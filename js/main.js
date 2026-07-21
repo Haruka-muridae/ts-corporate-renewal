@@ -4,8 +4,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const globalNav = document.getElementById('global-nav');
   const menuLinks = globalNav.querySelectorAll('a[href]');
   const pagetop = document.getElementById('pagetop');
+  const hero = document.getElementById('hero');
   const desktopMedia = window.matchMedia('(min-width: 1024px)');
   const reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  if (reducedMotionMedia.matches) {
+    hero.classList.add('is-motion-reduced');
+  } else {
+    window.requestAnimationFrame(() => {
+      hero.classList.add('is-animated');
+    });
+  }
 
   const isMenuOpen = () => menuToggle.getAttribute('aria-expanded') === 'true';
 
