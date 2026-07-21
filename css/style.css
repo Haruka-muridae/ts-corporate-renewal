@@ -207,7 +207,6 @@ a {
   transition-delay: 0ms;
 }
 
-.reveal-ready .step.reveal.is-reveal-complete,
 .reveal-ready .member-card.reveal.is-reveal-complete {
   transition-duration: 220ms;
 }
@@ -694,42 +693,51 @@ body.is-menu-open .global-nav {
 
 .steps {
   display: grid;
-  gap: 44px;
+  align-items: start;
+  gap: 20px;
 }
 
-.step {
+.step-item {
+  min-width: 0;
+}
+
+details.step {
   position: relative;
   min-width: 0;
-  padding: 32px 24px;
+  overflow: hidden;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-card);
   background-color: var(--c-bg);
-  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+  transition: border-color 200ms ease, background-color 200ms ease, box-shadow 220ms ease, transform 220ms ease;
 }
 
-.step + .step::before,
-.step + .step::after {
-  position: absolute;
-  left: 50%;
+details.step[open] {
+  border-color: var(--c-sub);
+  background-color: rgba(47, 111, 168, 0.06);
+}
+
+.step__summary {
+  position: relative;
+  display: grid;
+  min-height: 44px;
+  min-width: 0;
+  padding: 24px 64px 24px 24px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.step__summary::-webkit-details-marker {
+  display: none;
+}
+
+.step__summary::marker {
   content: "";
-  pointer-events: none;
 }
 
-.step + .step::before {
-  top: -31px;
-  width: 1px;
-  height: 18px;
-  background-color: var(--c-border-strong);
-  transform: translateX(-50%);
-}
-
-.step + .step::after {
-  top: -18px;
-  width: 7px;
-  height: 7px;
-  border-right: 1px solid var(--c-border-strong);
-  border-bottom: 1px solid var(--c-border-strong);
-  transform: translateX(-50%) rotate(45deg);
+.step__summary:focus-visible {
+  border-radius: calc(var(--radius-card) - 2px);
+  outline: 2px solid var(--c-accent);
+  outline-offset: -3px;
 }
 
 .step__num,
@@ -745,7 +753,7 @@ body.is-menu-open .global-nav {
   font-size: 1.75rem;
 }
 
-.step:last-child .step__num {
+.steps > li:last-child .step__num {
   color: var(--c-accent);
 }
 
@@ -761,11 +769,11 @@ body.is-menu-open .global-nav {
 .step__icon {
   width: 48px;
   height: 48px;
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 .step__label {
-  margin-top: 20px;
+  margin-top: 16px;
   color: var(--c-sub);
   font-size: 0.8125rem;
   font-weight: 500;
@@ -776,17 +784,49 @@ body.is-menu-open .global-nav {
 }
 
 .step__text {
-  margin-top: 16px;
+  margin: 0 24px;
+  padding: 20px 0 28px;
+  border-top: 1px solid var(--c-border);
   color: var(--c-text-muted);
+  animation: step-content-in 200ms ease-out both;
 }
 
-.approach__feedback {
-  display: none;
+.step__toggle {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 50%;
+  color: var(--c-main);
+  background-color: var(--c-bg);
+  font-family: var(--font-en);
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.step__toggle::before {
+  content: "+";
+}
+
+.step[open] .step__toggle {
+  border-color: var(--c-sub);
+  color: var(--c-bg);
+  background-color: var(--c-sub);
+}
+
+.step[open] .step__toggle::before {
+  content: "−";
 }
 
 /* Business */
 .business__grid {
   display: grid;
+  align-items: start;
   gap: 20px;
 }
 
@@ -794,17 +834,50 @@ body.is-menu-open .global-nav {
   min-width: 0;
 }
 
-.business-card {
-  height: 100%;
-  padding: 24px;
+details.business-card {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-card);
   background-color: var(--c-bg);
-  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+  transition: border-color 200ms ease, background-color 200ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+details.business-card[open] {
+  border-color: var(--c-sub);
+  background-color: rgba(47, 111, 168, 0.06);
+}
+
+.business-card__summary {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 44px;
+  padding: 24px 64px 24px 24px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.business-card__summary::-webkit-details-marker {
+  display: none;
+}
+
+.business-card__summary::marker {
+  content: "";
+}
+
+.business-card__summary:focus-visible {
+  border-radius: calc(var(--radius-card) - 2px);
+  outline: 2px solid var(--c-accent);
+  outline-offset: -3px;
 }
 
 .business-card__top {
   display: flex;
+  min-width: 0;
+  padding-right: 40px;
   align-items: center;
   justify-content: space-between;
 }
@@ -839,8 +912,47 @@ body.is-menu-open .global-nav {
   line-height: 1.7;
 }
 
+.business-card__toggle {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 50%;
+  color: var(--c-main);
+  background-color: var(--c-bg);
+  font-family: var(--font-en);
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.business-card__toggle::before {
+  content: "+";
+}
+
+.business-card[open] .business-card__toggle {
+  border-color: var(--c-sub);
+  color: var(--c-bg);
+  background-color: var(--c-sub);
+}
+
+.business-card[open] .business-card__toggle::before {
+  content: "−";
+}
+
+.business-card__content {
+  margin: 0 24px;
+  padding: 20px 0 24px;
+  border-top: 1px solid var(--c-border);
+  animation: business-content-in 200ms ease-out both;
+}
+
 .business-card__text {
-  margin-top: 12px;
+  margin: 0;
   color: var(--c-text-muted);
 }
 
@@ -1503,6 +1615,30 @@ body.is-menu-open .global-nav {
   text-underline-offset: 4px;
 }
 
+@keyframes step-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes business-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes hero-text-in {
   from {
     opacity: 0;
@@ -1563,7 +1699,6 @@ body.is-menu-open .global-nav {
     transform: translateY(-4px);
   }
 
-  .reveal-ready .step.reveal.is-visible:hover,
   .reveal-ready .member-card.reveal.is-visible:hover {
     transition-delay: 0ms;
     transition-duration: 220ms;
@@ -1656,7 +1791,6 @@ body.is-menu-open .global-nav {
   }
 
   .business__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 32px;
   }
 
@@ -1892,65 +2026,45 @@ body.is-menu-open .global-nav {
 
   .steps {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 48px;
-    align-items: stretch;
+    align-items: start;
+    gap: 32px;
   }
 
-  .step {
-    padding: 40px 32px;
-  }
-
-  .step + .step::before,
-  .step + .step::after {
-    top: 50%;
-    left: auto;
-  }
-
-  .step + .step::before {
-    left: -36px;
-    width: 24px;
-    height: 1px;
-    transform: translateY(-50%);
-  }
-
-  .step + .step::after {
-    left: -17px;
-    border-top: 1px solid var(--c-border-strong);
-    border-right: 1px solid var(--c-border-strong);
-    border-bottom: 0;
-    transform: translateY(-50%) rotate(45deg);
+  .step__summary {
+    padding: 32px 72px 28px 32px;
   }
 
   .step__num {
     font-size: 2.5rem;
   }
 
-  .approach__feedback {
-    display: block;
-    width: calc(100% - 80px);
-    margin: 24px auto 0;
-    color: var(--c-text-muted);
-    text-align: center;
+  .step__toggle {
+    top: 32px;
+    right: 32px;
   }
 
-  .approach__feedback svg {
-    width: 100%;
-    height: auto;
-    fill: none;
-    stroke: var(--c-border-strong);
-    stroke-width: 1.5;
-    stroke-dasharray: 6 6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+  .step__text {
+    margin-inline: 32px;
+    padding-bottom: 32px;
   }
 
-  .approach__feedback p {
-    margin-top: -8px;
-    font-size: 0.8125rem;
+  .business__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
   }
 
-  .business-card {
-    padding: 40px;
+  .business-card__summary {
+    padding: 40px 80px 32px 40px;
+  }
+
+  .business-card__toggle {
+    top: 40px;
+    right: 40px;
+  }
+
+  .business-card__content {
+    margin-inline: 40px;
+    padding-bottom: 40px;
   }
 
   .strength__item {
@@ -2011,7 +2125,10 @@ body.is-menu-open .global-nav {
 
   .member-details summary::after,
   .member-details__content,
-  .company-details summary::after {
+  .company-details summary::after,
+  .step__text,
+  .business-card__content {
+    animation: none !important;
     transition: none !important;
   }
 
