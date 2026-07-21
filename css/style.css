@@ -1,0 +1,63 @@
+/* Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+h1,
+p {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  color: #222;
+  background-color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+  line-height: 1.6;
+}
+
+/* Basic layout */
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+.container {
+  width: min(100% - 32px, 1120px);
+  margin-inline: auto;
+}
+
+.site-header,
+.site-footer {
+  padding-block: 24px;
+}
+
+.site-header {
+  border-bottom: 1px solid #ddd;
+}
+
+.site-name {
+  font-weight: 700;
+}
+
+.hero {
+  padding-block: 80px;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.3;
+}
+
+.site-footer {
+  border-top: 1px solid #ddd;
+}
