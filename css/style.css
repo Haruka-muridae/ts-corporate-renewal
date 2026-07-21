@@ -121,6 +121,39 @@ a {
   outline-offset: 2px;
 }
 
+.btn--primary:focus-visible,
+.global-nav__link--contact:focus-visible {
+  outline-color: var(--c-main);
+}
+
+.contact :focus-visible {
+  outline-color: var(--c-bg);
+}
+
+/* Skip link */
+.skip-link {
+  position: fixed;
+  z-index: 2000;
+  top: 12px;
+  left: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius-button);
+  color: var(--c-bg);
+  background-color: var(--c-main);
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(calc(-100% - 24px));
+}
+
+.skip-link:focus-visible {
+  outline-color: var(--c-accent);
+  transform: translateY(0);
+}
+
+#main-content:focus {
+  outline: none;
+}
+
 /* Layout utilities */
 .container {
   width: 100%;
@@ -153,6 +186,37 @@ a {
   text-transform: uppercase;
 }
 
+/* Scroll reveal is enabled only after JavaScript confirms support. */
+.reveal {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal-ready .reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 600ms ease-out, transform 600ms ease-out;
+}
+
+.reveal-ready .reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal-ready .reveal.is-reveal-complete {
+  transition-delay: 0ms;
+}
+
+.reveal-ready .step.reveal.is-reveal-complete,
+.reveal-ready .member-card.reveal.is-reveal-complete {
+  transition-duration: 220ms;
+}
+
+.reveal-ready .steps .reveal,
+.reveal-ready .business__grid > .reveal {
+  transition-delay: calc(var(--i, 0) * 40ms);
+}
+
 .btn {
   display: inline-flex;
   min-height: 56px;
@@ -171,7 +235,7 @@ a {
 }
 
 .btn--primary {
-  color: var(--c-bg);
+  color: var(--c-main);
   background-color: var(--c-accent);
 }
 
@@ -338,7 +402,7 @@ body.is-menu-open .global-nav {
 .global-nav__link--contact {
   margin-top: 16px;
   border-radius: var(--radius-button);
-  color: var(--c-bg);
+  color: var(--c-main);
   background-color: var(--c-accent);
   font-weight: 700;
 }
@@ -640,6 +704,7 @@ body.is-menu-open .global-nav {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-card);
   background-color: var(--c-bg);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
 }
 
 .step + .step::before,
@@ -1034,7 +1099,7 @@ body.is-menu-open .global-nav {
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1;
-  opacity: 0.35;
+  opacity: 1;
 }
 
 .strength__item h3 {
@@ -1068,6 +1133,7 @@ body.is-menu-open .global-nav {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-card);
   background-color: var(--c-bg);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
 }
 
 .member-card__header {
@@ -1428,6 +1494,9 @@ body.is-menu-open .global-nav {
 }
 
 .contact__mail a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
   color: var(--c-bg);
   text-decoration: underline;
   text-decoration-thickness: 1px;
@@ -1472,23 +1541,56 @@ body.is-menu-open .global-nav {
 
 @media (hover: hover) {
   .btn--primary:hover {
+    color: var(--c-bg);
+    background-color: var(--c-main-dark);
+  }
+
+  .global-nav__link--contact:hover {
+    color: var(--c-bg);
     background-color: var(--c-main-dark);
   }
 
   .btn--secondary:hover {
-    color: var(--c-bg);
-    background-color: var(--c-main);
+    color: var(--c-main);
+    background-color: var(--c-bg-sub);
   }
 
-  .business-card:hover {
+  .step:hover,
+  .business-card:hover,
+  .member-card:hover {
     border-color: var(--c-sub);
     box-shadow: 0 8px 24px rgba(15, 42, 68, 0.08);
     transform: translateY(-4px);
   }
 
+  .reveal-ready .step.reveal.is-visible:hover,
+  .reveal-ready .member-card.reveal.is-visible:hover {
+    transition-delay: 0ms;
+    transition-duration: 220ms;
+  }
+
   .contact__button:hover {
     color: var(--c-main);
     background-color: var(--c-bg);
+  }
+
+  .global-nav__link:not(.global-nav__link--contact),
+  .footer-nav a,
+  .site-footer__address a,
+  .business__other a {
+    background-image: linear-gradient(currentcolor, currentcolor);
+    background-repeat: no-repeat;
+    background-position: left bottom;
+    background-size: 0 1px;
+    text-decoration: none;
+    transition: background-size 240ms ease;
+  }
+
+  .global-nav__link:not(.global-nav__link--contact):hover,
+  .footer-nav a:hover,
+  .site-footer__address a:hover,
+  .business__other a:hover {
+    background-size: 100% 1px;
   }
 }
 
@@ -1564,6 +1666,57 @@ body.is-menu-open .global-nav {
 
   .connection-diagram--mobile {
     display: none;
+  }
+
+  .reveal-ready .steps .reveal,
+  .reveal-ready .business__grid > .reveal {
+    transition-delay: calc(var(--i, 0) * 80ms);
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal .connection-map__node {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 400ms ease-out, transform 400ms ease-out;
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal.is-visible .connection-map__node {
+    opacity: 1;
+    transform: none;
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal.is-visible .connection-map__node--02 {
+    transition-delay: 100ms;
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal.is-visible .connection-map__node--03 {
+    transition-delay: 200ms;
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal.is-visible .connection-map__node--04 {
+    transition-delay: 300ms;
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal .connection-map__lines > path:first-of-type,
+  .reveal-ready .connection-diagram--desktop.reveal .connection-map__flow {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    transition: stroke-dashoffset 800ms ease-out;
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal.is-visible .connection-map__lines > path:first-of-type,
+  .reveal-ready .connection-diagram--desktop.reveal.is-visible .connection-map__flow {
+    stroke-dashoffset: 0;
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal .connection-map__cycle {
+    opacity: 0;
+    stroke-dashoffset: 120;
+    transition: opacity 400ms ease-out 400ms, stroke-dashoffset 800ms ease-out;
+  }
+
+  .reveal-ready .connection-diagram--desktop.reveal.is-visible .connection-map__cycle {
+    opacity: 1;
+    stroke-dashoffset: 0;
   }
 
   .strength__item {
@@ -1844,6 +1997,7 @@ body.is-menu-open .global-nav {
   .reveal {
     opacity: 1 !important;
     transform: none !important;
+    transition-delay: 0ms !important;
   }
 
   .hero__title-line,
@@ -1856,7 +2010,31 @@ body.is-menu-open .global-nav {
   }
 
   .member-details summary::after,
-  .member-details__content {
+  .member-details__content,
+  .company-details summary::after {
     transition: none !important;
+  }
+
+  .connection-map__node {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .connection-map__lines > path:first-of-type,
+  .connection-map__flow {
+    stroke-dasharray: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+
+  .connection-map__cycle {
+    opacity: 1 !important;
+    stroke-dasharray: 6 6 !important;
+    stroke-dashoffset: 0 !important;
+  }
+
+  .step:hover,
+  .business-card:hover,
+  .member-card:hover {
+    transform: none !important;
   }
 }

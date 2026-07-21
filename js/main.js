@@ -5,8 +5,52 @@ document.addEventListener('DOMContentLoaded', () => {
   const menuLinks = globalNav.querySelectorAll('a[href]');
   const pagetop = document.getElementById('pagetop');
   const hero = document.getElementById('hero');
+  const revealElements = [...document.querySelectorAll('.reveal')];
   const desktopMedia = window.matchMedia('(min-width: 1024px)');
   const reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let revealObserver = null;
+
+  const showAllRevealElements = () => {
+    revealObserver?.disconnect();
+    revealObserver = null;
+    document.documentElement.classList.remove('reveal-ready');
+    revealElements.forEach((element) => {
+      element.classList.add('is-visible', 'is-reveal-complete');
+    });
+  };
+
+  const initializeScrollReveal = () => {
+    if (reducedMotionMedia.matches || !('IntersectionObserver' in window)) {
+      showAllRevealElements();
+      return;
+    }
+
+    document.documentElement.classList.add('reveal-ready');
+    revealObserver = new IntersectionObserver((entries, observer) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) {
+          return;
+        }
+
+        const staggerIndex = Number.parseInt(
+          window.getComputedStyle(entry.target).getPropertyValue('--i'),
+          10,
+        ) || 0;
+        const staggerInterval = window.matchMedia('(min-width: 768px)').matches ? 80 : 40;
+
+        entry.target.classList.add('is-visible');
+        window.setTimeout(() => {
+          entry.target.classList.add('is-reveal-complete');
+        }, 600 + (staggerIndex * staggerInterval));
+        observer.unobserve(entry.target);
+      });
+    }, {
+      threshold: 0.15,
+      rootMargin: '0px 0px -10% 0px',
+    });
+
+    revealElements.forEach((element) => revealObserver.observe(element));
+  };
 
   if (reducedMotionMedia.matches) {
     hero.classList.add('is-motion-reduced');
@@ -15,6 +59,19 @@ document.addEventListener('DOMContentLoaded', () => {
       hero.classList.add('is-animated');
     });
   }
+
+  initializeScrollReveal();
+
+  reducedMotionMedia.addEventListener('change', (event) => {
+    if (!event.matches) {
+      hero.classList.remove('is-motion-reduced');
+      return;
+    }
+
+    hero.classList.remove('is-animated');
+    hero.classList.add('is-motion-reduced');
+    showAllRevealElements();
+  });
 
   const memberDetails = document.querySelectorAll('.member-details');
 
