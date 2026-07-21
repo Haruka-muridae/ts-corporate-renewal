@@ -141,11 +141,14 @@
     </section>
     <section id="about" class="section about" aria-labelledby="about-title">
       <div class="container">
-        <div class="about__layout reveal">
-          <div class="about__heading">
-            <p class="section-label" lang="en">About</p>
-            <h2 id="about-title">私たちについて</h2>
-          </div>
+        <details class="about-accordion reveal">
+          <summary class="about-accordion__summary">
+            <div class="about__heading">
+              <p class="section-label" lang="en">About</p>
+              <h2 id="about-title">私たちについて</h2>
+            </div>
+            <span class="about-accordion__toggle" aria-hidden="true"></span>
+          </summary>
 
           <div class="about__body">
             <div class="about__copy">
@@ -159,80 +162,97 @@
               <li>中身を説明できる仕組み</li>
             </ul>
           </div>
-        </div>
+        </details>
       </div>
     </section>
     <section id="approach" class="section approach" aria-labelledby="approach-title">
       <div class="container">
-        <div class="section-heading reveal">
+        <header class="section-heading approach__heading reveal">
           <p class="section-label" lang="en">Approach</p>
           <h2 id="approach-title">課題解決の進め方</h2>
           <p class="section-heading__lead">答えを出す前に、まず問題を正しく定義する。定式化・解法・実装を一つの流れとして進めます。</p>
-        </div>
+        </header>
 
         <ol class="steps">
           <li class="step-item reveal" style="--i: 0">
             <details class="step">
               <summary class="step__summary">
-                <span class="step__num">01</span>
-                <svg class="step__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M4 4v16h16"></path>
-                  <path d="M5 18c3 0 3.5-10 7-10s4 10 8 10"></path>
-                </svg>
-                <span class="step__label">数理でとらえる</span>
-                <h3>問題を定式化する</h3>
-                <span class="step__toggle" aria-hidden="true"></span>
+                <div class="step__header">
+                  <span class="step__num">01</span>
+                  <svg class="step__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 4v16h16"></path>
+                    <path d="M5 18c3 0 3.5-10 7-10s4 10 8 10"></path>
+                  </svg>
+                  <p class="step__label">数理でとらえる</p>
+                  <h3>問題を定式化する</h3>
+                  <span class="step__action" aria-hidden="true"></span>
+                </div>
               </summary>
-              <p class="step__text">保険数理、確率統計、最適化。事象を分布とモデルで記述し、不確実性を数値として扱います。答えを出す前に、まず問題を正しく定義します。</p>
+              <div class="step__content">
+                <p class="step__text">保険数理、確率統計、最適化。事象を分布とモデルで記述し、不確実性を数値として扱います。答えを出す前に、まず問題を正しく定義します。</p>
+              </div>
             </details>
           </li>
           <li class="step-item reveal" style="--i: 1">
             <details class="step">
               <summary class="step__summary">
-                <span class="step__num">02</span>
-                <svg class="step__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M7 7l10 4M7 7l3 10m7-6l-7 6"></path>
-                  <circle cx="7" cy="7" r="3"></circle>
-                  <circle cx="17" cy="11" r="3"></circle>
-                  <circle cx="10" cy="17" r="3"></circle>
-                </svg>
-                <span class="step__label">AIで解く</span>
-                <h3>説明できるAIを使う</h3>
-                <span class="step__toggle" aria-hidden="true"></span>
+                <div class="step__header">
+                  <span class="step__num">02</span>
+                  <svg class="step__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M7 7l10 4M7 7l3 10m7-6l-7 6"></path>
+                    <circle cx="7" cy="7" r="3"></circle>
+                    <circle cx="17" cy="11" r="3"></circle>
+                    <circle cx="10" cy="17" r="3"></circle>
+                  </svg>
+                  <p class="step__label">AIで解く</p>
+                  <h3>説明できるAIを使う</h3>
+                  <span class="step__action" aria-hidden="true"></span>
+                </div>
               </summary>
-              <p class="step__text">機械学習によるモデリングと、生成AIの実装。設計にはプロンプト技術だけでなく、認知科学・行動経済学の知見も取り入れています。</p>
+              <div class="step__content">
+                <p class="step__text">機械学習によるモデリングと、生成AIの実装。設計にはプロンプト技術だけでなく、認知科学・行動経済学の知見も取り入れています。</p>
+              </div>
             </details>
           </li>
           <li class="step-item reveal" style="--i: 2">
             <details class="step">
               <summary class="step__summary">
-                <span class="step__num">03</span>
-                <svg class="step__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <rect x="3" y="4" width="18" height="14" rx="2"></rect>
-                  <path d="M3 8h18M9 21h6M12 18v3"></path>
-                  <circle cx="12" cy="13" r="2.5"></circle>
-                  <path d="M12 9.5v1M12 15.5v1M8.5 13h1M14.5 13h1"></path>
-                </svg>
-                <span class="step__label">仕組みに落とす</span>
-                <h3>動くものをつくる</h3>
-                <span class="step__toggle" aria-hidden="true"></span>
+                <div class="step__header">
+                  <span class="step__num">03</span>
+                  <svg class="step__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <rect x="3" y="4" width="18" height="14" rx="2"></rect>
+                    <path d="M3 8h18M9 21h6M12 18v3"></path>
+                    <circle cx="12" cy="13" r="2.5"></circle>
+                    <path d="M12 9.5v1M12 15.5v1M8.5 13h1M14.5 13h1"></path>
+                  </svg>
+                  <p class="step__label">仕組みに落とす</p>
+                  <h3>動くものをつくる</h3>
+                  <span class="step__action" aria-hidden="true"></span>
+                </div>
               </summary>
-              <p class="step__text">分析で終わらせず、システム・業務自動化・クラウド環境として実装します。現場で継続して動くものになって、はじめて価値になると考えています。</p>
+              <div class="step__content">
+                <p class="step__text">分析で終わらせず、システム・業務自動化・クラウド環境として実装します。現場で継続して動くものになって、はじめて価値になると考えています。</p>
+              </div>
             </details>
           </li>
         </ol>
       </div>
     </section>
-    <section id="business" class="section business" aria-labelledby="business-title">
+    <section id="business" class="section business section-accordion" aria-labelledby="business-title">
       <div class="container">
-        <div class="section-heading reveal">
-          <p class="section-label" lang="en">Business</p>
-          <h2 id="business-title">事業領域</h2>
+        <details class="section-accordion__details reveal">
+          <summary class="section-accordion__summary">
+            <div class="section-accordion__heading">
+              <p class="section-label" lang="en">Business</p>
+              <h2 id="business-title">事業領域</h2>
+            </div>
+            <span class="section-accordion__toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="section-accordion__content">
           <p class="section-heading__lead">数理・データ・AIを共通の土台として、コンサルティングから実装、教育までを行っています。</p>
-        </div>
 
         <ul class="business__grid">
-          <li class="reveal" style="--i: 0">
+          <li style="--i: 0">
             <details class="business-card">
               <summary class="business-card__summary">
                 <div class="business-card__top">
@@ -255,7 +275,7 @@
               </div>
             </details>
           </li>
-          <li class="reveal" style="--i: 1">
+          <li style="--i: 1">
             <details class="business-card">
               <summary class="business-card__summary">
                 <div class="business-card__top">
@@ -280,7 +300,7 @@
               </div>
             </details>
           </li>
-          <li class="reveal" style="--i: 2">
+          <li style="--i: 2">
             <details class="business-card">
               <summary class="business-card__summary">
                 <div class="business-card__top">
@@ -305,7 +325,7 @@
               </div>
             </details>
           </li>
-          <li class="reveal" style="--i: 3">
+          <li style="--i: 3">
             <details class="business-card">
               <summary class="business-card__summary">
                 <div class="business-card__top">
@@ -330,18 +350,20 @@
           </li>
         </ul>
 
-        <div class="business__other reveal">
+        <div class="business__other">
           <p>このほか、不動産の所有・管理及び賃貸、中古車・貴金属その他の商品及び中古品の売買を、定款上の事業として行っています。詳細は<a href="#company">会社概要</a>をご覧ください。</p>
         </div>
+          </div>
+        </details>
       </div>
     </section>
     <section id="connection" class="section connection" aria-labelledby="connection-title">
       <div class="container">
-        <div class="section-heading section-heading--center reveal">
+        <header class="section-heading section-heading--center connection__heading reveal">
           <p class="section-label" lang="en">Connection</p>
           <h2 id="connection-title">事業のつながり</h2>
           <p class="section-heading__lead">保険数理・データ分析・AI・システム開発・業務自動化・教育は、それぞれ独立した事業ではありません。数理とデータという共通の土台の上で、相互に結びついています。</p>
-        </div>
+        </header>
 
         <figure class="connection-diagram connection-diagram--desktop reveal">
           <div class="connection-map">
@@ -393,47 +415,21 @@
         </div>
       </div>
     </section>
-    <section id="strength" class="section strength" aria-labelledby="strength-title">
+    <section id="members" class="section members section-accordion" aria-labelledby="members-title">
       <div class="container">
-        <div class="section-heading reveal">
-          <p class="section-label" lang="en">Strength</p>
-          <h2 id="strength-title">わたしたちの強み</h2>
-        </div>
-
-        <ol class="strength-list">
-          <li class="strength-item reveal">
-            <span class="strength__number">01</span>
-            <h3>保険数理とAI実装の、両方を扱えます</h3>
-            <p>保険数理・確率統計・最適化による問題の定式化と、機械学習・生成AIによる実装を、同じチームで担当します。理論と実装の受け渡しで意図がずれることがありません。</p>
-          </li>
-          <li class="strength-item reveal">
-            <span class="strength__number">02</span>
-            <h3>問題の定式化から、システム実装まで対応します</h3>
-            <p>答えを出す前に問題を正しく定義し、分析で終わらせず、システム・業務自動化・クラウド環境として形にします。</p>
-          </li>
-          <li class="strength-item reveal">
-            <span class="strength__number">03</span>
-            <h3>金融の実務経験を土台にしています</h3>
-            <p>外資系金融機関の役員（CFO / CDO 等）歴任、保険会社でのデータサイエンス専門部門の立ち上げなど、金融の現場でデータ活用組織を築いた経験があります。</p>
-          </li>
-          <li class="strength-item reveal">
-            <span class="strength__number">04</span>
-            <h3>現場で続く仕組みにします</h3>
-            <p>認知科学・行動経済学の知見を設計に取り入れ、現場で継続して動くことを前提に構築します。業務自動化では、月間の雑務時間を275時間から53時間へ削減した実装事例があります。</p>
-          </li>
-        </ol>
-      </div>
-    </section>
-    <section id="members" class="section members" aria-labelledby="members-title">
-      <div class="container">
-        <div class="section-heading reveal">
-          <p class="section-label" lang="en">Members</p>
-          <h2 id="members-title">メンバー</h2>
+        <details class="section-accordion__details reveal">
+          <summary class="section-accordion__summary">
+            <div class="section-accordion__heading">
+              <p class="section-label" lang="en">Members</p>
+              <h2 id="members-title">メンバー</h2>
+            </div>
+            <span class="section-accordion__toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="section-accordion__content">
           <p class="section-heading__lead members__lead">金融の現場でデータサイエンス組織を築いてきた経験と、AI・認知科学を長く研究してきた実装力。理論から現場の仕組みづくりまでを担当します。</p>
-        </div>
 
         <div class="members__grid">
-          <article class="member-card reveal">
+          <article class="member-card">
             <header class="member-card__header">
               <div class="member-card__initial" aria-hidden="true">TS</div>
               <div class="member-card__identity">
@@ -466,7 +462,10 @@
             </div>
 
             <details class="member-details">
-              <summary aria-controls="takayuki-career-details">すべての経歴・実績を見る</summary>
+              <summary aria-controls="takayuki-career-details">
+                <span>すべての経歴・実績を見る</span>
+                <span class="member-details__toggle" aria-hidden="true"></span>
+              </summary>
               <div id="takayuki-career-details" class="member-details__content">
                 <ul class="member-details__list">
                   <li>外資系金融機関の役員（CFO / CDO 等）を歴任</li>
@@ -489,7 +488,7 @@
             </details>
           </article>
 
-          <article class="member-card reveal">
+          <article class="member-card">
             <header class="member-card__header">
               <div class="member-card__initial" aria-hidden="true">YS</div>
               <div class="member-card__identity">
@@ -523,7 +522,10 @@
             </div>
 
             <details class="member-details">
-              <summary aria-controls="yuki-career-details">すべての経歴・実績を見る</summary>
+              <summary aria-controls="yuki-career-details">
+                <span>すべての経歴・実績を見る</span>
+                <span class="member-details__toggle" aria-hidden="true"></span>
+              </summary>
               <div id="yuki-career-details" class="member-details__content">
                 <ul class="member-details__list">
                   <li>2010年から、AIの勉強と研究に取り組む</li>
@@ -546,16 +548,23 @@
             </details>
           </article>
         </div>
+          </div>
+        </details>
       </div>
     </section>
-    <section id="company" class="section company" aria-labelledby="company-title">
+    <section id="company" class="section company section-accordion" aria-labelledby="company-title">
       <div class="container">
-        <div class="section-heading reveal">
-          <p class="section-label" lang="en">Company</p>
-          <h2 id="company-title">会社概要</h2>
-        </div>
+        <details class="section-accordion__details reveal">
+          <summary class="section-accordion__summary">
+            <div class="section-accordion__heading">
+              <p class="section-label" lang="en">Company</p>
+              <h2 id="company-title">会社概要</h2>
+            </div>
+            <span class="section-accordion__toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="section-accordion__content">
 
-        <dl class="company-profile reveal">
+        <dl class="company-profile">
           <div class="company-profile__row">
             <dt>商号</dt>
             <dd>TSアセットマネジメント合同会社</dd>
@@ -592,7 +601,10 @@
             <dt>事業内容</dt>
             <dd>
               <details class="company-details">
-                <summary>定款上の事業内容（全6項目）を表示</summary>
+                <summary>
+                  <span>定款上の事業内容（全6項目）を表示</span>
+                  <span class="company-details__toggle" aria-hidden="true"></span>
+                </summary>
                 <ol class="company-details__list">
                   <li>不動産の所有、管理及び賃貸</li>
                   <li>保険数理、資産運用、会計に関するコンサルティング</li>
@@ -606,7 +618,7 @@
           </div>
         </dl>
 
-        <section class="company-news reveal" aria-labelledby="news-title">
+        <section class="company-news" aria-labelledby="news-title">
           <h3 id="news-title">お知らせ</h3>
           <ul class="news-list">
             <li>
@@ -626,6 +638,8 @@
             </li>
           </ul>
         </section>
+          </div>
+        </details>
       </div>
     </section>
     <section id="contact" class="section contact" aria-labelledby="contact-title">
