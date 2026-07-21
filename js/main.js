@@ -16,6 +16,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const memberDetails = document.querySelectorAll('.member-details');
+
+  memberDetails.forEach((details) => {
+    const summary = details.querySelector('summary');
+
+    if (!summary) {
+      return;
+    }
+
+    const syncDetailsState = () => {
+      const isOpen = details.open;
+
+      details.classList.toggle('is-open', isOpen);
+      summary.setAttribute('aria-expanded', String(isOpen));
+    };
+
+    syncDetailsState();
+    details.addEventListener('toggle', syncDetailsState);
+  });
+
   const isMenuOpen = () => menuToggle.getAttribute('aria-expanded') === 'true';
 
   const closeMenu = (restoreFocus = true) => {
