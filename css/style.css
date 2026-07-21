@@ -142,13 +142,285 @@ a {
   padding-block: var(--section-space);
 }
 
+/* Header */
+.site-header {
+  position: sticky;
+  z-index: 1000;
+  top: 0;
+  height: 60px;
+  color: var(--c-main);
+  transition: background-color 240ms ease, box-shadow 240ms ease, color 240ms ease;
+}
+
+/*
+ * STEP 3でファーストビューを実装するまでの一時対応。
+ * 未スクロール時も白系背景と濃色文字にし、STEP 3で透明背景と白文字へ切り替えられる構造を維持する。
+ */
+.site-header {
+  background-color: rgba(255, 255, 255, 0.96);
+}
+
+.site-header.is-scrolled {
+  background-color: var(--c-bg);
+  box-shadow: 0 2px 16px rgba(15, 42, 68, 0.08);
+}
+
+.site-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.site-logo {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-main);
+  text-decoration: none;
+}
+
+.site-logo__mark {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-logo);
+  color: var(--c-bg);
+  background-color: var(--c-main);
+  font-family: var(--font-en);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+.site-logo__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.site-logo__name {
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.site-logo__name-en {
+  display: none;
+  color: var(--c-text-muted);
+  font-family: var(--font-en);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+}
+
+.menu-toggle {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  place-content: center;
+  gap: 5px;
+  border: 0;
+  color: var(--c-main);
+  background: transparent;
+  cursor: pointer;
+}
+
+.menu-toggle__line {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background-color: currentColor;
+  transition: transform 300ms ease, opacity 300ms ease;
+}
+
+.menu-toggle[aria-expanded="true"] .menu-toggle__line:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.menu-toggle[aria-expanded="true"] .menu-toggle__line:nth-child(2) {
+  opacity: 0;
+}
+
+.menu-toggle[aria-expanded="true"] .menu-toggle__line:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+.global-nav {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 84px var(--container-padding) 24px;
+  overflow-y: auto;
+  visibility: hidden;
+  opacity: 0;
+  background-color: var(--c-bg);
+  transform: translateY(-100%);
+  transition: visibility 0s linear 300ms, opacity 300ms ease, transform 300ms ease;
+}
+
+body.is-menu-open {
+  overflow: hidden;
+}
+
+body.is-menu-open .global-nav {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.global-nav__list {
+  width: min(100%, 560px);
+}
+
+.global-nav__link {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-main);
+  font-weight: 500;
+  text-align: center;
+  text-decoration: none;
+}
+
+.global-nav__link--contact {
+  margin-top: 16px;
+  border-radius: var(--radius-button);
+  color: var(--c-bg);
+  background-color: var(--c-accent);
+  font-weight: 700;
+}
+
+/* Footer */
+.site-footer {
+  padding-top: 72px;
+  color: var(--c-bg);
+  background-color: var(--c-main);
+}
+
+.site-footer__main {
+  display: grid;
+  gap: 48px;
+  text-align: center;
+}
+
+.site-footer__name {
+  font-weight: 700;
+}
+
+.site-footer__name-en {
+  margin-top: 4px;
+  font-family: var(--font-en);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+
+.site-footer__address {
+  margin-top: 24px;
+  font-style: normal;
+}
+
+.site-footer__address a,
+.footer-nav a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.footer-nav__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+}
+
+.footer-nav a {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+.site-footer__bottom {
+  margin-top: 48px;
+  padding-block: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  text-align: center;
+}
+
+.site-footer__bottom small {
+  font-size: 0.75rem;
+}
+
+/* Back to top */
+.pagetop {
+  position: fixed;
+  z-index: 900;
+  right: var(--container-padding);
+  bottom: 20px;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  visibility: hidden;
+  opacity: 0;
+  color: var(--c-bg);
+  background-color: var(--c-main);
+  pointer-events: none;
+  cursor: pointer;
+  transition: visibility 240ms ease, opacity 240ms ease;
+}
+
+.pagetop.is-visible {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 @media (min-width: 600px) {
   :root {
     --container-padding: 32px;
   }
+
+  .site-logo {
+    gap: 10px;
+  }
+
+  .site-logo__name {
+    font-size: 0.8125rem;
+  }
 }
 
 @media (min-width: 768px) {
+  .site-header {
+    height: 64px;
+  }
+
+  .global-nav {
+    padding-top: 88px;
+  }
+
+  .site-footer__main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    text-align: left;
+  }
+
+  .footer-nav a {
+    justify-content: flex-start;
+  }
+
   .grid {
     grid-template-columns: repeat(12, minmax(0, 1fr));
   }
@@ -163,6 +435,63 @@ a {
     --container-padding: 40px;
     --section-space: 120px;
     --content-space: 48px;
+  }
+
+  .site-header {
+    height: 72px;
+  }
+
+  .site-logo__mark {
+    width: 40px;
+    height: 40px;
+  }
+
+  .site-logo__name {
+    font-size: 0.875rem;
+  }
+
+  .site-logo__name-en {
+    display: block;
+  }
+
+  .menu-toggle {
+    display: none;
+  }
+
+  .global-nav {
+    position: static;
+    display: block;
+    width: auto;
+    padding: 0;
+    overflow: visible;
+    visibility: visible;
+    opacity: 1;
+    background: transparent;
+    transform: none;
+    transition: none;
+  }
+
+  .global-nav__list {
+    display: flex;
+    width: auto;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .global-nav__link {
+    min-height: 44px;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+
+  .global-nav__link--contact {
+    min-height: 40px;
+    margin-top: 0;
+    padding-inline: 16px;
+  }
+
+  .site-footer__main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
