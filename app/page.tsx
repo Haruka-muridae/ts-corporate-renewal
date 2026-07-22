@@ -1,15 +1,26 @@
+import { About } from "@/components/sections/About";
+import { Brand } from "@/components/sections/Brand";
+import { CTA } from "@/components/sections/CTA";
+import { Empathy } from "@/components/sections/Empathy";
+import { FAQ } from "@/components/sections/FAQ";
+import { Hero } from "@/components/sections/Hero";
+import { Pricing } from "@/components/sections/Pricing";
+import { Results } from "@/components/sections/Results";
+import { Service } from "@/components/sections/Service";
+import { lpContent } from "@/content/lp";
+
 export default function HomePage() {
   return (
-    <main className="grid min-h-screen place-items-center bg-white px-6 text-slate-950">
-      <div className="max-w-xl text-center">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
-          Technical foundation
-        </p>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight">Potenitas</h1>
-        <p className="mt-4 text-base leading-8 text-slate-600">
-          Landing page content will be implemented in a later phase.
-        </p>
-      </div>
+    <main>
+      <Hero content={lpContent.hero} />
+      <Empathy content={lpContent.empathy} />
+      <About content={lpContent.about} />
+      <Brand content={lpContent.brand} />
+      <Service content={lpContent.service} />
+      <Results content={lpContent.results} />
+      <FAQ content={lpContent.faq} />
+      <Pricing content={lpContent.pricing} />
+      <CTA content={lpContent.cta} />
     </main>
   );
 }
