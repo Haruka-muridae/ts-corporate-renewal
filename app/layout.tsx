@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { isProductionDeployment, siteUrl } from "@/lib/env";
-import { buildHomeJsonLd, serializeJsonLd } from "@/lib/jsonld";
 import {
   siteDescription,
   siteKeywords,
@@ -63,19 +62,9 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: RootLayoutProps) {
-  const jsonLd = siteUrl ? buildHomeJsonLd(siteUrl) : null;
-
   return (
     <html lang="ja">
-      <body>
-        {jsonLd ? (
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
-          />
-        ) : null}
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

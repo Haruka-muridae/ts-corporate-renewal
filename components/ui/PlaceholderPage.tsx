@@ -12,7 +12,9 @@ export function PlaceholderPage({ title }: PlaceholderPageProps) {
         <h1 className="text-3xl font-semibold text-[var(--color-navy)] sm:text-4xl">
           {title}
         </h1>
-        <p className="mt-6 text-base text-[var(--color-text-muted)]">TODO</p>
+        <p className="mt-6 text-base text-[var(--color-text-muted)]">
+          このページは現在準備中です。
+        </p>
       </div>
     </main>
   );

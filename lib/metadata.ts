@@ -7,12 +7,16 @@ type PageMetadataOptions = Readonly<{
   title: string;
   pathname: string;
   noIndex?: boolean;
+  follow?: boolean;
+  noCache?: boolean;
 }>;
 
 export function buildPageMetadata({
   title,
   pathname,
   noIndex = false,
+  follow = true,
+  noCache = false,
 }: PageMetadataOptions): Metadata {
   const canonicalUrl = getAbsoluteUrl(pathname);
   const socialTitle = `${title}｜${siteName}`;
@@ -23,7 +27,8 @@ export function buildPageMetadata({
     robots: noIndex
       ? {
           index: false,
-          follow: true,
+          follow,
+          nocache: noCache,
         }
       : undefined,
     openGraph: {

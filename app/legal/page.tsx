@@ -4,6 +4,7 @@ import { buildPageMetadata } from "@/lib/metadata";
 export const metadata = buildPageMetadata({
   title: "特定商取引法に基づく表記",
   pathname: "/legal/",
+  noIndex: true,
 });
 
 export default function LegalPage() {

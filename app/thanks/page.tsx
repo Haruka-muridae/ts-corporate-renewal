@@ -5,6 +5,8 @@ export const metadata = buildPageMetadata({
   title: "送信完了",
   pathname: "/thanks/",
   noIndex: true,
+  follow: false,
+  noCache: true,
 });
 
 export default function ThanksPage() {
