@@ -28,8 +28,7 @@ export type ResultItemContent = Readonly<{
 export type PricingPlanContent = Readonly<{
   id: string;
   name: string;
-  price: null;
-  pricePendingLabel: string;
+  price: string;
   description: string;
   action: LinkContent;
 }>;
@@ -37,9 +36,9 @@ export type PricingPlanContent = Readonly<{
 export type FormFieldContent = Readonly<{
   id: string;
   label: string;
-  kind: "text" | "textarea";
+  kind: "text" | "email" | "textarea";
   required: boolean;
-  autoComplete?: "name";
+  autoComplete?: "name" | "email";
 }>;
 
 export type ConsultationFormContent = Readonly<{
@@ -78,6 +77,8 @@ export type ResultsContent = SectionContent &
 export type PricingContent = SectionContent &
   Readonly<{
     plans: readonly PricingPlanContent[];
+    termsHeading: string;
+    terms: readonly string[];
   }>;
 
 export type CTAContent = SectionContent &

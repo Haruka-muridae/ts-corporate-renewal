@@ -55,7 +55,7 @@ export function ConsultationForm({ content }: ConsultationFormProps) {
             ) : (
               <input
                 id={field.id}
-                type="text"
+                type={field.kind}
                 required={field.required}
                 autoComplete={field.autoComplete}
                 className="mt-2 block min-h-12 w-full rounded-sm border border-[var(--color-border-strong)] bg-white px-4 py-3 text-base text-[var(--color-text)]"
