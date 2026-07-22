@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  background: #ffffff;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  font-family: Arial, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo,
+    sans-serif;
+}
