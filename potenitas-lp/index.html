@@ -342,13 +342,15 @@ ul,ol{ list-style:none; }
    9. CTA(申込みの流れ + 相談)
    ============================================================ */
 .flow{ display:grid; gap:1px; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.16); text-align:left; }
-@media (min-width:900px){ .flow{ grid-template-columns:repeat(4,1fr); } }
-.flow__item{ background:var(--ink); padding:2.2rem 1.6rem; }
+/* 申込みフローは、狭い本文幅で4列にすると日本語が過度に折り返されるため、
+   モバイルは1列、タブレット以上は2列で表示する */
+@media (min-width:700px){ .flow{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.flow__item{ background:var(--ink); padding:2.2rem 1.8rem; min-width:0; }
 .flow__n{ font-family:var(--mono); font-size:.72rem; letter-spacing:.14em; color:var(--accent-on-ink); }
 .flow__t{ margin-top:1.1rem; font-family:var(--serif); font-size:1.02rem; font-weight:600; line-height:1.8; }
 .flow__d{ margin-top:.9rem; font-size:.9rem; line-height:2.05; color:var(--on-ink-2); }
 .qlist{ margin-top:1rem; padding:1rem 1.1rem; background:rgba(255,255,255,.06); counter-reset:q; }
-.qlist li{ counter-increment:q; position:relative; padding:.28em 0 .28em 1.9em; font-size:.87rem; line-height:1.85; }
+.qlist li{ counter-increment:q; position:relative; padding:.38em 0 .38em 2.2em; font-size:.9rem; line-height:1.9; word-break:normal; overflow-wrap:break-word; }
 .qlist li::before{ content:"Q" counter(q); position:absolute; left:0; top:.55em; font-family:var(--mono); font-size:.64rem; color:var(--accent-on-ink); }
 .cta{ text-align:center; }
 .cta__t{ font-family:var(--serif); font-weight:600; font-size:clamp(1.6rem,4.8vw,2.4rem); line-height:1.6; letter-spacing:.06em; }
