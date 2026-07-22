@@ -7,11 +7,27 @@ type BrandProps = Readonly<{
 
 export function Brand({ content }: BrandProps) {
   return (
-    <section id={content.id} className="py-16">
-      <Container>
-        <p className="text-sm text-slate-500">{content.eyebrow}</p>
-        <h2 className="mt-3 text-3xl font-semibold">{content.heading}</h2>
-        <p className="mt-4 text-slate-600">{content.description}</p>
+    <section
+      id={content.id}
+      className="border-y border-[var(--color-gold-dark)] bg-[var(--color-navy)] py-20 text-white sm:py-28"
+      aria-labelledby={`${content.id}-title`}
+    >
+      <Container className="text-center">
+        <span
+          aria-hidden="true"
+          className="mx-auto block h-px w-12 bg-[var(--color-gold)]"
+        />
+        <h2
+          id={`${content.id}-title`}
+          className="mt-7 text-3xl leading-tight font-semibold tracking-tight sm:text-5xl"
+        >
+          {content.heading}
+        </h2>
+        <div className="mx-auto mt-7 max-w-3xl space-y-4 text-base leading-8 text-slate-200 sm:text-lg">
+          {content.description.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+        </div>
       </Container>
     </section>
   );

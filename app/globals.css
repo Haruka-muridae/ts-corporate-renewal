@@ -2,15 +2,76 @@
 
 :root {
   color-scheme: light;
+  --color-navy: #0f2747;
+  --color-navy-dark: #091a30;
+  --color-navy-light: #29496f;
+  --color-gold: #c99a2e;
+  --color-gold-dark: #9a6f15;
+  --color-gold-light: #e7d29c;
+  --color-gold-pale: #fbf6e9;
+  --color-white: #ffffff;
+  --color-off-white: #f8f7f3;
+  --color-text: #20242a;
+  --color-text-muted: #626870;
+  --color-border: #ddd8cc;
+  --color-border-strong: #a8a49a;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 html {
-  background: #ffffff;
+  background: var(--color-white);
+  scroll-behavior: smooth;
 }
 
 body {
   min-height: 100vh;
   margin: 0;
+  background: var(--color-white);
+  color: var(--color-text);
   font-family: Arial, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo,
     sans-serif;
+  font-size: 1rem;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+a,
+button,
+input,
+textarea,
+summary {
+  outline-offset: 3px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+}
+
+::selection {
+  background: var(--color-gold-light);
+  color: var(--color-navy-dark);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -8,32 +8,50 @@ type PricingProps = Readonly<{
 
 export function Pricing({ content }: PricingProps) {
   return (
-    <section id={content.id} className="py-16">
+    <section
+      id={content.id}
+      className="bg-white py-20 sm:py-28"
+      aria-labelledby={`${content.id}-title`}
+    >
       <Container>
-        <p className="text-sm text-slate-500">{content.eyebrow}</p>
-        <h2 className="mt-3 text-3xl font-semibold">{content.heading}</h2>
-        <p className="mt-4 text-slate-600">{content.description}</p>
-        {content.plans.length > 0 && (
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {content.plans.map((plan) => (
-              <article key={plan.id} className="border border-slate-200 p-5">
-                <h3 className="text-xl font-semibold">{plan.name}</h3>
-                <p className="mt-3">{plan.price}</p>
-                <p className="mt-3 text-sm text-slate-600">
-                  {plan.description}
-                </p>
-                <ul className="my-5 list-disc space-y-2 pl-5 text-sm">
-                  {plan.features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
+        <span
+          aria-hidden="true"
+          className="block h-px w-12 bg-[var(--color-gold)]"
+        />
+        <h2
+          id={`${content.id}-title`}
+          className="mt-6 text-3xl font-semibold text-[var(--color-navy)] sm:text-4xl"
+        >
+          {content.heading}
+        </h2>
+        <div className="mt-5 space-y-2 text-base leading-8 text-[var(--color-text-muted)]">
+          {content.description.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+        </div>
+        <div className="mt-10 grid items-stretch gap-5 md:grid-cols-3">
+          {content.plans.map((plan) => (
+            <article
+              key={plan.id}
+              className="flex min-w-0 flex-col border border-[var(--color-border)] bg-white p-6"
+            >
+              <h3 className="text-xl font-semibold text-[var(--color-navy)] sm:text-2xl">
+                {plan.name}
+              </h3>
+              <p className="mt-6 border-y border-[var(--color-border)] py-5 text-base leading-7 text-[var(--color-text-muted)]">
+                {plan.pricePendingLabel}
+              </p>
+              <p className="mt-5 text-base leading-7 text-[var(--color-text)]">
+                {plan.description}
+              </p>
+              <div className="mt-auto pt-8">
                 <Button href={plan.action.href} variant="secondary">
                   {plan.action.label}
                 </Button>
-              </article>
-            ))}
-          </div>
-        )}
+              </div>
+            </article>
+          ))}
+        </div>
       </Container>
     </section>
   );

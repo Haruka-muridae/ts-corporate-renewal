@@ -1,39 +1,60 @@
 export type SectionContent = Readonly<{
   id: string;
-  eyebrow: string;
   heading: string;
-  description: string;
+  description: readonly string[];
 }>;
 
 export type LinkContent = Readonly<{
   label: string;
-  href: string;
+  href: "#consultation";
 }>;
 
 export type AccordionItemContent = Readonly<{
   id: string;
   title: string;
-  content: string;
+  body: readonly string[];
+  items: readonly string[];
+  status: "confirmed" | "pending";
+  statusLabel?: string;
 }>;
 
 export type ResultItemContent = Readonly<{
   id: string;
   label: string;
-  value: string;
-  description: string;
+  facts: readonly string[];
+  notes: readonly string[];
 }>;
 
 export type PricingPlanContent = Readonly<{
   id: string;
   name: string;
-  price: string;
+  price: null;
+  pricePendingLabel: string;
   description: string;
-  features: readonly string[];
   action: LinkContent;
+}>;
+
+export type FormFieldContent = Readonly<{
+  id: string;
+  label: string;
+  kind: "text" | "textarea";
+  required: boolean;
+  autoComplete?: "name";
+}>;
+
+export type ConsultationFormContent = Readonly<{
+  id: string;
+  heading: string;
+  notice: string;
+  fields: readonly FormFieldContent[];
+  submitLabel: string;
+  developmentMessage: string;
 }>;
 
 export type HeroContent = SectionContent &
   Readonly<{
+    serviceName: string;
+    supplement: string;
     primaryAction: LinkContent;
   }>;
 
@@ -45,11 +66,13 @@ export type ListSectionContent = SectionContent &
 export type AccordionSectionContent = SectionContent &
   Readonly<{
     items: readonly AccordionItemContent[];
+    pendingLabel?: string;
   }>;
 
 export type ResultsContent = SectionContent &
   Readonly<{
     items: readonly ResultItemContent[];
+    disclaimer: string;
   }>;
 
 export type PricingContent = SectionContent &
@@ -59,7 +82,11 @@ export type PricingContent = SectionContent &
 
 export type CTAContent = SectionContent &
   Readonly<{
-    action: LinkContent;
+    flow: Readonly<{
+      heading: string;
+      pendingLabel: string;
+    }>;
+    form: ConsultationFormContent;
   }>;
 
 export type LPContent = Readonly<{
