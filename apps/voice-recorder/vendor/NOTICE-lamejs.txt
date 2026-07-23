@@ -1,0 +1,61 @@
+# 同梱ライブラリに関する表示 (NOTICE)
+
+このディレクトリには、MP3エンコードのために第三者ライブラリを同梱しています。
+本アプリのコードとは分離して配置しています。
+
+## ライブラリ
+
+- ライブラリ名        : lamejs (LAME.js / MP3 encoder in JavaScript)
+- バージョン          : 1.2.7
+- npmパッケージ名     : @breezystack/lamejs
+- 配布元 (npm)        : https://registry.npmjs.org/@breezystack/lamejs/-/lamejs-1.2.7.tgz
+- ソースリポジトリ    : https://github.com/shijinyu/lamejs
+                        (本家: https://github.com/zhuker/lamejs)
+- 原作者              : Alex Zhukov ほか LAME.js 貢献者
+- ライセンス名        : LGPL-3.0 (GNU Lesser General Public License v3.0)
+
+## 同梱ファイル
+
+- ファイル            : lamejs.iife.js
+- 取得元 (公式)       : npm レジストリの上記 tarball 内 dist/lamejs.iife.js
+- 取得日時 (UTC)      : 2026-07-23T23:16:39Z
+- SHA-256             : 0be202ec162aa3042d5c5c4e6288ad326cff8cec7312c2894a0a91ad2f9aeda1
+- 改変の有無          : 改変なし (tarball 収録物をそのまま配置)
+- 形式                : IIFE (Web Worker から importScripts で読み込み可能)
+
+tarball 全体の SHA-256 : 2fbd5d15a3c89a1ca60237b3b8b0036c9bc756c100a7be34ef812cfc2598d85d
+tarball 全体の SHA-1   : c4779f7f0b6b685da675ebbaaff85e52187a51ad
+  (npm レジストリ公表の dist.shasum と一致することを確認済み)
+
+## ライセンス全文
+
+- LICENSE-lamejs.txt に、宣言されているライセンス LGPL-3.0 の正典全文
+  (および LGPLv3 が参照する GPL-3.0 の全文) を https://www.gnu.org/licenses/
+  から取得して改変せずに収録しています。
+
+## npmパッケージ同梱の LICENSE ファイル (原文のまま)
+
+npm パッケージに含まれる LICENSE ファイルは、ライセンス全文ではなく、
+商用利用に関する短い案内文でした。参考として、その内容を改変せず以下に転記します。
+（ライセンス全文は上記 LICENSE-lamejs.txt を参照してください。）
+
+--- ここから package/LICENSE 原文 ---
+Can I use LAME in my commercial program?  
+
+Yes, you can, under the restrictions of the LGPL.  The easiest
+way to do this is to:
+
+1. Link to LAME as separate jar (lame.min.js or lame.all.js)
+
+2. Fully acknowledge that you are using LAME, and give a link
+   to our web site, lame.sourceforge.net
+
+3. If you make modifications to LAME, you *must* release these
+   these modifications back to the LAME project, under the LGPL.
+--- ここまで package/LICENSE 原文 ---
+
+## 実行時の動作
+
+- このライブラリは実行時に外部へ通信しません
+  (fetch / XMLHttpRequest / WebSocket / importScripts を含まないことを静的に確認)。
+- 追加の依存パッケージはありません (dependencies: 空)。

@@ -95,16 +95,45 @@
             <button type="button" class="btn btn--secondary" id="recorder-stop" hidden>停止</button>
           </div>
 
+          <!-- 停止後：元形式（録音そのまま）の確認とMP3変換の開始 -->
           <div class="recorder__result" id="recorder-result" hidden>
-            <h3 class="recorder__result-title">録音の確認</h3>
+            <h3 class="recorder__result-title">録音の確認（元の音声）</h3>
             <audio class="recorder__player" id="recorder-player" controls preload="metadata"></audio>
             <p class="recorder__meta" id="recorder-meta"></p>
+
+            <div class="recorder__controls">
+              <button type="button" class="btn btn--primary" id="recorder-convert">MP3に変換する</button>
+              <button type="button" class="btn btn--secondary" id="recorder-reset">やり直す</button>
+            </div>
+          </div>
+
+          <!-- 変換中：デコードとエンコードの進捗 -->
+          <div class="recorder__conversion" id="recorder-conversion" hidden>
+            <h3 class="recorder__result-title" id="recorder-conversion-title">MP3に変換しています</h3>
+            <div class="recorder__progress"
+              role="progressbar"
+              id="recorder-progress"
+              aria-labelledby="recorder-conversion-title"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0">
+              <span class="recorder__progress-bar" id="recorder-progress-bar" aria-hidden="true"></span>
+            </div>
+            <!-- 数値は progressbar が読み上げるため、この表示は視覚のみ -->
+            <p class="recorder__progress-text" id="recorder-progress-text" aria-hidden="true">0%</p>
+          </div>
+
+          <!-- 変換後：MP3の確認と保存 -->
+          <div class="recorder__completed" id="recorder-completed" hidden>
+            <h3 class="recorder__result-title">MP3の確認</h3>
+            <audio class="recorder__player" id="recorder-mp3-player" controls preload="metadata"></audio>
+            <p class="recorder__meta" id="recorder-mp3-meta"></p>
 
             <div class="recorder__save-group" id="recorder-save-group" role="group" aria-label="保存先"></div>
             <p class="recorder__save-note" id="recorder-save-note"></p>
 
             <div class="recorder__controls">
-              <button type="button" class="btn btn--secondary" id="recorder-reset">やり直す</button>
+              <button type="button" class="btn btn--secondary" id="recorder-reset-completed">やり直す</button>
             </div>
           </div>
         </div>

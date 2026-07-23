@@ -57,33 +57,56 @@ export function extensionForMimeType(mimeType) {
   }
 }
 
+export class SaveError extends Error {
+  constructor(cause) {
+    super('SAVE_FAILED');
+    this.name = 'SaveError';
+    this.code = 'SAVE_FAILED';
+    this.cause = cause ?? null;
+  }
+}
+
 /* 端末へ保存する。オブジェクトURLは必ず解放する。 */
 export function saveToDevice(blob, fileName) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
+  let url;
 
-  link.href = url;
-  link.download = fileName;
-  link.rel = 'noopener';
-  document.body.append(link);
-  link.click();
-  link.remove();
+  try {
+    url = URL.createObjectURL(blob);
+  } catch (error) {
+    /* Object URL の生成失敗は保存失敗として上位へ返す。 */
+    throw new SaveError(error);
+  }
+
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.rel = 'noopener';
+    document.body.append(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw new SaveError(error);
+  }
 
   /*
    * 即座に解放するとダウンロードが始まらない環境があるため、
    * 次のタスクまで待ってから解放する。
+   * URLごとに個別のタイマーで解放するため、連続クリックでもURLは残らない。
    */
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /*
- * 保存先の一覧。
- * id       … 内部識別子
- * label    … ボタン文言
- * note     … 補足説明（プライバシー説明の切り替えにも使う）
- * external … 音声が端末外へ送信されるか。true の保存先を追加する場合は
- *            同意UIとプライバシー説明の見直しが必須。
- * save     … 実処理。未実装の保存先は null。
+ * 保存先の一覧（レジストリ）。
+ * id        … 内部識別子
+ * label     … ボタン文言
+ * note      … 補足説明（プライバシー説明の切り替えにも使う）
+ * external  … 音声が端末外へ送信されるか。true の保存先を有効化する場合は
+ *             同意UIとプライバシー説明の見直しが必須。
+ * available … 現在利用できるか。false は準備中としてUIに表示する。
+ * save      … 実処理。準備中の保存先は null。
  */
 export const SAVE_TARGETS = [
   {
@@ -91,23 +114,24 @@ export const SAVE_TARGETS = [
     label: '端末に保存',
     note: '音声は端末内に保存されます。',
     external: false,
+    available: true,
     save: saveToDevice,
   },
-  /*
-   * 将来の追加予定。実装時にコメントを外す。
-   * Google Identity Services によるクライアントサイドOAuthを使い、
-   * スコープは drive.file（アプリが作成したファイルのみ）に限定する。
-   * external: true のため、プライバシー説明の文言を保存先に応じて
-   * 切り替える必要がある。
-   *
-   * {
-   *   id: 'google-drive',
-   *   label: 'Google Drive に保存',
-   *   note: '音声が Google Drive へ送信されます。',
-   *   external: true,
-   *   save: saveToGoogleDrive,
-   * },
-   */
+  {
+    /*
+     * 準備中。今回は表示のみで、保存処理は実装しない。
+     * 実装時は Google Identity Services のクライアントサイドOAuthを使い、
+     * スコープは drive.file（アプリが作成したファイルのみ）に限定する。
+     * external: true のため、プライバシー説明の文言を保存先に応じて
+     * 切り替える必要がある。
+     */
+    id: 'google-drive',
+    label: 'Google Drive に保存',
+    note: '音声が Google Drive へ送信されます（準備中）。',
+    external: true,
+    available: false,
+    save: null,
+  },
 ];
 
 export function getSaveTarget(id) {

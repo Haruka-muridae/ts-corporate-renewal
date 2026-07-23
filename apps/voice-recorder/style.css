@@ -226,10 +226,44 @@
   min-width: 140px;
 }
 
-.recorder__result {
+.recorder__result,
+.recorder__conversion,
+.recorder__completed {
   margin-top: 32px;
   padding-top: 28px;
   border-top: 1px solid var(--c-border);
+}
+
+/* 変換の進捗バー */
+.recorder__progress {
+  overflow: hidden;
+  height: 12px;
+  margin-top: 16px;
+  border-radius: 999px;
+  background-color: var(--c-bg-sub);
+  border: 1px solid var(--c-border);
+}
+
+.recorder__progress-bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  background-color: var(--color-gold);
+  transition: width 200ms ease;
+}
+
+.recorder__progress-text {
+  margin-top: 8px;
+  color: var(--c-text-muted);
+  font-family: var(--font-num);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder__progress-bar {
+    transition: none;
+  }
 }
 
 .recorder__result-title {
@@ -259,11 +293,12 @@
   min-width: 180px;
 }
 
-.recorder__save:disabled {
+/* 準備中の保存先（Google Drive）は押下でき、案内を返すため
+   disabled ではなく aria-disabled で見た目のみ抑える。 */
+.recorder__save[aria-disabled="true"] {
   border-color: var(--color-border-strong);
   color: var(--c-text-muted);
   background-color: var(--c-bg-sub);
-  cursor: not-allowed;
 }
 
 .recorder__save-note {
