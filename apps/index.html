@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIアプリ | TSアセットマネジメント合同会社</title>
+  <meta name="description" content="TSアセットマネジメント合同会社が開発・提供するAIアプリの一覧です。数理とデータの知見をもとに、業務で使える形に実装しています。">
+
+  <!-- TODO: 公開URLの確定後に canonical を追加 -->
+  <!-- TODO: 公開URLの確定後に og:url を追加 -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="AIアプリ | TSアセットマネジメント合同会社">
+  <meta property="og:description" content="TSアセットマネジメント合同会社が開発・提供するAIアプリの一覧です。">
+  <meta property="og:locale" content="ja_JP">
+  <!-- TODO: OGP画像の確定後に og:image を追加 -->
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- TODO: favicon提供後に link rel="icon" を追加 -->
+  <!-- TODO: 公開URLの確定後に BreadcrumbList の JSON-LD を追加 -->
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <header id="header" class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-logo" href="../index.html" aria-label="TSアセットマネジメント合同会社 トップページ">
+        <span class="site-logo__mark" aria-hidden="true">TS</span>
+        <span class="site-logo__text">
+          <span class="site-logo__name">TSアセットマネジメント合同会社</span>
+          <span class="site-logo__name-en" lang="en">TS ASSET MANAGEMENT LLC</span>
+        </span>
+      </a>
+
+      <button
+        id="menu-toggle"
+        class="menu-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="global-nav"
+        aria-label="メニューを開く"
+      >
+        <span class="menu-toggle__line" aria-hidden="true"></span>
+        <span class="menu-toggle__line" aria-hidden="true"></span>
+        <span class="menu-toggle__line" aria-hidden="true"></span>
+      </button>
+
+      <nav id="global-nav" class="global-nav" aria-label="グローバルナビ">
+        <ul class="global-nav__list">
+          <li><a class="global-nav__link" href="../index.html#about">私たちについて</a></li>
+          <li><a class="global-nav__link" href="../index.html#approach">課題解決の進め方</a></li>
+          <li><a class="global-nav__link" href="../index.html#business">事業領域</a></li>
+          <li><a class="global-nav__link" href="index.html" aria-current="page">AIアプリ</a></li>
+          <li><a class="global-nav__link" href="../index.html#members">メンバー</a></li>
+          <li><a class="global-nav__link" href="../index.html#company">会社概要</a></li>
+          <li><a class="global-nav__link global-nav__link--contact" href="../index.html#contact">お問い合わせ</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="section apps-hero" aria-labelledby="apps-title">
+      <div class="container">
+        <nav class="breadcrumb" aria-label="パンくずリスト">
+          <ol class="breadcrumb__list">
+            <li><a href="../index.html">ホーム</a></li>
+            <li aria-current="page">AIアプリ</li>
+          </ol>
+        </nav>
+
+        <div class="apps-hero__inner">
+          <p class="apps-hero__label" lang="en">AI Apps</p>
+          <h1 id="apps-title" class="apps-hero__title">AIアプリ</h1>
+          <p class="apps-hero__lead">数理とデータの知見を、実際に触って使える形にしたアプリを公開していきます。分析の結果を報告書で終わらせず、日々の業務のなかで動かせることを目指しています。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section apps" aria-labelledby="apps-list-title">
+      <div class="container">
+        <header class="section-heading apps__heading reveal">
+          <p class="section-label" lang="en">Lineup</p>
+          <h2 id="apps-list-title">アプリ一覧</h2>
+          <p class="section-heading__lead">TSアセットマネジメント合同会社が開発・運営するAIアプリケーションです。公開中のアプリから順次ご利用いただけます。</p>
+        </header>
+
+        <!--
+          カードは script.js の APPS 配列から生成する。
+          追加・更新の手順は script.js 冒頭の「アプリ追加方法」を参照する。
+          このHTMLを編集する必要はない。
+
+          JavaScriptが無効な環境向けに、下の noscript で同じ一覧を提供している。
+          APPS を更新したときは、noscript 内の一覧もあわせて更新する。
+        -->
+        <ul id="apps-grid" class="apps__grid"></ul>
+
+        <noscript>
+          <ul class="apps-fallback">
+            <li>音声録音・MP3変換アプリ（準備中）</li>
+            <li>領収書・収支管理システム（準備中）</li>
+            <li>電子契約書作成アプリ（準備中）</li>
+          </ul>
+        </noscript>
+
+        <div class="apps-note reveal">
+          <p>各アプリは、それぞれ別のドメインまたはリポジトリで提供する予定です。このページは一覧と入口の役割を担い、アプリ本体は含みません。</p>
+          <p>ご要望や、業務でお困りの内容がありましたら、<a href="../index.html#contact">お問い合わせ</a>からお知らせください。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer" class="site-footer">
+    <div class="container">
+      <div class="site-footer__main">
+        <div class="site-footer__info">
+          <p class="site-footer__name">TSアセットマネジメント合同会社</p>
+          <p class="site-footer__name-en" lang="en">TS ASSET MANAGEMENT LLC</p>
+          <address class="site-footer__address">
+            <p>〒249-0002 神奈川県逗子市久木8-8-26</p>
+            <p><a href="mailto:architect@potenitas.com">architect@potenitas.com</a></p>
+          </address>
+        </div>
+
+        <nav class="footer-nav" aria-label="フッターナビ">
+          <ul class="footer-nav__list">
+            <li><a href="../index.html#about">私たちについて</a></li>
+            <li><a href="../index.html#approach">課題解決の進め方</a></li>
+            <li><a href="../index.html#business">事業領域</a></li>
+            <li><a href="index.html" aria-current="page">AIアプリ</a></li>
+            <li><a href="../index.html#members">メンバー</a></li>
+            <li><a href="../index.html#company">会社概要</a></li>
+            <li><a href="../index.html#contact">お問い合わせ</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <div class="site-footer__bottom">
+        <small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small>
+      </div>
+    </div>
+  </footer>
+
+  <button id="pagetop" class="pagetop" type="button" aria-label="ページトップへ戻る" aria-hidden="true" tabindex="-1">
+    <span aria-hidden="true">▲</span>
+  </button>
+
+  <script src="script.js"></script>
+</body>
+</html>
