@@ -1,0 +1,349 @@
+/*
+ * AIアプリ一覧ページ専用スタイル。
+ * ../css/style.css を読み込んだうえで追加する差分のみを定義する。
+ * 既存クラスは上書きせず、このページ固有のクラスだけを追加する。
+ */
+
+/* Breadcrumb */
+.breadcrumb {
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-text-muted);
+}
+
+.breadcrumb__list li + li::before {
+  margin-right: 8px;
+  color: var(--color-border-strong);
+  content: "/";
+}
+
+.breadcrumb__list a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.breadcrumb__list [aria-current="page"] {
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+/* Page hero */
+.apps-hero {
+  padding-top: calc(var(--section-space) + var(--header-height));
+  padding-bottom: calc(var(--section-space) - 16px);
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.apps-hero__inner {
+  margin-top: 32px;
+  max-width: 720px;
+}
+
+.apps-hero__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-gold-text);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.apps-hero__label::before {
+  width: 32px;
+  height: 1px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+.apps-hero__title {
+  margin-top: 16px;
+  font-size: clamp(1.75rem, 1.2rem + 2.6vw, 2.75rem);
+  line-height: 1.35;
+}
+
+.apps-hero__lead {
+  margin-top: 24px;
+  color: var(--c-text-muted);
+}
+
+/* Lineup */
+.apps__heading {
+  margin-bottom: 32px;
+}
+
+.apps__grid {
+  display: grid;
+  align-items: start;
+  gap: 20px;
+}
+
+.apps__grid > li {
+  min-width: 0;
+}
+
+.reveal-ready .apps__grid > .reveal {
+  transition-delay: calc(var(--i, 0) * 40ms);
+}
+
+/* 読み上げ専用テキスト */
+.apps-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 登録件数が0件のとき */
+.apps-empty {
+  padding: 32px 20px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-card);
+  color: var(--c-text-muted);
+  text-align: center;
+}
+
+/* JavaScript無効時の一覧 */
+.apps-fallback {
+  display: grid;
+  gap: 12px;
+}
+
+.apps-fallback li {
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+  font-weight: 700;
+  color: var(--c-main);
+}
+
+/* App card */
+.app-card {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  padding: 28px 20px;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+  transition: border-color 220ms ease, box-shadow 220ms ease;
+}
+
+.app-card__top {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-card__num {
+  color: var(--color-navy-light);
+  font-family: var(--font-num);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.app-card__icon {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: var(--color-navy-light);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/*
+ * ステータスバッジ。
+ * script.js の STATUSES のキーと、修飾子クラスの名前を対応させている。
+ * coming = グレー / beta = ブルー / public = ゴールド。
+ */
+.app-card__status {
+  display: inline-flex;
+  margin-top: 24px;
+  padding: 4px 10px;
+  align-self: flex-start;
+  align-items: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-tag);
+  color: var(--c-text-muted);
+  background-color: var(--c-bg-sub);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+}
+
+.app-card__status--coming {
+  border-color: var(--color-border-strong);
+  color: var(--c-text-muted);
+  background-color: var(--c-bg-sub);
+}
+
+.app-card__status--beta {
+  border-color: var(--color-navy-light);
+  color: var(--color-navy-light);
+  background-color: rgba(41, 73, 111, 0.07);
+}
+
+.app-card__status--public {
+  border-color: var(--color-gold);
+  color: var(--color-gold-text);
+  background-color: rgba(201, 154, 46, 0.1);
+}
+
+/* カード自体の強調も、ステータスに合わせて段階的に変える。 */
+.app-card--coming {
+  box-shadow: inset 3px 0 0 var(--color-border-strong);
+}
+
+.app-card--beta {
+  box-shadow: inset 3px 0 0 var(--color-navy-light);
+}
+
+.app-card--public {
+  border-color: var(--color-gold);
+  box-shadow: inset 3px 0 0 var(--color-gold);
+}
+
+.app-card__title {
+  margin-top: 16px;
+}
+
+.app-card__name-en {
+  margin-top: 4px;
+  color: var(--c-text-muted);
+  font-family: var(--font-en);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+}
+
+.app-card__text {
+  margin-top: 20px;
+  color: var(--c-text-muted);
+}
+
+.app-card__tags {
+  display: flex;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-card__tags li {
+  padding: 5px 8px;
+  border: 1px solid var(--color-gold-light);
+  border-radius: var(--radius-tag);
+  color: var(--c-text-muted);
+  background-color: var(--c-bg-sub);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+}
+
+.app-card__action {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--c-border);
+}
+
+.app-card__link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--color-navy-light);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.app-card__link::after {
+  margin-left: 6px;
+  content: "→";
+}
+
+/* Note */
+.apps-note {
+  margin-top: 40px;
+  padding: 24px 20px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+}
+
+.apps-note p + p {
+  margin-top: 12px;
+}
+
+.apps-note a {
+  color: var(--c-main);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (hover: hover) {
+  /* リンクを持つカードだけを反応させ、準備中のカードは静止させる。 */
+  .app-card.has-link:hover {
+    border-color: var(--color-gold);
+  }
+
+  .app-card__link:hover {
+    color: var(--color-gold-text);
+  }
+}
+
+@media (min-width: 768px) {
+  .apps__grid {
+    gap: 32px;
+  }
+
+  .apps-note {
+    padding: 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .apps-hero__inner {
+    margin-top: 40px;
+  }
+
+  .apps__heading {
+    margin-bottom: 48px;
+  }
+
+  .apps__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-card {
+    padding: 40px 24px 32px;
+  }
+}
