@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>音声録音・MP3変換アプリ | TSアセットマネジメント合同会社</title>
+  <meta name="description" content="ブラウザだけで音声を録音できるアプリです。録音した音声は端末の外へ送信されません。">
+
+  <!-- TODO: 公開URLの確定後に canonical を追加 -->
+  <!-- TODO: 公開URLの確定後に og:url を追加 -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="音声録音・MP3変換アプリ | TSアセットマネジメント合同会社">
+  <meta property="og:description" content="ブラウザだけで音声を録音できるアプリです。録音した音声は端末の外へ送信されません。">
+  <meta property="og:locale" content="ja_JP">
+  <!-- TODO: OGP画像の確定後に og:image を追加 -->
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- 公開前の準備中ページのため、検索エンジンには登録しない -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <header id="header" class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-logo" href="../../index.html" aria-label="TSアセットマネジメント合同会社 トップページ">
+        <span class="site-logo__mark" aria-hidden="true">TS</span>
+        <span class="site-logo__text">
+          <span class="site-logo__name">TSアセットマネジメント合同会社</span>
+          <span class="site-logo__name-en" lang="en">TS ASSET MANAGEMENT LLC</span>
+        </span>
+      </a>
+
+      <nav class="vr-nav" aria-label="ページ内ナビ">
+        <a class="vr-nav__link" href="../index.html">AIアプリ一覧へ戻る</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="section vr-hero" aria-labelledby="vr-title">
+      <div class="container">
+        <nav class="vr-breadcrumb" aria-label="パンくずリスト">
+          <ol class="vr-breadcrumb__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li aria-current="page">音声録音・MP3変換アプリ</li>
+          </ol>
+        </nav>
+
+        <div class="vr-hero__inner">
+          <p class="vr-hero__label" lang="en">Voice Recorder</p>
+          <h1 id="vr-title" class="vr-hero__title">音声録音・MP3変換アプリ</h1>
+          <p class="vr-hero__lead">ブラウザだけで音声を録音できます。録音した音声は端末の外へ送信されず、サーバーにも保存されません。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section vr-main" aria-labelledby="vr-recorder-title">
+      <div class="container">
+        <h2 id="vr-recorder-title" class="vr-section-title">録音</h2>
+
+        <div id="recorder-app" class="recorder" data-state="idle">
+          <!-- 状態通知。毎秒読み上げると妨害になるため、経過時間は含めない -->
+          <p id="recorder-status" class="recorder__status" role="status" aria-live="polite">録音の準備ができています。</p>
+
+          <p class="recorder__timer">
+            <span class="recorder__time" id="recorder-time" aria-label="録音時間">00:00</span>
+            <span class="recorder__limit" id="recorder-limit"></span>
+          </p>
+
+          <!-- 色だけに頼らず、必ずテキストでも状態を示す -->
+          <p class="recorder__indicator" id="recorder-indicator" hidden>
+            <span class="recorder__dot" aria-hidden="true"></span>
+            <span id="recorder-indicator-label">録音中</span>
+          </p>
+
+          <p class="recorder__notice" id="recorder-notice" role="status" aria-live="polite" hidden></p>
+          <p class="recorder__error" id="recorder-error" role="alert" hidden></p>
+
+          <div class="recorder__controls">
+            <button type="button" class="btn btn--primary" id="recorder-start">録音を開始</button>
+            <button type="button" class="btn btn--secondary" id="recorder-pause" hidden>一時停止</button>
+            <button type="button" class="btn btn--secondary" id="recorder-resume" hidden>再開</button>
+            <button type="button" class="btn btn--secondary" id="recorder-stop" hidden>停止</button>
+          </div>
+
+          <div class="recorder__result" id="recorder-result" hidden>
+            <h3 class="recorder__result-title">録音の確認</h3>
+            <audio class="recorder__player" id="recorder-player" controls preload="metadata"></audio>
+            <p class="recorder__meta" id="recorder-meta"></p>
+
+            <div class="recorder__save-group" id="recorder-save-group" role="group" aria-label="保存先"></div>
+            <p class="recorder__save-note" id="recorder-save-note"></p>
+
+            <div class="recorder__controls">
+              <button type="button" class="btn btn--secondary" id="recorder-reset">やり直す</button>
+            </div>
+          </div>
+        </div>
+
+        <noscript>
+          <p class="recorder__error">このアプリの利用にはJavaScriptが必要です。ブラウザの設定で有効にしてください。</p>
+        </noscript>
+
+        <div class="vr-notes">
+          <h2 class="vr-section-title">ご利用にあたって</h2>
+
+          <div class="vr-note">
+            <h3>プライバシー</h3>
+            <p>録音した音声は、お使いの端末のブラウザ内だけで処理されます。当社のサーバーを含め、外部へ送信することはありません。録音データの保存・解析・第三者提供も行いません。ページを閉じると録音内容は破棄されます。</p>
+          </div>
+
+          <div class="vr-note">
+            <h3>対応ブラウザ</h3>
+            <p>Chrome、Edge、Firefox、Safari の最新版に対応しています。ご利用にはマイクの使用許可が必要です。</p>
+            <p><strong>iPhone・iPadをお使いの場合</strong>は、画面をロックしたり他のアプリへ切り替えたりすると録音が停止します。録音中は画面を表示したままにしてください。また、マイクの使用中は音声がスピーカーから出力されます。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer" class="site-footer">
+    <div class="container">
+      <div class="site-footer__main">
+        <div class="site-footer__info">
+          <p class="site-footer__name">TSアセットマネジメント合同会社</p>
+          <p class="site-footer__name-en" lang="en">TS ASSET MANAGEMENT LLC</p>
+          <address class="site-footer__address">
+            <p>〒249-0002 神奈川県逗子市久木8-8-26</p>
+            <p><a href="mailto:architect@potenitas.com">architect@potenitas.com</a></p>
+          </address>
+        </div>
+
+        <nav class="footer-nav" aria-label="フッターナビ">
+          <ul class="footer-nav__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li><a href="../../index.html#business">事業領域</a></li>
+            <li><a href="../../index.html#company">会社概要</a></li>
+            <li><a href="../../index.html#contact">お問い合わせ</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <div class="site-footer__bottom">
+        <small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
