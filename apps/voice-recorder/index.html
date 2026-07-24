@@ -185,9 +185,14 @@
             </div>
           </div>
 
-          <p class="recorder__indicator" id="long-indicator" hidden>
+          <!--
+            録音状態のチップ。常に表示し、状態に応じて文言と色を切り替える。
+            読み上げは上の #long-status（aria-live）が担うため、ここは視覚用。
+            色だけに頼らず、必ず文言でも状態を示す。
+          -->
+          <p class="recorder__indicator vr-status vr-status--idle" id="long-status-chip" aria-hidden="true">
             <span class="recorder__dot" aria-hidden="true"></span>
-            <span id="long-indicator-label">録音中</span>
+            <span id="long-status-label">待機中</span>
           </p>
 
           <p class="vr-long__state" id="long-substate" aria-live="polite" hidden></p>
