@@ -138,15 +138,21 @@ Sign in with Google の既定のスコープのみ。
 
 ---
 
-## 10. Drive権限は未実装
+## 10. Drive権限（音声レコーダーのみ）
 
-- `https://www.googleapis.com/auth/drive.file` などのDriveスコープは要求していない。
-- `google.accounts.oauth2.initTokenClient` も使用していない。
-- Drive API / Google Docs API の呼び出しも行っていない。
+ログイン（第9節）ではDriveスコープを要求しない。
+音声レコーダーで「Google Driveへ保存」を押したときにだけ、
+別のOAuth認可フロー（`google.accounts.oauth2.initTokenClient`）で
+以下のスコープを要求する。
 
-将来、音声レコーダーの「Google Driveへ保存」を実装する際に、
-**その操作の時点で** 別のOAuth認可フロー（`initTokenClient`）を起動し、
-必要最小限のスコープだけを要求する。ログインと認可は分離したまま運用する。
+```
+https://www.googleapis.com/auth/drive.file
+```
+
+このスコープは **このアプリが作成した、または利用者が明示的に選んだファイル** だけを
+対象とする。Drive全体の閲覧権限ではない。
+
+Google Docs API は使用していない。設定手順は「付録B: Google Drive保存の設定」を参照。
 
 ---
 
@@ -252,7 +258,7 @@ OAuth同意画面の公開ステータスが **テスト** の場合、
 
 ### 追加してよい外部通信
 
-今回追加した外部通信は Google Identity Services 関連のみ。
+現在の外部通信は Google Identity Services と Google Drive API のみ。
 以下は追加しない方針とする。
 
 - Google Analytics / Google Tag Manager
@@ -260,3 +266,134 @@ OAuth同意画面の公開ステータスが **テスト** の場合、
 - 他のCDN
 - 非公式の認証SDK
 - 独自トラッキング
+
+---
+
+# 付録B: Google Drive保存の設定
+
+音声レコーダー（`/apps/voice-recorder/`）の「Google Driveへ保存」に必要な設定。
+
+| ファイル | 役割 |
+| --- | --- |
+| `apps/gis-loader.js` | GIS公式スクリプトの共通ローダー（ログインとDriveで共用） |
+| `apps/voice-recorder/drive-auth.js` | アクセストークンの取得（**メモリ上のみ**） |
+| `apps/voice-recorder/drive-client.js` | Drive API v3（フォルダ確認・作成、multipartアップロード） |
+| `apps/voice-recorder/drive-save.js` | 保存UI（状態表示、エラー文言） |
+
+OAuthクライアントIDは `apps/auth-config.js` を参照する。**Drive側で重複定義しない。**
+
+## B-1. Google Drive API の有効化
+
+Driveスコープを許可しても、APIが無効なままだと呼び出しが `403` で失敗する。
+
+1. <https://console.cloud.google.com/> で対象プロジェクトを選ぶ。
+2. 「APIとサービス」→「ライブラリ」を開く。
+3. 「Google Drive API」を検索して開く。
+4. 「有効にする」を押す。
+5. 「APIとサービス」→「有効なAPIとサービス」に表示されることを確認する。
+
+有効化していない場合、画面には
+「Google Drive APIが有効になっていません。管理者にGoogle Cloud側の設定をご確認ください。」
+と表示される（`accessNotConfigured` を検出して切り替えている）。
+
+## B-2. OAuth同意画面へ `drive.file` スコープを追加
+
+1. 「APIとサービス」→「OAuth同意画面」→「データアクセス」（旧「スコープ」）。
+2. 「スコープを追加または削除」を押す。
+3. `https://www.googleapis.com/auth/drive.file` を選ぶ。
+4. 保存する。
+
+- `drive.file` は Google の分類上 **機密スコープ（sensitive scope）** にあたる。
+  制限付きスコープ（`drive` や `drive.readonly`）ではない。
+- 追加するのはこの1つだけ。`drive`、`drive.readonly`、`drive.metadata` は追加しない。
+
+## B-3. テストユーザー
+
+公開ステータスが「テスト」の場合、テストユーザーに登録したアカウントでしか
+認可できない。ログイン（第13節）と同じ制約が、Drive認可にも適用される。
+
+未登録のアカウントでは、認可ポップアップが `access_denied` で閉じ、画面には
+「Google Driveへのアクセスが許可されませんでした。」と表示される。
+
+## B-4. 本番公開時のOAuth審査
+
+- `drive.file` は機密スコープのため、User Type「外部」で本番公開する場合は
+  **Googleの審査（verification）が必要になる可能性が高い**。
+  審査ではアプリのホームページ、プライバシーポリシー、スコープの利用目的の説明、
+  場合によっては動作を示す動画の提出を求められる。
+- User Type「内部」（Google Workspace組織内のみ）であれば審査は不要。
+- 審査前でも、テストユーザーとして登録したアカウントでは動作を確認できる。
+- 未審査のまま「本番環境」へ公開すると、認可時に「確認されていないアプリ」の
+  警告画面が表示され、100人までの上限が適用される場合がある。
+
+**本番公開前に、どちらの運用にするかを決めること。**
+
+## B-5. client secret を置かないこと
+
+- Token Model（クライアントサイドのOAuth）では client secret は不要。
+- `refresh token` も発行されないため、保存する対象がそもそも存在しない。
+- APIキーも使用しない（認可はアクセストークンのみ）。
+- アクセストークンは **メモリ上だけ** で保持する。
+  sessionStorage / localStorage / cookie / URL / ログのいずれにも書かない。
+  ページを再読み込みすると消え、次回の保存時に再認可が必要になる（意図した挙動）。
+
+## B-6. localhost での確認方法
+
+```
+py -m http.server 8000
+```
+
+<http://localhost:8000/apps/> でGoogleログイン →
+<http://localhost:8000/apps/voice-recorder/> へ **同じタブで** 移動 →
+録音 → MP3変換 → 「Google Driveへ保存」。
+
+- ログイン状態は sessionStorage で共有される。sessionStorage は
+  **オリジン単位かつタブ単位** のため、別タブで開くとログイン状態は引き継がれない。
+- 承認済みのJavaScript生成元に `http://localhost:8000` が必要（第6節）。
+- `file://` では動作しない。必ずHTTPサーバー経由で開く。
+
+## B-7. GitHub Pages での確認方法
+
+1. ブランチをマージし、GitHub Pagesへ反映されるのを待つ（通常1〜2分）。
+2. <https://tsam-ai.com/apps/> でログイン。
+3. 同じタブで <https://tsam-ai.com/apps/voice-recorder/> へ移動。
+4. 録音 → MP3変換 → 「Google Driveへ保存」。
+5. Drive（<https://drive.google.com/>）のマイドライブに
+   「TSAM AI」＞「Voice Recorder」が作成され、MP3が入っていることを確認する。
+
+承認済みのJavaScript生成元に `https://tsam-ai.com` が必要（第5節）。
+オリジンにパス（`/apps/`）は含めない。
+
+## B-8. 想定エラーと確認箇所
+
+| 画面表示 | 原因 | 確認箇所 |
+| --- | --- | --- |
+| Googleへのログインが必要です | sessionStorageにプロフィールが無い | `/apps/` で同じタブからログインし直す |
+| Google Drive保存は現在準備中です | クライアントID未設定 | `apps/auth-config.js` の `clientId` |
+| 認証画面が閉じられたため、保存を中止しました | 利用者がポップアップを閉じた | 操作のやり直し |
+| 認証画面を開けませんでした | ポップアップブロック | ブラウザのポップアップ設定 |
+| アクセスが許可されませんでした | 同意画面で拒否／テストユーザー未登録 | B-3 |
+| 保存権限が許可されませんでした | 同意画面でDriveのチェックを外した | 再度「許可」を選ぶ |
+| Google Drive APIが有効になっていません | APIが未有効化（403 `accessNotConfigured`） | B-1 |
+| 認証の有効期限が切れました | アクセストークンの期限切れ（401） | もう一度ボタンを押すと再認可 |
+| 保存容量が不足しています | Driveの容量超過（403 `storageQuotaExceeded`） | Google Driveの空き容量 |
+| アクセスが集中しています | レート制限（429 / `rateLimitExceeded`） | 時間をおいて再試行 |
+| 通信に失敗しました | オフライン、遮断、CORS | ネットワーク、拡張機能 |
+| Google側で問題が発生しています | 5xx | Google側の障害情報 |
+
+`The given origin is not allowed for the given client ID` が
+コンソールに出る場合は、承認済みのJavaScript生成元の登録漏れ（第4〜6節）。
+
+## B-9. drive.file スコープの制約（仕様として理解しておくこと）
+
+`drive.file` では、このアプリが作成したファイル・フォルダしか見えない。
+そのため次の挙動になる。
+
+- 利用者が手動で作った「TSAM AI」フォルダは、このアプリからは**見えない**。
+  同名のフォルダをアプリ側が新たに作成する。
+- アプリが作ったフォルダを利用者がゴミ箱へ入れると、次回は新しく作成される
+  （検索条件に `trashed=false` を含めているため）。
+- 同名フォルダが複数見つかった場合は、最初に取得できたものを使う。
+
+これは権限を最小限に保つための意図した制約であり、
+より広いスコープ（`drive`）へ広げる予定はない。

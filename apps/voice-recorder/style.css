@@ -307,6 +307,114 @@
   font-size: 0.8125rem;
 }
 
+/*
+ * Google Drive保存パネル。
+ * 端末保存より目立たせず、状態は色だけでなく文言でも示す。
+ * 中身は drive-save.js が生成する。
+ */
+.recorder__drive {
+  margin-top: 20px;
+}
+
+.vr-drive {
+  display: flex;
+  padding: 16px;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg-sub);
+}
+
+.vr-drive__status {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* 状態ごとの色。文言と併用し、色だけに頼らない。 */
+.vr-drive[data-drive-status="saved"] .vr-drive__status {
+  color: var(--color-gold-text);
+}
+
+.vr-drive[data-drive-status="failed"] .vr-drive__status,
+.vr-drive[data-drive-status="reauth"] .vr-drive__status {
+  color: #7a1c16;
+}
+
+.vr-drive__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.vr-drive__button {
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+
+.vr-drive__signin {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--c-sub);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.vr-drive__message,
+.vr-drive__note {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.vr-drive__message {
+  padding: 10px 12px;
+  border-left: 3px solid var(--color-border-strong);
+  background-color: var(--c-bg);
+}
+
+.vr-drive[data-drive-status="failed"] .vr-drive__message,
+.vr-drive[data-drive-status="reauth"] .vr-drive__message {
+  border-left-color: #7a1c16;
+}
+
+.vr-drive__result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+/* 長いファイル名でも枠を壊さない。 */
+.vr-drive__file {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.vr-drive__link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--c-sub);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.vr-drive__note {
+  padding-top: 10px;
+  border-top: 1px solid var(--c-border);
+  font-size: 0.75rem;
+}
+
 /* Notes */
 .vr-notes {
   margin-top: 56px;
