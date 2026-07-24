@@ -24,10 +24,16 @@ import {
 } from './encoder.js';
 
 import {
-  SAVE_TARGETS,
   SaveError,
   buildFileName,
+  getButtonSaveTargets,
 } from './saver.js';
+
+/*
+ * Google Drive 保存は専用パネルが描画する（認可・通信・状態表示を伴うため）。
+ * 起動時にDrive権限は要求しない。ボタンを押した時だけ認可が始まる。
+ */
+import { mountDriveSave } from './drive-save.js';
 
 import {
   detectLongModeSupport,
@@ -161,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     mp3Meta: document.getElementById('recorder-mp3-meta'),
     saveGroup: document.getElementById('recorder-save-group'),
     saveNote: document.getElementById('recorder-save-note'),
+    drive: document.getElementById('recorder-drive'),
     resetCompleted: document.getElementById('recorder-reset-completed'),
     // 録音操作
     start: document.getElementById('recorder-start'),
@@ -180,6 +187,12 @@ document.addEventListener('DOMContentLoaded', () => {
   /* 停止後の録音（元形式）と、変換結果のMP3 */
   let recording = null;
   let mp3Result = null;
+
+  /*
+   * 録音を開始した日時。Drive保存のファイル名に使う。
+   * 録音層（recorder.js）は経過時間しか持たないため、UI層で控えておく。
+   */
+  let recordingStartedAt = null;
 
   /* 直近の停止が上限到達によるものか（表示用） */
   let stoppedByLimit = false;
@@ -422,6 +435,10 @@ document.addEventListener('DOMContentLoaded', () => {
     releaseMp3();
     recording = null;
     mp3Result = null;
+    recordingStartedAt = null;
+
+    /* 前回のDrive保存結果を消す（保存済み表示が残らないように）。 */
+    driveSave.reset();
 
     clearNotice();
     clearError();
@@ -493,7 +510,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* ---------- 保存ボタン（レジストリから生成） ---------- */
 
-  SAVE_TARGETS.forEach((target) => {
+  /* 専用パネルを持つ保存先（Google Drive）はここには並べない。 */
+  getButtonSaveTargets().forEach((target) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn recorder__save';
@@ -509,7 +527,15 @@ document.addEventListener('DOMContentLoaded', () => {
     el.saveGroup.append(button);
   });
 
-  el.saveNote.textContent = '保存した音声は端末内に残ります。外部へは送信されません。';
+  el.saveNote.textContent = '端末に保存した音声は端末内に残ります。Google Driveへ保存した場合のみ、音声がGoogleへ送信されます。';
+
+  /* Google Drive保存パネル。押されるまで認可も通信も発生しない。 */
+  const driveSave = mountDriveSave(el.drive, {
+    getRecording: () => (mp3Result
+      ? { blob: mp3Result.blob, startedAt: recordingStartedAt }
+      : null),
+    onDeveloperError: (scope, error) => logDeveloperError(scope, error),
+  });
 
   function handleSave(target) {
     if (!target.available || typeof target.save !== 'function') {
@@ -544,10 +570,14 @@ document.addEventListener('DOMContentLoaded', () => {
     recording = null;
     mp3Result = null;
     stoppedByLimit = false;
+    recordingStartedAt = null;
+    driveSave.reset();
     el.time.textContent = formatDuration(0);
 
     try {
       await recorder.start();
+      /* 実際に録音が始まった時刻だけを記録する（失敗時は残さない）。 */
+      recordingStartedAt = new Date();
     } catch (error) {
       logDeveloperError('start', error.cause ?? error);
       showError(RECORDER_ERROR_MESSAGES[error.code] ?? RECORDER_ERROR_MESSAGES[RecorderErrorCode.RECORDING_FAILED]);
@@ -771,6 +801,7 @@ function setupLongMode() {
     mp3Meta: document.getElementById('long-mp3-meta'),
     saveGroup: document.getElementById('long-save-group'),
     saveNote: document.getElementById('long-save-note'),
+    drive: document.getElementById('long-drive'),
     reset: document.getElementById('long-reset'),
   };
 
@@ -782,6 +813,9 @@ function setupLongMode() {
   let mp3Url = null;
   let mp3File = null;
   let mp3FileName = null;
+
+  /* 録音を開始した日時。Drive保存のファイル名に使う。 */
+  let recordingStartedAt = null;
 
   /* 起動時に OPFS の残存一時ファイルを自動削除（復旧はしない）。 */
   cleanupStaleFiles().then((r) => {
@@ -908,8 +942,8 @@ function setupLongMode() {
     return longRecorder;
   }
 
-  /* 保存ボタン（レジストリから生成。device有効、Google Drive準備中）。 */
-  SAVE_TARGETS.forEach((target) => {
+  /* 保存ボタン（レジストリから生成。専用パネルを持つ保存先は除く）。 */
+  getButtonSaveTargets().forEach((target) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn recorder__save';
@@ -932,7 +966,15 @@ function setupLongMode() {
     });
     el.saveGroup.append(button);
   });
-  el.saveNote.textContent = '保存した音声は端末内に残ります。外部へは送信されません。';
+  el.saveNote.textContent = '端末に保存した音声は端末内に残ります。Google Driveへ保存した場合のみ、音声がGoogleへ送信されます。';
+
+  /* Google Drive保存パネル。押されるまで認可も通信も発生しない。 */
+  const driveSave = mountDriveSave(el.drive, {
+    getRecording: () => (mp3File
+      ? { blob: mp3File, startedAt: recordingStartedAt }
+      : null),
+    onDeveloperError: (scope, error) => console.error(`[voice-recorder] ${scope}`, error?.code ?? error?.name ?? 'Error'),
+  });
 
   /* ---- 操作 ---- */
   el.start.addEventListener('click', async () => {
@@ -940,6 +982,8 @@ function setupLongMode() {
     setLongNotice('');
     releaseMp3();
     mp3File = null;
+    recordingStartedAt = null;
+    driveSave.reset();
     el.time.textContent = formatLongDuration(0);
     el.size.textContent = '0.0 MB';
     el.written.textContent = '0 B';
@@ -954,6 +998,8 @@ function setupLongMode() {
     try {
       const rec = await ensureLongRecorder();
       await rec.start();
+      /* 実際に録音が始まった時刻だけを記録する（失敗時は残さない）。 */
+      recordingStartedAt = new Date();
     } catch (error) {
       console.error('[voice-recorder] long start', error?.cause ?? error);
       setLongError(LONG_ERROR_MESSAGES[error?.code] ?? LONG_ERROR_MESSAGES.WORKLET_FAILED);
@@ -973,6 +1019,8 @@ function setupLongMode() {
 
     releaseMp3();
     mp3File = null;
+    recordingStartedAt = null;
+    driveSave.reset();
     el.time.textContent = formatLongDuration(0);
     el.size.textContent = '0.0 MB';
     el.written.textContent = '0 B';
@@ -984,6 +1032,8 @@ function setupLongMode() {
   el.reset.addEventListener('click', () => {
     releaseMp3();
     mp3File = null;
+    recordingStartedAt = null;
+    driveSave.reset();
     setLongNotice('');
     setLongError('');
     el.time.textContent = formatLongDuration(0);

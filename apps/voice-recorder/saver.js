@@ -119,20 +119,31 @@ export const SAVE_TARGETS = [
   },
   {
     /*
-     * 準備中。今回は表示のみで、保存処理は実装しない。
-     * 実装時は Google Identity Services のクライアントサイドOAuthを使い、
-     * スコープは drive.file（アプリが作成したファイルのみ）に限定する。
+     * Google Drive 保存。
+     * 認可（ポップアップ）と通信を伴い、状態表示も必要なため、
+     * この同期 save(blob, fileName) では表現できない。
+     * ui: 'panel' を付けた保存先は、汎用ボタン列には並べず、
+     * 専用パネル（drive-save.js の mountDriveSave）が描画を担当する。
+     *
+     * 認可は Google Identity Services の OAuth 2.0 Token Model を使い、
+     * スコープは drive.file（このアプリが作成したファイルのみ）に限定する。
      * external: true のため、プライバシー説明の文言を保存先に応じて
      * 切り替える必要がある。
      */
     id: 'google-drive',
     label: 'Google Drive に保存',
-    note: '音声が Google Drive へ送信されます（準備中）。',
+    note: '音声が Google Drive へ送信されます。',
     external: true,
-    available: false,
+    available: true,
+    ui: 'panel',
     save: null,
   },
 ];
+
+/* 汎用ボタン列に並べる保存先（専用パネルを持つものは除く）。 */
+export function getButtonSaveTargets() {
+  return SAVE_TARGETS.filter((target) => target.ui !== 'panel');
+}
 
 export function getSaveTarget(id) {
   return SAVE_TARGETS.find((target) => target.id === id) ?? null;

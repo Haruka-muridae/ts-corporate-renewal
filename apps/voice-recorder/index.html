@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>音声録音・MP3変換アプリ | TSアセットマネジメント合同会社</title>
-  <meta name="description" content="ブラウザだけで音声を録音できるアプリです。録音した音声は端末の外へ送信されません。">
+  <meta name="description" content="ブラウザだけで音声を録音できるアプリです。録音と変換は端末内で完結し、Google Driveへ保存した場合のみ音声がGoogleへ送信されます。">
 
   <!-- TODO: 公開URLの確定後に canonical を追加 -->
   <!-- TODO: 公開URLの確定後に og:url を追加 -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="音声録音・MP3変換アプリ | TSアセットマネジメント合同会社">
-  <meta property="og:description" content="ブラウザだけで音声を録音できるアプリです。録音した音声は端末の外へ送信されません。">
+  <meta property="og:description" content="ブラウザだけで音声を録音できるアプリです。録音と変換は端末内で完結し、Google Driveへ保存した場合のみ音声がGoogleへ送信されます。">
   <meta property="og:locale" content="ja_JP">
   <!-- TODO: OGP画像の確定後に og:image を追加 -->
   <meta name="twitter:card" content="summary_large_image">
@@ -61,7 +61,7 @@
         <div class="vr-hero__inner">
           <p class="vr-hero__label" lang="en">Voice Recorder</p>
           <h1 id="vr-title" class="vr-hero__title">音声録音・MP3変換アプリ</h1>
-          <p class="vr-hero__lead">ブラウザだけで音声を録音できます。録音した音声は端末の外へ送信されず、サーバーにも保存されません。</p>
+          <p class="vr-hero__lead">ブラウザだけで音声を録音できます。録音とMP3変換は端末内で完結し、当社のサーバーへ送信されることはありません。ご自身で「Google Driveへ保存」を選んだ場合にかぎり、その音声がお使いのGoogleアカウントのDriveへ送信されます。</p>
         </div>
       </div>
     </section>
@@ -155,6 +155,9 @@
             <div class="recorder__save-group" id="recorder-save-group" role="group" aria-label="保存先"></div>
             <p class="recorder__save-note" id="recorder-save-note"></p>
 
+            <!-- Google Drive保存。中身は drive-save.js が生成する。 -->
+            <div class="recorder__drive" id="recorder-drive" role="group" aria-label="Google Driveへ保存"></div>
+
             <div class="recorder__controls">
               <button type="button" class="btn btn--secondary" id="recorder-reset-completed">やり直す</button>
             </div>
@@ -214,6 +217,9 @@
             <div class="recorder__save-group" id="long-save-group" role="group" aria-label="保存先"></div>
             <p class="recorder__save-note" id="long-save-note"></p>
 
+            <!-- Google Drive保存。中身は drive-save.js が生成する。 -->
+            <div class="recorder__drive" id="long-drive" role="group" aria-label="Google Driveへ保存"></div>
+
             <div class="recorder__controls">
               <button type="button" class="btn btn--secondary" id="long-reset">新しく録音する</button>
             </div>
@@ -237,6 +243,14 @@
             <h3>プライバシー</h3>
             <p><strong>通常録音</strong>では、録音した音声はお使いの端末のブラウザ内だけで処理されます。MP3への変換もブラウザ内で行い、当社のサーバーを含め外部へ送信することはありません。録音内容はメモリ上でのみ扱い、ページを閉じると破棄されます。</p>
             <p><strong>長時間録音（β）</strong>でも、音声を外部へ送信しない点は同じです。ただし録音中は、音声を端末内のブラウザ用ストレージ（OPFS）へ一時保存します。これは端末内のみで、外部へは送られません。保存の完了後または破棄後に一時ファイルは削除されます。ブラウザのサイトデータ削除により消える場合があります。異常終了で残った一時ファイルは、次回この画面を開いたときに自動削除されます（今回のβ版に復旧機能はありません）。</p>
+          </div>
+
+          <div class="vr-note">
+            <h3>Google Driveへの保存</h3>
+            <p><strong>「Google Driveへ保存」を押したときだけ</strong>、MP3がお使いのGoogleアカウントのDriveへ送信されます。送信先はご自身のDriveであり、当社のサーバーを経由しません。ボタンを押さないかぎり、音声が端末の外へ出ることはありません。</p>
+            <p>保存先はマイドライブの「TSAM AI」＞「Voice Recorder」フォルダです。フォルダが無い場合は自動的に作成し、既にある場合はそのまま利用します。</p>
+            <p>このアプリが求める権限は <code>drive.file</code> のみです。これは<strong>このアプリが作成したファイルだけ</strong>を対象とする権限で、Drive内の他のファイルを閲覧することはできません。権限はボタンを押したときに確認し、アプリを開いただけでは要求しません。</p>
+            <p>Driveの利用にはGoogleへのログインが必要です。ログインは<a href="../index.html">AIアプリ一覧</a>から行えます。権限の取り消しは、Googleアカウントの「<a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">サードパーティ製のアプリとサービス</a>」からいつでも行えます。</p>
           </div>
 
           <div class="vr-note">

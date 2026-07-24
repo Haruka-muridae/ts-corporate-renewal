@@ -23,10 +23,10 @@
 
 import {
   GOOGLE_AUTH_CONFIG,
-  GIS_SCRIPT_URL,
-  GIS_LOAD_TIMEOUT_MS,
   isClientIdConfigured,
 } from './auth-config.js';
+
+import { loadGisScript } from './gis-loader.js';
 
 import {
   loadProfile,
@@ -392,58 +392,18 @@ export function renderAuthState(status, profile = null) {
 /* ---------- Google Identity Services ---------- */
 
 /*
- * 公式スクリプトを読み込む。
+ * 公式スクリプトの読み込みは gis-loader.js に集約している。
+ * Drive保存（voice-recorder/drive-auth.js）も同じローダーを使うため、
+ * 同じスクリプトが二重に読み込まれることはない。
  * クライアントIDが未設定のときは呼ばない（不要な外部通信を発生させない）。
  */
-function loadGisScript() {
-  return new Promise((resolve, reject) => {
-    if (getGoogleId()) {
-      resolve();
-      return;
-    }
+async function ensureGisReady() {
+  await loadGisScript();
 
-    let settled = false;
-
-    const finish = (error) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      clearTimeout(timer);
-
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve();
-    };
-
-    const timer = setTimeout(() => finish(new Error('GIS_TIMEOUT')), GIS_LOAD_TIMEOUT_MS);
-
-    let script;
-
-    try {
-      script = document.createElement('script');
-    } catch (error) {
-      finish(error);
-      return;
-    }
-
-    script.src = GIS_SCRIPT_URL;
-    script.async = true;
-    script.defer = true;
-
-    script.addEventListener('load', () => {
-      /* 読み込めても google.accounts.id が無い場合がある。 */
-      finish(getGoogleId() ? null : new Error('GIS_UNAVAILABLE'));
-    });
-
-    script.addEventListener('error', () => finish(new Error('GIS_LOAD_FAILED')));
-
-    (document.head ?? document.body)?.append(script);
-  });
+  /* accounts は読めても accounts.id が無い場合を弾く。 */
+  if (!getGoogleId()) {
+    throw new Error('GIS_UNAVAILABLE');
+  }
 }
 
 /* Google公式ボタンの幅。既存カード幅からはみ出さない範囲へ収める。 */
@@ -595,7 +555,7 @@ export async function startGoogleAuth() {
   renderAuthState(cached ? AUTH_STATUS.SIGNED_IN : AUTH_STATUS.LOADING, cached);
 
   try {
-    await loadGisScript();
+    await ensureGisReady();
   } catch (error) {
     console.warn('[apps] Google Identity Services を読み込めませんでした:', error?.message ?? 'Error');
 
