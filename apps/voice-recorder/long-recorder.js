@@ -21,6 +21,7 @@ import {
   buildPartName,
   getRecordingFile,
   deleteRecording,
+  probeSyncAccessSupport,
 } from './opfs-storage.js';
 
 export const LongState = {
@@ -35,6 +36,7 @@ export const LongState = {
 export const LongErrorCode = {
   UNSUPPORTED: 'UNSUPPORTED',
   INSUFFICIENT_STORAGE: 'INSUFFICIENT_STORAGE',
+  SYNC_ACCESS_UNSUPPORTED: 'SYNC_ACCESS_UNSUPPORTED',
   UNSUPPORTED_SAMPLE_RATE: 'UNSUPPORTED_SAMPLE_RATE',
   PERMISSION_DENIED: 'PERMISSION_DENIED',
   NO_DEVICE: 'NO_DEVICE',
@@ -131,6 +133,15 @@ export class LongRecorder {
       throw this.fail(LongErrorCode.INSUFFICIENT_STORAGE);
     }
 
+    /*
+     * SyncAccessHandle の実対応を Worker 内で確認する。
+     * ここで先に検証しておけば、非対応時にマイクを要求せずに済む。
+     */
+    const probe = await probeSyncAccessSupport();
+    if (!probe.supported) {
+      throw this.fail(LongErrorCode.SYNC_ACCESS_UNSUPPORTED, probe.error);
+    }
+
     this.setState(LongState.PREPARING);
 
     /* マイク取得。 */
@@ -182,6 +193,11 @@ export class LongRecorder {
     } catch (error) {
       await this.teardownAudio();
       this.teardownStream();
+      /* 初期化中に作りかけた一時ファイルがあれば削除する。 */
+      if (this.partName) {
+        await deleteRecording(this.partName);
+        this.partName = null;
+      }
       this.setState(LongState.IDLE);
       throw (error instanceof Error && error.code) ? error : this.fail(LongErrorCode.WORKER_FAILED, error);
     }

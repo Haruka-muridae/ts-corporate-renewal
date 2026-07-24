@@ -611,6 +611,7 @@ function formatLongDuration(totalSeconds) {
 const LONG_ERROR_MESSAGES = {
   UNSUPPORTED: 'このブラウザは長時間録音に対応していません。通常録音をご利用ください。',
   INSUFFICIENT_STORAGE: '端末の空き容量が不足しています。通常録音をご利用ください。',
+  SYNC_ACCESS_UNSUPPORTED: 'このブラウザでは端末内ストレージへの保存を利用できませんでした。通常録音をご利用ください。',
   UNSUPPORTED_SAMPLE_RATE: 'この端末の音声設定では長時間録音を開始できません。通常録音をご利用ください。',
   PERMISSION_DENIED: 'マイクの使用が許可されていません。ブラウザの設定から許可してください。',
   NO_DEVICE: 'マイクが見つかりません。接続をご確認ください。',

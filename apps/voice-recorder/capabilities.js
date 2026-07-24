@@ -20,52 +20,58 @@ export function checkSecureContext() {
   return typeof window !== 'undefined' && window.isSecureContext === true;
 }
 
+export function checkMicrophone() {
+  return typeof navigator !== 'undefined'
+    && !!navigator.mediaDevices
+    && typeof navigator.mediaDevices.getUserMedia === 'function';
+}
+
+export function checkAudioContext() {
+  return typeof AudioContext === 'function' || typeof webkitAudioContext === 'function';
+}
+
 export function checkAudioWorklet() {
-  return typeof AudioWorkletNode === 'function'
-    && typeof AudioContext !== 'undefined'
-    && typeof AudioContext.prototype === 'object'
-    && 'audioWorklet' in AudioContext.prototype;
+  return typeof AudioWorkletNode === 'function';
 }
 
 export function checkWorker() {
   return typeof Worker === 'function';
 }
 
-export function checkOpfs() {
-  return typeof navigator !== 'undefined'
-    && !!navigator.storage
-    && typeof navigator.storage.getDirectory === 'function';
+export function checkStorage() {
+  return typeof navigator !== 'undefined' && !!navigator.storage;
 }
 
-/*
- * SyncAccessHandle は Worker 内でしか呼べないが、
- * 実装の有無はメインスレッドからプロトタイプで静的に確認できる。
- */
-export function checkSyncAccessHandle() {
-  return typeof FileSystemFileHandle !== 'undefined'
-    && typeof FileSystemFileHandle.prototype === 'object'
-    && typeof FileSystemFileHandle.prototype.createSyncAccessHandle === 'function';
+export function checkGetDirectory() {
+  return checkStorage() && typeof navigator.storage.getDirectory === 'function';
 }
 
 export function checkStorageManager() {
-  return typeof navigator !== 'undefined'
-    && !!navigator.storage
-    && typeof navigator.storage.estimate === 'function';
+  return checkStorage() && typeof navigator.storage.estimate === 'function';
 }
 
 /*
  * 環境判定をまとめて返す。
  * reasons の各キーは「その条件を満たすか（true=OK）」。
- * capacity（空き容量）と persistence（永続性）は非同期のため別途 checkFreeSpace で確認する。
+ *
+ * ここではメインスレッドで確認できる条件のみを判定する。
+ * SyncAccessHandle（createSyncAccessHandle）は Dedicated Worker 専用APIで、
+ * メインスレッドのプロトタイプ静的判定は対応ブラウザでも false になり得るため、
+ * ここでは判定しない。実対応は録音開始時に Worker 内で実検証する
+ * （opfs-storage.js の probeSyncAccessSupport / sync-access-probe-worker.js）。
+ *
+ * 空き容量（capacity）は非同期のため別途 checkFreeSpace で確認する。
  */
 export function detectLongModeSupport() {
   const reasons = {
     secureContext: checkSecureContext(),
+    microphone: checkMicrophone(),
+    audioContext: checkAudioContext(),
     audioWorklet: checkAudioWorklet(),
     worker: checkWorker(),
-    opfs: checkOpfs(),
-    syncAccessHandle: checkSyncAccessHandle(),
-    storageManager: checkStorageManager(),
+    storage: checkStorage(),
+    getDirectory: checkGetDirectory(),
+    estimate: checkStorageManager(),
   };
 
   const supported = Object.values(reasons).every(Boolean);
@@ -75,12 +81,14 @@ export function detectLongModeSupport() {
 
 /* 非対応理由を利用者向け文言の配列にする。 */
 export const REASON_LABELS = {
-  secureContext: '安全な接続（HTTPS）ではありません。',
+  secureContext: '安全な接続（HTTPS または localhost）ではありません。',
+  microphone: 'このブラウザはマイク録音に対応していません。',
+  audioContext: 'このブラウザは Web Audio に対応していません。',
   audioWorklet: 'このブラウザは AudioWorklet に対応していません。',
   worker: 'このブラウザは Web Worker に対応していません。',
-  opfs: 'このブラウザは端末内ストレージ（OPFS）に対応していません。',
-  syncAccessHandle: 'このブラウザは端末内ストレージへの同期書き込みに対応していません。',
-  storageManager: 'このブラウザは空き容量の確認に対応していません。',
+  storage: 'このブラウザは端末内ストレージに対応していません。',
+  getDirectory: 'このブラウザは端末内ストレージ（OPFS）に対応していません。',
+  estimate: 'このブラウザは空き容量の確認に対応していません。',
 };
 
 export function unmetReasonMessages(reasons) {

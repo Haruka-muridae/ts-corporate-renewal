@@ -82,6 +82,47 @@ export async function deleteRecording(fileName) {
 }
 
 /*
+ * SyncAccessHandle の実対応を Worker 内で検証する。
+ * メインスレッドのプロトタイプ静的判定は当てにならないため、
+ * 専用 Worker で実際に作成→書込→クローズ→削除を試す。
+ * 戻り値: { supported: boolean, error?: string }
+ * timeoutMs 以内に応答が無い場合は supported=false（TimeoutError）とする。
+ */
+export function probeSyncAccessSupport(timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    let worker;
+    let done = false;
+
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      try { worker?.terminate(); } catch { /* noop */ }
+      resolve(result);
+    };
+
+    try {
+      worker = new Worker(new URL('./sync-access-probe-worker.js', import.meta.url));
+    } catch (error) {
+      resolve({ supported: false, error: 'WorkerCreateError', detail: String(error) });
+      return;
+    }
+
+    const timer = window.setTimeout(() => finish({ supported: false, error: 'TimeoutError' }), timeoutMs);
+
+    worker.onmessage = (event) => {
+      const m = event.data;
+      if (m?.type === 'result') {
+        finish({ supported: !!m.supported, error: m.error });
+      }
+    };
+    worker.onerror = (event) => finish({ supported: false, error: 'WorkerError', detail: event.message ?? '' });
+
+    worker.postMessage({ type: 'probe', dirName: RECORDINGS_DIR });
+  });
+}
+
+/*
  * 一時ファイル名を作る。
  * rec-YYYYMMDD-HHmmss-<random>.mp3.part
  * random は多重起動時の衝突回避。日時は利用者のローカル時刻。

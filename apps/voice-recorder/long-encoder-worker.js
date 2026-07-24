@@ -103,7 +103,13 @@ async function handleInit(message) {
     syncHandle.truncate(0);
     writePos = 0;
   } catch (error) {
-    post(MessageType.ERROR, { code: ErrorCode.OPFS_OPEN_FAILED, detail: String(error) });
+    /* 作りかけの一時ファイルを削除してから通知する。エラー名も返す。 */
+    try { if (dirHandle && fileName) await dirHandle.removeEntry(fileName); } catch { /* noop */ }
+    post(MessageType.ERROR, {
+      code: ErrorCode.OPFS_OPEN_FAILED,
+      errorName: (error && error.name) ? error.name : 'UnknownError',
+      detail: String(error),
+    });
     return;
   }
 
