@@ -4,6 +4,16 @@
  * 既存クラスは上書きせず、このページ固有のクラスだけを追加する。
  */
 
+/*
+ * hidden属性の保証。
+ * このファイル内には display を持つクラスが多く、作者スタイルは
+ * UAの [hidden]{display:none} より優先されるため、hidden が効かなくなる。
+ * voice-recorder 側と同じ方針で、hidden を最優先で効かせる。
+ */
+[hidden] {
+  display: none !important;
+}
+
 /* Breadcrumb */
 .breadcrumb {
   font-size: 0.75rem;
@@ -76,6 +86,202 @@
 .apps-hero__lead {
   margin-top: 24px;
   color: var(--c-text-muted);
+}
+
+/*
+ * Googleログイン領域。
+ * 既存のアプリカードより目立たせないため、余白は控えめにし、
+ * 強調色（ゴールド）は使わずに補助情報として置く。
+ */
+.apps-auth {
+  padding-top: 32px;
+  padding-bottom: 8px;
+}
+
+.auth-panel {
+  display: flex;
+  padding: 20px;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg-sub);
+}
+
+.auth-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.auth-panel__title {
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+}
+
+.auth-panel__status {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.auth-panel__signin {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.auth-panel__lead,
+.auth-panel__note,
+.auth-panel__message,
+.auth-panel__disclaimer {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+/* Google公式ボタンの受け皿。中身の見た目は上書きしない。 */
+.auth-panel__button {
+  min-height: 44px;
+  max-width: 360px;
+  width: 100%;
+}
+
+.auth-panel__message {
+  padding: 12px 14px;
+  border-left: 3px solid var(--color-border-strong);
+  background-color: var(--c-bg);
+}
+
+.auth-panel__disclaimer {
+  padding-top: 12px;
+  border-top: 1px solid var(--c-border);
+  font-size: 0.75rem;
+}
+
+/* アカウントカード */
+.auth-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+/* 画像の有無で高さが変わらないよう、枠のサイズを固定する。 */
+.auth-account__avatar {
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+}
+
+.auth-account__image,
+.auth-account__initial {
+  position: absolute;
+  inset: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+.auth-account__image {
+  object-fit: cover;
+  background-color: var(--c-bg-sub);
+}
+
+.auth-account__initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--c-border);
+  background-color: var(--c-bg-sub);
+  color: var(--c-sub);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.auth-account__body {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.auth-account__name {
+  color: var(--c-main);
+  font-weight: 700;
+  line-height: 1.6;
+  /* 長い表示名でも折り返して枠を保つ。 */
+  overflow-wrap: anywhere;
+}
+
+.auth-account__email {
+  margin-top: 2px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  /* 長いメールアドレスは折り返す。省略はしない（全文を確認できるように）。 */
+  overflow-wrap: anywhere;
+}
+
+.auth-account__email-note {
+  margin-left: 4px;
+  font-weight: 700;
+}
+
+/*
+ * ログイン中バッジ。
+ * 色だけでなくドットと文言でも状態が分かるようにする。
+ */
+.auth-account__badge {
+  display: inline-flex;
+  padding: 4px 10px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-navy-light);
+  border-radius: var(--radius-tag);
+  color: var(--color-navy-light);
+  background-color: rgba(41, 73, 111, 0.07);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+}
+
+.auth-account__badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-navy-light);
+}
+
+.auth-account__signout {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg);
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 220ms ease, background-color 220ms ease;
+}
+
+.auth-account__signout[disabled] {
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* Lineup */
@@ -318,6 +524,18 @@
   .app-card__link:hover {
     color: var(--color-gold-text);
   }
+
+  .auth-account__signout:not([disabled]):hover {
+    border-color: var(--color-navy-light);
+    background-color: var(--c-bg-sub);
+  }
+}
+
+/* 動きを減らす設定では、装飾的なトランジションを無効にする。 */
+@media (prefers-reduced-motion: reduce) {
+  .auth-account__signout {
+    transition: none;
+  }
 }
 
 @media (min-width: 768px) {
@@ -327,6 +545,14 @@
 
   .apps-note {
     padding: 32px;
+  }
+
+  .apps-auth {
+    padding-top: 40px;
+  }
+
+  .auth-panel {
+    padding: 24px 28px;
   }
 }
 

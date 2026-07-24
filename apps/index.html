@@ -81,6 +81,67 @@
       </div>
     </section>
 
+    <!--
+      Googleログイン領域。
+      画面表示のみを目的とした機能で、アプリの利用制限には使用しない。
+      表示の切り替えはすべて apps/google-auth.js の renderAuthState() が行う。
+      設定手順とセキュリティ上の位置付けは apps/AUTH_SETUP.md を参照する。
+    -->
+    <section class="apps-auth" aria-labelledby="auth-title">
+      <div class="container">
+        <div class="auth-panel" id="auth-panel" data-auth-status="loading">
+          <div class="auth-panel__head">
+            <h2 id="auth-title" class="auth-panel__title">Googleアカウント</h2>
+            <p id="auth-status" class="auth-panel__status" aria-live="polite">Googleログインを読み込んでいます。</p>
+          </div>
+
+          <div class="auth-panel__signin" id="auth-signin" hidden>
+            <p class="auth-panel__lead">Googleにログインすると、今後追加されるDrive保存などの連携機能を利用できます。</p>
+            <!-- ボタンは Google の renderButton() が描画する。自前で再現しない。 -->
+            <div class="auth-panel__button" id="auth-button"></div>
+            <p class="auth-panel__note">ログインせずにアプリを利用することもできます。</p>
+          </div>
+
+          <div class="auth-account" id="auth-account" hidden>
+            <p class="auth-account__avatar">
+              <img
+                class="auth-account__image"
+                id="auth-avatar"
+                alt=""
+                width="48"
+                height="48"
+                referrerpolicy="no-referrer"
+                hidden
+              >
+              <span class="auth-account__initial" id="auth-avatar-fallback" aria-hidden="true">?</span>
+            </p>
+
+            <div class="auth-account__body">
+              <p class="auth-account__name" id="auth-name"></p>
+              <p class="auth-account__email">
+                <span id="auth-email"></span>
+                <span class="auth-account__email-note" id="auth-email-note" hidden></span>
+              </p>
+            </div>
+
+            <p class="auth-account__badge">
+              <span class="auth-account__badge-dot" aria-hidden="true"></span>ログイン中
+            </p>
+
+            <button class="auth-account__signout" id="auth-signout" type="button">ログアウト</button>
+          </div>
+
+          <p class="auth-panel__message" id="auth-message" hidden></p>
+
+          <p class="auth-panel__disclaimer">ログイン情報はこの画面での表示にのみ使用します。アプリの利用制限や権限の判定には使用していません。</p>
+
+          <noscript>
+            <p class="auth-panel__note">JavaScriptが無効なため、Googleログインはご利用いただけません。アプリ一覧はそのままご覧いただけます。</p>
+          </noscript>
+        </div>
+      </div>
+    </section>
+
     <section class="section apps" aria-labelledby="apps-list-title">
       <div class="container">
         <header class="section-heading apps__heading reveal">
@@ -151,5 +212,11 @@
   </button>
 
   <script src="script.js"></script>
+  <!--
+    Googleログイン。ES Modules で読み込む（voice-recorder と同じ方式）。
+    Google Identity Services の公式スクリプトは、クライアントIDが設定済みの
+    ときだけ google-auth.js が動的に読み込む。未設定なら外部通信は発生しない。
+  -->
+  <script type="module" src="google-auth.js"></script>
 </body>
 </html>
