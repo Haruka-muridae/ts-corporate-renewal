@@ -519,3 +519,99 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* ============================================================
+   hidden 属性の徹底
+   .btn や .recorder__indicator など display を指定したクラスは、
+   作者スタイルがUAの [hidden]{display:none} を上書きしてしまい、
+   hidden を付けても表示され続ける。ここで確実に非表示にする。
+   ============================================================ */
+[hidden] {
+  display: none !important;
+}
+
+/* ============================================================
+   長時間録音のステータスチップ
+   状態は script.js の updateLongRecordingStatus() が一元管理する。
+   色に加えて必ず文言でも状態を示す。
+   ============================================================ */
+.vr-status {
+  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease;
+}
+
+/* 待機中：中立（グレー） */
+.vr-status--idle {
+  border-color: var(--color-border-strong);
+  color: var(--c-text-muted);
+  background-color: var(--c-bg-sub);
+}
+
+.vr-status--idle .recorder__dot {
+  background-color: var(--color-border-strong);
+}
+
+/* 準備中：ブルー */
+.vr-status--preparing {
+  border-color: var(--color-navy-light);
+  color: var(--color-navy-light);
+  background-color: rgba(41, 73, 111, 0.07);
+}
+
+.vr-status--preparing .recorder__dot {
+  background-color: var(--color-navy-light);
+}
+
+/* 録音中：レッド（実際に録音しているときだけ） */
+.vr-status--recording {
+  border-color: #b3261e;
+  color: #7a1c16;
+  background-color: #fdf3f2;
+}
+
+.vr-status--recording .recorder__dot {
+  background-color: #b3261e;
+}
+
+/* 停止処理中：ブルー（処理中であることを示す） */
+.vr-status--stopping {
+  border-color: var(--color-navy-light);
+  color: var(--color-navy-light);
+  background-color: rgba(41, 73, 111, 0.07);
+}
+
+.vr-status--stopping .recorder__dot {
+  background-color: var(--color-navy-light);
+}
+
+/* 録音完了：グリーン */
+.vr-status--completed {
+  border-color: #1e7a44;
+  color: #146034;
+  background-color: #f0f8f3;
+}
+
+.vr-status--completed .recorder__dot {
+  background-color: #1e7a44;
+}
+
+/* エラー：レッド */
+.vr-status--error {
+  border-color: #b3261e;
+  color: #7a1c16;
+  background-color: #fdf3f2;
+}
+
+.vr-status--error .recorder__dot {
+  background-color: #b3261e;
+}
+
+/* 点滅は「録音中」のみ。reduced-motion では静止（既存ルールを踏襲）。 */
+.vr-status--recording .recorder__dot {
+  animation: recorder-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vr-status--recording .recorder__dot {
+    animation: none;
+  }
+}

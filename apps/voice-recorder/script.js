@@ -632,6 +632,103 @@ const LONG_WARNING_MESSAGES = {
   interrupted: '録音が中断されました。ここまでの録音は保存できます。',
 };
 
+/*
+ * 長時間録音のUI状態。
+ * long-recorder.js の LongState（録音層の状態）をUI表示用に写したもの。
+ * 「録音中」は実際にPCM取得とMP3逐次エンコードが動いている間だけ。
+ */
+const LONG_STATUS = {
+  IDLE: 'idle',
+  PREPARING: 'preparing',
+  RECORDING: 'recording',
+  STOPPING: 'stopping',
+  COMPLETED: 'completed',
+  ERROR: 'error',
+};
+
+/* 録音層の状態 → UI状態 */
+const LONG_STATE_TO_STATUS = {
+  idle: LONG_STATUS.IDLE,
+  preparing: LONG_STATUS.PREPARING,
+  recording: LONG_STATUS.RECORDING,
+  stopping: LONG_STATUS.STOPPING,
+  finalized: LONG_STATUS.COMPLETED,
+  error: LONG_STATUS.ERROR,
+};
+
+/*
+ * 各UI状態の表示定義。
+ * label    … ステータスチップの文言
+ * sentence … 読み上げ用の説明文（#long-status, aria-live="polite"）
+ * substate … 補足行（不要なら空）
+ * buttons  … 操作ボタンの表示と有効無効
+ */
+const LONG_STATUS_VIEW = {
+  [LONG_STATUS.IDLE]: {
+    label: '待機中',
+    sentence: '待機中です。録音を開始できます。',
+    substate: '',
+    buttons: {
+      startVisible: true, startEnabled: true,
+      stopVisible: false, stopEnabled: false,
+      discardVisible: false, discardEnabled: false,
+    },
+  },
+  [LONG_STATUS.PREPARING]: {
+    label: '準備中',
+    sentence: '準備中です。マイクの使用を許可してください。',
+    substate: '端末内ストレージの確認とマイクの初期化を行っています。',
+    /* 二重開始を防ぐため、準備中はすべて無効。 */
+    buttons: {
+      startVisible: true, startEnabled: false,
+      stopVisible: false, stopEnabled: false,
+      discardVisible: false, discardEnabled: false,
+    },
+  },
+  [LONG_STATUS.RECORDING]: {
+    label: '録音中',
+    sentence: '録音中です。',
+    substate: 'MP3へ逐次変換し、端末内へ保存しています。',
+    buttons: {
+      startVisible: false, startEnabled: false,
+      stopVisible: true, stopEnabled: true,
+      discardVisible: true, discardEnabled: true,
+    },
+  },
+  [LONG_STATUS.STOPPING]: {
+    label: '停止処理中',
+    sentence: '停止処理中です。MP3を確定しています。',
+    substate: '保存処理中です。ページを閉じないでください。',
+    /* 二重停止を防ぐため、停止処理中はすべて無効。 */
+    buttons: {
+      startVisible: false, startEnabled: false,
+      stopVisible: true, stopEnabled: false,
+      discardVisible: true, discardEnabled: false,
+    },
+  },
+  [LONG_STATUS.COMPLETED]: {
+    label: '録音完了',
+    sentence: '録音完了です。MP3を再生・保存できます。',
+    substate: '',
+    buttons: {
+      startVisible: false, startEnabled: false,
+      stopVisible: false, stopEnabled: false,
+      discardVisible: false, discardEnabled: false,
+    },
+  },
+  [LONG_STATUS.ERROR]: {
+    label: '録音エラー',
+    sentence: '録音エラーが発生しました。もう一度お試しください。',
+    substate: '',
+    /* 安全に再試行できる状態へ戻す。 */
+    buttons: {
+      startVisible: true, startEnabled: true,
+      stopVisible: false, stopEnabled: false,
+      discardVisible: false, discardEnabled: false,
+    },
+  },
+};
+
 const LONG_STOP_NOTE = {
   limit: `録音上限（${formatLongDuration(LONG_MAX_SECONDS)}）に達したため自動停止しました。`,
   backpressure: '端末の処理性能が不足したため停止しました。ここまでを保存できます。',
@@ -661,7 +758,8 @@ function setupLongMode() {
     size: document.getElementById('long-size'),
     written: document.getElementById('long-written'),
     free: document.getElementById('long-free'),
-    indicator: document.getElementById('long-indicator'),
+    statusChip: document.getElementById('long-status-chip'),
+    statusLabel: document.getElementById('long-status-label'),
     substate: document.getElementById('long-substate'),
     notice: document.getElementById('long-notice'),
     error: document.getElementById('long-error'),
@@ -737,32 +835,33 @@ function setupLongMode() {
     el.mp3Player.load();
   }
 
-  function renderLong(state) {
-    el.app.dataset.state = state;
-    const recording = state === 'recording';
-    const stopping = state === 'stopping';
-    const finalized = state === 'finalized';
+  /*
+   * 長時間録音のUI状態を一元管理する。
+   * 文言・チップの色クラス・ドット・表示/非表示・ボタンの有効無効を
+   * すべてこの1関数で決める（分散したDOM操作をしない）。
+   */
+  function updateLongRecordingStatus(status) {
+    const view = LONG_STATUS_VIEW[status] ?? LONG_STATUS_VIEW[LONG_STATUS.IDLE];
 
-    el.start.hidden = recording || stopping || finalized;
-    el.stop.hidden = !recording;
-    el.discard.hidden = !recording;
-    el.indicator.hidden = !recording;
-    el.completed.hidden = !finalized;
+    el.app.dataset.state = status;
 
-    if (state === 'preparing') {
-      el.status.textContent = 'マイクの使用を許可してください。';
-    } else if (recording) {
-      el.status.textContent = '録音しています。';
-      setSubstate('録音中：MP3へ逐次変換し、端末内へ保存しています。');
-    } else if (stopping) {
-      el.status.textContent = 'MP3を確定しています…';
-      setSubstate('保存処理中です。ページを閉じないでください。');
-    } else if (finalized) {
-      setSubstate('');
-    } else {
-      el.status.textContent = '録音の準備ができています。';
-      setSubstate('');
-    }
+    /* チップ：文言と色クラス（色だけに頼らず必ず文言も出す） */
+    el.statusLabel.textContent = view.label;
+    el.statusChip.className = `recorder__indicator vr-status vr-status--${status}`;
+
+    /* 読み上げ用の説明文（#long-status が aria-live） */
+    el.status.textContent = view.sentence;
+    setSubstate(view.substate ?? '');
+
+    /* ボタンの表示と有効無効を状態と一致させる */
+    el.start.hidden = !view.buttons.startVisible;
+    el.start.disabled = !view.buttons.startEnabled;
+    el.stop.hidden = !view.buttons.stopVisible;
+    el.stop.disabled = !view.buttons.stopEnabled;
+    el.discard.hidden = !view.buttons.discardVisible;
+    el.discard.disabled = !view.buttons.discardEnabled;
+
+    el.completed.hidden = status !== LONG_STATUS.COMPLETED;
   }
 
   async function ensureLongRecorder() {
@@ -772,7 +871,10 @@ function setupLongMode() {
       LongRecorderClass = mod.LongRecorder;
     }
     longRecorder = new LongRecorderClass({
-      onStateChange: renderLong,
+      onStateChange: (state) => {
+        /* 録音層の状態をUI状態へ写す。実録音中だけ RECORDING になる。 */
+        updateLongRecordingStatus(LONG_STATE_TO_STATUS[state] ?? LONG_STATUS.IDLE);
+      },
       onTick: (elapsed, bytes) => {
         el.time.textContent = formatLongDuration(elapsed);
         el.size.textContent = formatBytes(estimateMp3Bytes(elapsed));
@@ -842,26 +944,41 @@ function setupLongMode() {
     el.size.textContent = '0.0 MB';
     el.written.textContent = '0 B';
 
+    /*
+     * 押した直後から「準備中」にする。
+     * この後の SyncAccessHandle プローブ・マイク取得・AudioContext /
+     * Worker 初期化の間は、まだ「録音中」にしない。
+     */
+    updateLongRecordingStatus(LONG_STATUS.PREPARING);
+
     try {
       const rec = await ensureLongRecorder();
       await rec.start();
     } catch (error) {
       console.error('[voice-recorder] long start', error?.cause ?? error);
       setLongError(LONG_ERROR_MESSAGES[error?.code] ?? LONG_ERROR_MESSAGES.WORKLET_FAILED);
-      renderLong('idle');
+      updateLongRecordingStatus(LONG_STATUS.ERROR);
     }
   });
 
   el.stop.addEventListener('click', () => longRecorder?.stop('manual'));
 
-  el.discard.addEventListener('click', () => {
+  el.discard.addEventListener('click', async () => {
     /* 破棄は確認を入れる。 */
     if (!window.confirm('録音を破棄します。よろしいですか？')) return;
-    longRecorder?.discard();
+
+    /* 削除中は二重操作を防ぐため停止処理中と同じ扱いにする。 */
+    updateLongRecordingStatus(LONG_STATUS.STOPPING);
+    await longRecorder?.discard();
+
     releaseMp3();
     mp3File = null;
     el.time.textContent = formatLongDuration(0);
+    el.size.textContent = '0.0 MB';
+    el.written.textContent = '0 B';
     setLongNotice('録音を破棄しました。');
+    /* 一時ファイル削除まで終わってから待機中へ戻す。 */
+    updateLongRecordingStatus(LONG_STATUS.IDLE);
   });
 
   el.reset.addEventListener('click', () => {
@@ -872,7 +989,7 @@ function setupLongMode() {
     el.time.textContent = formatLongDuration(0);
     el.size.textContent = '0.0 MB';
     el.written.textContent = '0 B';
-    renderLong('idle');
+    updateLongRecordingStatus(LONG_STATUS.IDLE);
     el.start.focus();
   });
 
@@ -881,5 +998,5 @@ function setupLongMode() {
     releaseMp3();
   });
 
-  renderLong('idle');
+  updateLongRecordingStatus(LONG_STATUS.IDLE);
 }
