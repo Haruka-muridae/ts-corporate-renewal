@@ -77,6 +77,19 @@ const DEFAULT_ICON = 'app';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EXTERNAL_URL_PATTERN = /^https?:\/\//i;
 
+/*
+ * Googleログインの状態を受け取り、ルート要素の data 属性へ反映する。
+ * 表示・スタイル分岐のための目印であり、権限判定には使用しない。
+ * 認証UI自体の描画は google-auth.js の renderAuthState() が担当する。
+ *
+ * このファイルはクラシックスクリプト、google-auth.js はモジュール（defer相当）
+ * のため、登録漏れが起きないよう DOMContentLoaded の外で購読する。
+ * アプリ一覧の描画はこのイベントに依存しない。
+ */
+document.addEventListener('tsam-auth-change', (event) => {
+  document.documentElement.dataset.authStatus = event.detail?.status ?? 'unknown';
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   const header = document.getElementById('header');
   const menuToggle = document.getElementById('menu-toggle');
