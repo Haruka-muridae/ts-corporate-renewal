@@ -366,3 +366,156 @@
     animation: none;
   }
 }
+
+/* ============================================================
+   長時間録音モード（β）
+   既存の recorder / vr- クラスは変更せず、追加分のみ定義する。
+   ============================================================ */
+
+/* モード選択 */
+.vr-modes {
+  margin: 0 0 24px;
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.vr-modes__legend {
+  padding: 0 8px;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.vr-mode {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: var(--radius-tag);
+  cursor: pointer;
+}
+
+.vr-mode + .vr-mode {
+  margin-top: 4px;
+}
+
+.vr-mode input {
+  margin-top: 4px;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+.vr-mode__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vr-mode__title {
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+.vr-mode__desc {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+/* 選択不可（非対応）のモード */
+.vr-mode.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.vr-modes__reason {
+  margin: 8px 0 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-border-strong);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.vr-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--color-navy-light);
+  border-radius: var(--radius-tag);
+  color: var(--color-navy-light);
+  background-color: rgba(41, 73, 111, 0.07);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+}
+
+/* 長時間パネル */
+.vr-long__title {
+  margin-bottom: 16px;
+  font-size: 1.125rem;
+}
+
+.vr-long__facts {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.vr-long__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vr-long__fact-label {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.vr-long__fact-value {
+  color: var(--c-main);
+  font-family: var(--font-num);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.vr-long__fact-note {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+}
+
+.vr-long__state {
+  margin-top: 16px;
+  color: var(--color-navy-light);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.vr-long__warn {
+  margin-top: 28px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.vr-long__warn p + p {
+  margin-top: 12px;
+}
+
+@media (min-width: 768px) {
+  .vr-long__facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

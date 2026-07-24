@@ -29,6 +29,18 @@ import {
   buildFileName,
 } from './saver.js';
 
+import {
+  detectLongModeSupport,
+  unmetReasonMessages,
+  checkFreeSpace,
+  estimateMp3Bytes,
+  formatBytes,
+  LONG_MAX_SECONDS,
+  MIN_FREE_BYTES,
+} from './capabilities.js';
+
+import { cleanupStaleFiles } from './opfs-storage.js';
+
 /* 録音のエラー文言。内部エラーは表示せず、コンソールへ記録する。 */
 const RECORDER_ERROR_MESSAGES = {
   [RecorderErrorCode.UNSUPPORTED]:
@@ -581,4 +593,292 @@ document.addEventListener('DOMContentLoaded', () => {
 
   el.time.textContent = formatDuration(0);
   setAppState(AppState.IDLE);
+
+  /* ============================================================
+     長時間録音モード（β）
+     通常録音のロジックには手を入れず、モード切替とパネル制御を追加する。
+     ============================================================ */
+  setupLongMode();
 });
+
+function formatLongDuration(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+const LONG_ERROR_MESSAGES = {
+  UNSUPPORTED: 'このブラウザは長時間録音に対応していません。通常録音をご利用ください。',
+  INSUFFICIENT_STORAGE: '端末の空き容量が不足しています。通常録音をご利用ください。',
+  UNSUPPORTED_SAMPLE_RATE: 'この端末の音声設定では長時間録音を開始できません。通常録音をご利用ください。',
+  PERMISSION_DENIED: 'マイクの使用が許可されていません。ブラウザの設定から許可してください。',
+  NO_DEVICE: 'マイクが見つかりません。接続をご確認ください。',
+  DEVICE_BUSY: 'マイクが他のアプリで使用中の可能性があります。他のアプリを終了してお試しください。',
+  WORKLET_FAILED: '録音を開始できませんでした。ページを再読み込みしてお試しください。',
+  WORKER_FAILED: 'MP3変換を開始できませんでした。ページを再読み込みしてお試しください。',
+  OPFS_FAILED: '端末内ストレージへの保存に失敗しました。空き容量をご確認のうえお試しください。',
+  ENCODE_FAILED: 'MP3への変換に失敗しました。もう一度お試しください。',
+  FINALIZE_FAILED: '録音の確定に失敗しました。もう一度お試しください。',
+  PERFORMANCE: 'お使いの端末の処理性能が不足しています。通常録音をご利用ください。',
+};
+
+const LONG_WARNING_MESSAGES = {
+  'limit-approaching': `まもなく録音上限（${formatLongDuration(LONG_MAX_SECONDS)}）です。`,
+  backpressure: 'お使いの端末の処理が追いついていません。安定しない場合は通常録音をご利用ください。',
+  'capacity-low': '空き容量が少なくなっています。',
+  hidden: 'このページが非表示になりました。録音中は表示したままにしてください（環境によっては停止します）。',
+  interrupted: '録音が中断されました。ここまでの録音は保存できます。',
+};
+
+const LONG_STOP_NOTE = {
+  limit: `録音上限（${formatLongDuration(LONG_MAX_SECONDS)}）に達したため自動停止しました。`,
+  backpressure: '端末の処理性能が不足したため停止しました。ここまでを保存できます。',
+  capacity: '空き容量が不足したため停止しました。ここまでを保存できます。',
+  'mic-ended': 'マイクが切断されたため停止しました。ここまでを保存できます。',
+  interrupted: '録音が中断されました。ここまでを保存できます。',
+  manual: '録音を停止しました。MP3を保存できます。',
+};
+
+function setupLongMode() {
+  const modeNormal = document.getElementById('vr-mode-normal');
+  const modeLong = document.getElementById('vr-mode-long');
+  const modeLongLabel = document.getElementById('vr-mode-long-label');
+  const reason = document.getElementById('vr-mode-long-reason');
+  const normalApp = document.getElementById('recorder-app');
+  const longApp = document.getElementById('long-recorder-app');
+
+  if (!modeNormal || !modeLong || !longApp) {
+    return;
+  }
+
+  const el = {
+    app: longApp,
+    status: document.getElementById('long-status'),
+    time: document.getElementById('long-time'),
+    limit: document.getElementById('long-limit'),
+    size: document.getElementById('long-size'),
+    written: document.getElementById('long-written'),
+    free: document.getElementById('long-free'),
+    indicator: document.getElementById('long-indicator'),
+    substate: document.getElementById('long-substate'),
+    notice: document.getElementById('long-notice'),
+    error: document.getElementById('long-error'),
+    start: document.getElementById('long-start'),
+    stop: document.getElementById('long-stop'),
+    discard: document.getElementById('long-discard'),
+    completed: document.getElementById('long-completed'),
+    mp3Player: document.getElementById('long-mp3-player'),
+    mp3Meta: document.getElementById('long-mp3-meta'),
+    saveGroup: document.getElementById('long-save-group'),
+    saveNote: document.getElementById('long-save-note'),
+    reset: document.getElementById('long-reset'),
+  };
+
+  el.limit.textContent = `上限 ${formatLongDuration(LONG_MAX_SECONDS)}`;
+  el.status.textContent = '録音の準備ができています。';
+
+  let longRecorder = null;   // LongRecorder インスタンス（遅延生成）
+  let LongRecorderClass = null;
+  let mp3Url = null;
+  let mp3File = null;
+  let mp3FileName = null;
+
+  /* 起動時に OPFS の残存一時ファイルを自動削除（復旧はしない）。 */
+  cleanupStaleFiles().then((r) => {
+    if (r.removed > 0) {
+      console.info('[voice-recorder] 一時ファイルを削除しました', r);
+    }
+  }).catch(() => {});
+
+  /* 対応環境の判定と、空き容量の初期表示。 */
+  const support = detectLongModeSupport();
+
+  function disableLongMode(messages) {
+    modeLong.disabled = true;
+    modeLongLabel.classList.add('is-disabled');
+    reason.hidden = false;
+    reason.textContent = `長時間録音は利用できません：${messages.join(' ')}`;
+  }
+
+  if (!support.supported) {
+    disableLongMode(unmetReasonMessages(support.reasons));
+  } else {
+    /* 空き容量の初期確認（推定値。実際の可否は録音開始時に再確認）。 */
+    checkFreeSpace(MIN_FREE_BYTES).then((space) => {
+      if (space.freeBytes !== null) {
+        el.free.textContent = formatBytes(space.freeBytes);
+      }
+      if (!space.ok) {
+        disableLongMode(['端末の空き容量が不足しています（150MB以上が必要です）。']);
+      }
+    }).catch(() => {});
+  }
+
+  /* モード切替 */
+  function applyMode(mode) {
+    const isLong = mode === 'long' && !modeLong.disabled;
+    normalApp.hidden = isLong;
+    longApp.hidden = !isLong;
+  }
+
+  modeNormal.addEventListener('change', () => applyMode('normal'));
+  modeLong.addEventListener('change', () => applyMode(modeLong.checked ? 'long' : 'normal'));
+
+  /* ---- 表示ヘルパ ---- */
+  function setLongNotice(msg) { el.notice.textContent = msg; el.notice.hidden = !msg; }
+  function setLongError(msg) { el.error.textContent = msg; el.error.hidden = !msg; }
+  function setSubstate(msg) { el.substate.textContent = msg; el.substate.hidden = !msg; }
+
+  function releaseMp3() {
+    if (mp3Url) { URL.revokeObjectURL(mp3Url); mp3Url = null; }
+    el.mp3Player.removeAttribute('src');
+    el.mp3Player.load();
+  }
+
+  function renderLong(state) {
+    el.app.dataset.state = state;
+    const recording = state === 'recording';
+    const stopping = state === 'stopping';
+    const finalized = state === 'finalized';
+
+    el.start.hidden = recording || stopping || finalized;
+    el.stop.hidden = !recording;
+    el.discard.hidden = !recording;
+    el.indicator.hidden = !recording;
+    el.completed.hidden = !finalized;
+
+    if (state === 'preparing') {
+      el.status.textContent = 'マイクの使用を許可してください。';
+    } else if (recording) {
+      el.status.textContent = '録音しています。';
+      setSubstate('録音中：MP3へ逐次変換し、端末内へ保存しています。');
+    } else if (stopping) {
+      el.status.textContent = 'MP3を確定しています…';
+      setSubstate('保存処理中です。ページを閉じないでください。');
+    } else if (finalized) {
+      setSubstate('');
+    } else {
+      el.status.textContent = '録音の準備ができています。';
+      setSubstate('');
+    }
+  }
+
+  async function ensureLongRecorder() {
+    if (longRecorder) return longRecorder;
+    if (!LongRecorderClass) {
+      const mod = await import('./long-recorder.js');
+      LongRecorderClass = mod.LongRecorder;
+    }
+    longRecorder = new LongRecorderClass({
+      onStateChange: renderLong,
+      onTick: (elapsed, bytes) => {
+        el.time.textContent = formatLongDuration(elapsed);
+        el.size.textContent = formatBytes(estimateMp3Bytes(elapsed));
+        el.written.textContent = formatBytes(bytes);
+      },
+      onWarning: (kind) => {
+        const msg = LONG_WARNING_MESSAGES[kind];
+        if (msg) setLongNotice(msg);
+      },
+      onStopped: (reasonKind) => {
+        setLongNotice(LONG_STOP_NOTE[reasonKind] ?? LONG_STOP_NOTE.manual);
+      },
+      onFinalized: async (result) => {
+        mp3File = result.file;
+        mp3FileName = buildFileName('mp3');
+        if (mp3File) {
+          releaseMp3();
+          mp3Url = URL.createObjectURL(mp3File);
+          el.mp3Player.src = mp3Url;
+        }
+        el.mp3Meta.textContent = [
+          `ファイル名 ${mp3FileName}`,
+          `サイズ ${formatBytes(result.sizeBytes)}`,
+          `長さ ${formatLongDuration(result.durationSeconds)}`,
+        ].join(' ／ ');
+      },
+      onError: (code) => {
+        setLongError(LONG_ERROR_MESSAGES[code] ?? LONG_ERROR_MESSAGES.WORKLET_FAILED);
+      },
+    });
+    return longRecorder;
+  }
+
+  /* 保存ボタン（レジストリから生成。device有効、Google Drive準備中）。 */
+  SAVE_TARGETS.forEach((target) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn recorder__save';
+    button.classList.add(target.available ? 'btn--primary' : 'btn--secondary');
+    button.textContent = target.available ? `${target.label}（MP3）` : `${target.label}（準備中）`;
+    button.dataset.saveTarget = target.id;
+    if (!target.available) button.setAttribute('aria-disabled', 'true');
+    button.addEventListener('click', () => {
+      if (!target.available || typeof target.save !== 'function') {
+        setLongNotice(`${target.label}は現在準備中です。`);
+        return;
+      }
+      if (!mp3File) return;
+      try {
+        target.save(mp3File, mp3FileName);
+      } catch (error) {
+        console.error('[voice-recorder] long save', error instanceof SaveError ? (error.cause ?? error) : error);
+        setLongError('保存に失敗しました。もう一度お試しください。');
+      }
+    });
+    el.saveGroup.append(button);
+  });
+  el.saveNote.textContent = '保存した音声は端末内に残ります。外部へは送信されません。';
+
+  /* ---- 操作 ---- */
+  el.start.addEventListener('click', async () => {
+    setLongError('');
+    setLongNotice('');
+    releaseMp3();
+    mp3File = null;
+    el.time.textContent = formatLongDuration(0);
+    el.size.textContent = '0.0 MB';
+    el.written.textContent = '0 B';
+
+    try {
+      const rec = await ensureLongRecorder();
+      await rec.start();
+    } catch (error) {
+      console.error('[voice-recorder] long start', error?.cause ?? error);
+      setLongError(LONG_ERROR_MESSAGES[error?.code] ?? LONG_ERROR_MESSAGES.WORKLET_FAILED);
+      renderLong('idle');
+    }
+  });
+
+  el.stop.addEventListener('click', () => longRecorder?.stop('manual'));
+
+  el.discard.addEventListener('click', () => {
+    /* 破棄は確認を入れる。 */
+    if (!window.confirm('録音を破棄します。よろしいですか？')) return;
+    longRecorder?.discard();
+    releaseMp3();
+    mp3File = null;
+    el.time.textContent = formatLongDuration(0);
+    setLongNotice('録音を破棄しました。');
+  });
+
+  el.reset.addEventListener('click', () => {
+    releaseMp3();
+    mp3File = null;
+    setLongNotice('');
+    setLongError('');
+    el.time.textContent = formatLongDuration(0);
+    el.size.textContent = '0.0 MB';
+    el.written.textContent = '0 B';
+    renderLong('idle');
+    el.start.focus();
+  });
+
+  window.addEventListener('pagehide', () => {
+    longRecorder?.dispose();
+    releaseMp3();
+  });
+
+  renderLong('idle');
+}
