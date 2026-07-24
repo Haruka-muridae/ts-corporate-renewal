@@ -1,0 +1,368 @@
+/*
+ * 音声録音・MP3変換アプリ 専用スタイル。
+ * ../../css/style.css を読み込んだうえで追加する差分のみを定義する。
+ * 既存クラスは上書きせず、vr- と recorder の接頭辞のみを使う。
+ */
+
+/* ヘッダー内の戻りリンク（このページはグローバルナビを持たない） */
+.vr-nav__link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Breadcrumb */
+.vr-breadcrumb {
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.vr-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-text-muted);
+}
+
+.vr-breadcrumb__list li + li::before {
+  margin-right: 8px;
+  color: var(--color-border-strong);
+  content: "/";
+}
+
+.vr-breadcrumb__list a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.vr-breadcrumb__list [aria-current="page"] {
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+/* Page hero */
+.vr-hero {
+  padding-top: calc(var(--section-space) + var(--header-height));
+  padding-bottom: calc(var(--section-space) - 24px);
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.vr-hero__inner {
+  margin-top: 32px;
+  max-width: 720px;
+}
+
+.vr-hero__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-gold-text);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.vr-hero__label::before {
+  width: 32px;
+  height: 1px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+.vr-hero__title {
+  margin-top: 16px;
+  font-size: clamp(1.625rem, 1.2rem + 2.2vw, 2.5rem);
+  line-height: 1.35;
+}
+
+.vr-hero__lead {
+  margin-top: 24px;
+  color: var(--c-text-muted);
+}
+
+.vr-section-title {
+  position: relative;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+}
+
+.vr-section-title::after {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 40px;
+  height: 2px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+/* Recorder */
+.recorder {
+  padding: 28px 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+/* 録音中と一時停止中は左端の色でも状態が分かるようにする */
+.recorder[data-state="recording"] {
+  border-color: var(--color-gold);
+  box-shadow: inset 3px 0 0 var(--color-gold);
+}
+
+.recorder[data-state="paused"] {
+  box-shadow: inset 3px 0 0 var(--color-navy-light);
+}
+
+.recorder__status {
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+}
+
+.recorder__timer {
+  display: flex;
+  margin-top: 16px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.recorder__time {
+  color: var(--c-main);
+  font-family: var(--font-num);
+  font-size: clamp(2.5rem, 2rem + 4vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.recorder__limit {
+  color: var(--c-text-muted);
+  font-family: var(--font-num);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+}
+
+.recorder__indicator {
+  display: inline-flex;
+  margin-top: 16px;
+  padding: 6px 12px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-gold);
+  border-radius: var(--radius-tag);
+  color: var(--color-gold-text);
+  background-color: rgba(201, 154, 46, 0.1);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.recorder__dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background-color: #b3261e;
+}
+
+.recorder[data-state="recording"] .recorder__dot {
+  animation: recorder-pulse 1.6s ease-in-out infinite;
+}
+
+.recorder[data-state="paused"] .recorder__indicator {
+  border-color: var(--color-navy-light);
+  color: var(--color-navy-light);
+  background-color: rgba(41, 73, 111, 0.07);
+}
+
+.recorder[data-state="paused"] .recorder__dot {
+  background-color: var(--color-navy-light);
+}
+
+@keyframes recorder-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.recorder__notice {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text);
+  font-size: 0.875rem;
+}
+
+.recorder__error {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-left: 3px solid #b3261e;
+  background-color: #fdf3f2;
+  color: #7a1c16;
+  font-size: 0.875rem;
+}
+
+.recorder__controls {
+  display: flex;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.recorder__controls .btn {
+  flex: 1 1 auto;
+  min-width: 140px;
+}
+
+.recorder__result,
+.recorder__conversion,
+.recorder__completed {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--c-border);
+}
+
+/* 変換の進捗バー */
+.recorder__progress {
+  overflow: hidden;
+  height: 12px;
+  margin-top: 16px;
+  border-radius: 999px;
+  background-color: var(--c-bg-sub);
+  border: 1px solid var(--c-border);
+}
+
+.recorder__progress-bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  background-color: var(--color-gold);
+  transition: width 200ms ease;
+}
+
+.recorder__progress-text {
+  margin-top: 8px;
+  color: var(--c-text-muted);
+  font-family: var(--font-num);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder__progress-bar {
+    transition: none;
+  }
+}
+
+.recorder__result-title {
+  font-size: 1rem;
+}
+
+.recorder__player {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.recorder__meta {
+  margin-top: 12px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.recorder__save-group {
+  display: flex;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.recorder__save-group .btn {
+  flex: 1 1 auto;
+  min-width: 180px;
+}
+
+/* 準備中の保存先（Google Drive）は押下でき、案内を返すため
+   disabled ではなく aria-disabled で見た目のみ抑える。 */
+.recorder__save[aria-disabled="true"] {
+  border-color: var(--color-border-strong);
+  color: var(--c-text-muted);
+  background-color: var(--c-bg-sub);
+}
+
+.recorder__save-note {
+  margin-top: 12px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+/* Notes */
+.vr-notes {
+  margin-top: 56px;
+}
+
+.vr-note + .vr-note {
+  margin-top: 24px;
+}
+
+.vr-note {
+  padding: 24px 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg-sub);
+}
+
+.vr-note h3 {
+  font-size: 0.9375rem;
+}
+
+.vr-note p {
+  margin-top: 12px;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+}
+
+@media (hover: hover) {
+  .vr-nav__link:hover {
+    color: var(--color-gold-text);
+  }
+}
+
+@media (min-width: 768px) {
+  .recorder {
+    padding: 40px;
+  }
+
+  .recorder__controls .btn,
+  .recorder__save-group .btn {
+    flex: 0 0 auto;
+  }
+
+  .vr-note {
+    padding: 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .vr-hero__inner {
+    margin-top: 40px;
+  }
+}
+
+/* 点滅を止めても、テキストと枠線で状態が判別できる */
+@media (prefers-reduced-motion: reduce) {
+  .recorder[data-state="recording"] .recorder__dot {
+    animation: none;
+  }
+}

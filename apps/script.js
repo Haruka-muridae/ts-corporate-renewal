@@ -25,8 +25,8 @@ const APPS = [
   {
     name: '音声録音・MP3変換アプリ',
     description: '音声を録音し、MP3形式のファイルに変換するアプリです。',
-    status: 'coming',
-    url: null,
+    status: 'beta',
+    url: '/apps/voice-recorder/',
     tags: ['音声録音', 'MP3変換'],
     icon: 'mic',
   },
