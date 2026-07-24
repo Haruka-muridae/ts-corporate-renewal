@@ -70,6 +70,29 @@
       <div class="container">
         <h2 id="vr-recorder-title" class="vr-section-title">録音</h2>
 
+        <!-- 録音モードの選択。長時間モードは対応環境でのみ選べる。 -->
+        <fieldset class="vr-modes" id="vr-modes">
+          <legend class="vr-modes__legend">録音モード</legend>
+
+          <label class="vr-mode">
+            <input type="radio" name="vr-mode" id="vr-mode-normal" value="normal" checked>
+            <span class="vr-mode__body">
+              <span class="vr-mode__title">通常録音</span>
+              <span class="vr-mode__desc">最大5分。短いメモや会話向け。停止後にMP3へ変換します。</span>
+            </span>
+          </label>
+
+          <label class="vr-mode" id="vr-mode-long-label">
+            <input type="radio" name="vr-mode" id="vr-mode-long" value="long" aria-describedby="vr-mode-long-reason">
+            <span class="vr-mode__body">
+              <span class="vr-mode__title">長時間録音<span class="vr-badge">β</span></span>
+              <span class="vr-mode__desc">最大60分。会議・講義向け。録音中にMP3へ逐次変換し、端末内へ一時保存します。</span>
+            </span>
+          </label>
+
+          <p class="vr-modes__reason" id="vr-mode-long-reason" role="status" aria-live="polite" hidden></p>
+        </fieldset>
+
         <div id="recorder-app" class="recorder" data-state="idle">
           <!-- 状態通知。毎秒読み上げると妨害になるため、経過時間は含めない -->
           <p id="recorder-status" class="recorder__status" role="status" aria-live="polite">録音の準備ができています。</p>
@@ -138,6 +161,66 @@
           </div>
         </div>
 
+        <!-- 長時間録音モード（初期は非表示。モード選択で切り替える） -->
+        <div id="long-recorder-app" class="recorder" data-state="idle" hidden>
+          <h3 class="vr-long__title">長時間録音<span class="vr-badge">β</span></h3>
+
+          <p class="recorder__status" id="long-status" role="status" aria-live="polite">録音の準備ができています。</p>
+
+          <div class="vr-long__facts">
+            <div class="vr-long__fact">
+              <span class="vr-long__fact-label">録音時間</span>
+              <span class="vr-long__fact-value recorder__time" id="long-time">00:00:00</span>
+              <span class="vr-long__fact-note" id="long-limit">上限 60:00</span>
+            </div>
+            <div class="vr-long__fact">
+              <span class="vr-long__fact-label">推定ファイルサイズ</span>
+              <span class="vr-long__fact-value" id="long-size">0.0 MB</span>
+              <span class="vr-long__fact-note">現在の保存済み <span id="long-written">0 B</span></span>
+            </div>
+            <div class="vr-long__fact">
+              <span class="vr-long__fact-label">端末の推定空き容量</span>
+              <span class="vr-long__fact-value" id="long-free">確認中…</span>
+              <span class="vr-long__fact-note">必要 150 MB 以上</span>
+            </div>
+          </div>
+
+          <p class="recorder__indicator" id="long-indicator" hidden>
+            <span class="recorder__dot" aria-hidden="true"></span>
+            <span id="long-indicator-label">録音中</span>
+          </p>
+
+          <p class="vr-long__state" id="long-substate" aria-live="polite" hidden></p>
+          <p class="recorder__notice" id="long-notice" role="status" aria-live="polite" hidden></p>
+          <p class="recorder__error" id="long-error" role="alert" hidden></p>
+
+          <div class="recorder__controls">
+            <button type="button" class="btn btn--primary" id="long-start">録音を開始</button>
+            <button type="button" class="btn btn--secondary" id="long-stop" hidden>停止して保存へ</button>
+            <button type="button" class="btn btn--secondary" id="long-discard" hidden>録音を破棄</button>
+          </div>
+
+          <!-- 停止後：MP3の確認と保存 -->
+          <div class="recorder__completed" id="long-completed" hidden>
+            <h4 class="recorder__result-title">MP3の確認</h4>
+            <audio class="recorder__player" id="long-mp3-player" controls preload="metadata"></audio>
+            <p class="recorder__meta" id="long-mp3-meta"></p>
+
+            <div class="recorder__save-group" id="long-save-group" role="group" aria-label="保存先"></div>
+            <p class="recorder__save-note" id="long-save-note"></p>
+
+            <div class="recorder__controls">
+              <button type="button" class="btn btn--secondary" id="long-reset">新しく録音する</button>
+            </div>
+          </div>
+
+          <div class="vr-long__warn">
+            <p><strong>録音中は画面を閉じず、このページを表示したままにしてください。</strong>画面ロック、アプリ切り替え、着信などにより録音が停止する場合があります。停止した場合も、その時点までの録音は保存できます。</p>
+            <p>録音中の音声は、お使いの端末内のブラウザ用ストレージ（OPFS）へ一時保存されます。外部へは送信されません。保存の完了後または破棄後に、一時ファイルは削除されます。</p>
+            <p>今回のβ版には、アプリを閉じたあとの録音復旧機能はありません。異常終了で残った一時ファイルは、次回この画面を開いたときに自動的に削除されます。</p>
+          </div>
+        </div>
+
         <noscript>
           <p class="recorder__error">このアプリの利用にはJavaScriptが必要です。ブラウザの設定で有効にしてください。</p>
         </noscript>
@@ -147,7 +230,8 @@
 
           <div class="vr-note">
             <h3>プライバシー</h3>
-            <p>録音した音声は、お使いの端末のブラウザ内だけで処理されます。MP3への変換もブラウザ内で行い、当社のサーバーを含め、外部へ送信することはありません。録音データの保存・解析・第三者提供も行いません。ページを閉じると録音内容は破棄されます。</p>
+            <p><strong>通常録音</strong>では、録音した音声はお使いの端末のブラウザ内だけで処理されます。MP3への変換もブラウザ内で行い、当社のサーバーを含め外部へ送信することはありません。録音内容はメモリ上でのみ扱い、ページを閉じると破棄されます。</p>
+            <p><strong>長時間録音（β）</strong>でも、音声を外部へ送信しない点は同じです。ただし録音中は、音声を端末内のブラウザ用ストレージ（OPFS）へ一時保存します。これは端末内のみで、外部へは送られません。保存の完了後または破棄後に一時ファイルは削除されます。ブラウザのサイトデータ削除により消える場合があります。異常終了で残った一時ファイルは、次回この画面を開いたときに自動削除されます（今回のβ版に復旧機能はありません）。</p>
           </div>
 
           <div class="vr-note">
