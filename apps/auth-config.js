@@ -26,7 +26,7 @@ export const GOOGLE_AUTH_CONFIG = Object.freeze({
    * Google Cloud Console で発行した「ウェブアプリケーション」用クライアントID。
    * 形式: 000000000000-xxxxxxxxxxxx.apps.googleusercontent.com
    */
-  clientId: CLIENT_ID_PLACEHOLDER,
+  clientId: '603018562548-a0fs4g4eetdhg5jrfjbh5qqos547g69r.apps.googleusercontent.com',
 
   /* sessionStorage のキー。プロフィール表示用の最小情報だけを入れる。 */
   storageKey: 'tsam-ai-google-profile',
