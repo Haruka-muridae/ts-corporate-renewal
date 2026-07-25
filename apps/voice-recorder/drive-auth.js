@@ -32,12 +32,18 @@
 import { GOOGLE_AUTH_CONFIG, isClientIdConfigured } from '../auth-config.js';
 import { loadGisScript } from '../gis-loader.js';
 import { loadProfile } from '../auth-session.js';
+import { debugLog } from './debug-log.js';
 
 /* 要求するスコープはこの1つだけ。増やさないこと。 */
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 export const DriveAuthErrorCode = {
   CLIENT_ID_MISSING: 'CLIENT_ID_MISSING',
+  /*
+   * NOT_SIGNED_IN は「/apps/ のログイン表示が消えているとDrive保存を拒否する」
+   * という旧仕様の名残。Drive保存はログイン表示に依存しないため、通常は使わない。
+   * 後方互換のためコードは残すが、ensureAccessToken では投げない。
+   */
   NOT_SIGNED_IN: 'NOT_SIGNED_IN',
   GIS_LOAD_FAILED: 'GIS_LOAD_FAILED',
   POPUP_CLOSED: 'POPUP_CLOSED',
@@ -65,6 +71,8 @@ export class DriveAuthError extends Error {
 let accessToken = null;
 let tokenExpiresAt = 0;
 let tokenClient = null;
+/* tokenClient を作ったときの login_hint。プロフィールの有無が変わったら作り直す。 */
+let tokenClientHint = undefined;
 let pendingRequest = null;
 
 /* 期限ぎりぎりでの401を避けるための余裕。 */
@@ -130,23 +138,33 @@ function hasDriveScope(response) {
   return granted.includes(DRIVE_SCOPE);
 }
 
-function createTokenClient() {
+/*
+ * 現在のログイン表示から login_hint に使うメールを得る。
+ * プロフィールが無ければ undefined（＝アカウント選択画面を出す）。
+ * ここでの「ログイン」はあくまで表示用であり、Drive認可の前提条件ではない。
+ */
+function resolveHint() {
+  const profile = loadProfile();
+  const email = profile?.email;
+  return typeof email === 'string' && email.includes('@') ? email : undefined;
+}
+
+function createTokenClient(hint) {
   const oauth2 = globalThis.google?.accounts?.oauth2;
 
   if (!oauth2 || typeof oauth2.initTokenClient !== 'function') {
     throw new DriveAuthError(DriveAuthErrorCode.GIS_LOAD_FAILED, 'oauth2_unavailable');
   }
 
-  const profile = loadProfile();
-
   return oauth2.initTokenClient({
     client_id: GOOGLE_AUTH_CONFIG.clientId,
     scope: DRIVE_SCOPE,
     /*
      * hint はアカウント選択の初期値を寄せるだけの補助。
+     * プロフィールが無ければ渡さず、Googleのアカウント選択画面に任せる。
      * 認可の可否はGoogle側が判断するため、これで権限が変わることはない。
      */
-    hint: profile?.email ?? undefined,
+    hint,
     callback: (response) => {
       const request = pendingRequest;
       pendingRequest = null;
@@ -181,11 +199,15 @@ function createTokenClient() {
       accessToken = token;
       tokenExpiresAt = Date.now() + Math.max(0, lifetimeMs - EXPIRY_MARGIN_MS);
 
+      /* トークン本体・メールは出さない。有効秒数だけ。 */
+      debugLog('auth:token-acquired', { tokenPresent: true, expiresInSec: Math.round(lifetimeMs / 1000) });
       request.resolve(token);
     },
     error_callback: (error) => {
       const request = pendingRequest;
       pendingRequest = null;
+      /* エラー種別のみ。OAuthレスポンス全体は出さない。 */
+      debugLog('auth:error-callback', { type: error?.type ?? 'unknown' });
       request?.reject(toAuthError(error));
     },
   });
@@ -201,6 +223,12 @@ function createTokenClient() {
  * ポップアップブロックを避けるため、押下から離れた非同期処理の後には呼ばない。
  */
 export async function ensureAccessToken({ forceConsent = false } = {}) {
+  debugLog('auth:ensure', {
+    forceConsent,
+    hasValidToken: hasValidAccessToken(),
+    hasProfile: Boolean(loadProfile()),
+  });
+
   if (!forceConsent) {
     const cached = getCachedAccessToken();
 
@@ -214,12 +242,10 @@ export async function ensureAccessToken({ forceConsent = false } = {}) {
   }
 
   /*
-   * ログインしていない場合はここで止める。
-   * 無断でページ遷移はせず、UI層が案内とリンクを出す。
+   * ここで /apps/ のログイン表示（sessionStorage プロフィール）の有無は問わない。
+   * 長時間録音の途中でプロフィールが期限切れになっていても、保存操作の中で
+   * OAuth Token Model を開始できるようにする（これが今回の主目的）。
    */
-  if (!loadProfile()) {
-    throw new DriveAuthError(DriveAuthErrorCode.NOT_SIGNED_IN);
-  }
 
   try {
     await loadGisScript();
@@ -227,8 +253,18 @@ export async function ensureAccessToken({ forceConsent = false } = {}) {
     throw new DriveAuthError(DriveAuthErrorCode.GIS_LOAD_FAILED, error?.message ?? 'load_failed');
   }
 
-  if (!tokenClient) {
-    tokenClient = createTokenClient();
+  /*
+   * login_hint は現在のプロフィールから毎回求める。
+   * プロフィールが消えた／現れたなど hint が変わった場合は、
+   * その値でトークンクライアントを作り直す。
+   */
+  const hint = resolveHint();
+
+  if (!tokenClient || tokenClientHint !== hint) {
+    /* hint の有無だけを出す。メールアドレスは出さない。 */
+    debugLog('auth:token-client', { hintPresent: hint !== undefined });
+    tokenClient = createTokenClient(hint);
+    tokenClientHint = hint;
   }
 
   /* ポップアップを二重に開かない。 */
@@ -261,5 +297,6 @@ export async function ensureAccessToken({ forceConsent = false } = {}) {
 export function resetDriveAuth() {
   clearAccessToken();
   tokenClient = null;
+  tokenClientHint = undefined;
   pendingRequest = null;
 }
