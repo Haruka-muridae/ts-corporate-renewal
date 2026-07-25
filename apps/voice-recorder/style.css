@@ -338,8 +338,8 @@
   color: var(--color-gold-text);
 }
 
-.vr-drive[data-drive-status="failed"] .vr-drive__status,
-.vr-drive[data-drive-status="reauth"] .vr-drive__status {
+/* 失敗のみ赤。キャンセルは中立色（案内であって失敗ではない）。 */
+.vr-drive[data-drive-status="failed"] .vr-drive__status {
   color: #7a1c16;
 }
 
@@ -355,17 +355,6 @@
   min-width: 200px;
 }
 
-.vr-drive__signin {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  color: var(--c-sub);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-
 .vr-drive__message,
 .vr-drive__note {
   color: var(--c-text-muted);
@@ -379,8 +368,7 @@
   background-color: var(--c-bg);
 }
 
-.vr-drive[data-drive-status="failed"] .vr-drive__message,
-.vr-drive[data-drive-status="reauth"] .vr-drive__message {
+.vr-drive[data-drive-status="failed"] .vr-drive__message {
   border-left-color: #7a1c16;
 }
 

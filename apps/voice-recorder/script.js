@@ -46,6 +46,42 @@ import {
 } from './capabilities.js';
 
 import { cleanupStaleFiles } from './opfs-storage.js';
+import { debugLog } from './debug-log.js';
+
+/*
+ * ページライフサイクルの観測（ログのみ）。
+ * 目的は「どのイベントで何が起きたか」を ?debug=1 のときだけ記録すること。
+ * ここでは録音結果・保存状態の reset や初期化を一切行わない。
+ *
+ * ・pageshow で不要な初期化をしない（復元時に録音結果を消さない）
+ * ・visibilitychange で reset しない（非表示になっただけで破棄しない）
+ * ・freeze / resume（Page Lifecycle API）はログのみ。保持中の Blob/File は
+ *   同一ドキュメントが生きている限り freeze→resume をまたいで残るため、
+ *   ここで解放してはならない（解放するとむしろデータを失う）。
+ * ・beforeunload / unload は追加しない（unload は BFCache を無効化するため）。
+ *   実際の解放は pagehide（persisted=false）だけで行う。
+ */
+function setupLifecycleLogging() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.addEventListener('pageshow', (event) => {
+    debugLog('lifecycle:pageshow', { persisted: event.persisted === true });
+  });
+
+  window.addEventListener('freeze', () => {
+    debugLog('lifecycle:freeze');
+  });
+
+  window.addEventListener('resume', () => {
+    debugLog('lifecycle:resume');
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    debugLog('lifecycle:visibilitychange', { hidden: document.hidden === true });
+  });
+}
 
 /* 録音のエラー文言。内部エラーは表示せず、コンソールへ記録する。 */
 const RECORDER_ERROR_MESSAGES = {
@@ -599,8 +635,18 @@ document.addEventListener('DOMContentLoaded', () => {
   el.reset.addEventListener('click', resetAll);
   el.resetCompleted.addEventListener('click', resetAll);
 
-  /* ページ離脱時にマイクとWorkerを解放する。 */
-  window.addEventListener('pagehide', () => {
+  /*
+   * ページ離脱時にマイクとWorkerを解放する。
+   * ただし bfcache へ入る離脱（event.persisted）では解放しない。
+   * Androidでタブが休止→復元される際に、変換済みMP3や録音データを
+   * 失わないようにするため（復元後もそのままDrive保存できる）。
+   * 本当にページが破棄される場合のみ解放する（そのときメモリは元々消える）。
+   */
+  window.addEventListener('pagehide', (event) => {
+    debugLog('lifecycle:pagehide', { persisted: event.persisted === true, mode: 'normal' });
+    if (event.persisted) {
+      return;
+    }
     generation += 1;
     if (converter) {
       converter.cancel();
@@ -623,6 +669,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   el.time.textContent = formatDuration(0);
   setAppState(AppState.IDLE);
+
+  /* ライフサイクル観測（ログのみ。reset や初期化はしない）。 */
+  setupLifecycleLogging();
 
   /* ============================================================
      長時間録音モード（β）
@@ -1043,7 +1092,16 @@ function setupLongMode() {
     el.start.focus();
   });
 
-  window.addEventListener('pagehide', () => {
+  window.addEventListener('pagehide', (event) => {
+    debugLog('lifecycle:pagehide', { persisted: event.persisted === true, mode: 'long' });
+    /*
+     * bfcache へ入る離脱（タブ休止など）では解放しない。
+     * 復元後に変換済みMP3をそのままDrive保存できるようにするため。
+     * 本当にページが破棄される場合のみ解放する。
+     */
+    if (event.persisted) {
+      return;
+    }
     longRecorder?.dispose();
     releaseMp3();
   });
