@@ -3,3 +3,9 @@ Thumbs.db
 .vscode/
 node_modules/
 *.log
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.env*
+!.env.example

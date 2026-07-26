@@ -1,0 +1,9 @@
+# 同梱している第三者ライブラリの内容と SHA-256 を保護する。
+# core.autocrlf=true の環境でも改行変換で本体が変化しないようにする。
+
+# lamejs 本体はバイナリ相当として扱い、Git による改行変換の対象外にする。
+apps/voice-recorder/vendor/lamejs.iife.js -text
+
+# ライセンスと NOTICE は LF に固定する。
+apps/voice-recorder/vendor/LICENSE-lamejs.txt text eol=lf
+apps/voice-recorder/vendor/NOTICE-lamejs.txt text eol=lf
