@@ -110,7 +110,9 @@ const el = {
   dismissPromptButton: document.getElementById('dismissPromptButton'),
 
   // 共通
-  message: document.getElementById('message')
+  message: document.getElementById('message'),
+  loadingOverlay: document.getElementById('loadingOverlay'),
+  loadingText: document.getElementById('loadingText')
 };
 
 /**
@@ -143,13 +145,13 @@ let isBusy = false;
  */
 function showMessage(text, type) {
   el.message.textContent = text;
-  el.message.className = 'message message--' + type;
+  el.message.className = 'nh-message nh-message--' + type;
 }
 
 /** メッセージを消す */
 function clearMessage() {
   el.message.textContent = '';
-  el.message.className = 'message';
+  el.message.className = 'nh-message';
 }
 
 /**
@@ -185,6 +187,24 @@ function setBusy(busy) {
   });
 }
 
+/**
+ * 通信中の表示を切り替える。
+ *
+ * 画面全体を覆って操作を止めるので、
+ * ボタンの無効化（setBusy）とあわせて二重送信を防げる。
+ *
+ * @param {boolean} isLoading - true なら表示する
+ * @param {string} [text] - 表示する文章
+ */
+function setLoading(isLoading, text) {
+  if (text) {
+    el.loadingText.textContent = text;
+  }
+
+  el.loadingOverlay.classList.toggle('nh-is-hidden', !isLoading);
+  setBusy(isLoading);
+}
+
 /** 本文の文字数表示を更新する */
 function updateBodyLength() {
   el.bodyLength.textContent = String(el.articleBodyText.value.length);
@@ -210,7 +230,7 @@ function renderArticle(data) {
 
   updateBodyLength();
 
-  el.articleView.classList.remove('is-hidden');
+  el.articleView.classList.remove('nh-is-hidden');
 }
 
 /** 記事の表示を消す（サーバーへは何も送らない） */
@@ -224,7 +244,7 @@ function clearArticleView() {
   el.errorMessageInput.value = '';
   el.bodyLength.textContent = '0';
 
-  el.articleView.classList.add('is-hidden');
+  el.articleView.classList.add('nh-is-hidden');
 }
 
 /**
@@ -233,7 +253,7 @@ function clearArticleView() {
  * @param {boolean} show - true なら表示する
  */
 function showNextPrompt(show) {
-  el.nextPromptView.classList.toggle('is-hidden', !show);
+  el.nextPromptView.classList.toggle('nh-is-hidden', !show);
 }
 
 // ============================================================
@@ -671,12 +691,11 @@ async function handlePing() {
   }
 
   clearMessage();
-  setBusy(true);
-  showMessage('接続を確認しています…', 'info');
+  setLoading(true, '接続を確認しています…');
 
   const result = await pingGas(gasUrl);
 
-  setBusy(false);
+  setLoading(false);
 
   if (!result.ok) {
     showFailure(result);
@@ -707,12 +726,11 @@ async function handleFetch() {
   clearMessage();
   showNextPrompt(false);
   clearArticleView();
-  setBusy(true);
-  showMessage('次の記事を取得しています…', 'info');
+  setLoading(true, '次の記事を取得しています…');
 
   const result = await fetchNextArticle(gasUrl);
 
-  setBusy(false);
+  setLoading(false);
 
   if (!result.ok) {
     // 対象が無いのは異常ではないため、エラー色にせず案内として表示する
@@ -802,12 +820,11 @@ async function submitStatus(status, message, loadingText, successText, askNext) 
   }
 
   clearMessage();
-  setBusy(true);
-  showMessage(loadingText, 'info');
+  setLoading(true, loadingText);
 
   const result = await updateArticleStatus(gasUrl, currentNewsId, status, message);
 
-  setBusy(false);
+  setLoading(false);
 
   if (!result.ok) {
     showFailure(result);

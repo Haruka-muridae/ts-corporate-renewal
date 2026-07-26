@@ -46,6 +46,14 @@ const APPS = [
     tags: ['電子契約', '書類作成'],
     icon: 'contract',
   },
+  {
+    name: 'Note Draft Helper',
+    description: '生成済みの記事を取得し、noteへの登録を補助するアプリです。',
+    status: 'beta',
+    url: '/apps/note-helper/',
+    tags: ['note', '下書き作成'],
+    icon: 'app',
+  },
 ];
 
 /*

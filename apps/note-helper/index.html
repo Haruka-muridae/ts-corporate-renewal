@@ -4,181 +4,248 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Note Draft Helper | TSアセットマネジメント合同会社</title>
-  <meta name="description" content="生成済みの記事を取得し、noteへの登録を補助します。">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#0f2a44">
+  <meta name="description" content="生成済みの記事を取得し、noteへの登録を補助するアプリです。記事のコピーとnoteの起動、記事状況の更新を1画面で行えます。">
 
-  <!-- 既存サイトと同じ書体 -->
+  <!-- TODO: 公開URLの確定後に canonical を追加 -->
+  <!-- TODO: 公開URLの確定後に og:url を追加 -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Note Draft Helper | TSアセットマネジメント合同会社">
+  <meta property="og:description" content="生成済みの記事を取得し、noteへの登録を補助するアプリです。">
+  <meta property="og:locale" content="ja_JP">
+  <!-- TODO: OGP画像の確定後に og:image を追加 -->
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- 社内利用向けのため、検索エンジンには登録しない -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
-
-  <!--
-    既存サイトのCSSを土台として読み込む。
-    配色・書体・角丸・ボタン（.btn）・.container・.section-label などを共有し、
-    この画面だけに必要なCSSを style.css に書く。
-    ※ 既存サイトの css/style.css は変更していない。
-  -->
   <link rel="stylesheet" href="../../css/style.css">
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="helper-body">
+<body>
   <a class="skip-link" href="#main-content">本文へスキップ</a>
 
-  <!-- ================================================================
-       1. ヘッダー
-       ================================================================ -->
-  <header class="helper-header">
-    <div class="container">
-      <h1 class="helper-header__title">Note Draft Helper</h1>
-      <p class="helper-header__lead">生成済みの記事を取得し、noteへの登録を補助します。</p>
+  <header id="header" class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-logo" href="../../index.html" aria-label="TSアセットマネジメント合同会社 トップページ">
+        <span class="site-logo__mark" aria-hidden="true">TS</span>
+        <span class="site-logo__text">
+          <span class="site-logo__name">TSアセットマネジメント合同会社</span>
+          <span class="site-logo__name-en" lang="en">TS ASSET MANAGEMENT LLC</span>
+        </span>
+      </a>
+
+      <nav class="nh-nav" aria-label="ページ内ナビ">
+        <a class="nh-nav__link" href="../index.html">AIアプリ一覧へ戻る</a>
+      </nav>
     </div>
   </header>
 
-  <main id="main-content" class="helper-main container" tabindex="-1">
+  <main id="main-content" tabindex="-1">
+    <section class="section nh-hero" aria-labelledby="nh-title">
+      <div class="container">
+        <nav class="nh-breadcrumb" aria-label="パンくずリスト">
+          <ol class="nh-breadcrumb__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li aria-current="page">Note Draft Helper</li>
+          </ol>
+        </nav>
 
-    <!-- ================================================================
-         2. GAS設定
-         ================================================================ -->
-    <section class="panel" aria-labelledby="settingsHeading">
-      <p class="section-label" lang="en">Settings</p>
-      <h2 id="settingsHeading" class="panel__title">GAS設定</h2>
-
-      <p class="panel__lead">
-        GAS WebアプリのURLを保存します。この端末のブラウザ内にのみ保存され、外部へは送信されません。
-      </p>
-
-      <div class="field">
-        <label class="field__label" for="gasUrlInput">GAS WebアプリURL</label>
-        <input
-          id="gasUrlInput"
-          class="field__input"
-          type="url"
-          inputmode="url"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="https://script.google.com/macros/s/.../exec"
-        >
-      </div>
-
-      <div class="actions">
-        <button id="saveUrlButton" class="btn btn--primary" type="button">保存</button>
-        <button id="pingButton" class="btn btn--secondary" type="button">接続確認</button>
-      </div>
-    </section>
-
-    <!-- ================================================================
-         3. 記事取得
-         ================================================================ -->
-    <section class="panel" aria-labelledby="fetchHeading">
-      <p class="section-label" lang="en">Fetch</p>
-      <h2 id="fetchHeading" class="panel__title">記事取得</h2>
-
-      <p class="panel__lead">
-        記事状況が「記事生成完了」の記事を1件取得します。取得した記事は「取得済」になります。
-      </p>
-
-      <div class="actions">
-        <button id="fetchButton" class="btn btn--primary btn--block" type="button">次の記事を取得</button>
-      </div>
-    </section>
-
-    <!-- ================================================================
-         4. 記事表示 ＋ 5. 操作ボタン
-         ================================================================ -->
-    <section id="articleView" class="panel is-hidden" aria-labelledby="articleHeading">
-      <p class="section-label" lang="en">Draft</p>
-      <h2 id="articleHeading" class="panel__title">取得した記事</h2>
-
-      <dl class="meta">
-        <div class="meta__row">
-          <dt class="meta__key">ニュースID</dt>
-          <dd id="articleNewsId" class="meta__value">-</dd>
-        </div>
-        <div class="meta__row">
-          <dt class="meta__key">現在の状態</dt>
-          <dd id="articleStatus" class="meta__value">-</dd>
-        </div>
-      </dl>
-
-      <div class="field">
-        <label class="field__label" for="articleTitleText">記事タイトル</label>
-        <textarea id="articleTitleText" class="field__textarea field__textarea--title" rows="2"></textarea>
-      </div>
-
-      <div class="field">
-        <label class="field__label" for="articleBodyText">note本文</label>
-        <textarea id="articleBodyText" class="field__textarea field__textarea--body" rows="12"></textarea>
-        <p class="field__count"><span id="bodyLength">0</span> 文字</p>
-      </div>
-
-      <!-- コピー操作 -->
-      <div class="actions actions--wrap">
-        <button id="copyTitleButton" class="btn btn--secondary" type="button">タイトルをコピー</button>
-        <button id="copyBodyButton" class="btn btn--secondary" type="button">本文をコピー</button>
-        <button id="copyBothButton" class="btn btn--secondary" type="button">タイトル＋本文をコピー</button>
-      </div>
-
-      <!-- note を開く -->
-      <div class="actions">
-        <button id="openNoteButton" class="btn btn--primary btn--block" type="button">noteを開く</button>
-      </div>
-
-      <!-- 投稿完了 -->
-      <div class="actions">
-        <button id="completeButton" class="btn btn--primary btn--block" type="button">投稿完了</button>
-      </div>
-
-      <!-- エラーとして記録 -->
-      <div class="field field--error-record">
-        <label class="field__label" for="errorMessageInput">エラー内容</label>
-        <p class="field__hint">
-          「エラーとして記録」を押すと、記事状況を「下書き作成エラー」にし、この内容をシートへ残します。
-        </p>
-        <textarea
-          id="errorMessageInput"
-          class="field__textarea field__textarea--error"
-          rows="3"
-          placeholder="例：本文の見出しが崩れているため作り直しが必要"
-        ></textarea>
-
-        <div class="actions">
-          <button id="errorButton" class="btn btn--secondary btn--block" type="button">エラーとして記録</button>
+        <div class="nh-hero__inner">
+          <p class="nh-hero__label" lang="en">Note Draft Helper</p>
+          <h1 id="nh-title" class="nh-hero__title">Note Draft Helper</h1>
+          <p class="nh-hero__lead">生成済みの記事を取得し、noteへの登録を補助します。記事のコピー、noteの起動、記事状況の更新を1画面で行えます。noteへの投稿はご自身の操作で行っていただく必要があり、このアプリが自動で投稿することはありません。</p>
         </div>
       </div>
-
-      <!-- 画面上の表示だけを消す -->
-      <div class="actions">
-        <button id="closeButton" class="btn btn--quiet btn--block" type="button">記事を閉じる</button>
-      </div>
     </section>
 
-    <!-- ================================================================
-         投稿完了後の案内（次の記事を続けて取得する）
-         ================================================================ -->
-    <section id="nextPromptView" class="panel panel--prompt is-hidden" aria-labelledby="nextPromptHeading">
-      <h2 id="nextPromptHeading" class="panel__title">次の記事を取得しますか？</h2>
+    <section class="section nh-main">
+      <div class="container nh-container">
 
-      <p class="panel__lead">
-        続けて作業する場合は「取得する」を押してください。
-      </p>
+        <!-- ============================================================
+             GAS設定
+             ============================================================ -->
+        <section aria-labelledby="nh-settings-title">
+          <h2 id="nh-settings-title" class="nh-section-title">GAS設定</h2>
 
-      <div class="actions">
-        <button id="fetchNextButton" class="btn btn--primary" type="button">取得する</button>
-        <button id="dismissPromptButton" class="btn btn--secondary" type="button">あとで</button>
+          <div class="nh-panel">
+            <p class="nh-lead">
+              GAS WebアプリのURLを保存します。この端末のブラウザ内にのみ保存され、外部へは送信されません。
+            </p>
+
+            <div class="nh-field">
+              <label class="nh-field__label" for="gasUrlInput">GAS WebアプリURL</label>
+              <input
+                id="gasUrlInput"
+                class="nh-field__input"
+                type="url"
+                inputmode="url"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="https://script.google.com/macros/s/.../exec"
+              >
+            </div>
+
+            <div class="nh-actions">
+              <button id="saveUrlButton" class="btn btn--primary" type="button">保存</button>
+              <button id="pingButton" class="btn btn--secondary" type="button">接続確認</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             記事取得
+             ============================================================ -->
+        <section class="nh-block" aria-labelledby="nh-fetch-title">
+          <h2 id="nh-fetch-title" class="nh-section-title">記事取得</h2>
+
+          <div class="nh-panel">
+            <p class="nh-lead">
+              記事状況が「記事生成完了」の記事を1件取得します。取得した記事は「取得済」になります。
+            </p>
+
+            <div class="nh-actions">
+              <button id="fetchButton" class="btn btn--primary" type="button">次の記事を取得</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             取得した記事（取得するまで隠す）
+             ============================================================ -->
+        <section id="articleView" class="nh-block nh-is-hidden" aria-labelledby="nh-article-title">
+          <h2 id="nh-article-title" class="nh-section-title">取得した記事</h2>
+
+          <div class="nh-panel">
+            <dl class="nh-meta">
+              <div class="nh-meta__row">
+                <dt class="nh-meta__key">ニュースID</dt>
+                <dd id="articleNewsId" class="nh-meta__value">-</dd>
+              </div>
+              <div class="nh-meta__row">
+                <dt class="nh-meta__key">現在の状態</dt>
+                <dd id="articleStatus" class="nh-meta__value">-</dd>
+              </div>
+            </dl>
+
+            <div class="nh-field">
+              <label class="nh-field__label" for="articleTitleText">記事タイトル</label>
+              <textarea id="articleTitleText" class="nh-field__textarea nh-field__textarea--title" rows="2"></textarea>
+            </div>
+
+            <div class="nh-field">
+              <label class="nh-field__label" for="articleBodyText">note本文</label>
+              <textarea id="articleBodyText" class="nh-field__textarea nh-field__textarea--body" rows="12"></textarea>
+              <p class="nh-field__count"><span id="bodyLength">0</span> 文字</p>
+            </div>
+
+            <div class="nh-actions">
+              <button id="copyTitleButton" class="btn btn--secondary" type="button">タイトルをコピー</button>
+              <button id="copyBodyButton" class="btn btn--secondary" type="button">本文をコピー</button>
+              <button id="copyBothButton" class="btn btn--secondary" type="button">タイトル＋本文をコピー</button>
+            </div>
+
+            <div class="nh-actions nh-actions--single">
+              <button id="openNoteButton" class="btn btn--primary" type="button">noteを開く</button>
+            </div>
+
+            <div class="nh-actions nh-actions--single">
+              <button id="completeButton" class="btn btn--primary" type="button">投稿完了</button>
+            </div>
+
+            <!-- エラーとして記録 -->
+            <div class="nh-subblock">
+              <h3 class="nh-subblock__title">エラーとして記録</h3>
+
+              <label class="nh-field__label" for="errorMessageInput">エラー内容</label>
+              <p class="nh-field__hint">
+                記事状況を「下書き作成エラー」にし、この内容をシートへ残します。
+              </p>
+              <textarea
+                id="errorMessageInput"
+                class="nh-field__textarea nh-field__textarea--error"
+                rows="3"
+                placeholder="例：本文の見出しが崩れているため作り直しが必要"
+              ></textarea>
+
+              <div class="nh-actions nh-actions--single">
+                <button id="errorButton" class="btn btn--secondary" type="button">エラーとして記録</button>
+              </div>
+            </div>
+
+            <!-- 画面上の表示だけを消す -->
+            <div class="nh-actions nh-actions--single">
+              <button id="closeButton" class="btn nh-btn-quiet" type="button">記事を閉じる</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             投稿完了後の案内
+             ============================================================ -->
+        <section id="nextPromptView" class="nh-block nh-is-hidden" aria-labelledby="nh-next-title">
+          <h2 id="nh-next-title" class="nh-section-title">次の記事を取得しますか？</h2>
+
+          <div class="nh-panel nh-panel--prompt">
+            <p class="nh-lead">続けて作業する場合は「取得する」を押してください。</p>
+
+            <div class="nh-actions">
+              <button id="fetchNextButton" class="btn btn--primary" type="button">取得する</button>
+              <button id="dismissPromptButton" class="btn btn--secondary" type="button">あとで</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 状態の通知（成功・エラー・案内） -->
+        <p id="message" class="nh-message" role="status" aria-live="polite"></p>
+
       </div>
     </section>
-
-    <!-- 状態の通知（成功・エラー・案内） -->
-    <p id="message" class="message" role="status" aria-live="polite"></p>
-
   </main>
 
-  <footer class="helper-footer">
+  <footer id="footer" class="site-footer">
     <div class="container">
-      <p class="helper-footer__note">社内利用向けツール／TSアセットマネジメント合同会社</p>
+      <div class="site-footer__main">
+        <div class="site-footer__info">
+          <p class="site-footer__name">TSアセットマネジメント合同会社</p>
+          <p class="site-footer__name-en" lang="en">TS ASSET MANAGEMENT LLC</p>
+          <address class="site-footer__address">
+            <p>〒249-0002 神奈川県逗子市久木8-8-26</p>
+            <p><a href="mailto:architect@potenitas.com">architect@potenitas.com</a></p>
+          </address>
+        </div>
+
+        <nav class="footer-nav" aria-label="フッターナビ">
+          <ul class="footer-nav__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li><a href="../../index.html#business">事業領域</a></li>
+            <li><a href="../../index.html#company">会社概要</a></li>
+            <li><a href="../../index.html#contact">お問い合わせ</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <div class="site-footer__bottom">
+        <small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small>
+      </div>
     </div>
   </footer>
+
+  <!-- 通信中の表示。画面全体を覆って操作を止める -->
+  <div id="loadingOverlay" class="nh-loading nh-is-hidden" role="alert" aria-live="assertive">
+    <div class="nh-loading__box">
+      <span class="nh-loading__spinner" aria-hidden="true"></span>
+      <p id="loadingText" class="nh-loading__text">読み込み中…</p>
+    </div>
+  </div>
 
   <script src="script.js"></script>
 </body>

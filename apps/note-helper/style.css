@@ -1,123 +1,177 @@
 /*
- * Note Draft Helper 固有のCSS
+ * Note Draft Helper 専用スタイル。
+ * ../../css/style.css を読み込んだうえで追加する差分のみを定義する。
+ * 既存クラスは上書きせず、nh- の接頭辞のみを使う。
  *
  * 配色・書体・角丸・ボタン（.btn / .btn--primary / .btn--secondary）・
- * .container・.section-label・リセット・フォーカス表示・
+ * .container / .section / .skip-link / リセット / フォーカス表示 /
  * prefers-reduced-motion への対応は ../../css/style.css から受け取る。
- * このファイルには、この画面だけに必要なCSSを書く。
  *
  * ブレークポイントは既存サイトに合わせて 600px / 1024px を使う。
  */
 
-/* ============================================================
-   全体レイアウト
-   最大幅720px・中央寄せ・横スクロールを起こさない
-   ============================================================ */
-
-.helper-body {
-  display: flex;
-  min-height: 100vh;
-  flex-direction: column;
-  /* 横スクロールを発生させない */
-  overflow-x: hidden;
-  background-color: var(--c-bg-sub);
-}
-
-.helper-main {
-  width: 100%;
-  max-width: calc(720px + (var(--container-padding) * 2));
-  flex: 1 0 auto;
-  padding-block: 24px 40px;
-}
-
-/* ============================================================
-   1. ヘッダー
-   ============================================================ */
-
-.helper-header {
-  border-bottom: 1px solid var(--c-border);
-  background-color: var(--c-bg);
-  /* iPhoneのノッチ部分に文字が隠れないようにする */
-  padding-top: env(safe-area-inset-top);
-}
-
-.helper-header > .container {
-  max-width: calc(720px + (var(--container-padding) * 2));
-  padding-block: 20px;
-}
-
-.helper-header__title {
+/* ヘッダー内の戻りリンク（このページはグローバルナビを持たない） */
+.nh-nav__link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
   color: var(--c-main);
-  font-family: var(--font-en);
-  font-size: 1.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Breadcrumb */
+.nh-breadcrumb {
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.nh-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-text-muted);
+}
+
+.nh-breadcrumb__list li + li::before {
+  margin-right: 8px;
+  color: var(--color-border-strong);
+  content: "/";
+}
+
+.nh-breadcrumb__list a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.nh-breadcrumb__list [aria-current="page"] {
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+/* Page hero */
+.nh-hero {
+  padding-top: calc(var(--section-space) + var(--header-height));
+  padding-bottom: calc(var(--section-space) - 24px);
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.nh-hero__inner {
+  margin-top: 32px;
+  max-width: 720px;
+}
+
+.nh-hero__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-gold-text);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.4;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.helper-header__lead {
-  margin-top: 6px;
+.nh-hero__label::before {
+  width: 32px;
+  height: 1px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+.nh-hero__title {
+  margin-top: 16px;
+  font-size: clamp(1.625rem, 1.2rem + 2.2vw, 2.5rem);
+  line-height: 1.35;
+}
+
+.nh-hero__lead {
+  margin-top: 24px;
   color: var(--c-text-muted);
-  font-size: 0.8125rem;
-  line-height: 1.7;
 }
 
-/* ============================================================
-   パネル（設定・取得・記事表示の枠）
-   ============================================================ */
+/* 本体。操作に集中できるよう、読み幅を720pxに抑える */
+.nh-container {
+  max-width: calc(720px + (var(--container-padding) * 2));
+}
 
-.panel {
-  padding: 24px 20px;
+.nh-section-title {
+  position: relative;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+}
+
+.nh-section-title::after {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 40px;
+  height: 2px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+/* 見出し＋パネルのひとかたまり */
+.nh-block {
+  margin-top: 48px;
+}
+
+/* パネル（各操作の枠） */
+.nh-panel {
+  padding: 28px 20px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-card);
   background-color: var(--c-bg);
 }
 
-.panel + .panel {
-  margin-top: 20px;
+/* 投稿完了後の案内。左端の色で他と区別する */
+.nh-panel--prompt {
+  box-shadow: inset 3px 0 0 var(--color-gold);
 }
 
-/* 投稿完了後の案内。通常のパネルと区別が付くよう左に色帯を付ける */
-.panel--prompt {
-  border-left: 4px solid var(--c-accent);
-}
-
-.panel__title {
-  margin-top: 6px;
-  font-size: 1.1875rem;
-  line-height: 1.5;
-}
-
-.panel__lead {
-  margin-top: 12px;
+.nh-lead {
   color: var(--c-text-muted);
   font-size: 0.875rem;
   line-height: 1.9;
 }
 
-/* ============================================================
-   ニュースID・現在の状態
-   ============================================================ */
+/* パネル内の小見出し（エラーとして記録） */
+.nh-subblock {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--c-border);
+}
 
-.meta {
-  margin-top: 20px;
+.nh-subblock__title {
+  margin-bottom: 16px;
+  font-size: 1rem;
+}
+
+/* ニュースID・現在の状態 */
+.nh-meta {
   padding: 4px 14px;
   border-radius: var(--radius-tag);
   background-color: var(--c-bg-sub);
 }
 
-.meta__row {
+.nh-meta__row {
   display: flex;
   align-items: baseline;
   gap: 12px;
   padding-block: 8px;
 }
 
-.meta__row + .meta__row {
+.nh-meta__row + .nh-meta__row {
   border-top: 1px solid var(--c-border);
 }
 
-.meta__key {
+.nh-meta__key {
   width: 6.5em;
   flex: 0 0 auto;
   color: var(--c-text-muted);
@@ -125,7 +179,7 @@
   letter-spacing: 0.04em;
 }
 
-.meta__value {
+.nh-meta__value {
   min-width: 0;
   color: var(--c-main);
   font-size: 0.9375rem;
@@ -134,21 +188,12 @@
   overflow-wrap: anywhere;
 }
 
-/* ============================================================
-   入力欄
-   ============================================================ */
-
-.field {
+/* 入力欄 */
+.nh-field {
   margin-top: 24px;
 }
 
-.field--error-record {
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid var(--c-border);
-}
-
-.field__label {
+.nh-field__label {
   display: block;
   margin-bottom: 8px;
   color: var(--c-main);
@@ -157,15 +202,15 @@
   letter-spacing: 0.04em;
 }
 
-.field__hint {
+.nh-field__hint {
   margin-bottom: 8px;
   color: var(--c-text-muted);
   font-size: 0.75rem;
   line-height: 1.8;
 }
 
-.field__input,
-.field__textarea {
+.nh-field__input,
+.nh-field__textarea {
   display: block;
   width: 100%;
   padding: 12px 14px;
@@ -178,31 +223,31 @@
   line-height: 1.8;
 }
 
-.field__input {
+.nh-field__input {
   line-height: 1.6;
 }
 
-.field__textarea {
+.nh-field__textarea {
   /* 横に広げられると枠が崩れるため、縦だけリサイズ可能にする */
   resize: vertical;
 }
 
-.field__textarea--title {
+.nh-field__textarea--title {
   min-height: 5em;
   font-weight: 500;
 }
 
-.field__textarea--body {
+.nh-field__textarea--body {
   min-height: 18em;
   font-size: 0.9375rem;
 }
 
-.field__textarea--error {
+.nh-field__textarea--error {
   min-height: 6em;
   font-size: 0.9375rem;
 }
 
-.field__count {
+.nh-field__count {
   margin-top: 6px;
   color: var(--c-text-muted);
   font-family: var(--font-num);
@@ -210,33 +255,31 @@
   text-align: right;
 }
 
-/* ============================================================
-   ボタン配置
-   .btn は既存サイトのもの（min-height 56px）を使うため、
-   要件の「48px以上」を満たしている。
-   ============================================================ */
-
-.actions {
+/* ボタン配置。
+   .btn（min-height 56px）はサイト共通のものを使うため、
+   要件の「48px以上」を満たしている。 */
+.nh-actions {
   display: flex;
-  flex-direction: column;
+  margin-top: 24px;
+  flex-wrap: wrap;
   gap: 12px;
-  margin-top: 20px;
 }
 
-.btn--block {
-  display: flex;
-  width: 100%;
-}
-
-/* .btn は padding-inline: 32px のため、狭い画面では横並びにせず縦に積む */
-.actions .btn {
-  width: 100%;
+.nh-actions .btn {
+  flex: 1 1 auto;
+  min-width: 140px;
+  /* 狭い画面で文字が詰まらないよう、左右の余白を抑える */
   padding-inline: 16px;
 }
 
-/* このツール専用のボタン種別。
-   「記事を閉じる」のような主要ではない操作に使う。 */
-.btn--quiet {
+/* 単独で置くボタンは常に横幅いっぱいにする */
+.nh-actions--single .btn {
+  width: 100%;
+}
+
+/* 「記事を閉じる」のような主要ではない操作。
+   .btn に追加する形で使い、既存の .btn--* は変更しない。 */
+.nh-btn-quiet {
   color: var(--c-text-muted);
   border-color: transparent;
   background-color: transparent;
@@ -245,140 +288,131 @@
   text-underline-offset: 4px;
 }
 
-button:disabled {
+.nh-panel button:disabled,
+.nh-panel .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* ============================================================
-   11. メッセージ表示
-   色だけに頼らず、左の縦線と文言で状態が分かるようにする。
-   ============================================================ */
-
-.message {
-  margin-top: 20px;
+/* メッセージ表示。
+   色だけに頼らず、左の縦線と文言で状態が分かるようにする。 */
+.nh-message {
+  margin-top: 32px;
   font-size: 0.875rem;
   line-height: 1.9;
   /* 長いURLやエラー文でも横スクロールを起こさない */
   overflow-wrap: anywhere;
 }
 
-.message:empty {
+.nh-message:empty {
   display: none;
 }
 
-.message--info,
-.message--success,
-.message--error {
+.nh-message--info,
+.nh-message--success,
+.nh-message--error {
   padding: 12px 16px;
-  border-left: 3px solid var(--c-border-strong);
-  border-radius: var(--radius-tag);
-  background-color: var(--c-bg);
 }
 
 /* NO_TARGET などの案内。エラー色にしない */
-.message--info {
-  border-left-color: var(--c-sub);
+.nh-message--info {
+  border-left: 3px solid var(--color-navy-light);
   color: var(--c-text);
+  background-color: var(--c-bg-sub);
 }
 
-.message--success {
-  border-left-color: var(--c-accent);
-  color: var(--c-main);
+.nh-message--success {
+  border-left: 3px solid var(--color-gold);
+  color: var(--c-text);
+  background-color: var(--c-bg-sub);
 }
 
-.message--error {
-  border-left-color: #b3261e;
-  color: #8c1d18;
+.nh-message--error {
+  border-left: 3px solid #b3261e;
+  color: #7a1c16;
+  background-color: #fdf3f2;
 }
 
-/* ============================================================
-   フッター
-   ============================================================ */
+/* ローディング表示 */
+.nh-loading {
+  position: fixed;
+  z-index: 1500;
+  inset: 0;
+  display: grid;
+  padding: var(--container-padding);
+  place-items: center;
+  background-color: rgba(15, 39, 71, 0.5);
+}
 
-.helper-footer {
-  padding-block: 20px;
-  padding-bottom: calc(20px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--c-border);
+.nh-loading__box {
+  display: flex;
+  width: min(100%, 320px);
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 24px;
+  border-radius: var(--radius-card);
   background-color: var(--c-bg);
-}
-
-.helper-footer__note {
-  color: var(--c-text-muted);
-  font-size: 0.75rem;
-  line-height: 1.8;
   text-align: center;
 }
 
-/* ============================================================
-   表示・非表示の切り替え
-   ============================================================ */
+.nh-loading__spinner {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--c-border);
+  border-top-color: var(--color-gold);
+  border-radius: 50%;
+  animation: nh-spin 800ms linear infinite;
+}
 
-.is-hidden {
+.nh-loading__text {
+  color: var(--c-main);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.7;
+}
+
+@keyframes nh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 表示・非表示の切り替え */
+.nh-is-hidden {
   display: none !important;
 }
 
-/* ============================================================
-   ホバーできる環境だけの装飾
-   ============================================================ */
-
 @media (hover: hover) {
-  .btn--quiet:hover {
+  .nh-btn-quiet:hover {
     color: var(--c-main);
     background-color: var(--c-bg-sub);
   }
 }
 
-/* ============================================================
-   タブレット以上
-   ============================================================ */
-
 @media (min-width: 600px) {
-  .helper-main {
-    padding-block: 32px 56px;
-  }
-
-  .helper-header > .container {
-    padding-block: 24px;
-  }
-
-  .helper-header__title {
-    font-size: 1.375rem;
-  }
-
-  .panel {
+  .nh-panel {
     padding: 32px;
   }
 
-  /* 横幅に余裕があるので、ボタンを横並びにする */
-  .actions {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  .actions .btn {
-    width: auto;
-    flex: 1 1 auto;
-    padding-inline: 24px;
-  }
-
-  .actions--wrap .btn {
-    /* 3つ並ぶコピーボタンは、文字が詰まらない幅を確保して折り返す */
-    flex: 1 1 auto;
-    min-width: 13em;
-  }
-
-  .meta__key {
+  .nh-meta__key {
     width: 8em;
   }
 }
 
 @media (min-width: 1024px) {
-  .helper-main {
-    padding-block: 40px 72px;
+  .nh-block {
+    margin-top: 56px;
   }
+}
 
-  .panel + .panel {
-    margin-top: 24px;
+/* 動きを減らす設定への対応。
+   共通のリセットは ../../css/style.css にもあるが、
+   このアプリで追加した回転アニメーションを明示的に止める。 */
+@media (prefers-reduced-motion: reduce) {
+  .nh-loading__spinner {
+    animation: none;
+    border-top-color: var(--color-gold);
   }
 }
