@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.local
+
+# 自動生成。正本は apps/auth-config.js。
+# npm run build / npm run dev のたびに再生成される。
+src/generated/
+
+# PDF.js の cmaps / standard_fonts を node_modules から複製したもの。
+# ビルドのたびに作り直されるため、ソース側では管理しない。
+# （配信物 apps/knowledge/cmaps, apps/knowledge/standard_fonts はコミットする。）
+public/
+
+# 検証用フィクスチャ（一時）
+selftest-data/
+
+# テスト用に生成するフィクスチャ（毎回作り直す）
+tests/fixtures/generated/
