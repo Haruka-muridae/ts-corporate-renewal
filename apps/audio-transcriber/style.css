@@ -1,0 +1,778 @@
+/*
+ * 音声文字起こし 専用スタイル。
+ * ../../css/style.css を読み込んだうえで追加する差分のみを定義する。
+ * 既存クラスは上書きせず、at- の接頭辞のみを使う。
+ *
+ * 色は既存のカスタムプロパティ（--color-navy / --color-gold / --c-border など）
+ * を使い、新しい色を定義しない。
+ * 既存サイトにダークモードの指定は無いため、ここでも導入しない
+ * （このアプリだけ配色が変わると、サイト内で不整合になる）。
+ *
+ * ブレークポイントは既存サイトに合わせて 600px / 1024px を使う。
+ */
+
+/*
+ * hidden 属性を確実に効かせる。
+ *
+ * ブラウザ既定の [hidden] { display: none } は作者スタイルに負ける。
+ * 中止ボタンは .btn（display: inline-flex）を持つため、hidden を立てても
+ * 消えず、待機中もずっと画面に出たままになっていた（実ブラウザで確認）。
+ *
+ * このアプリは表示の出し分けを hidden で行っているので、ここで押し切る。
+ * 影響範囲を広げないよう .at-app の中だけに限定する。
+ */
+.at-app [hidden] {
+  display: none !important;
+}
+
+/* ヘッダー内の戻りリンク（このページはグローバルナビを持たない） */
+.at-nav__link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Breadcrumb */
+.at-breadcrumb {
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.at-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-text-muted);
+}
+
+.at-breadcrumb__list li + li::before {
+  margin-right: 8px;
+  color: var(--color-border-strong);
+  content: "/";
+}
+
+.at-breadcrumb__list a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.at-breadcrumb__list [aria-current="page"] {
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+/* Page hero */
+.at-hero {
+  padding-top: calc(var(--section-space) + var(--header-height));
+  padding-bottom: calc(var(--section-space) - 24px);
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.at-hero__inner {
+  margin-top: 24px;
+}
+
+.at-hero__label {
+  color: var(--color-gold-text);
+  font-family: var(--font-en);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.at-hero__title {
+  margin-top: 8px;
+  color: var(--c-main);
+  font-size: var(--fs-h2);
+}
+
+.at-hero__lead {
+  max-width: 44em;
+  margin-top: 16px;
+  color: var(--c-text-muted);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+/* Layout */
+.at-container {
+  max-width: 760px;
+}
+
+.at-block + .at-block {
+  margin-top: var(--content-space);
+}
+
+.at-section-title {
+  margin-bottom: 12px;
+  color: var(--c-main);
+  font-size: var(--fs-h3);
+}
+
+.at-subtitle {
+  margin-bottom: 8px;
+  color: var(--c-main);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.at-panel {
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-white);
+}
+
+.at-panel > * + * {
+  margin-top: 16px;
+}
+
+.at-note {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.at-note:empty {
+  display: none;
+}
+
+.at-link {
+  color: var(--c-main);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Actions */
+.at-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.at-actions .btn {
+  min-height: 44px;
+}
+
+/* 補助的な操作。主要動線より弱く見せる */
+.at-btn-quiet {
+  border: 1px solid var(--c-border-strong);
+  background-color: transparent;
+  color: var(--c-text-muted);
+}
+
+.at-btn-quiet:hover:not(:disabled) {
+  border-color: var(--c-main);
+  color: var(--c-main);
+}
+
+.btn:disabled,
+.at-btn-quiet:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Visually hidden（読み上げには残す） */
+.at-visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- ファイル情報 ---------- */
+
+.at-file-info {
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border);
+}
+
+.at-file-meta {
+  display: grid;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+.at-file-meta__row {
+  display: grid;
+  grid-template-columns: 6.5em 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.at-file-meta dt {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.at-file-meta dd {
+  margin: 0;
+  color: var(--c-text);
+}
+
+/*
+ * 長いファイル名でレイアウトを壊さない。
+ * 日本語には空白が無いため overflow-wrap だけでは折れない場面があり、
+ * word-break も併用する。
+ */
+.at-file-meta__name {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.at-player {
+  width: 100%;
+  margin-top: 16px;
+}
+
+/* ---------- 取得元の選択 ---------- */
+
+.at-source-label {
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.at-sources {
+  display: grid;
+  gap: 12px;
+}
+
+.at-source {
+  padding: 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-off-white);
+}
+
+/* 取得元ボタンは枠いっぱいに広げ、2つの選択肢として並べて見せる */
+.at-source__button {
+  width: 100%;
+  min-height: 44px;
+}
+
+/* 対象フォルダ。ここが固定であることが伝わるよう本文より強く見せる */
+.at-source__path {
+  margin-top: 10px;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.at-source__hint {
+  margin-top: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+/* ---------- Drive の一覧 ---------- */
+
+.at-drive-list {
+  display: grid;
+  max-height: 320px;
+  gap: 8px;
+  margin: 12px 0;
+  overflow-y: auto;
+}
+
+.at-drive-list__button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-tag);
+  background-color: var(--color-off-white);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.at-drive-list__button:hover {
+  border-color: var(--c-main);
+}
+
+.at-drive-list__name {
+  display: block;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.at-drive-list__meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+}
+
+.at-drive-list__empty {
+  padding: 12px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+/* ---------- Drive 選択ダイアログ ---------- */
+
+/*
+ * <dialog> の showModal() を使う。
+ * Escape・フォーカスの閉じ込め・背面の不活性化はブラウザが行うので、
+ * ここでは見た目だけを整える。
+ */
+.at-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(80vh, 720px);
+  padding: 0;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-card);
+  background-color: var(--color-white);
+  color: var(--c-text);
+  /* ダイアログ内を縦に積み、本文だけをスクロールさせる */
+  overflow: hidden;
+}
+
+.at-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.at-dialog::backdrop {
+  background-color: rgb(15 39 71 / 55%);
+}
+
+.at-dialog__head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.at-dialog__title {
+  color: var(--c-main);
+  font-size: 1rem;
+}
+
+.at-dialog__path {
+  margin-top: 4px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+/* 件数が多くても画面からはみ出さないよう、ここだけスクロールさせる */
+.at-dialog__body {
+  flex: 1 1 auto;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.at-dialog__body > * + * {
+  margin-top: 12px;
+}
+
+.at-dialog__status {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.at-dialog__status:empty {
+  display: none;
+}
+
+.at-dialog__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.at-dialog__foot .btn {
+  min-height: 44px;
+}
+
+/* ダイアログ内の一覧は高さ制限を外し、本文側のスクロールに任せる */
+.at-dialog .at-drive-list {
+  max-height: none;
+  margin: 0;
+}
+
+@media (max-width: 599px) {
+  .at-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 48px);
+  }
+
+  .at-dialog__foot .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- モード選択カード ---------- */
+
+.at-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.at-mode-cards {
+  display: grid;
+  gap: 12px;
+}
+
+.at-mode-card {
+  position: relative;
+}
+
+/*
+ * ラジオ本体は見た目上隠すが、フォーカスは受け取れるようにする
+ * （display:none や visibility:hidden にするとキーボードで操作できなくなる）。
+ */
+.at-mode-card__input {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  margin: 0;
+}
+
+.at-mode-card__label {
+  display: block;
+  padding: 16px 16px 16px 44px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-white);
+  cursor: pointer;
+}
+
+.at-mode-card__input:checked + .at-mode-card__label {
+  border-color: var(--c-main);
+  background-color: var(--color-off-white);
+  box-shadow: inset 0 0 0 1px var(--c-main);
+}
+
+.at-mode-card__input:focus-visible + .at-mode-card__label {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+.at-mode-card__name {
+  display: block;
+  color: var(--c-main);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+/* モード名の横に付ける小さな札（推奨 / ベータ） */
+.at-mode-card__badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-tag);
+  background-color: var(--color-navy);
+  color: var(--color-white);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.at-mode-card__badge--beta {
+  background-color: var(--color-gold-light);
+  color: var(--color-gold-text);
+}
+
+.at-mode-card__desc {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.at-mode-card__note {
+  display: block;
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 3px solid var(--color-gold-light);
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+/* ---------- フォーム ---------- */
+
+.at-field + .at-field {
+  margin-top: 16px;
+}
+
+.at-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.at-input,
+.at-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--color-white);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.9375rem;
+}
+
+.at-input:focus-visible,
+.at-select:focus-visible,
+.at-textarea:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 1px;
+}
+
+.at-key-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.at-key-row .at-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.at-key-toggle {
+  flex: 0 0 auto;
+  min-width: 4.5em;
+}
+
+/* APIキーは等幅で見せる。表示切り替え時に桁が読み取りやすくなる */
+.at-input--key {
+  font-family: var(--font-num);
+  letter-spacing: 0.02em;
+}
+
+/*
+ * チェックボックスは本体が小さいので、ラベル側で押せる高さを確保する
+ * （実機で指が届く 44px を目安にする）。
+ */
+.at-checkbox {
+  display: flex;
+  min-height: 44px;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.at-checkbox input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.at-checkbox label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.at-mode-settings {
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border);
+}
+
+.at-security-note {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--color-off-white);
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.9;
+}
+
+.at-security-note p + p {
+  margin-top: 4px;
+}
+
+/* ---------- 状態・進捗 ---------- */
+
+.at-status {
+  padding: 10px 14px;
+  border-left: 3px solid var(--c-border-strong);
+  background-color: var(--color-off-white);
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+/*
+ * 状態は左の線の色でも示すが、意味は必ず文言側に持たせる。
+ * 色を見分けられない環境でも、文言だけで状態が分かるようにしてある。
+ */
+.at-status[data-tone="busy"] {
+  border-left-color: var(--color-navy-light);
+}
+
+.at-status[data-tone="done"] {
+  border-left-color: var(--color-gold);
+}
+
+.at-status[data-tone="error"] {
+  border-left-color: #b3261e;
+}
+
+.at-progress__bar {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--color-border);
+}
+
+.at-progress__fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background-color: var(--c-main);
+  transition: width 0.2s ease-out;
+}
+
+/* 進み具合が分からない処理は、幅を出さず縞模様で「動いている」ことを示す */
+.at-progress[data-indeterminate="true"] .at-progress__fill {
+  width: 100%;
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--c-main) 0 8px,
+    var(--color-navy-light) 8px 16px
+  );
+}
+
+.at-progress__label {
+  margin-top: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.at-alert {
+  padding: 12px 14px;
+  border-radius: var(--radius-tag);
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.at-alert--error {
+  border: 1px solid #e6b4b0;
+  background-color: #fdf3f2;
+  color: #8c1d18;
+}
+
+/* 「エラー：」の接頭辞を付け、色以外でも異常と分かるようにする */
+.at-alert--error::before {
+  font-weight: 700;
+  content: "エラー：";
+}
+
+/* ---------- 結果 ---------- */
+
+.at-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.at-textarea {
+  width: 100%;
+  min-height: 260px;
+  max-height: 60vh;
+  padding: 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--color-white);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.9;
+  resize: vertical;
+  /* 長い結果でも画面が横へ広がらない */
+  overflow-wrap: anywhere;
+}
+
+.at-tools summary {
+  cursor: pointer;
+  color: var(--c-main);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.at-tools__body {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-tag);
+  background-color: var(--color-off-white);
+}
+
+.at-tools__body > * + * {
+  margin-top: 12px;
+}
+
+.at-toast {
+  padding: 10px 14px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--color-off-white);
+  font-size: 0.875rem;
+}
+
+/* ---------- 画面幅 ---------- */
+
+@media (min-width: 600px) {
+  .at-panel {
+    padding: 24px;
+  }
+
+  .at-mode-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 599px) {
+  /* 幅が足りない端末では、ボタンを縦に積んで押しやすくする */
+  .at-actions .btn {
+    flex: 1 1 100%;
+  }
+
+  .at-file-meta__row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* 動きを減らす設定を尊重する */
+@media (prefers-reduced-motion: reduce) {
+  .at-progress__fill {
+    transition: none;
+  }
+}

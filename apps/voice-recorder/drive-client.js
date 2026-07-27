@@ -12,12 +12,20 @@
  * 認可はアクセストークン（Authorization ヘッダー）のみで行う。
  */
 
+import { DRIVE_FOLDERS } from '../drive-folders.js';
+
 export const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 export const MP3_MIME = 'audio/mpeg';
 
-/* 保存先: マイドライブ / TSAM AI / Voice Recorder */
-export const ROOT_FOLDER_NAME = 'TSAM AI';
-export const APP_FOLDER_NAME = 'Voice Recorder';
+/*
+ * 保存先: マイドライブ / TSAM AI / Voice Recorder
+ *
+ * 名前の実体は ../drive-folders.js に置いてある。
+ * 音声文字起こしアプリがこの保存先を読みに来るため、
+ * 名前を変えると両方が同時に変わる必要がある。ここで直接書き換えないこと。
+ */
+export const ROOT_FOLDER_NAME = DRIVE_FOLDERS.root;
+export const APP_FOLDER_NAME = DRIVE_FOLDERS.voiceRecorder;
 
 const FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/drive/v3/files';

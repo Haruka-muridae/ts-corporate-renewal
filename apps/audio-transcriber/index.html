@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>音声文字起こし | TSアセットマネジメント合同会社</title>
+  <meta name="description" content="端末またはGoogleドライブの音声ファイルを、端末内AIまたはGemini APIで文字起こしします。端末内モードでは音声を外部へ送信しません。">
+
+  <!--
+    Content Security Policy（このページ限定）
+
+    サイト全体のCSPは存在しないため、ここでは他ページへ影響しない
+    <meta> によるページ単位の指定にとどめる。既存ページのCSPは緩めない。
+
+    許可した接続先と理由:
+      cdn.jsdelivr.net            … Transformers.js 本体（バージョン固定）
+      huggingface.co / *.hf.co    … Whisperモデルの取得とリダイレクト先のCDN
+      generativelanguage.googleapis.com … Gemini API（Files API / generateContent）
+      www.googleapis.com          … Google Drive API
+      accounts.google.com         … Google Identity Services（Drive認可）
+
+    Google Picker（apis.google.com / docs.google.com）は許可していない。
+    このアプリは Drive の固定フォルダを Drive API で読むだけで、Picker を使わない。
+    drive-picker.js を再び使う場合は、script-src / connect-src へ
+    https://apis.google.com を、frame-src へ https://docs.google.com と
+    https://content-drive.googleapis.com を戻す必要がある。
+
+    'wasm-unsafe-eval' は ONNX Runtime の WebAssembly 実行に必須。
+    これが無いと端末内モードが動かない。'unsafe-eval' は許可しない。
+
+    worker-src に blob: と jsDelivr の両方が要る理由（実ブラウザで確認済み）:
+      blob:            … ONNX Runtime が内部で生成するワーカー
+      cdn.jsdelivr.net … ONNX Runtime が Transformers.js のバンドルURL自体を
+                         入れ子のワーカーとして起動する。これを許可しないと
+                         「Creating a worker from ... violates worker-src」で
+                         モデルの読み込みが失敗する。
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' blob: 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://accounts.google.com;
+    worker-src 'self' blob: https://cdn.jsdelivr.net;
+    child-src 'self' blob: https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob: https://*.googleusercontent.com https://ssl.gstatic.com https://www.gstatic.com https://drive-thirdparty.googleusercontent.com;
+    media-src 'self' blob:;
+    connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co https://cdn-lfs.huggingface.co https://cdn-lfs-us-1.hf.co https://generativelanguage.googleapis.com https://www.googleapis.com https://accounts.google.com;
+    frame-src https://accounts.google.com;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+  ">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="音声文字起こし | TSアセットマネジメント合同会社">
+  <meta property="og:description" content="端末またはGoogleドライブの音声ファイルを、端末内AIまたはGemini APIで文字起こしします。">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- ベータ版のため、検索エンジンには登録しない -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <header id="header" class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-logo" href="../../index.html" aria-label="TSアセットマネジメント合同会社 トップページ">
+        <span class="site-logo__mark" aria-hidden="true">TS</span>
+        <span class="site-logo__text">
+          <span class="site-logo__name">TSアセットマネジメント合同会社</span>
+          <span class="site-logo__name-en" lang="en">TS ASSET MANAGEMENT LLC</span>
+        </span>
+      </a>
+
+      <nav class="at-nav" aria-label="ページ内ナビ">
+        <a class="at-nav__link" href="../index.html">AIアプリ一覧へ戻る</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="section at-hero" aria-labelledby="at-title">
+      <div class="container">
+        <nav class="at-breadcrumb" aria-label="パンくずリスト">
+          <ol class="at-breadcrumb__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li aria-current="page">音声文字起こし</li>
+          </ol>
+        </nav>
+
+        <div class="at-hero__inner">
+          <p class="at-hero__label" lang="en">Audio Transcriber</p>
+          <h1 id="at-title" class="at-hero__title">音声文字起こし</h1>
+          <p class="at-hero__lead">端末またはGoogleドライブの音声ファイルを、端末内AIまたはGemini APIで文字起こしします。結果はその場で編集し、コピーやTXT保存ができます。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section at-main">
+      <div class="container at-container">
+
+        <!--
+          画面全体の状態は script.js が data-app-state へ書き込む。
+          CSSはこの属性を見て表示を切り替える（色だけに頼らず、文言も併記する）。
+        -->
+        <div id="at-app" class="at-app" data-app-state="idle" data-mode="local">
+
+          <!-- ============================================================
+               1. 音声ファイルを選択
+               ============================================================ -->
+          <section class="at-block" aria-labelledby="at-file-title">
+            <h2 id="at-file-title" class="at-section-title">1. 音声ファイルを選ぶ</h2>
+
+            <div class="at-panel">
+              <!--
+                input は視覚的に隠し、操作はボタンから行う（card-scanner と同じ方式）。
+                tabindex="-1" は、見えない input にフォーカスが入るのを防ぐため。
+              -->
+              <input id="at-file-input" class="at-visually-hidden" type="file" tabindex="-1" aria-hidden="true">
+
+              <!--
+                取得元は「端末」と「Googleドライブの固定フォルダ」の2つだけ。
+                どちらから取るのかが一目で分かるよう、選択肢として並べる。
+              -->
+              <p class="at-source-label" id="at-source-label">音声ファイルの取得元</p>
+
+              <div class="at-sources" role="group" aria-labelledby="at-source-label">
+                <div class="at-source">
+                  <button id="at-local-button" class="btn btn--primary at-source__button" type="button">端末から選択</button>
+                  <p class="at-source__hint">この端末に保存されている音声ファイル</p>
+                </div>
+
+                <div class="at-source">
+                  <button id="at-drive-button" class="btn btn--secondary at-source__button" type="button">Google Driveから選択</button>
+                  <!-- 対象フォルダは固定。Drive全体は検索しない。 -->
+                  <p class="at-source__path">マイドライブ ＞ TSAM AI ＞ Voice Recorder</p>
+                  <p class="at-source__hint">音声録音アプリで保存した録音</p>
+                </div>
+              </div>
+
+              <p class="at-note">対応形式：MP3 / WAV / M4A / AAC / OGG / WebM / FLAC</p>
+              <p id="at-drive-note" class="at-note"></p>
+
+              <!-- 選択後のファイル情報 -->
+              <div id="at-file-info" class="at-file-info" hidden>
+                <h3 class="at-subtitle">選択中のファイル</h3>
+                <dl class="at-file-meta">
+                  <div class="at-file-meta__row">
+                    <dt>ファイル名</dt>
+                    <dd id="at-file-name" class="at-file-meta__name"></dd>
+                  </div>
+                  <div class="at-file-meta__row">
+                    <dt>形式</dt>
+                    <dd id="at-file-type"></dd>
+                  </div>
+                  <div class="at-file-meta__row">
+                    <dt>サイズ</dt>
+                    <dd id="at-file-size"></dd>
+                  </div>
+                  <div class="at-file-meta__row">
+                    <dt>長さ</dt>
+                    <dd id="at-file-duration"></dd>
+                  </div>
+                  <div class="at-file-meta__row">
+                    <dt>取得元</dt>
+                    <dd id="at-file-source"></dd>
+                  </div>
+                </dl>
+
+                <audio id="at-player" class="at-player" controls preload="metadata"></audio>
+
+                <div class="at-actions">
+                  <button id="at-clear-file" class="btn at-btn-quiet" type="button">ファイルを解除する</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============================================================
+               2. 文字起こし方法
+               ============================================================ -->
+          <section class="at-block" aria-labelledby="at-mode-title">
+            <h2 id="at-mode-title" class="at-section-title">2. 文字起こしの方法を選ぶ</h2>
+
+            <div class="at-panel">
+              <fieldset class="at-fieldset">
+                <legend class="at-visually-hidden">文字起こしの方法</legend>
+
+                <div class="at-mode-cards">
+                  <div class="at-mode-card">
+                    <input id="at-mode-local" class="at-mode-card__input" type="radio" name="at-mode" value="local" checked>
+                    <label class="at-mode-card__label" for="at-mode-local">
+                      <span class="at-mode-card__name">完全無料・端末内処理<span class="at-mode-card__badge">推奨</span></span>
+                      <span class="at-mode-card__desc">音声を外部サーバーへ送信せず、この端末内で文字起こしします。APIキーは不要です。</span>
+                      <span class="at-mode-card__note">初回はAIモデルをダウンロードします。端末性能や音声の長さによって処理時間が変わります。</span>
+                    </label>
+                  </div>
+
+                  <div class="at-mode-card">
+                    <input id="at-mode-gemini" class="at-mode-card__input" type="radio" name="at-mode" value="gemini">
+                    <label class="at-mode-card__label" for="at-mode-gemini">
+                      <span class="at-mode-card__name">Gemini API<span class="at-mode-card__badge at-mode-card__badge--beta">ベータ</span></span>
+                      <span class="at-mode-card__desc">ユーザー自身のGemini APIキーを使用して文字起こしします。</span>
+                      <span class="at-mode-card__note">音声ファイルはGoogleのGemini APIへ送信されます。利用上限や料金は、ご自身のGoogle Cloudプロジェクトの設定に従います。</span>
+                      <!--
+                        実APIキーでの通信は未確認のため、その旨を明示する。
+                        確認できたら、この一文を削除する。
+                      -->
+                      <span class="at-mode-card__note">APIキーが必要です。実環境によって利用できない場合があります。</span>
+                    </label>
+                  </div>
+                </div>
+              </fieldset>
+            </div>
+          </section>
+
+          <!-- ============================================================
+               3. モード別の設定
+               ============================================================ -->
+          <section class="at-block" aria-labelledby="at-settings-title">
+            <h2 id="at-settings-title" class="at-section-title">3. 設定</h2>
+
+            <div class="at-panel">
+              <div class="at-field">
+                <label class="at-label" for="at-language">言語</label>
+                <select id="at-language" class="at-select"></select>
+              </div>
+
+              <div class="at-checkbox">
+                <input id="at-timestamps" type="checkbox" checked>
+                <label for="at-timestamps">タイムスタンプを付ける（取得できた場合）</label>
+              </div>
+
+              <!-- 端末内モードの設定 -->
+              <div id="at-local-settings" class="at-mode-settings">
+                <div class="at-field">
+                  <label class="at-label" for="at-whisper-model">AIモデル</label>
+                  <select id="at-whisper-model" class="at-select"></select>
+                  <p id="at-whisper-model-note" class="at-note"></p>
+                </div>
+                <p id="at-device-note" class="at-note"></p>
+              </div>
+
+              <!-- Gemini モードの設定 -->
+              <div id="at-gemini-settings" class="at-mode-settings" hidden>
+                <div class="at-field">
+                  <label class="at-label" for="at-gemini-model">Geminiモデル</label>
+                  <select id="at-gemini-model" class="at-select"></select>
+                  <p class="at-note">「自動」を選ぶと、お使いのAPIキーで利用できるモデルから自動的に選びます。</p>
+                </div>
+
+                <div class="at-field">
+                  <label class="at-label" for="at-api-key">Gemini APIキー</label>
+                  <div class="at-key-row">
+                    <!--
+                      autocomplete="off" と name の省略は、ブラウザのパスワード保存
+                      ダイアログを出さないため。キーを端末へ残さない方針に合わせる。
+                    -->
+                    <input
+                      id="at-api-key"
+                      class="at-input at-input--key"
+                      type="password"
+                      autocomplete="off"
+                      autocapitalize="off"
+                      autocorrect="off"
+                      spellcheck="false"
+                      placeholder="APIキーを貼り付けてください"
+                    >
+                    <button id="at-key-toggle" class="btn at-btn-quiet at-key-toggle" type="button" aria-pressed="false">表示</button>
+                  </div>
+                  <p id="at-key-status" class="at-note" role="status" aria-live="polite">APIキーは未入力です。</p>
+                </div>
+
+                <div class="at-security-note">
+                  <p>APIキーはGoogle AI Studioで取得できます。</p>
+                  <p>このアプリは入力されたAPIキーを保存しません。</p>
+                  <p>共有端末では使用後にページを閉じてください。</p>
+                  <p>
+                    <a
+                      id="at-key-link"
+                      class="at-link"
+                      href="https://aistudio.google.com/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >Google AI Studio でAPIキーを取得する（新しいタブで開きます）</a>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============================================================
+               4. 実行
+               ============================================================ -->
+          <section class="at-block" aria-labelledby="at-run-title">
+            <h2 id="at-run-title" class="at-section-title">4. 文字起こしを開始する</h2>
+
+            <div class="at-panel">
+              <!--
+                状態は文言でも示す。色（背景・文字色）だけに意味を持たせない。
+                aria-live="polite" で進捗を読み上げる。
+              -->
+              <p id="at-status" class="at-status" role="status" aria-live="polite" data-tone="idle">音声ファイルが選ばれていません。</p>
+
+              <div class="at-progress" id="at-progress" hidden>
+                <div
+                  class="at-progress__bar"
+                  role="progressbar"
+                  aria-labelledby="at-progress-label"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                >
+                  <span id="at-progress-fill" class="at-progress__fill"></span>
+                </div>
+                <p id="at-progress-label" class="at-progress__label"></p>
+              </div>
+
+              <p id="at-error" class="at-alert at-alert--error" hidden></p>
+
+              <div class="at-actions">
+                <button id="at-start" class="btn btn--primary" type="button" disabled>文字起こしを開始</button>
+                <button id="at-cancel" class="btn at-btn-quiet" type="button" hidden>中止する</button>
+              </div>
+
+              <!--
+                処理時間の見込み。実測に基づく（WebGPUで1時間の音声に1時間前後）。
+                驚かせないために開始ボタンの近くへ置くが、控えめな見た目にする。
+              -->
+              <p class="at-note">長時間の音声は、音声時間と同程度以上の処理時間がかかる場合があります。端末の性能やブラウザによって処理速度は異なります。</p>
+            </div>
+          </section>
+
+          <!-- ============================================================
+               5. 結果
+               ============================================================ -->
+          <section class="at-block" aria-labelledby="at-result-title">
+            <h2 id="at-result-title" class="at-section-title">5. 文字起こし結果</h2>
+
+            <div class="at-panel">
+              <div class="at-result-meta">
+                <p id="at-result-count" class="at-result-meta__item">0文字</p>
+                <p id="at-result-mode" class="at-result-meta__item" hidden></p>
+                <p id="at-result-elapsed" class="at-result-meta__item" hidden></p>
+              </div>
+
+              <label class="at-visually-hidden" for="at-result">文字起こし結果（編集できます）</label>
+              <textarea
+                id="at-result"
+                class="at-textarea"
+                rows="14"
+                placeholder="ここに文字起こしの結果が表示されます。内容はそのまま編集できます。"
+                spellcheck="false"
+              ></textarea>
+
+              <div class="at-actions">
+                <button id="at-copy" class="btn btn--secondary" type="button" disabled>全文をコピー</button>
+                <button id="at-download" class="btn btn--secondary" type="button" disabled>TXTで保存</button>
+                <button id="at-save-drive" class="btn at-btn-quiet" type="button" disabled>Googleドライブへ保存</button>
+                <button id="at-clear-result" class="btn at-btn-quiet" type="button" disabled>結果をクリア</button>
+              </div>
+
+              <details class="at-tools">
+                <summary>話者名をまとめて置き換える</summary>
+                <div class="at-tools__body">
+                  <div class="at-field">
+                    <label class="at-label" for="at-speaker-from">置き換える話者名</label>
+                    <input id="at-speaker-from" class="at-input" type="text" placeholder="話者1">
+                  </div>
+                  <div class="at-field">
+                    <label class="at-label" for="at-speaker-to">新しい名前</label>
+                    <input id="at-speaker-to" class="at-input" type="text" placeholder="山田">
+                  </div>
+                  <div class="at-actions">
+                    <button id="at-speaker-apply" class="btn at-btn-quiet" type="button">置き換える</button>
+                  </div>
+                  <p class="at-note">行頭の「話者1：」のような表記だけを置き換えます。本文中の同じ語は変更しません。</p>
+                </div>
+              </details>
+
+              <p id="at-toast" class="at-toast" role="status" aria-live="polite" hidden></p>
+            </div>
+          </section>
+
+        </div>
+
+        <!-- ============================================================
+             Googleドライブの音声を選ぶダイアログ
+
+             <dialog> の showModal() を使う。
+             Escapeで閉じる・フォーカスを内側に閉じ込める・背面を不活性にする、
+             の3つをブラウザ側が面倒を見てくれるため、自前で実装しない。
+             ============================================================ -->
+        <dialog id="at-drive-dialog" class="at-dialog" aria-labelledby="at-dialog-title">
+          <div class="at-dialog__head">
+            <h2 id="at-dialog-title" class="at-dialog__title">Google Driveの音声を選ぶ</h2>
+            <p class="at-dialog__path">マイドライブ ＞ TSAM AI ＞ Voice Recorder</p>
+          </div>
+
+          <div class="at-dialog__body">
+            <p id="at-dialog-status" class="at-dialog__status" role="status" aria-live="polite"></p>
+            <p id="at-dialog-error" class="at-alert at-alert--error" hidden></p>
+
+            <!-- 一覧は script.js が textContent で組み立てる。innerHTML は使わない。 -->
+            <ul id="at-drive-list" class="at-drive-list"></ul>
+          </div>
+
+          <div class="at-dialog__foot">
+            <button id="at-drive-reload" class="btn btn--secondary" type="button">再読み込み</button>
+            <button id="at-drive-cancel" class="btn at-btn-quiet" type="button">キャンセル</button>
+          </div>
+        </dialog>
+
+        <noscript>
+          <p class="at-alert at-alert--error">このアプリはJavaScriptが必要です。ブラウザの設定を確認してください。</p>
+        </noscript>
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer" class="site-footer">
+    <div class="container">
+      <div class="site-footer__main">
+        <div class="site-footer__info">
+          <p class="site-footer__name">TSアセットマネジメント合同会社</p>
+          <p class="site-footer__name-en" lang="en">TS ASSET MANAGEMENT LLC</p>
+          <address class="site-footer__address">
+            <p>〒249-0002 神奈川県逗子市久木8-8-26</p>
+            <p><a href="mailto:architect@potenitas.com">architect@potenitas.com</a></p>
+          </address>
+        </div>
+
+        <nav class="footer-nav" aria-label="フッターナビ">
+          <ul class="footer-nav__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li><a href="../../index.html#business">事業領域</a></li>
+            <li><a href="../../index.html#company">会社概要</a></li>
+            <li><a href="../../index.html#contact">お問い合わせ</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <div class="site-footer__bottom">
+        <small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>

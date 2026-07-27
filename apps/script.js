@@ -62,6 +62,14 @@ const APPS = [
     tags: ['名刺管理', 'OCR'],
     icon: 'app',
   },
+  {
+    name: '音声文字起こし',
+    description: '端末またはGoogleドライブの音声ファイルを、端末内AIまたはGemini APIで文字起こしします。',
+    status: 'beta',
+    url: '/apps/audio-transcriber/',
+    tags: ['文字起こし', '音声認識'],
+    icon: 'mic',
+  },
 ];
 
 /*
