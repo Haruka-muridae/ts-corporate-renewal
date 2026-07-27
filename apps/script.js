@@ -54,6 +54,14 @@ const APPS = [
     tags: ['note', '下書き作成'],
     icon: 'app',
   },
+  {
+    name: '名刺スキャナ',
+    description: '名刺を撮影して文字を読み取り、スプレッドシートへ蓄積するアプリです。',
+    status: 'public',
+    url: '/apps/card-scanner/',
+    tags: ['名刺管理', 'OCR'],
+    icon: 'app',
+  },
 ];
 
 /*

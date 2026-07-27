@@ -1,0 +1,798 @@
+/*
+ * 名刺スキャナ 専用スタイル。
+ * ../../css/style.css を読み込んだうえで追加する差分のみを定義する。
+ * 既存クラスは上書きせず、cs- の接頭辞のみを使う。
+ *
+ * 色は既存のカスタムプロパティ（--color-navy / --color-gold / --c-border など）
+ * を使い、新しい色を定義しない。
+ *
+ * ブレークポイントは既存サイトに合わせて 600px / 1024px を使う。
+ */
+
+/* ヘッダー内の戻りリンク（このページはグローバルナビを持たない） */
+.cs-nav__link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Breadcrumb */
+.cs-breadcrumb {
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.cs-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-text-muted);
+}
+
+.cs-breadcrumb__list li + li::before {
+  margin-right: 8px;
+  color: var(--color-border-strong);
+  content: "/";
+}
+
+.cs-breadcrumb__list a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.cs-breadcrumb__list [aria-current="page"] {
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+/* Page hero */
+.cs-hero {
+  padding-top: calc(var(--section-space) + var(--header-height));
+  padding-bottom: calc(var(--section-space) - 24px);
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.cs-hero__inner {
+  margin-top: 32px;
+  max-width: 720px;
+}
+
+.cs-hero__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-gold-text);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.cs-hero__label::before {
+  width: 32px;
+  height: 1px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+.cs-hero__title {
+  margin-top: 16px;
+  font-size: clamp(1.625rem, 1.2rem + 2.2vw, 2.5rem);
+  line-height: 1.35;
+}
+
+.cs-hero__lead {
+  margin-top: 24px;
+  color: var(--c-text-muted);
+}
+
+/* 本体。入力に集中できるよう読み幅を抑える */
+.cs-container {
+  max-width: calc(720px + (var(--container-padding) * 2));
+}
+
+.cs-section-title {
+  position: relative;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  font-size: clamp(1.1875rem, 1.05rem + 0.5vw, 1.375rem);
+}
+
+.cs-section-title::after {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 40px;
+  height: 2px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+.cs-block {
+  margin-top: 48px;
+}
+
+/* パネル */
+.cs-panel {
+  padding: 28px 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.cs-panel > p + p {
+  margin-top: 16px;
+}
+
+.cs-panel--about {
+  background-color: var(--c-bg-sub);
+}
+
+.cs-panel__note {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.cs-note {
+  margin-top: 16px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   撮影エリア
+   名刺と同じ 91:55 の比率にして、寄せて撮る目安にする
+   ============================================================ */
+
+.cs-frame {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  aspect-ratio: 91 / 55;
+  place-items: center;
+  border: 2px dashed var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg-sub);
+}
+
+.cs-frame[data-has-image="true"] {
+  border-style: solid;
+  border-color: var(--color-gold);
+  background-color: var(--c-bg);
+}
+
+.cs-frame__image {
+  width: 100%;
+  height: 100%;
+  /* 名刺全体が見えるようにする。切り取らない。 */
+  object-fit: contain;
+}
+
+.cs-frame__hint {
+  padding-inline: 16px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  text-align: center;
+}
+
+/* 入力欄を視覚的に隠す（読み上げと操作は可能なまま） */
+.cs-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   状態表示・メッセージ
+   ============================================================ */
+
+.cs-status {
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-navy-light);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.cs-message {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-border-strong);
+  background-color: var(--c-bg-sub);
+  font-size: 0.875rem;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.cs-message[data-tone="error"] {
+  border-left-color: #b3261e;
+  color: #7a1c16;
+  background-color: #fdf3f2;
+}
+
+.cs-message[data-tone="success"] {
+  border-left-color: var(--color-gold);
+  color: var(--c-text);
+}
+
+/*
+ * 注意表示。
+ * 色だけに頼らず、文字（要確認 / 重複の可能性）でも状態が分かるようにする。
+ */
+.cs-alert {
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--c-bg-sub);
+  font-size: 0.875rem;
+  line-height: 1.9;
+}
+
+/* 読み取り精度についての案内。エラーではないので警告色にしない。 */
+.cs-alert--caution {
+  border-left-color: var(--color-gold);
+  color: var(--c-text);
+}
+
+/* 重複の可能性。保存は止めないが、目に留まる必要がある。 */
+.cs-alert--warning {
+  border-left-color: #b3261e;
+  color: #7a1c16;
+  background-color: #fdf3f2;
+}
+
+/*
+ * カードIDの一致は通常起きない。
+ * 起きた場合は採番の異常なので、通常の重複警告より強く見せる。
+ */
+.cs-alert[data-severity="critical"] {
+  border-color: var(--color-alert, #b3261e);
+  border-left-width: 4px;
+  color: var(--color-alert-text, #8c1d18);
+  background-color: rgba(179, 38, 30, 0.08);
+  font-weight: 700;
+}
+
+.cs-alert:empty {
+  display: none;
+}
+
+/* ============================================================
+   表面・裏面
+   ============================================================ */
+
+.cs-note--lead {
+  margin-bottom: 16px;
+}
+
+/*
+ * 狭い画面では縦、広い画面では左右に並べる。
+ * 表面が先に来る順序は、DOMの順序のまま変えない。
+ */
+.cs-sides {
+  display: grid;
+  gap: 20px;
+}
+
+@media (min-width: 768px) {
+  .cs-sides {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.cs-side__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: var(--c-main);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cs-side__badge {
+  padding: 2px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-tag);
+  color: var(--c-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* 必須は色だけでなく文字でも分かるようにする */
+.cs-side__badge--required {
+  border-color: var(--color-gold);
+  color: var(--color-gold-text);
+  background-color: rgba(201, 154, 46, 0.1);
+  font-weight: 700;
+}
+
+/* ============================================================
+   保存先の候補一覧
+   ============================================================ */
+
+.cs-candidates {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.cs-candidate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg);
+}
+
+.cs-candidate__label {
+  flex: 1 1 200px;
+  color: var(--c-text);
+  font-size: 0.8125rem;
+}
+
+.cs-candidate__open {
+  font-size: 0.75rem;
+}
+
+.cs-candidate__choose {
+  font-size: 0.8125rem;
+}
+
+/* ============================================================
+   自動で決まる項目（読み取り専用）
+   ============================================================ */
+
+.cs-meta {
+  display: grid;
+  gap: 12px 24px;
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg-sub);
+}
+
+@media (min-width: 640px) {
+  .cs-meta {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+.cs-meta__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cs-meta__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* 公式の指標ではないことを、値のそばで断っておく */
+.cs-meta__note {
+  color: var(--c-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+
+.cs-meta__value {
+  margin: 0;
+  color: var(--c-text);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   確認フォーム
+   ============================================================ */
+
+.cs-form {
+  display: grid;
+  gap: 20px;
+}
+
+.cs-field__note {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+}
+
+/* ============================================================
+   メールアドレス（複数件）
+   ============================================================ */
+
+.cs-email-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cs-email-list:empty {
+  display: none;
+}
+
+/*
+ * 「メイン」の選択・入力欄・削除を1行に並べる。
+ * 狭い画面では入力欄が折り返して2段になる。
+ */
+.cs-email {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-email__main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cs-email__main input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-gold);
+}
+
+/* メインに選ばれている行は文字でも分かるようにする */
+.cs-email__main:has(input:checked) {
+  color: var(--color-gold-text);
+  font-weight: 700;
+}
+
+.cs-email__main input:disabled {
+  cursor: default;
+}
+
+.cs-email__input {
+  flex: 1 1 220px;
+  width: auto;
+}
+
+.cs-email__remove {
+  padding: 8px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-button);
+  color: var(--c-text-muted);
+  background-color: transparent;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.cs-email__remove:hover {
+  color: var(--c-text);
+  border-color: var(--color-border-strong);
+}
+
+.cs-email-add {
+  justify-self: start;
+  margin-top: 12px;
+  font-size: 0.8125rem;
+}
+
+/* ============================================================
+   表面と裏面の食い違い
+   ============================================================ */
+
+.cs-conflict {
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-gold);
+  border-left-width: 3px;
+  border-radius: var(--radius-button);
+  background-color: rgba(201, 154, 46, 0.06);
+}
+
+.cs-conflict__title {
+  margin-bottom: 12px;
+  color: var(--color-gold-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.cs-conflict__list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cs-conflict__item {
+  padding-top: 12px;
+  border-top: 1px solid rgba(201, 154, 46, 0.3);
+}
+
+.cs-conflict__item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.cs-conflict__label {
+  margin-bottom: 4px;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.cs-conflict__value {
+  color: var(--c-text);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  /* OCR結果は長くなることがある。枠から溢れさせない */
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.cs-conflict__adopt {
+  margin-top: 8px;
+  font-size: 0.75rem;
+}
+
+.cs-field__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cs-field__label {
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* 「要確認」の印。アイコンではなく文字で示す */
+.cs-field__flag {
+  padding: 2px 8px;
+  border: 1px solid var(--color-gold);
+  border-radius: var(--radius-tag);
+  color: var(--color-gold-text);
+  background-color: rgba(201, 154, 46, 0.1);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cs-field__hint {
+  margin-top: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+.cs-field__input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button);
+  color: var(--c-text);
+  background-color: var(--c-bg);
+  /* 16px未満だとスマホで画面が拡大されるため、16pxを下限にする */
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+textarea.cs-field__input {
+  line-height: 1.8;
+  /* 横に広げられると枠が崩れるため、縦だけリサイズ可能にする */
+  resize: vertical;
+}
+
+/* 要確認の欄は枠でも分かるようにする（色だけに頼らない） */
+.cs-field[data-flagged="true"] .cs-field__input {
+  border-color: var(--color-gold);
+  border-left-width: 3px;
+}
+
+/* ============================================================
+   読み取ったテキストの確認
+   ============================================================ */
+
+.cs-raw {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--c-border);
+}
+
+.cs-raw summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cs-raw__text {
+  margin-top: 12px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text);
+  font-family: var(--font-num);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 面ごとの見出し。表面・裏面を分けて確認できるようにする */
+.cs-raw__group + .cs-raw__group {
+  margin-top: 16px;
+}
+
+.cs-raw__label {
+  margin-top: 16px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   チェックボックス
+   ============================================================ */
+
+.cs-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  font-size: 0.875rem;
+}
+
+.cs-checkbox input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.cs-checkbox label {
+  line-height: 1.7;
+}
+
+/* ============================================================
+   ボタン配置
+   .btn（min-height 56px）はサイト共通のものを使う
+   ============================================================ */
+
+.cs-actions {
+  display: flex;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cs-actions .btn {
+  flex: 1 1 auto;
+  min-width: 140px;
+  padding-inline: 16px;
+}
+
+/* 主要ではない操作 */
+.cs-btn-quiet {
+  color: var(--c-text-muted);
+  border-color: transparent;
+  background-color: transparent;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.cs-panel .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   保存結果
+   ============================================================ */
+
+.cs-result {
+  margin-top: 20px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--c-bg-sub);
+  font-size: 0.875rem;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.cs-result a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* 表示・非表示の切り替え */
+.cs-is-hidden {
+  display: none !important;
+}
+
+@media (hover: hover) {
+  .cs-btn-quiet:hover {
+    color: var(--c-main);
+    background-color: var(--c-bg-sub);
+  }
+}
+
+@media (min-width: 600px) {
+  .cs-panel {
+    padding: 32px;
+  }
+
+  /* 横幅に余裕があるので2列に並べる。住所と備考は1列のまま */
+  .cs-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 24px;
+  }
+
+  .cs-field[data-span="full"] {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .cs-block {
+    margin-top: 56px;
+  }
+}
+
+/*
+ * 動きを減らす設定への対応。
+ * 共通のリセットは ../../css/style.css にもあるが、
+ * このアプリで追加した状態変化を明示的に止める。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .cs-frame,
+  .cs-frame__image {
+    transition: none;
+  }
+}

@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>名刺スキャナ | TSアセットマネジメント合同会社</title>
+  <meta name="description" content="名刺を撮影して文字を読み取り、Googleスプレッドシートへ蓄積するアプリです。読み取り結果は保存前に確認・修正できます。">
+
+  <!-- TODO: 公開URLの確定後に canonical を追加 -->
+  <!-- TODO: 公開URLの確定後に og:url を追加 -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="名刺スキャナ | TSアセットマネジメント合同会社">
+  <meta property="og:description" content="名刺を撮影して文字を読み取り、Googleスプレッドシートへ蓄積するアプリです。">
+  <meta property="og:locale" content="ja_JP">
+  <!-- TODO: OGP画像の確定後に og:image を追加 -->
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- 公開前の準備中ページのため、検索エンジンには登録しない -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <!--
+    このページが通信してよい相手を明示する。
+    許可しているのは Google の認証・Drive・Sheets だけ。
+
+      accounts.google.com … Google Identity Services（Drive認可）
+      www.googleapis.com  … Drive API（OCR・画像保存・フォルダ）
+      sheets.googleapis.com … Sheets API（台帳）
+
+    blob: が img-src に要るのは、撮影した画像のプレビューに
+    URL.createObjectURL() を使っているため。ここを外すとプレビューが消える。
+    CSP違反が出た場合も、ワイルドカードを足さず必要な接続先だけ追加すること。
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' https://accounts.google.com;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob: https://*.googleusercontent.com https://ssl.gstatic.com https://www.gstatic.com;
+    connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://accounts.google.com;
+    frame-src https://accounts.google.com;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+  ">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <header id="header" class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-logo" href="../../index.html" aria-label="TSアセットマネジメント合同会社 トップページ">
+        <span class="site-logo__mark" aria-hidden="true">TS</span>
+        <span class="site-logo__text">
+          <span class="site-logo__name">TSアセットマネジメント合同会社</span>
+          <span class="site-logo__name-en" lang="en">TS ASSET MANAGEMENT LLC</span>
+        </span>
+      </a>
+
+      <nav class="cs-nav" aria-label="ページ内ナビ">
+        <a class="cs-nav__link" href="../index.html">AIアプリ一覧へ戻る</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="section cs-hero" aria-labelledby="cs-title">
+      <div class="container">
+        <nav class="cs-breadcrumb" aria-label="パンくずリスト">
+          <ol class="cs-breadcrumb__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li aria-current="page">名刺スキャナ</li>
+          </ol>
+        </nav>
+
+        <div class="cs-hero__inner">
+          <p class="cs-hero__label" lang="en">Card Scanner</p>
+          <h1 id="cs-title" class="cs-hero__title">名刺スキャナ</h1>
+          <p class="cs-hero__lead">名刺を撮影して文字を読み取り、Googleスプレッドシートへ1行ずつ蓄積します。読み取り結果は保存前に確認・修正できます。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         何がGoogleへ送信されるか
+         ============================================================ -->
+    <section class="section cs-main" aria-labelledby="cs-about-title">
+      <div class="container cs-container">
+
+        <h2 id="cs-about-title" class="cs-section-title">このアプリについて</h2>
+
+        <div class="cs-panel cs-panel--about">
+          <p>撮影した画像は、文字を読み取るために Google ドライブへ送信されます。読み取りに使った一時ファイルは自動で削除されます。</p>
+          <p>読み取った内容は、確認・修正したうえで Google スプレッドシート「名刺台帳（表裏対応 v3）」へ追記されます。当社のサーバーへ送信されることはありません。</p>
+          <p class="cs-panel__note">文字の読み取りには Google ドライブの機能を使います。生成AIは使用していません。</p>
+          <p class="cs-panel__note">保存先はマイドライブの「TSAM AI」＞「名刺スキャナ」です。画像は「名刺画像」の下に、表面・裏面それぞれのフォルダへ保存されます。</p>
+        </div>
+
+        <!-- ============================================================
+             保存先の確認
+
+             通常は表示しない。
+             同名の「TSAM AI」が複数見つかり、どれを使うか決められないときだけ出す。
+             見つからない場合は自動で作るため、この画面は出ない。
+             ============================================================ -->
+        <section id="cs-folder" class="cs-block cs-is-hidden" aria-labelledby="cs-folder-title">
+          <h2 id="cs-folder-title" class="cs-section-title">保存先の確認</h2>
+
+          <div class="cs-panel">
+            <p id="cs-folder-message" class="cs-alert cs-alert--caution"></p>
+
+            <!--
+              候補一覧。どれが本物かはアプリには判断できないため自動では選ばない。
+              中身は script.js が生成する。
+            -->
+            <ul id="cs-folder-candidates" class="cs-candidates" hidden></ul>
+
+            <p id="cs-folder-note" class="cs-note"></p>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             1. 撮影
+             ============================================================ -->
+        <section class="cs-block" aria-labelledby="cs-capture-title">
+          <h2 id="cs-capture-title" class="cs-section-title">1. 名刺を撮影する</h2>
+
+          <p class="cs-note cs-note--lead">表面は必須です。裏面がある名刺は、裏面も登録すると読み取り結果を補い合えます。</p>
+
+          <div class="cs-sides">
+
+            <!-- 表面（必須） -->
+            <div class="cs-panel cs-side" data-side="front">
+              <h3 class="cs-side__title">
+                表面
+                <span class="cs-side__badge cs-side__badge--required">必須</span>
+              </h3>
+
+              <!-- 名刺と同じ 91:55 の比率にして、画面いっぱいに写す目安にする -->
+              <div id="cs-front-frame" class="cs-frame" data-has-image="false">
+                <img id="cs-front-preview" class="cs-frame__image" alt="撮影した名刺の表面のプレビュー" hidden>
+                <p id="cs-front-hint" class="cs-frame__hint">
+                  名刺の表面がこの枠いっぱいに入るように撮影してください
+                </p>
+              </div>
+
+              <!--
+                input は視覚的に隠し、操作は下のボタンから行う。
+                label ではなく button を使うのは、キーボードで到達できるようにするため。
+
+                tabindex="-1" を付けるのは、見えない input にフォーカスが当たると
+                「どこにフォーカスがあるか分からない」状態になるため。
+                キーボード操作はボタン側で完結する。
+              -->
+              <input id="cs-front-camera-input" class="cs-visually-hidden" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+              <input id="cs-front-file-input" class="cs-visually-hidden" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
+
+              <div class="cs-actions">
+                <button id="cs-front-camera-button" class="btn btn--primary" type="button">表面を撮影する</button>
+                <button id="cs-front-file-button" class="btn btn--secondary" type="button">画像を選ぶ</button>
+                <button id="cs-front-clear-button" class="btn cs-btn-quiet" type="button" hidden>削除する</button>
+              </div>
+
+              <p id="cs-front-info" class="cs-note" hidden></p>
+            </div>
+
+            <!-- 裏面（任意） -->
+            <div class="cs-panel cs-side" data-side="back">
+              <h3 class="cs-side__title">
+                裏面
+                <span class="cs-side__badge">任意</span>
+              </h3>
+
+              <div id="cs-back-frame" class="cs-frame" data-has-image="false">
+                <img id="cs-back-preview" class="cs-frame__image" alt="撮影した名刺の裏面のプレビュー" hidden>
+                <p id="cs-back-hint" class="cs-frame__hint">
+                  裏面がある場合のみ撮影してください
+                </p>
+              </div>
+
+              <input id="cs-back-camera-input" class="cs-visually-hidden" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+              <input id="cs-back-file-input" class="cs-visually-hidden" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
+
+              <div class="cs-actions">
+                <button id="cs-back-camera-button" class="btn btn--secondary" type="button">裏面を撮影する</button>
+                <button id="cs-back-file-button" class="btn btn--secondary" type="button">画像を選ぶ</button>
+                <button id="cs-back-clear-button" class="btn cs-btn-quiet" type="button" hidden>削除する</button>
+              </div>
+
+              <p id="cs-back-info" class="cs-note" hidden></p>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ============================================================
+             2. 読み取り
+             ============================================================ -->
+        <section class="cs-block" aria-labelledby="cs-read-title">
+          <h2 id="cs-read-title" class="cs-section-title">2. 文字を読み取る</h2>
+
+          <div class="cs-panel">
+            <!-- 状態表示。読み上げにも対応する -->
+            <p id="cs-status" class="cs-status" role="status" aria-live="polite">画像が選ばれていません</p>
+
+            <p id="cs-message" class="cs-message" hidden></p>
+
+            <div class="cs-checkbox">
+              <input id="cs-save-image" type="checkbox" checked>
+              <label for="cs-save-image">撮影した画像もGoogleドライブへ保存する（表面・裏面それぞれ）</label>
+            </div>
+
+            <div class="cs-actions">
+              <button id="cs-read-button" class="btn btn--primary" type="button" disabled>文字を読み取る</button>
+            </div>
+
+            <p class="cs-note">「文字を読み取る」を押すと、Googleドライブへの接続許可を求める画面が表示されます。</p>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             3. 確認・修正（読み取るまで隠す）
+
+             この方式では氏名・部署・役職の切り分けが安定しないため、
+             この画面は省略できない必須の工程として扱う。
+             ============================================================ -->
+        <section id="cs-review" class="cs-block cs-is-hidden" aria-labelledby="cs-review-title">
+          <h2 id="cs-review-title" class="cs-section-title">3. 内容を確認する</h2>
+
+          <div class="cs-panel">
+            <p id="cs-low-confidence" class="cs-alert cs-alert--caution"></p>
+
+            <p id="cs-duplicate" class="cs-alert cs-alert--warning" hidden></p>
+
+            <!--
+              表面と裏面で値が食い違った項目の一覧。
+              自動では上書きせず、裏面の値を採るかどうかを利用者が選ぶ。
+              中身は script.js が生成する。
+            -->
+            <div id="cs-conflict" class="cs-conflict" hidden>
+              <p class="cs-conflict__title">表面と裏面で内容が異なる項目があります。表面の値を入れてあります。</p>
+              <ul id="cs-conflict-list" class="cs-conflict__list"></ul>
+            </div>
+
+            <!--
+              自動で決まる項目。利用者は編集しない。
+              カードIDは保存時に採番するため、保存前は「保存時に自動生成」と出す。
+              画像ハッシュ・会社ID・重複判定キーはここに出さない（?debug=1 のログのみ）。
+            -->
+            <dl class="cs-meta">
+              <div class="cs-meta__item">
+                <dt class="cs-meta__label">カードID</dt>
+                <dd id="cs-meta-card-id" class="cs-meta__value">保存時に自動生成</dd>
+              </div>
+              <div class="cs-meta__item">
+                <dt class="cs-meta__label">OCRエンジン</dt>
+                <dd id="cs-meta-engine" class="cs-meta__value">—</dd>
+              </div>
+              <div class="cs-meta__item">
+                <dt class="cs-meta__label">
+                  OCR信頼度
+                  <span class="cs-meta__note">アプリ独自の目安</span>
+                </dt>
+                <dd id="cs-meta-confidence" class="cs-meta__value">—</dd>
+              </div>
+              <div class="cs-meta__item">
+                <dt class="cs-meta__label">名刺の向き</dt>
+                <dd id="cs-meta-orientation" class="cs-meta__value">—</dd>
+              </div>
+              <div class="cs-meta__item">
+                <dt class="cs-meta__label">言語</dt>
+                <dd id="cs-meta-language" class="cs-meta__value">—</dd>
+              </div>
+            </dl>
+
+            <p class="cs-note">OCR信頼度は、Googleが返す公式の数値ではありません。どの項目をどれだけ確かな手がかりで取れたかを、このアプリが独自に点数化した目安です。</p>
+
+            <!-- 入力欄は fields.js の定義から script.js が生成する -->
+            <div id="cs-form" class="cs-form"></div>
+
+            <details class="cs-raw">
+              <summary>読み取ったテキストを表示する</summary>
+
+              <div class="cs-raw__group">
+                <h4 class="cs-raw__label">表面</h4>
+                <pre id="cs-raw-front" class="cs-raw__text"></pre>
+              </div>
+
+              <div id="cs-raw-back-group" class="cs-raw__group" hidden>
+                <h4 class="cs-raw__label">裏面</h4>
+                <pre id="cs-raw-back" class="cs-raw__text"></pre>
+              </div>
+            </details>
+
+            <div class="cs-actions">
+              <button id="cs-save-button" class="btn btn--primary" type="button">スプレッドシートへ保存する</button>
+              <button id="cs-next-button" class="btn cs-btn-quiet" type="button">次の名刺を読み取る</button>
+            </div>
+
+            <p id="cs-result" class="cs-result" hidden></p>
+          </div>
+        </section>
+
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer" class="site-footer">
+    <div class="container">
+      <div class="site-footer__main">
+        <div class="site-footer__info">
+          <p class="site-footer__name">TSアセットマネジメント合同会社</p>
+          <p class="site-footer__name-en" lang="en">TS ASSET MANAGEMENT LLC</p>
+          <address class="site-footer__address">
+            <p>〒249-0002 神奈川県逗子市久木8-8-26</p>
+            <p><a href="mailto:architect@potenitas.com">architect@potenitas.com</a></p>
+          </address>
+        </div>
+
+        <nav class="footer-nav" aria-label="フッターナビ">
+          <ul class="footer-nav__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li><a href="../../index.html#business">事業領域</a></li>
+            <li><a href="../../index.html#company">会社概要</a></li>
+            <li><a href="../../index.html#contact">お問い合わせ</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <div class="site-footer__bottom">
+        <small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
