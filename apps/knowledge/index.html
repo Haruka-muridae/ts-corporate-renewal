@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!--
+    Content-Security-Policy
+
+    GitHub Pages ではレスポンスヘッダーを制御できないため meta で指定する。
+    （meta では frame-ancestors / report-uri は効かない。フレーム埋め込みの
+      禁止が必要になった場合は配信側のヘッダーで別途設定すること。）
+
+    許可している外部通信は Google の公式ドメインのみ。
+      accounts.google.com  … Google Identity Services（認可）
+      apis.google.com      … Google Picker
+      www.googleapis.com   … Drive API v3（読み取りのみ）
+    解析・保存・検索はすべてブラウザ内で完結するため、他の外部通信は無い。
+
+    script-src に 'unsafe-inline' / 'unsafe-eval' は入れない。
+    （PDF.js は isEvalSupported: false で動かしている。）
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src 'self' https://accounts.google.com https://apis.google.com;
+    style-src 'self' 'unsafe-inline' https://accounts.google.com;
+    img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://*.google.com;
+    font-src 'self' data:;
+    connect-src 'self' blob: https://www.googleapis.com https://content.googleapis.com https://accounts.google.com;
+    frame-src https://accounts.google.com https://content.googleapis.com https://docs.google.com https://drive.google.com;
+    worker-src 'self' blob:;
+    child-src 'self' blob:;
+    form-action 'none';
+    base-uri 'self';
+    object-src 'none';
+  ">
+
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Google Driveのファイルをブラウザ内だけで解析・検索するナレッジ管理ツール。">
+
+  <!--
+    アイコンは相対パスで参照する。
+    サイトルート絶対パス（/favicon.ico）にすると、サブパス配信（プロジェクトPages）で
+    404 になりコンソールにエラーが出る。実体は scripts/copy-assets.mjs が
+    リポジトリルートから複製し、配信ディレクトリの中で自己完結させている。
+  -->
+  <link rel="icon" href="./favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+
+  <title>ナレッジ管理・検索 | TSAM AI</title>
+  <script type="module" crossorigin src="./assets/index-DfpL7ilm.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/dexie-CVCRFKW4.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-BJWObC6R.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+
+  <header class="app-header">
+    <div class="app-header__inner">
+      <div class="app-header__title">
+        <h1>ナレッジ管理・検索</h1>
+        <p class="app-header__lead">Google Driveのファイルを、ブラウザ内だけで解析・検索します。</p>
+      </div>
+
+      <div class="app-header__account" id="account-area" aria-live="polite"></div>
+    </div>
+
+    <nav class="app-nav" aria-label="画面切り替え">
+      <ul id="nav-list" class="app-nav__list"></ul>
+    </nav>
+
+    <div class="app-status" id="status-bar" role="status" aria-live="polite"></div>
+  </header>
+
+  <main id="main" class="app-main" tabindex="-1"></main>
+
+  <footer class="app-footer">
+    <p>
+      抽出テキスト・チャンク・検索インデックスはこのブラウザ内（IndexedDB）にのみ保存され、
+      Google Driveへは書き込みません。
+    </p>
+  </footer>
+
+  <noscript>
+    <p class="noscript">このツールを利用するにはJavaScriptを有効にしてください。</p>
+  </noscript>
+
+</body>
+</html>

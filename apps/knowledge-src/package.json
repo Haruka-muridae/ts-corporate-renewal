@@ -1,0 +1,36 @@
+{
+  "name": "tsam-knowledge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Google Drive連携型のローカルナレッジ管理・検索アプリ（ブラウザ内完結）",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "generate:config": "node scripts/generate-auth-config.mjs",
+    "copy:assets": "node scripts/copy-assets.mjs",
+    "prepare:assets": "npm run generate:config && npm run copy:assets",
+    "predev": "npm run prepare:assets",
+    "dev": "vite",
+    "prebuild": "npm run prepare:assets",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:fixtures": "node tests/fixtures/generate.mjs",
+    "test:static": "node tests/tools/analyze-source.mjs",
+    "test:unit": "node tests/fixtures/generate.mjs && node tests/unit/run.mjs",
+    "test:browser": "node tests/fixtures/generate.mjs && node tests/tools/run-browser.mjs dev",
+    "test:dist": "node tests/tools/run-browser.mjs dist",
+    "test": "npm run prepare:assets && npm run test:static && npm run test:unit && npm run test:browser",
+    "test:ui": "node tests/fixtures/generate.mjs && node tests/tools/run-browser.mjs ui"
+  },
+  "dependencies": {
+    "dexie": "^4.2.0",
+    "mammoth": "^1.11.0",
+    "minisearch": "^7.2.0",
+    "pdfjs-dist": "^5.4.149"
+  },
+  "devDependencies": {
+    "vite": "^7.1.14"
+  }
+}
