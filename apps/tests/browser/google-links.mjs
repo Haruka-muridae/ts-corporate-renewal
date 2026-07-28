@@ -178,16 +178,55 @@ const storageKeys = await evaluate(`Object.keys(sessionStorage).concat(Object.ke
 check('紹介リンクで保存領域が汚れない',
   !storageKeys.includes('referral') && !storageKeys.includes('workspace'), storageKeys);
 
-section("9. お気に入り画面でも同じ案内が出る");
-await goto(`${origin}/apps/favorites.html`, 1600);
-const favSignup = await evaluate(`(() => {
-  const el = document.getElementById('auth-signup');
-  return el ? String(!el.hidden) : 'missing';
-})()`);
-check('★同じ案内が出る（正本は1か所）', favSignup === 'true', String(favSignup));
+section("9. 認証パネルを持つ他ページでも同じ案内が出る");
+/*
+ * ------------------------------------------------------------------
+ * 未追跡ファイルへ依存しないこと
+ * ------------------------------------------------------------------
+ * favorites.html はリポジトリに入っていない時期がある
+ * （お気に入り機能は別途開発中のため）。
+ *
+ * 「手元にあるから」で当てにすると、クリーンなチェックアウトで
+ * 必ず落ちるテストになる。存在するときだけ確かめる。
+ *
+ * 無い場合も検査は飛ばさない。
+ * 「正本が1か所である」という本題は、
+ * 描画元が1モジュールであることで確かめられる。
+ * ------------------------------------------------------------------
+ */
+const favStatus = await evaluate(
+  `fetch('/apps/favorites.html').then(r => String(r.status)).catch(() => '0')`,
+);
 
-const favHref = await evaluate(`document.querySelector('[data-link-id="workspace-referral"] a')?.getAttribute('href') ?? ''`);
-check('★アプリ一覧と同じURL', favHref === workspace.href, favHref);
+if (favStatus === '200') {
+  await goto(`${origin}/apps/favorites.html`, 1600);
+
+  const favSignup = await evaluate(`(() => {
+    const el = document.getElementById('auth-signup');
+    return el ? String(!el.hidden) : 'missing';
+  })()`);
+  check('★お気に入り画面にも同じ案内が出る', favSignup === 'true', String(favSignup));
+
+  const favHref = await evaluate(`document.querySelector('[data-link-id="workspace-referral"] a')?.getAttribute('href') ?? ''`);
+  check('★アプリ一覧と同じURL', favHref === workspace.href, favHref);
+} else {
+  /* ページが無い版。正本が1か所であることを別の形で確かめる。 */
+  const builders = await evaluate(`(async () => {
+    const files = ['google-auth.js', 'auth-session.js', 'gis-loader.js', 'auth-config.js'];
+    let hits = 0;
+    for (const f of files) {
+      const t = await (await fetch('/apps/' + f)).text();
+      if (t.includes('auth-signup')) hits += 1;
+    }
+    return String(hits);
+  })()`);
+  check('★案内を組み立てるモジュールは1つだけ', builders === '1', `${builders} 個 (favorites.html なし)`);
+
+  const inHtml = await evaluate(
+    `fetch('/apps/index.html').then(r => r.text()).then(t => String(t.includes('referworkspace')))`,
+  );
+  check('★URLをHTMLへ書き写していない', inHtml === 'false', inHtml);
+}
 
 section("10. レスポンシブ");
 await goto(`${origin}/apps/`, 1400);
