@@ -573,3 +573,56 @@
     padding: 40px 24px 32px;
   }
 }
+
+/*
+  Googleアカウントをお持ちでない方への案内。
+  要素は apps/google-auth.js が組み立てる（URLの正本は
+  apps/shared/external-links.js の1か所）。
+*/
+.auth-signup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border);
+}
+
+.auth-signup__title {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+}
+
+.auth-signup__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.auth-signup__lead {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+/*
+  外部リンク。Google公式ボタンと見た目を寄せない。
+  紹介リンクを公式の導線と見間違えさせないため、
+  意図的に文字リンクのままにしている。
+*/
+.auth-signup__link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  text-decoration: underline;
+}
+
+/* 有料である旨・紹介である旨。小さくしすぎない。 */
+.auth-signup__note {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
