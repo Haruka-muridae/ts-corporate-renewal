@@ -1,5 +1,17 @@
 # Supabase 認証の設定手順
 
+> ## ★ 現在の状態: 保留（2026-07-28）
+>
+> **この手順は実施していない。Supabase プロジェクトは作成しておらず、
+> `apps/shared/supabase-config.js` はプレースホルダーのままである。**
+>
+> `/apps/` の認証は、既存のGoogleログインを共通導線として整える方針に変わった。
+> 詳細は `apps/GOOGLE_AUTH_OPERATIONS.md` を参照する。
+>
+> 実装（`apps/shared/auth-providers/supabase.js` ほか）は削除していない。
+> 将来サーバー側で利用資格を判定する必要が生じたときの選択肢として残している。
+
+
 TSAM AI のログイン（`apps/login/`）を、動作確認用のダミーから
 **Supabase Auth による本物の認証**へ切り替える手順。
 
