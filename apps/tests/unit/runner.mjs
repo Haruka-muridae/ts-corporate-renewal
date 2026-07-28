@@ -214,7 +214,54 @@ setTimeout(() => {
   const runnerSweeps = runnerSource.includes('sweepStaleProfiles');
   check('★実行役が開始時に掃除する', runnerSweeps);
 
-  section("11. 一時ディレクトリ");
+  section("11. Node の下限が実際の要件と合っているか");
+  /*
+   * ------------------------------------------------------------------
+   * なぜ検査するのか
+   * ------------------------------------------------------------------
+   * ブラウザテストは helpers/chrome.mjs でグローバルの WebSocket を使う。
+   * これがフラグ無しで使えるのは Node 22.0 から、
+   * 実験的でなくなるのは 22.4 から。
+   *   https://nodejs.org/api/globals.html#websocket
+   *
+   * engines がこれより低いと、条件を満たす環境で入れたのに
+   * ブラウザテストだけが動かない、という分かりにくい失敗になる。
+   *
+   * 文字列の一致ではなく、数値として下限を比べる。
+   * ">=22.4.0" でも ">= 22.4.0" でも "^22.4.0" でも通るようにする。
+   * CI のバージョン（24）と一致させる検査にはしない。
+   * CI を上げ下げしても、下限の意味は変わらないため。
+   * ------------------------------------------------------------------
+   */
+  const pkg = JSON.parse(
+    await import('node:fs/promises')
+      .then((fs) => fs.readFile(new URL('../../../package.json', import.meta.url), 'utf8')),
+  );
+
+  const range = pkg.engines?.node ?? '';
+  check('engines.node がある', typeof range === 'string' && range.length > 0, range);
+
+  /* 範囲指定から最初の x.y.z を取り出す。 */
+  const found = range.match(/(\d+)\.(\d+)\.(\d+)/);
+  check('版が読み取れる', found !== null, range);
+
+  const [major, minor] = found ? [Number(found[1]), Number(found[2])] : [0, 0];
+  const atLeast = (m, n) => major > m || (major === m && minor >= n);
+
+  check('★グローバル WebSocket が使える下限（22.0）以上', atLeast(22, 0), range);
+  check('★実験的でなくなる下限（22.4）以上', atLeast(22, 4), range);
+  check('下限を上げすぎていない（26未満）', major < 26, range);
+
+  /* いま動かしている Node が、その下限を満たしていること。 */
+  const [runMajor, runMinor] = process.versions.node.split('.').map(Number);
+  check('実行中の Node が下限を満たす',
+    runMajor > major || (runMajor === major && runMinor >= minor),
+    `実行中 ${process.versions.node} / 下限 ${range}`);
+
+  /* 実際に使えることを確かめる。宣言と実態がずれていないか。 */
+  check('★グローバル WebSocket が実在する', typeof WebSocket === 'function', typeof WebSocket);
+
+  section("12. 一時ディレクトリ");
   check('作業場所が作られている', existsSync(workDir));
   const entries = await readdir(workDir);
   check('検査用スクリプトが置かれている', entries.length > 0, `${entries.length} 件`);

@@ -11,13 +11,23 @@
 
 | | 要件 |
 |---|---|
-| Node.js | **22.4 以上**（開発と CI は 24） |
+| Node.js | **22.4 以上**（`package.json` の `engines` と一致。開発と CI は 24） |
 | Chrome | Chrome または Chromium。Edge でも動く |
 
-`package.json` の `engines` は `>=20.9.0` だが、
-**ブラウザテストは Node 20 では動かない。**
-`helpers/chrome.mjs` が DevTools Protocol を叩くのにグローバルの
-`WebSocket` を使い、これが既定で有効になるのは Node 22.4 以降のため。
+`helpers/chrome.mjs` は DevTools Protocol を叩くのに
+グローバルの `WebSocket` を使う。これが下限を決めている。
+
+| Node | グローバル `WebSocket` |
+|---|---|
+| 20.10 / 21.0 | `--experimental-websocket` を付ければ使える |
+| **22.0** | **フラグ無しで使える** |
+| **22.4** | **実験的でなくなる** |
+
+出典: https://nodejs.org/api/globals.html#websocket （確認日 2026-07-28）
+
+フラグ無しで動くのは 22.0 からだが、下限は **22.4** とする。
+テストの土台が実験的APIのままでは、仕様が変わったときに
+原因の分かりにくい壊れ方をするため。
 
 Node 20 でも `npm run test:unit`（Chrome 不要）は動く。
 
