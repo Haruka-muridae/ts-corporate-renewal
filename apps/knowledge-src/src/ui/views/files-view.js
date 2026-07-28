@@ -131,6 +131,13 @@ export function createFilesView(ctx) {
       el('button', {
         type: 'button',
         class: 'button',
+        text: '＋ ナレッジを追加',
+        disabled: !canSync || busy,
+        onClick: () => ctx.actions.openKnowledgeUpload(),
+      }),
+      el('button', {
+        type: 'button',
+        class: 'button button--secondary',
         text: busy ? '同期中…' : '差分同期',
         disabled: !canSync || busy,
         onClick: () => ctx.actions.startSync({ force: false }),

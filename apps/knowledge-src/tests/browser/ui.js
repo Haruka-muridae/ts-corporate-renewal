@@ -16,6 +16,7 @@ import { openDb } from '../../src/db/db.js';
 import { clearAllCache, putFile, setSelectedFolder } from '../../src/db/repo.js';
 import { openFolderBrowser } from '../../src/ui/folder-browser.js';
 import { openCreateFoldersDialog } from '../../src/ui/create-folders-dialog.js';
+import { openKnowledgeUploadDialog } from '../../src/ui/knowledge-upload-dialog.js';
 import { buildFolderPlan, classifyPlan, summarizePlan, formatNodePath } from '../../src/drive/folder-plan.js';
 import { makeSetupRecord, createProgress, summarizeDiagnosis } from '../../src/setup/wizard-state.js';
 import { FOLDER_STRUCTURE } from '../../src/config.js';
@@ -195,6 +196,13 @@ async function main() {
     check('横スクロール用の枠がある', Boolean(document.querySelector('.table-wrap')));
     check('本文がはみ出さない設定', getComputedStyle(document.querySelector('.file-name')).wordBreak === 'break-word');
     check('エラー列に上限幅がある', getComputedStyle(document.querySelector('.error-cell')).maxWidth !== 'none');
+    const addKnowledgeButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('ナレッジを追加'));
+    check('ナレッジを追加ボタンがある', Boolean(addKnowledgeButton));
+    calls.length = 0;
+    addKnowledgeButton.click();
+    await wait(80);
+    check('追加ボタンで専用操作を呼ぶ', calls.some((call) => call.name === 'openKnowledgeUpload'));
 
     section('6. 画面幅・モーション');
 
@@ -494,7 +502,102 @@ async function main() {
     check('確認後もダイアログを残さない', document.querySelector('dialog[aria-label="不足フォルダの作成を確認"]') === null);
 
     /* ============================================================ */
-    section('12. セットアップウィザード');
+    section('12. ナレッジ追加ダイアログ');
+
+    const folder = {
+      id: 'f-kn',
+      name: '01_ナレッジ',
+      path: 'マイドライブ / TSAM AI / ローカルLLM / 01_ナレッジ',
+    };
+    let uploadRunCount = 0;
+    const uploadPromise = openKnowledgeUploadDialog({
+      folder,
+      runUpload: async (plan, { onProgress }) => {
+        uploadRunCount += 1;
+        const entry = plan.accepted[0];
+        onProgress({
+          phase: 'uploading', done: 0, total: 1, currentName: entry.relativePath,
+          itemId: entry.id, itemStatus: 'uploading',
+        });
+        onProgress({
+          phase: 'uploading', done: 1, total: 1, currentName: entry.relativePath,
+          itemId: entry.id, itemStatus: 'saved', uploadName: entry.safeName, fileId: 'uploaded-1',
+        });
+        return {
+          ok: true,
+          syncCompleted: true,
+          upload: {
+            uploaded: [{
+              entry,
+              file: { id: 'uploaded-1', name: entry.safeName },
+              uploadName: entry.safeName,
+              renamed: false,
+              parseable: true,
+            }],
+            failed: [],
+            skipped: [],
+          },
+          syncedFiles: [{ fileId: 'uploaded-1', syncState: 'indexed', chunkCount: 2 }],
+        };
+      },
+    });
+    await wait(100);
+    let uploadDialog = document.querySelector('dialog[aria-label="ナレッジファイルを追加"]');
+    check('追加ダイアログがモーダルで開く', Boolean(uploadDialog) && uploadDialog.matches(':modal'));
+    check('固定保存先を明記', uploadDialog.textContent.includes('TSAM AI / ローカルLLM / 01_ナレッジ'));
+    check('ドラッグ＆ドロップ領域がある', Boolean(uploadDialog.querySelector('.upload-drop[role="button"]')));
+    check('複数ファイル入力', uploadDialog.querySelector('input[type="file"]:not([webkitdirectory])')?.multiple === true);
+    check('フォルダ入力', Boolean(uploadDialog.querySelector('input[webkitdirectory]')));
+    check('対応形式を説明', uploadDialog.textContent.includes('PDF、DOCX、TXT、Markdown、CSV'));
+    check('保存のみの形式を説明', uploadDialog.textContent.includes('HTML、PPTX、XLSX'));
+    check('選択前は確認ボタンが無効', Array.from(uploadDialog.querySelectorAll('button'))
+      .find((button) => button.textContent === '内容を確認')?.disabled === true);
+
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['追加テスト本文'], 'UI追加.txt', { type: 'text/plain' }));
+    const input = uploadDialog.querySelector('input[type="file"]:not([webkitdirectory])');
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await wait(100);
+    uploadDialog = document.querySelector('dialog[aria-label="ナレッジファイルを追加"]');
+    check('選択ファイル名を安全なテキストで表示', uploadDialog.textContent.includes('UI追加.txt'));
+    check('選択後は確認へ進める', Array.from(uploadDialog.querySelectorAll('button'))
+      .find((button) => button.textContent === '内容を確認')?.disabled === false);
+
+    Array.from(uploadDialog.querySelectorAll('button')).find((button) => button.textContent === '内容を確認').click();
+    await wait(100);
+    check('確認画面にファイル数', uploadDialog.textContent.includes('ファイル数：1件'));
+    check('確認画面に一時書き込み権限', uploadDialog.textContent.includes('アップロード時のみ'));
+    check('確認画面に既存ファイル非変更', uploadDialog.textContent.includes('削除・編集・移動・上書きは行いません'));
+    check('確認画面に同期・解析', uploadDialog.textContent.includes('差分同期'));
+
+    Array.from(uploadDialog.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('アップロードして同期')).click();
+    await wait(180);
+    uploadDialog = document.querySelector('dialog[aria-label="ナレッジファイルを追加"]');
+    check('明示確認後だけアップロードを実行', uploadRunCount === 1);
+    check('完了をaria-liveで通知', Boolean(uploadDialog.querySelector('[role="status"][aria-live="polite"]')));
+    check('Drive保存状態', uploadDialog.textContent.includes('保存済み'));
+    check('同期状態', uploadDialog.textContent.includes('同期済み'));
+    check('解析状態', uploadDialog.textContent.includes('解析済み'));
+    check('チャンク件数', uploadDialog.textContent.includes('2件'));
+    check('検索反映状態', uploadDialog.textContent.includes('反映済み'));
+    check('検索導線', Boolean(uploadDialog.querySelector('a[href*="#search"]')));
+    check('チャット導線', Boolean(Array.from(uploadDialog.querySelectorAll('a')).find((a) => a.textContent.includes('AIナレッジチャット'))));
+    check('追加アップロード導線', Boolean(Array.from(uploadDialog.querySelectorAll('button')).find((b) => b.textContent === '追加でアップロード')));
+    Array.from(uploadDialog.querySelectorAll('button')).find((button) => button.textContent === '閉じる').click();
+    await uploadPromise;
+    check('閉じたら追加ダイアログが残らない', document.querySelector('dialog[aria-label="ナレッジファイルを追加"]') === null);
+
+    /* 選択前にEscで閉じても書き込み処理は呼ばれない。 */
+    const uploadCancel = openKnowledgeUploadDialog({ folder, runUpload: async () => { uploadRunCount += 1; } });
+    await wait(80);
+    uploadDialog = document.querySelector('dialog[aria-label="ナレッジファイルを追加"]');
+    uploadDialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+    await uploadCancel;
+    check('Escキャンセルではアップロードしない', uploadRunCount === 1);
+
+    section('13. セットアップウィザード');
 
     /* 初回アクセスの状況に合わせる（未認証から始める）。 */
     store.setAppState(AppState.UNAUTHENTICATED);

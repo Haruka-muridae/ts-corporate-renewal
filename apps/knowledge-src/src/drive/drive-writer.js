@@ -16,6 +16,11 @@
  *           同じ3項目のメタデータ + 本文
  *           呼び出し側が「同名ファイルが無いこと」を確認してからしか呼ばない。
  *
+ *   3. 利用者が明示選択したナレッジファイルの新規アップロード
+ *      POST https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart
+ *           保存先は呼び出し側が解決した 01_ナレッジ 配下だけ。
+ *           既存ファイルは更新せず、重複名は呼び出し側で別名にする。
+ *
  * PUT / PATCH / DELETE は実装しない。
  * 既存ファイルの編集・移動・削除は、経路そのものを持たないことで防ぐ。
  *
@@ -98,6 +103,7 @@ export async function createFolder({ name, parentId, signal, retries = 3 }) {
     body: JSON.stringify(built.body),
     signal,
     retries,
+    responseErrorCode: ErrorCode.FOLDER_CREATE_UNVERIFIED,
   });
 
   const verdict = validateCreatedFolder(resource, { name, parentId });
@@ -170,6 +176,7 @@ export async function createTextFile({ name, parentId, mimeType, content, signal
     body: payload,
     signal,
     retries,
+    responseErrorCode: ErrorCode.SAMPLE_CREATE_UNVERIFIED,
   });
 
   /* 名前と親が依頼どおりかを確認する（種別はフォルダではないので別扱い）。 */
@@ -182,6 +189,83 @@ export async function createTextFile({ name, parentId, mimeType, content, signal
   }
 
   logger.info('drive-writer:file-created', { mimeType: metadata.mimeType });
+
+  return toFolderResult(resource);
+}
+
+/*
+ * 利用者が選んだファイルをmultipart/relatedで新規作成する。
+ *
+ * File/Blobは読み直さず、そのままBlobの一部としてfetchへ渡す。
+ * 本文をログ、URL、Storageへ複製しない。
+ */
+export async function createKnowledgeFile({
+  name, parentId, mimeType, file, signal, retries = 3,
+}) {
+  const built = buildCreateBody({ name, parentId });
+
+  if (!built.ok) {
+    logger.warn('drive-writer:invalid-upload', { reason: built.reason });
+    throw new AppError(ErrorCode.UPLOAD_INVALID_FILE, built.reason);
+  }
+
+  if (!file || typeof file.size !== 'number' || file.size <= 0) {
+    throw new AppError(ErrorCode.UPLOAD_EMPTY_FILE, 'empty_file');
+  }
+
+  const token = peekWriteToken();
+
+  if (!token) {
+    throw new AppError(ErrorCode.WRITE_SCOPE_NOT_GRANTED, 'no_write_token');
+  }
+
+  const metadata = {
+    name: String(name),
+    mimeType: String(mimeType || file.type || 'application/octet-stream'),
+    parents: [String(parentId)],
+  };
+  const boundary = makeBoundary();
+  const url = new URL(`${DRIVE_UPLOAD_BASE}/files`);
+  url.searchParams.set('uploadType', 'multipart');
+  url.searchParams.set('fields', CREATE_FIELDS);
+  url.searchParams.set('supportsAllDrives', 'true');
+
+  const payload = new Blob([
+    `--${boundary}\r\n`,
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+    JSON.stringify(metadata),
+    `\r\n--${boundary}\r\n`,
+    `Content-Type: ${metadata.mimeType}\r\n\r\n`,
+    file,
+    `\r\n--${boundary}--\r\n`,
+  ], { type: `multipart/related; boundary=${boundary}` });
+
+  const resource = await send({
+    url,
+    token,
+    contentType: payload.type,
+    body: payload,
+    signal,
+    retries,
+    responseErrorCode: ErrorCode.UPLOAD_UNVERIFIED,
+  });
+
+  if (String(resource?.name) !== metadata.name) {
+    throw new AppError(ErrorCode.UPLOAD_UNVERIFIED, 'name_mismatch');
+  }
+
+  if (!Array.isArray(resource?.parents) || !resource.parents.includes(metadata.parents[0])) {
+    throw new AppError(ErrorCode.UPLOAD_UNVERIFIED, 'parent_mismatch');
+  }
+
+  if (resource?.mimeType && String(resource.mimeType) !== metadata.mimeType) {
+    throw new AppError(ErrorCode.UPLOAD_UNVERIFIED, 'mime_type_mismatch');
+  }
+
+  logger.info('drive-writer:knowledge-uploaded', {
+    mimeType: metadata.mimeType,
+    bytes: Number(file.size),
+  });
 
   return toFolderResult(resource);
 }
@@ -208,7 +292,10 @@ function toFolderResult(resource) {
  *   - 429 / 5xx は指数バックオフで再試行（Retry-After を優先）
  *   - 401 / 403 は再試行しない（権限の問題であり、待っても変わらない）
  */
-async function send({ url, token, contentType, body, signal, retries }) {
+async function send({
+  url, token, contentType, body, signal, retries,
+  responseErrorCode = ErrorCode.FOLDER_CREATE_UNVERIFIED,
+}) {
   let attempt = 0;
 
   for (;;) {
@@ -236,7 +323,7 @@ async function send({ url, token, contentType, body, signal, retries }) {
       try {
         return await response.json();
       } catch {
-        throw new AppError(ErrorCode.FOLDER_CREATE_UNVERIFIED, 'invalid_json');
+        throw new AppError(responseErrorCode, 'invalid_json');
       }
     }
 
@@ -274,6 +361,7 @@ export const WRITE_CONTRACT = Object.freeze({
   method: 'POST',
   path: '/files',
   uploadPath: '/upload/drive/v3/files',
+  knowledgeUpload: true,
   mimeType: MIME.GOOGLE_FOLDER,
   fields: CREATE_FIELDS,
   forbiddenMethods: Object.freeze(['PUT', 'PATCH', 'DELETE']),

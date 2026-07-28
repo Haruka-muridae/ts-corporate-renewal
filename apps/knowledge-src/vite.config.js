@@ -16,6 +16,17 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: './',
 
+  /*
+   * knowledgeアプリは素のCSSで、リポジトリルートのTailwind/PostCSS設定を
+   * 使用しない。親ディレクトリの設定を自動探索させると、独立した
+   * `npm ci` 環境で不要なTailwind依存を要求してしまうため明示的に分離する。
+   */
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
+
   build: {
     outDir: '../knowledge',
     /*

@@ -27,6 +27,7 @@ import {
   WizardStep, createProgress, makeSetupRecord, canFinish, summarizeDiagnosis,
 } from './setup/wizard-state.js';
 import { createSampleFiles as runCreateSampleFiles } from './drive/sample-files.js';
+import { uploadKnowledge, isUploadingKnowledge } from './drive/knowledge-upload.js';
 import { runDiagnostics } from './diagnostics/connection-check.js';
 import { SAMPLE_SEARCH_TERM, getDriveScope } from './config.js';
 import { hasWriteToken, requestWriteToken, discardWriteToken } from './auth/google-auth.js';
@@ -41,6 +42,7 @@ import { scanFolderStructure, createMissingFolders, isCreatingFolders } from './
 import { formatNodePath } from './drive/folder-plan.js';
 import { openFolderBrowser } from './ui/folder-browser.js';
 import { openCreateFoldersDialog } from './ui/create-folders-dialog.js';
+import { openKnowledgeUploadDialog } from './ui/knowledge-upload-dialog.js';
 
 import {
   runSync, previewFolder, cancelSync, resyncFile, isSyncing, terminateParseWorker,
@@ -745,11 +747,98 @@ const actions = {
       }
 
       logger.info('sync:summary', result);
+      return result;
     } catch (error) {
       await refreshFiles();
       await refreshStats();
       reportError(error, 'sync:failed');
+      return null;
     }
+  },
+
+  /*
+   * 端末から選んだファイルを 01_ナレッジ 配下へ新規追加する。
+   *
+   * 選択・確認までは読み取り専用のまま。確認後にダイアログから呼ばれた
+   * runUpload 内でだけ書き込みトークンを取り、保存後は既存差分同期へ渡す。
+   */
+  async openKnowledgeUpload() {
+    clearError();
+
+    if (!hasValidAccessToken()) {
+      reportError(new AppError(ErrorCode.AUTH_EXPIRED), 'upload:not-authenticated');
+      return null;
+    }
+
+    if (isSyncing() || isCreatingFolders() || isUploadingKnowledge()) {
+      reportError(new AppError(ErrorCode.UPLOAD_IN_PROGRESS), 'upload:busy');
+      return null;
+    }
+
+    /*
+     * 閲覧対象として別フォルダを選べる既存UIとは切り離し、アップロード先は
+     * 必ず固定パスを再解決する。画面状態のフォルダIDを流用して、任意の
+     * Driveフォルダへ書き込める経路を作らない。
+     */
+    const resolved = await resolveKnowledgeFolder();
+
+    if (resolved.status !== PathResolveStatus.RESOLVED || !resolved.folder?.id) {
+      const error = resolved.error
+        ?? new AppError(ErrorCode.SETUP_STEP_BLOCKED, resolved.message ?? 'fixed_folder_unresolved');
+      reportError(error, 'upload:fixed-folder-unresolved');
+      return null;
+    }
+
+    const folder = resolved.folder;
+
+    const dialogResult = await openKnowledgeUploadDialog({
+      folder,
+      runUpload: async (plan, { onProgress } = {}) => {
+        const upload = await uploadKnowledge({
+          folderId: folder.id,
+          entries: plan.accepted,
+          isBusy: () => isSyncing() || isCreatingFolders(),
+          onProgress,
+        });
+
+        if (upload.uploaded.length === 0) {
+          return {
+            ok: false,
+            upload,
+            syncCompleted: false,
+            syncedFiles: [],
+            error: upload.error ? { message: upload.error.userMessage } : null,
+          };
+        }
+
+        onProgress?.({
+          phase: 'syncing',
+          done: upload.uploaded.length,
+          total: upload.uploaded.length,
+          currentName: '',
+        });
+
+        const syncResult = await actions.startSync({ force: false });
+        await refreshFiles();
+        await refreshStats();
+
+        const uploadedIds = new Set(upload.uploaded.map((item) => String(item.file.id)));
+        const syncedFiles = (store.get().files ?? [])
+          .filter((file) => uploadedIds.has(String(file.fileId)));
+
+        return {
+          ok: upload.ok && Boolean(syncResult),
+          upload,
+          syncCompleted: Boolean(syncResult && !syncResult.cancelled),
+          syncedFiles,
+          error: upload.error ? { message: upload.error.userMessage } : null,
+        };
+      },
+    });
+
+    await refreshFiles();
+    await refreshStats();
+    return dialogResult;
   },
 
   cancelSync() {
@@ -921,6 +1010,16 @@ window.addEventListener('error', (event) => {
     message: String(event.message ?? '').slice(0, 300),
     source: String(event.filename ?? '').slice(0, 200),
   });
+});
+
+/* アップロード途中の誤操作による離脱だけ、ブラウザ標準の確認を出す。 */
+window.addEventListener('beforeunload', (event) => {
+  if (!isUploadingKnowledge()) {
+    return;
+  }
+
+  event.preventDefault();
+  event.returnValue = '';
 });
 
 /* ページ離脱時にWorkerを片付ける。 */

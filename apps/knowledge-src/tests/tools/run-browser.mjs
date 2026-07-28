@@ -15,7 +15,7 @@
  *   node tests/tools/run-browser.mjs dist
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile, stat, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -140,12 +140,12 @@ function waitFor(url, timeoutMs = 60000) {
 
 /* ---- CDP ---- */
 
-async function connect(urlFilter, timeoutMs = 30000) {
+async function connect(urlFilter, timeoutMs = 30000, cdpPort = CDP_PORT) {
   const deadline = Date.now() + timeoutMs;
 
   for (;;) {
     try {
-      const list = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json();
+      const list = await (await fetch(`http://127.0.0.1:${cdpPort}/json/list`)).json();
       const page = list.find((t) => t.type === 'page' && t.url.includes(urlFilter));
       if (page) {
         return page;
@@ -162,22 +162,27 @@ async function connect(urlFilter, timeoutMs = 30000) {
   }
 }
 
-async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {}) {
+async function runPage(pageUrl, urlFilter, {
+  waitMs = 300000,
+  expression,
+  cdpPort = CDP_PORT,
+  profileDir = resolve(root, 'node_modules/.cache/chrome-test-profile'),
+} = {}) {
   const chrome = spawn(chromePath, [
     '--headless=new',
     '--disable-gpu',
     '--no-sandbox',
     '--no-first-run',
     '--disable-extensions',
-    `--remote-debugging-port=${CDP_PORT}`,
-    `--user-data-dir=${resolve(root, 'node_modules/.cache/chrome-test-profile')}`,
+    `--remote-debugging-port=${cdpPort}`,
+    `--user-data-dir=${profileDir}`,
     pageUrl,
   ], { stdio: 'ignore' });
 
   const consoleLogs = [];
 
   try {
-    const target = await connect(urlFilter);
+    const target = await connect(urlFilter, 30000, cdpPort);
     const ws = new WebSocket(target.webSocketDebuggerUrl);
     const pending = new Map();
     let nextId = 0;
@@ -303,13 +308,34 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {})
 
     return { title, output, consoleLogs };
   } finally {
-    chrome.kill();
+    if (process.platform === 'win32' && chrome.pid) {
+      /*
+       * chrome.kill() だけではWindows上の子プロセスが残り、次のCDPポートへ
+       * 起動したChromeが既存プロセスへ吸収されることがある。自分で起動した
+       * テスト用プロセスツリーだけを明示終了する。
+       */
+      spawnSync('taskkill', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      chrome.kill();
+    }
   }
 }
 
 /* ---- 実行 ---- */
 
 if (mode === 'dev' || mode === 'ui') {
+  /*
+   * 同じoriginの前回キャッシュや、異常終了したCDPページを再利用すると、
+   * 編集前のテストモジュールを実行してしまう。毎回専用プロファイルを
+   * 初期化し、現在のソースだけを検証する。
+   */
+  await rm(resolve(root, 'node_modules/.cache/chrome-test-profile'), { recursive: true, force: true })
+    .catch(() => { /* 初回は存在しない。 */ });
+  await Promise.all([0, 1].map((index) => (
+    rm(resolve(root, `node_modules/.cache/chrome-test-profile-${index}`), { recursive: true, force: true })
+      .catch(() => { /* 初回は存在しない。 */ })
+  )));
+
   /* dev は統合テストとUIテストの両方、ui はUIテストだけを流す。 */
   const pages = mode === 'ui'
     ? [{ file: 'ui.html', label: 'UI' }]
@@ -324,10 +350,19 @@ if (mode === 'dev' || mode === 'ui') {
   let bad = 0;
 
   try {
-    for (const page of pages) {
+    for (let index = 0; index < pages.length; index += 1) {
+      const page = pages[index];
       const url = `http://localhost:${DEV_PORT}/tests/browser/${page.file}`;
       await waitFor(url);
-      const { title, output, consoleLogs } = await runPage(url, `tests/browser/${page.file}`);
+      const { title, output, consoleLogs } = await runPage(url, `tests/browser/${page.file}`, {
+        /*
+         * WindowsではChromeの子プロセスが終了するまで少し時間がかかる。
+         * テストページごとにCDPポートとプロファイルを分け、次のページが
+         * 終了待ちに巻き込まれないようにする。
+         */
+        cdpPort: CDP_PORT + index,
+        profileDir: resolve(root, `node_modules/.cache/chrome-test-profile-${index}`),
+      });
 
       console.log(`\n########## ${page.label}テスト (${page.file}) ##########`);
       console.log(output);

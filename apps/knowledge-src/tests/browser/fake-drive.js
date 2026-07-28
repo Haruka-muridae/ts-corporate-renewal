@@ -284,16 +284,24 @@ export function installFakeFetch({ tree, scenario }) {
     let sentBody = null;
     let sentContent = null;
 
+    let rawBody = null;
+
     if (typeof init.body === 'string') {
+      rawBody = init.body;
+    } else if (init.body instanceof Blob) {
+      rawBody = await init.body.text();
+    }
+
+    if (typeof rawBody === 'string') {
       if (contentType.startsWith('multipart/related')) {
-        const parsed = parseMultipart(init.body, contentType);
+        const parsed = parseMultipart(rawBody, contentType);
         sentBody = parsed.metadata;
         sentContent = parsed.content;
       } else {
         try {
-          sentBody = JSON.parse(init.body);
+          sentBody = JSON.parse(rawBody);
         } catch {
-          sentBody = { raw: String(init.body).slice(0, 200) };
+          sentBody = { raw: String(rawBody).slice(0, 200) };
         }
       }
     }

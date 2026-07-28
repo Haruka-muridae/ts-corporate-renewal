@@ -36,6 +36,14 @@ export const ErrorCode = Object.freeze({
   SAMPLE_CREATE_UNVERIFIED: 'SAMPLE_CREATE_UNVERIFIED',
   SETUP_STEP_BLOCKED: 'SETUP_STEP_BLOCKED',
 
+  /* 端末からのナレッジ追加 */
+  UPLOAD_IN_PROGRESS: 'UPLOAD_IN_PROGRESS',
+  UPLOAD_INVALID_FILE: 'UPLOAD_INVALID_FILE',
+  UPLOAD_LIMIT_EXCEEDED: 'UPLOAD_LIMIT_EXCEEDED',
+  UPLOAD_EMPTY_FILE: 'UPLOAD_EMPTY_FILE',
+  UPLOAD_FAILED: 'UPLOAD_FAILED',
+  UPLOAD_UNVERIFIED: 'UPLOAD_UNVERIFIED',
+
   /* Drive API */
   DRIVE_API_ERROR: 'DRIVE_API_ERROR',
   DRIVE_API_DISABLED: 'DRIVE_API_DISABLED',
@@ -160,6 +168,31 @@ const MESSAGES = Object.freeze({
   [ErrorCode.SETUP_STEP_BLOCKED]: {
     title: '前の手順が終わっていないため、この手順は実行できません。',
     hint: '前の手順に戻って完了させてください。',
+  },
+
+  [ErrorCode.UPLOAD_IN_PROGRESS]: {
+    title: 'ナレッジの追加を実行中です。',
+    hint: '完了するまで、この画面を閉じずにお待ちください。',
+  },
+  [ErrorCode.UPLOAD_INVALID_FILE]: {
+    title: '追加できないファイルが含まれています。',
+    hint: '対応形式とファイル名をご確認ください。',
+  },
+  [ErrorCode.UPLOAD_LIMIT_EXCEEDED]: {
+    title: 'アップロードの上限を超えています。',
+    hint: 'ファイル数または容量を減らして、もう一度お試しください。',
+  },
+  [ErrorCode.UPLOAD_EMPTY_FILE]: {
+    title: '0バイトのファイルは追加できません。',
+    hint: '内容を保存してから、もう一度選択してください。',
+  },
+  [ErrorCode.UPLOAD_FAILED]: {
+    title: 'ファイルのアップロードに失敗しました。',
+    hint: '成功したファイルはそのまま保存されています。失敗したファイルだけ再試行できます。',
+  },
+  [ErrorCode.UPLOAD_UNVERIFIED]: {
+    title: '保存したファイルの内容を確認できませんでした。',
+    hint: 'Drive上の 01_ナレッジ フォルダをご確認ください。',
   },
 
   [ErrorCode.DRIVE_API_ERROR]: {
