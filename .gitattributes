@@ -7,3 +7,10 @@ apps/voice-recorder/vendor/lamejs.iife.js -text
 # ライセンスと NOTICE は LF に固定する。
 apps/voice-recorder/vendor/LICENSE-lamejs.txt text eol=lf
 apps/voice-recorder/vendor/NOTICE-lamejs.txt text eol=lf
+
+# Supabase Auth JS 本体も同様に改行変換の対象外にする。
+# ファイル名にバージョンを含むため、更新時はこの行も直すこと。
+apps/vendor/supabase-auth-js-2.110.8.esm.js -text
+
+apps/vendor/LICENSE-supabase-auth-js.txt text eol=lf
+apps/vendor/NOTICE-supabase-auth-js.md text eol=lf

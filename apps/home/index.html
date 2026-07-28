@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>マイページ | TSAM AI</title>
+  <meta name="description" content="TSAM AIの個人ホームです。">
+
+  <!-- 個人向けの画面のため検索結果に出さない。 -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light">
+
+  <link rel="icon" href="../../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../account.css">
+</head>
+<body class="account-page">
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <!--
+    未ログインでこのページを直接開いた場合、home.js が
+    ログイン画面へ差し替える。その一瞬に個人向けの見出しが
+    見えないよう、本文は hidden で始める。
+
+    これは表示上の配慮であって、保護ではない。
+    HTMLもJSも直接取得できる（shared/auth.js の注記を参照）。
+  -->
+  <main id="main-content" class="account-main" tabindex="-1" hidden>
+    <div class="account-shell account-shell--wide">
+      <div class="account-brand">
+        <span class="account-brand__name" lang="en">TSAM AI</span>
+      </div>
+
+      <section class="home-welcome" aria-labelledby="home-title">
+        <p class="home-welcome__label">ようこそ</p>
+        <h1 class="home-welcome__name" id="home-title">
+          <span id="home-user-name"></span>さん
+        </h1>
+        <p class="home-welcome__meta" id="home-session-meta"></p>
+      </section>
+
+      <nav aria-labelledby="home-menu-title">
+        <h2 class="account-visually-hidden" id="home-menu-title">メニュー</h2>
+
+        <!--
+          未実装の項目は <a> にせず <p aria-disabled="true"> で置く。
+          リンク切れを作らず、キーボードでも「押せてしまう」を防ぐ。
+          実装時に <a href="..."> へ差し替える。
+        -->
+        <div class="home-menu">
+          <a class="home-menu__item" href="../account/">
+            <span class="home-menu__title">アカウント設定</span>
+            <span class="home-menu__note">二段階認証・パスワード・メール確認。</span>
+          </a>
+
+          <!-- TODO: Phase 6 でプロフィール画面を実装したらリンクへ差し替える -->
+          <p class="home-menu__item" aria-disabled="true">
+            <span class="home-menu__title">プロフィール</span>
+            <span class="home-menu__note">準備中です。</span>
+          </p>
+
+          <!-- TODO: 後のPhaseでGoogle Drive連携を実装したらリンクへ差し替える -->
+          <p class="home-menu__item" aria-disabled="true">
+            <span class="home-menu__title">Google連携</span>
+            <span class="home-menu__note">準備中です。</span>
+          </p>
+
+          <!-- TODO: Phase 5 でAI設定画面を実装したらリンクへ差し替える -->
+          <p class="home-menu__item" aria-disabled="true">
+            <span class="home-menu__title">AI設定</span>
+            <span class="home-menu__note">準備中です。</span>
+          </p>
+
+          <a class="home-menu__item" href="../favorites.html">
+            <span class="home-menu__title">お気に入り</span>
+            <span class="home-menu__note">よく使うアプリを並べ替えます。</span>
+          </a>
+
+          <a class="home-menu__item" href="../index.html">
+            <span class="home-menu__title">アプリ一覧</span>
+            <span class="home-menu__note">公開中のアプリを開きます。</span>
+          </a>
+        </div>
+      </nav>
+
+      <p class="account-message" id="home-message" tabindex="-1" hidden></p>
+
+      <div class="home-actions">
+        <button class="account-button account-button--ghost" id="home-logout" type="button">ログアウト</button>
+      </div>
+    </div>
+  </main>
+
+  <noscript>
+    <p class="account-message" style="margin:32px 16px">
+      JavaScriptが無効なため、この画面は利用できません。ブラウザの設定でJavaScriptを有効にしてください。
+    </p>
+  </noscript>
+
+  <footer class="account-footer">
+    <p><a href="../../index.html">TSアセットマネジメント合同会社</a></p>
+    <p><small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small></p>
+  </footer>
+
+  <script type="module" src="home.js"></script>
+</body>
+</html>

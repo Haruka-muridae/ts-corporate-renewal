@@ -1,0 +1,604 @@
+/*
+ * ログイン画面（apps/login/）と個人ホーム（apps/home/）の共通スタイル。
+ * ../css/style.css を読み込んだうえで追加する差分のみを定義する。
+ * 既存クラスは上書きせず、この2画面固有のクラスだけを追加する。
+ *
+ * 320px から積み上げるモバイルファースト。
+ * 375 / 768 / 1024 / 1440px で横スクロールが出ないことを前提に組む。
+ */
+
+/*
+ * hidden属性の保証。
+ * このファイル内には display を持つクラスがあり、作者スタイルは
+ * UAの [hidden]{display:none} より優先されるため hidden が効かなくなる。
+ * apps/style.css と同じ方針で、hidden を最優先で効かせる。
+ */
+[hidden] {
+  display: none !important;
+}
+
+/*
+ * 見た目には出さず、支援技術へは伝える。
+ * apps/style.css の .apps-visually-hidden と同じ目的だが、
+ * この2画面は apps/style.css を読み込まないため独自に持つ。
+ */
+.account-visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+}
+
+/* ---------- 画面全体 ---------- */
+
+.account-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--color-off-white);
+}
+
+.account-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  padding: 32px 16px 40px;
+}
+
+.account-shell {
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+}
+
+/* 個人ホームは項目が多いため、少し広くとる。 */
+.account-shell--wide {
+  max-width: 640px;
+}
+
+/* ---------- ブランド ---------- */
+
+.account-brand {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.account-brand__link {
+  display: inline-block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.account-brand__name {
+  color: var(--c-main);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+}
+
+.account-brand__owner {
+  margin-top: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/* ---------- カード ---------- */
+
+.account-card {
+  padding: 24px 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.account-card__title {
+  margin-bottom: 4px;
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+.account-card__lead {
+  margin-bottom: 20px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+/* ---------- 注意書き ---------- */
+
+/*
+ * 仮ログインであることの明示。
+ * 色だけに頼らず、見出し語（「確認用」）でも意味が伝わるようにする。
+ */
+.account-notice {
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--color-off-white);
+  color: var(--c-text);
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
+
+.account-notice__label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--color-gold-text);
+  font-weight: 700;
+}
+
+/* ---------- フォーム ---------- */
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field__label {
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.field__input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg);
+  /* 16px 未満だと iOS Safari が入力時に自動ズームする。 */
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.field__input:focus-visible {
+  outline: 2px solid var(--color-navy-light);
+  outline-offset: 1px;
+}
+
+.field__input[aria-invalid="true"] {
+  border-color: var(--color-gold-dark);
+}
+
+.field__hint {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+/* パスワード欄と表示切替ボタンを横に並べる。 */
+.field__control {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.field__control .field__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field__toggle {
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg-sub);
+  color: var(--c-main);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* ---------- メッセージ ---------- */
+
+.account-message {
+  padding: 12px 14px;
+  border: 1px solid var(--color-gold-dark);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.account-message:focus-visible {
+  outline: 2px solid var(--color-navy-light);
+  outline-offset: 2px;
+}
+
+/* ---------- ボタン ---------- */
+
+.account-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 20px;
+  border: 1px solid var(--c-main);
+  border-radius: var(--radius-button);
+  background-color: var(--c-main);
+  color: var(--color-white);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.account-button[disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.account-button--ghost {
+  border-color: var(--color-border-strong);
+  background-color: var(--c-bg);
+  color: var(--c-main);
+}
+
+@media (hover: hover) {
+  .account-button:not([disabled]):hover {
+    border-color: var(--color-navy-dark);
+    background-color: var(--color-navy-dark);
+  }
+
+  .account-button--ghost:not([disabled]):hover {
+    border-color: var(--color-gold);
+    background-color: var(--c-bg-sub);
+    color: var(--color-gold-text);
+  }
+
+  .field__toggle:hover {
+    border-color: var(--color-navy-light);
+  }
+}
+
+/* ---------- 補助リンク ---------- */
+
+.account-links {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--c-border);
+}
+
+.account-links__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.8125rem;
+}
+
+.account-links__list a {
+  color: var(--c-main);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/*
+ * 未提供の導線。
+ * リンクにするとリンク切れになるため、テキストとして示す。
+ */
+.account-links__pending {
+  color: var(--c-text-muted);
+}
+
+.account-links__pending::after {
+  margin-left: 6px;
+  content: "（準備中）";
+  font-size: 0.6875rem;
+}
+
+/* 確認コードは桁を数えやすいよう等幅・字間広めにする。 */
+.field__input--code {
+  font-family: var(--font-num);
+  font-size: 1.25rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+}
+
+/* ---------- アカウント設定 ---------- */
+
+.breadcrumb-simple {
+  margin-bottom: 12px;
+  font-size: 0.8125rem;
+}
+
+.breadcrumb-simple a {
+  color: var(--c-main);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.account-page-title {
+  margin-bottom: 20px;
+  font-size: 1.375rem;
+  line-height: 1.4;
+}
+
+.account-section {
+  margin-bottom: 20px;
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.account-section__title {
+  margin-bottom: 8px;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+
+.account-section__lead {
+  margin-bottom: 16px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.account-detail {
+  margin-bottom: 16px;
+  font-size: 0.875rem;
+}
+
+.account-detail__row {
+  display: flex;
+  gap: 4px;
+  flex-direction: column;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.account-detail__row:last-child {
+  border-bottom: 0;
+}
+
+.account-detail dt {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+}
+
+.account-detail dd {
+  margin: 0;
+  color: var(--c-text);
+  /* 長いメールアドレスでも横スクロールを起こさない。 */
+  overflow-wrap: anywhere;
+}
+
+.account-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.account-actions .account-button {
+  width: auto;
+  min-width: 180px;
+}
+
+.account-note {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+/* 登録手順。番号を出すため list-style を戻す（css/style.css で消えている）。 */
+.account-steps {
+  margin: 0 0 8px;
+  padding-left: 1.4em;
+  font-size: 0.875rem;
+  line-height: 1.9;
+  list-style: decimal;
+}
+
+.account-steps > li {
+  margin-bottom: 16px;
+}
+
+.account-qr {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-white);
+  /* QRは白背景・正方形を保つ。狭い画面でもはみ出さない。 */
+  width: fit-content;
+  max-width: 100%;
+}
+
+.account-qr img {
+  width: 200px;
+  height: 200px;
+  max-width: 100%;
+}
+
+.account-secret {
+  margin: 8px 0;
+}
+
+.account-secret code {
+  display: inline-block;
+  padding: 8px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg-sub);
+  font-family: var(--font-num);
+  font-size: 0.875rem;
+  letter-spacing: 0.08em;
+  /* 長い秘密鍵を折り返す。横スクロールを作らない。 */
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.account-form--inline {
+  margin-top: 12px;
+}
+
+.account-form--inline .account-button {
+  width: auto;
+  min-width: 180px;
+}
+
+/* ---------- 個人ホーム ---------- */
+
+.home-welcome {
+  margin-bottom: 20px;
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.home-welcome__label {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.home-welcome__name {
+  margin-top: 2px;
+  color: var(--c-main);
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.4;
+  /* 長い表示名でも横スクロールを起こさない。 */
+  overflow-wrap: anywhere;
+}
+
+.home-welcome__meta {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
+
+.home-menu {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+.home-menu__item {
+  display: flex;
+  gap: 4px;
+  flex-direction: column;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+  color: var(--c-main);
+  text-align: left;
+  text-decoration: none;
+}
+
+.home-menu__item[aria-disabled="true"] {
+  background-color: var(--c-bg-sub);
+  color: var(--c-text-muted);
+  cursor: not-allowed;
+}
+
+.home-menu__title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.home-menu__note {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+@media (hover: hover) {
+  .home-menu__item:not([aria-disabled="true"]):hover {
+    border-color: var(--color-gold);
+  }
+
+  .home-menu__item:not([aria-disabled="true"]):hover .home-menu__title {
+    color: var(--color-gold-text);
+  }
+}
+
+.home-actions {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--c-border);
+}
+
+/* ---------- フッター ---------- */
+
+.account-footer {
+  padding: 20px 16px 28px;
+  color: var(--c-text-muted);
+  font-size: 0.6875rem;
+  line-height: 1.8;
+  text-align: center;
+}
+
+/* ---------- 375px 以上 ---------- */
+
+@media (min-width: 375px) {
+  .account-main {
+    padding-inline: 20px;
+  }
+
+  .account-card {
+    padding: 28px 24px;
+  }
+}
+
+/* ---------- 768px 以上 ---------- */
+
+@media (min-width: 768px) {
+  .account-main {
+    padding: 56px 24px;
+  }
+
+  .account-card {
+    padding: 32px;
+  }
+
+  .account-brand__name {
+    font-size: 1.75rem;
+  }
+
+  .home-menu {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* ログアウトは全幅にせず、内容幅にとどめる。 */
+  .home-actions .account-button {
+    width: auto;
+    min-width: 200px;
+  }
+}
+
+/* ---------- 動きの軽減 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .account-button,
+  .home-menu__item {
+    transition: none;
+  }
+}

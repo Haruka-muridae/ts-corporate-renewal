@@ -16,7 +16,13 @@
     "build": "next build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node apps/tests/run.mjs",
+    "test:unit": "node apps/tests/run.mjs unit",
+    "test:browser": "node apps/tests/run.mjs browser",
+    "test:auth": "node apps/tests/run.mjs auth",
+    "test:audit": "node apps/tests/run.mjs audit",
+    "check:vendor": "node apps/vendor/check-updates.mjs"
   },
   "dependencies": {
     "next": "16.2.11",
