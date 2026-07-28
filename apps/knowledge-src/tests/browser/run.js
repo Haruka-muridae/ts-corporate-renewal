@@ -268,7 +268,11 @@ async function main() {
     const sync1 = await runSync({ folder: FOLDER });
     check('新規件数', sync1.added === 6, sync1);
     check('対象外は skipped', sync1.skipped === 1);
-    check('失敗ゼロ', sync1.failed === 0, sync1);
+    /* 失敗したときに原因が分かるよう、ファイルごとのエラーコードを添える。 */
+    const sync1Errors = (await listFiles())
+      .filter((f) => f.errorCode)
+      .map((f) => ({ id: f.fileId, code: f.errorCode, message: String(f.errorMessage ?? '').slice(0, 60) }));
+    check('失敗ゼロ', sync1.failed === 0, { summary: sync1, errors: sync1Errors });
     check('Googleドキュメントを export', net.countExport() === 1);
     check('本体取得は5件', net.countMedia() === 5);
 

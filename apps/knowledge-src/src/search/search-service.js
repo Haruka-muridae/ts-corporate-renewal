@@ -178,7 +178,17 @@ export async function persistIndex() {
   }
 }
 
-export async function search(query, { limit = 30 } = {}) {
+/*
+ * 検索する。
+ *
+ * searchOptions を渡すと MiniSearch の既定（AND 結合）を上書きできる。
+ * 省略時の挙動は変えていない（検索画面はこれまでどおり AND）。
+ *
+ * AIチャットのRAGは自然文の質問を投げるため、
+ * すべての語を含む文書だけに絞ると 0 件になりやすい。
+ * そちらからは combineWith: 'OR' を渡して、関連度順に拾う。
+ */
+export async function search(query, { limit = 30, searchOptions } = {}) {
   const trimmed = String(query ?? '').trim();
 
   if (trimmed === '') {
@@ -187,7 +197,7 @@ export async function search(query, { limit = 30 } = {}) {
 
   await ensureReady();
 
-  const result = await client.call('search', { query: trimmed, limit });
+  const result = await client.call('search', { query: trimmed, limit, searchOptions });
 
   return {
     total: result.total,

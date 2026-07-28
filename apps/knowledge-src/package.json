@@ -25,6 +25,7 @@
     "test:ui": "node tests/fixtures/generate.mjs && node tests/tools/run-browser.mjs ui"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.84",
     "dexie": "^4.2.0",
     "mammoth": "^1.11.0",
     "minisearch": "^7.2.0",

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!--
+    Content-Security-Policy（このページ専用）
+
+    ------------------------------------------------------------------
+    ナレッジ管理画面（../index.html）のCSPは一切変更していない。
+    ここで緩めているのは、ブラウザ内LLMを動かすために必要な最小限だけ。
+    ------------------------------------------------------------------
+
+    script-src に 'wasm-unsafe-eval' を追加している。
+      これは 'unsafe-eval' とは別物で、**WebAssembly のコンパイルだけ**を許可する。
+      JavaScript の eval() / new Function() は許可されないままである。
+      推論エンジン（MLC/TVM）は WebAssembly で動くため、これが無いと起動しない。
+
+    connect-src に追加した3つは **モデルファイルの取得だけ** に使う。
+      huggingface.co        … モデル定義と重みの入口
+      *.hf.co               … 重みの実配信CDN（huggingface.co からのリダイレクト先）
+      raw.githubusercontent.com … 推論ライブラリ（.wasm）
+    いずれも GET のみ。質問文・資料本文・回答を送信することはない。
+    Google Drive API（www.googleapis.com）はこのページからは呼ばない。
+
+    'unsafe-inline' / 'unsafe-eval' は入れない。
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src 'self' 'wasm-unsafe-eval';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: blob:;
+    font-src 'self' data:;
+    connect-src 'self' blob: data: https://huggingface.co https://*.hf.co https://raw.githubusercontent.com;
+    worker-src 'self' blob:;
+    child-src 'self' blob:;
+    form-action 'none';
+    base-uri 'self';
+    object-src 'none';
+  ">
+
+  <!-- モデル配信元へ参照元情報を送らない。 -->
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="同期済みのナレッジを、ブラウザ内で動作するローカルLLMが参照して回答します。質問と資料は外部の生成AIサービスへ送信しません。">
+
+  <link rel="icon" href="../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+
+  <title>AIナレッジチャット | TSAM AI</title>
+  <script type="module" crossorigin src="../assets/chat-BoU9oFSP.js"></script>
+  <link rel="modulepreload" crossorigin href="../assets/dexie-CVCRFKW4.js">
+  <link rel="modulepreload" crossorigin href="../assets/search-service-CSqgmXsF.js">
+  <link rel="stylesheet" crossorigin href="../assets/search-service-HqgodSb7.css">
+  <link rel="stylesheet" crossorigin href="../assets/chat-0De-mQn_.css">
+</head>
+<body class="chat-body">
+  <a class="skip-link" href="#main">本文へスキップ</a>
+
+  <header class="app-header">
+    <div class="app-header__inner">
+      <div class="app-header__title">
+        <h1>AIナレッジチャット</h1>
+        <p class="app-header__lead">
+          同期済みの資料を検索し、<strong>このブラウザの中で動くAI</strong>が根拠付きで答えます。
+        </p>
+      </div>
+
+      <div class="app-header__links">
+        <span class="badge badge--local">ブラウザ内で処理</span>
+        <span class="badge badge--local">外部AI API不使用</span>
+        <a class="header-link" href="../">ナレッジ管理へ戻る</a>
+        <a class="header-link" href="../../">アプリ一覧へ戻る</a>
+      </div>
+    </div>
+
+    <div class="app-status" id="status-bar" role="status" aria-live="polite"></div>
+  </header>
+
+  <main id="main" class="chat-main" tabindex="-1"></main>
+
+  <footer class="app-footer">
+    <p>
+      質問・資料本文・回答は外部の生成AIサービスへ送信しません。
+      通信が発生するのは、初回のモデルファイル取得（GETのみ）だけです。
+      Google Driveへの書き込みは行いません。
+    </p>
+  </footer>
+
+  <noscript>
+    <p class="noscript">このツールを利用するにはJavaScriptを有効にしてください。</p>
+  </noscript>
+
+</body>
+</html>

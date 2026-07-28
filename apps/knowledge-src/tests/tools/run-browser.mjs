@@ -15,8 +15,9 @@
  *   node tests/tools/run-browser.mjs dist
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
+import { createServer as createSocketServer } from 'node:net';
 import { readFile, stat, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, resolve, extname, normalize } from 'node:path';
@@ -27,9 +28,39 @@ const root = resolve(here, '../..');
 const repoApps = resolve(root, '..');
 
 const mode = process.argv[2] ?? 'dev';
-const DEV_PORT = 5233;
-const DIST_PORT = 5234;
-const CDP_PORT = 9333;
+/*
+ * 配信ポートも固定しない。
+ *
+ * 固定にすると、同じ端末の別の作業ディレクトリで動いている
+ * 「このプロジェクトの別コピー」の dev サーバーが同じポートを掴んでいるとき、
+ * --strictPort で自分の Vite が起動できないまま、
+ * 相手のサーバーへ接続してテストが進んでしまう。
+ * 実際にそれで、存在しないはずのテストページが
+ * SPA フォールバックでアプリ本体に化けていた。
+ */
+let DEV_PORT = 0;
+let DIST_PORT = 0;
+/*
+ * CDP のポートは固定しない。
+ *
+ * 固定にすると、同じ端末の別の作業ディレクトリで動いている Chrome が
+ * 同じポートを掴んでいるだけでテストが起動できなくなる。
+ * 実際にそれで落ちた（別リポジトリの headless Chrome が 9333 を保持）。
+ * 他人のプロセスを落とさずに済むよう、毎回空きポートを取る。
+ */
+async function findFreePort() {
+  return new Promise((resolvePort, rejectPort) => {
+    const probe = createSocketServer();
+
+    probe.on('error', rejectPort);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolvePort(port));
+    });
+  });
+}
+
+let CDP_PORT = await findFreePort();
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
@@ -111,7 +142,13 @@ function startStaticServer(port, baseDir, prefix, notFound = []) {
   return new Promise((done) => server.listen(port, '127.0.0.1', () => done(server)));
 }
 
-function waitFor(url, timeoutMs = 60000) {
+/*
+ * expectSubstring を渡すと、200 が返るだけでなく
+ * 「中身が期待したページか」まで確かめる。
+ * Vite は解決できないパスに index.html を返すため、
+ * 200 だけでは別のページを掴んでいても気づけない。
+ */
+function waitFor(url, timeoutMs = 60000, expectSubstring = '') {
   const deadline = Date.now() + timeoutMs;
 
   return new Promise((done, fail) => {
@@ -119,7 +156,12 @@ function waitFor(url, timeoutMs = 60000) {
       try {
         const response = await fetch(url);
         if (response.ok) {
-          done();
+          if (expectSubstring === '' || (await response.text()).includes(expectSubstring)) {
+            done();
+            return;
+          }
+
+          fail(new Error(`${url} が期待したページではありません（${expectSubstring} が含まれていません）`));
           return;
         }
       } catch {
@@ -162,7 +204,44 @@ async function connect(urlFilter, timeoutMs = 30000) {
   }
 }
 
-async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {}) {
+/*
+ * Chrome をプロセスツリーごと終了する。
+ *
+ * Windows では child.kill() が起動した1プロセスしか落とさず、
+ * renderer / gpu-process / crashpad-handler が生き残る。
+ * 生き残りが CDP ポートとプロファイルのロックを掴んだままになり、
+ * 次のページで「CDP へ接続できません」になる。
+ */
+function killTree(child) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+
+  if (process.platform === 'win32') {
+    try {
+      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      return;
+    } catch {
+      /* taskkill が無い環境では通常の kill にする。 */
+    }
+  }
+
+  child.kill();
+}
+
+/*
+ * profile を分けられるようにしてある。
+ *
+ * 同じ user-data-dir で Chrome を連続して起動し直すと、
+ * 直前のプロセスがプロファイルのロックを解放しきる前に次が起動し、
+ * 起動そのものに失敗することがある（3ページ目で落ちていた）。
+ * dev モードはページごとに別プロファイルを使う。
+ * dist モードは前の読み込みの IndexedDB を引き継ぐ必要があるため既定のまま。
+ */
+async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression, profile = 'chrome-test-profile' } = {}) {
+  /* ページごとに空きポートを取り直す（前ページの後始末に依存しない）。 */
+  CDP_PORT = await findFreePort();
+
   const chrome = spawn(chromePath, [
     '--headless=new',
     '--disable-gpu',
@@ -170,7 +249,7 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {})
     '--no-first-run',
     '--disable-extensions',
     `--remote-debugging-port=${CDP_PORT}`,
-    `--user-data-dir=${resolve(root, 'node_modules/.cache/chrome-test-profile')}`,
+    `--user-data-dir=${resolve(root, `node_modules/.cache/${profile}`)}`,
     pageUrl,
   ], { stdio: 'ignore' });
 
@@ -214,12 +293,41 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {})
       ws.addEventListener('error', fail);
     });
 
+    /*
+     * 接続が切れたときに、待っている送信を全部落とす。
+     * これをしないと Promise が永久に解決されず、
+     * Node が「unsettled top-level await」で黙って終了してしまい、
+     * どのページで何が起きたのか分からなくなる。
+     */
+    let socketDown = null;
+
+    const dropPending = (reason) => {
+      socketDown = socketDown ?? reason;
+
+      pending.forEach((done) => done({ error: { message: reason } }));
+      pending.clear();
+    };
+
+    ws.addEventListener('close', () => dropPending('CDP 接続が切断されました（Chrome が終了した可能性）'));
+    ws.addEventListener('error', () => dropPending('CDP 接続でエラーが発生しました'));
+
     const send = (method, params = {}) => {
       nextId += 1;
       const id = nextId;
+
+      if (socketDown) {
+        return Promise.resolve({ error: { message: socketDown } });
+      }
+
       return new Promise((done) => {
         pending.set(id, done);
-        ws.send(JSON.stringify({ id, method, params }));
+
+        try {
+          ws.send(JSON.stringify({ id, method, params }));
+        } catch (error) {
+          pending.delete(id);
+          done({ error: { message: `送信できません: ${error.message}` } });
+        }
       });
     };
 
@@ -261,6 +369,31 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {})
       return false;
     };
 
+    /*
+     * 期待したテストページが読み込まれたことを確かめ、違えば開き直す。
+     *
+     * Vite の dev サーバーは、パスを解決できないとき index.html を返す
+     * （SPA フォールバック）。依存の再最適化などでファイルを返せない一瞬に
+     * 当たると、テストページのつもりでアプリ本体が読み込まれ、
+     * 「1件も結果が出ないまま終わる」という分かりにくい失敗になる。
+     */
+    const ensureTestPage = async (attempts = 3) => {
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        await waitUntilLoaded();
+
+        const found = await evaluate("!!document.getElementById('out')");
+
+        if (found.value === true) {
+          return true;
+        }
+
+        await send('Page.navigate', { url: pageUrl });
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+
+      return false;
+    };
+
     if (expression) {
       await waitUntilLoaded();
 
@@ -285,7 +418,9 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {})
       return { custom, consoleLogs };
     }
 
-    await waitUntilLoaded();
+    if (!await ensureTestPage()) {
+      throw new Error(`${pageUrl}: テストページを読み込めませんでした（アプリ本体が返っている可能性）`);
+    }
 
     const deadline = Date.now() + waitMs;
     let title = '';
@@ -295,6 +430,11 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {})
       if (title === 'PASS' || title === 'FAIL') {
         break;
       }
+
+      if (socketDown) {
+        throw new Error(`${pageUrl}: ${socketDown}`);
+      }
+
       await new Promise((r) => setTimeout(r, 1000));
     }
 
@@ -303,7 +443,7 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {})
 
     return { title, output, consoleLogs };
   } finally {
-    chrome.kill();
+    killTree(chrome);
   }
 }
 
@@ -312,8 +452,14 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression } = {})
 if (mode === 'dev' || mode === 'ui') {
   /* dev は統合テストとUIテストの両方、ui はUIテストだけを流す。 */
   const pages = mode === 'ui'
-    ? [{ file: 'ui.html', label: 'UI' }]
-    : [{ file: 'index.html', label: '統合' }, { file: 'ui.html', label: 'UI' }];
+    ? [{ file: 'ui.html', label: 'UI' }, { file: 'chat.html', label: 'チャットUI' }]
+    : [
+      { file: 'index.html', label: '統合' },
+      { file: 'ui.html', label: 'UI' },
+      { file: 'chat.html', label: 'チャットUI' },
+    ];
+
+  DEV_PORT = await findFreePort();
 
   const vite = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['vite', '--port', String(DEV_PORT), '--strictPort'], {
     cwd: root,
@@ -326,13 +472,19 @@ if (mode === 'dev' || mode === 'ui') {
   try {
     for (const page of pages) {
       const url = `http://localhost:${DEV_PORT}/tests/browser/${page.file}`;
-      await waitFor(url);
-      const { title, output, consoleLogs } = await runPage(url, `tests/browser/${page.file}`);
+      /*
+       * 自分が起動した dev サーバーの、期待したテストページであることを確かめる。
+       * id="out" はテスト用ページだけが持つ（アプリ本体には無い）。
+       */
+      await waitFor(url, 60000, 'id="out"');
+      const { title, output, consoleLogs } = await runPage(url, `tests/browser/${page.file}`, {
+        profile: `chrome-test-${page.file.replace(/\W+/g, '-')}`,
+      });
 
       console.log(`\n########## ${page.label}テスト (${page.file}) ##########`);
       console.log(output);
 
-      const unexpected = consoleLogs.filter((l) => (l.level === 'error' || l.level === 'exception')
+    const unexpected = consoleLogs.filter((l) => (l.level === 'error' || l.level === 'exception')
         && !l.text.startsWith('[knowledge]'));
 
       if (unexpected.length > 0) {
@@ -347,7 +499,8 @@ if (mode === 'dev' || mode === 'ui') {
       }
     }
   } finally {
-    vite.kill();
+    /* npx 経由なので、木ごと落とさないと dev サーバーが残る。 */
+    killTree(vite);
   }
 
   process.exit(bad === 0 ? 0 : 1);
@@ -360,6 +513,8 @@ if (mode === 'dist') {
    */
   await rm(resolve(root, 'node_modules/.cache/chrome-test-profile'), { recursive: true, force: true })
     .catch(() => { /* 初回は存在しない。 */ });
+
+  DIST_PORT = await findFreePort();
 
   const distDir = resolve(repoApps, 'knowledge');
   /* GitHub Pages のプロジェクトページを想定した深いサブパス。 */
@@ -429,7 +584,12 @@ if (mode === 'dist') {
         // 本番CSP下で解析Workerを起動し、日本語PDFを抽出できるか
         out.workerProbe = await (async () => {
           const html = await (await originalFetch('./index.html')).text();
-          const chunk = /assets\\/(index-[A-Za-z0-9_-]+\\.js)/.exec(html);
+          /*
+           * エントリのチャンク名はビルド構成で変わる
+           * （マルチページ化で index-*.js → main-*.js になった）。
+           * HTML の module スクリプトから実際の名前を読む。
+           */
+          const chunk = /<script[^>]+type="module"[^>]+src="\\.\\/assets\\/([^"]+\\.js)"/.exec(html);
           if (!chunk) return 'chunk-not-found';
           const src = await (await originalFetch('./assets/' + chunk[1])).text();
           const parse = /(parse\\.worker-[A-Za-z0-9_-]+\\.js)/.exec(src);
@@ -509,6 +669,77 @@ if (mode === 'dist') {
       })()
     `;
 
+    /* チャットページ（/chat/）の検査。モデルは取得しない。 */
+    const chatExpression = `
+      (async () => {
+        const out = { errors: [], rejections: [], requests: [] };
+        window.addEventListener('unhandledrejection', (e) => out.rejections.push(String(e.reason)));
+
+        const originalError = console.error;
+        console.error = (...a) => { out.errors.push(a.map(String).join(' ')); originalError(...a); };
+
+        const originalFetch = window.fetch;
+        window.fetch = (input, init) => {
+          const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url);
+          out.requests.push({ url: String(url).slice(0, 160), method: (init && init.method) || 'GET' });
+          return originalFetch(input, init);
+        };
+
+        const deadline = Date.now() + 30000;
+        while (!document.querySelector('[data-role="prepare-model"]') && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
+
+        out.title = document.title;
+        out.hasPrepareButton = Boolean(document.querySelector('[data-role="prepare-model"]'));
+        out.hasInput = Boolean(document.getElementById('chat-input'));
+        out.inputDisabled = document.getElementById('chat-input')?.disabled === true;
+        out.text = (document.getElementById('main')?.textContent ?? '').slice(0, 6000);
+        out.headerText = (document.querySelector('.app-header')?.textContent ?? '').slice(0, 1000);
+        out.absoluteRefs = Array.from(document.querySelectorAll('[src],[href]'))
+          .map((e) => e.getAttribute('src') || e.getAttribute('href'))
+          .filter((v) => v && v.startsWith('/'));
+        out.links = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href'));
+        out.csp = document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content') ?? '';
+
+        /* 読み上げ・キーボード操作まわりが配信物にも残っているか。 */
+        out.logAriaLive = document.getElementById('chat-log')?.getAttribute('aria-live') ?? '';
+        out.logAriaBusy = document.getElementById('chat-log')?.hasAttribute('aria-busy') === true;
+        out.inputDescribedBy = document.getElementById('chat-input')?.getAttribute('aria-describedby') ?? '';
+        out.hasSkipLink = Boolean(document.querySelector('.skip-link'));
+        out.hasAnnouncer = Boolean(document.querySelector('.visually-hidden[role="status"]'));
+        out.hasDiagnosticsButton = Boolean(document.querySelector('[data-role="run-diagnostics"]'));
+        out.hasMinGrounding = Boolean(document.querySelector('[data-role="min-grounding"]'));
+        out.viewport = document.querySelector('meta[name="viewport"]')?.getAttribute('content') ?? '';
+
+        /* 横スクロールが出ていないか（狭い画面での確認）。 */
+        out.docWidth = document.documentElement.scrollWidth;
+        out.viewWidth = document.documentElement.clientWidth;
+
+        /* 読み込んだスクリプトに sourceMappingURL が残っていないか。 */
+        out.scripts = Array.from(document.querySelectorAll('script[src]')).map((s) => s.getAttribute('src'));
+
+        const bodies = await Promise.all(out.scripts.map((src) =>
+          originalFetch(src).then((r) => r.text()).catch(() => '')));
+
+        out.hasSourceMap = bodies.some((b) => b.includes('sourceMappingURL'));
+        out.hasLocalPath = bodies.some((b) => /[A-Za-z]:\\\\Users|\\/home\\/[a-z]+\\/|Desktop\\\\/.test(b));
+        out.hasSecretLike = bodies.some((b) => /AIza[0-9A-Za-z_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ya29\\./.test(b));
+        out.mentionsExternalLlm = bodies.some((b) => /api\\.openai\\.com|api\\.anthropic\\.com|generativelanguage\\.googleapis\\.com/i.test(b));
+
+        /* 起動時点で外部（モデル配信元）へ出ていないこと。 */
+        out.externalRequests = out.requests.filter((r) =>
+          /huggingface|hf\.co|raw\.githubusercontent|openai|anthropic|generativelanguage/i.test(r.url));
+
+        return JSON.stringify(out);
+      })()
+    `;
+
+    const chatPage = await runPage(`http://127.0.0.1:${DIST_PORT}${prefix}/chat/index.html`, 'chat/index.html', { expression: chatExpression });
+    const chatResult = chatPage.custom.error || typeof chatPage.custom.value !== 'string'
+      ? null
+      : JSON.parse(chatPage.custom.value);
+
     const first = await runPage(pageUrl, 'myrepo/apps/knowledge', { expression: wizardExpression });
     const wizardResult = first.custom.error || typeof first.custom.value !== 'string'
       ? null
@@ -562,6 +793,45 @@ if (mode === 'dist') {
     check('起動時に外部通信をしない', result.requests.every((r) => !/googleapis|accounts\.google|apis\.google/.test(r.url)), result.requests);
     check('unhandled rejection 0件', result.rejections.length === 0, result.rejections);
     check('console.error 0件', result.errors.length === 0, result.errors);
+
+    /* チャットページ（/chat/） */
+    check('/chat/ が表示できる', chatResult?.hasPrepareButton === true, chatPage.custom.error ?? chatResult);
+    check('/chat/ のタイトル', chatResult?.title?.includes('AIナレッジチャット') === true, chatResult?.title);
+    check('/chat/ は起動時にモデルを取得しない', chatResult?.externalRequests?.length === 0, chatResult?.externalRequests);
+    check('/chat/ の入力はモデル未読込で無効', chatResult?.inputDisabled === true);
+    check('/chat/ に初回説明がある', chatResult?.text?.includes('あなたのブラウザ内で動作します') === true);
+    check('/chat/ に外部AI不使用の明示がある', chatResult?.headerText?.includes('外部AI API不使用') === true);
+    check('/chat/ にナレッジ管理への導線がある', chatResult?.links?.includes('../') === true, chatResult?.links);
+    check('/chat/ にアプリ一覧への導線がある', chatResult?.links?.includes('../../') === true);
+    check('/chat/ に絶対パス参照が無い', chatResult?.absoluteRefs?.length === 0, chatResult?.absoluteRefs);
+    check('/chat/ のCSPに unsafe-inline が無い', !/script-src[^;]*unsafe-inline/.test(chatResult?.csp ?? 'x'));
+    check("/chat/ のCSPに unsafe-eval が無い", !/script-src[^;]*'unsafe-eval'/.test(chatResult?.csp ?? 'x'));
+    check("/chat/ のCSPは wasm-unsafe-eval のみ許可", /script-src[^;]*'wasm-unsafe-eval'/.test(chatResult?.csp ?? ''));
+    check('/chat/ のCSPにモデル配信元がある',
+      /connect-src[^;]*huggingface\.co/.test(chatResult?.csp ?? '')
+      && /connect-src[^;]*raw\.githubusercontent\.com/.test(chatResult?.csp ?? ''));
+    check('/chat/ のCSPにDrive APIは不要', !/connect-src[^;]*www\.googleapis\.com/.test(chatResult?.csp ?? ''));
+    check('/chat/ console.error 0件', chatResult?.errors?.length === 0, chatResult?.errors);
+    check('/chat/ unhandled rejection 0件', chatResult?.rejections?.length === 0, chatResult?.rejections);
+
+    /* アクセシビリティと操作性が配信物にも残っていること。 */
+    check('/chat/ 会話ログが読み上げ対象', chatResult?.logAriaLive === 'polite');
+    check('/chat/ 会話ログに aria-busy がある', chatResult?.logAriaBusy === true);
+    check('/chat/ 入力欄に説明が結び付く', chatResult?.inputDescribedBy === 'chat-input-help');
+    check('/chat/ 本文へスキップできる', chatResult?.hasSkipLink === true);
+    check('/chat/ 読み上げ用の通知がある', chatResult?.hasAnnouncer === true);
+    check('/chat/ 診断を実行できる', chatResult?.hasDiagnosticsButton === true);
+    check('/chat/ 根拠レベルを選べる', chatResult?.hasMinGrounding === true);
+    check('/chat/ 端末幅に追従する', (chatResult?.viewport ?? '').includes('width=device-width'));
+    check('/chat/ 横スクロールが出ない',
+      Number(chatResult?.docWidth ?? 0) <= Number(chatResult?.viewWidth ?? 0) + 1,
+      { doc: chatResult?.docWidth, view: chatResult?.viewWidth });
+
+    /* 配信物そのものの監査。 */
+    check('/chat/ ソースマップを配らない', chatResult?.hasSourceMap === false);
+    check('/chat/ ローカルパスが混ざらない', chatResult?.hasLocalPath === false);
+    check('/chat/ 秘密情報らしき文字列が無い', chatResult?.hasSecretLike === false);
+    check('/chat/ 外部LLM APIの宛先を含まない', chatResult?.mentionsExternalLlm === false);
 
     /* 意図的に叩いた存在しないパス以外で 404 が出ていないこと。 */
     const unexpected404 = notFound.filter((p) => !p.includes('__does_not_exist__'));

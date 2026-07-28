@@ -274,6 +274,34 @@ const MESSAGES = Object.freeze({
   },
 });
 
+/*
+ * 追加のエラーコードとメッセージ。
+ *
+ * 機能ごとにコードを増やせるようにするための受け口。
+ * 既存の ErrorCode / MESSAGES は書き換えず、ここへ足すだけにする
+ * （上の一覧を編集すると、既存機能のテストと突き合わせが崩れるため）。
+ *
+ * 例: src/chat/engine/errors.js がチャット用のコードを登録する。
+ */
+const extraMessages = new Map();
+
+export function registerMessages(map) {
+  Object.entries(map ?? {}).forEach(([code, entry]) => {
+    if (typeof code !== 'string' || code === '') {
+      return;
+    }
+    extraMessages.set(code, {
+      title: String(entry?.title ?? ''),
+      hint: String(entry?.hint ?? ''),
+    });
+  });
+}
+
+/* 既知のコードかどうか（登録済みの追加コードも含む）。 */
+export function isKnownCode(code) {
+  return Boolean(ErrorCode[code]) || extraMessages.has(code);
+}
+
 export class AppError extends Error {
   /*
    * detail には利用者へ出さない補助情報だけを入れる。
@@ -282,7 +310,7 @@ export class AppError extends Error {
   constructor(code, detail = null, cause = undefined) {
     super(code);
     this.name = 'AppError';
-    this.code = ErrorCode[code] ? code : ErrorCode.UNKNOWN;
+    this.code = isKnownCode(code) ? code : ErrorCode.UNKNOWN;
     this.detail = detail;
     if (cause !== undefined) {
       this.cause = cause;
@@ -294,17 +322,21 @@ export class AppError extends Error {
   }
 }
 
+function entryFor(code) {
+  return MESSAGES[code] ?? extraMessages.get(code) ?? MESSAGES[ErrorCode.UNKNOWN];
+}
+
 export function messageFor(code) {
-  const entry = MESSAGES[code] ?? MESSAGES[ErrorCode.UNKNOWN];
+  const entry = entryFor(code);
   return entry.hint ? `${entry.title} ${entry.hint}` : entry.title;
 }
 
 export function titleFor(code) {
-  return (MESSAGES[code] ?? MESSAGES[ErrorCode.UNKNOWN]).title;
+  return entryFor(code).title;
 }
 
 export function hintFor(code) {
-  return (MESSAGES[code] ?? MESSAGES[ErrorCode.UNKNOWN]).hint;
+  return entryFor(code).hint;
 }
 
 /* 任意の例外を AppError へ正規化する。 */

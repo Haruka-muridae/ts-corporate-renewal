@@ -22,7 +22,7 @@ import { logger } from '../core/logger.js';
 import { AppError, ErrorCode, toAppError } from '../core/errors.js';
 
 export const DB_NAME = 'tsam-knowledge';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const db = new Dexie(DB_NAME);
 
@@ -71,6 +71,36 @@ db.version(2).stores({
   });
 });
 
+/*
+ * v3: AIナレッジチャットの会話履歴を追加する。
+ *
+ * ------------------------------------------------------------------
+ * 既存テーブルの定義は1文字も変えていない（追加のみ）
+ * ------------------------------------------------------------------
+ * Dexie は version() ごとの stores() を「その版の完全な定義」として扱うため、
+ * 既存5テーブルはそのまま書き写し、conversations だけを足している。
+ * データ移行が不要なので .upgrade() は付けない。
+ *
+ * v2 までしか知らない古いタブが開いていても、Dexie が versionchange を扱う。
+ * 会話履歴を使わない（ナレッジ管理だけの）利用者には、空のテーブルが1つ増えるだけ。
+ *
+ * conversations
+ *   id        … 会話ID（文字列）
+ *   updatedAt … 並べ替えと古い履歴の整理に使う
+ *   messages  … [{ role, text, sourceRefs: [chunkId], at }]
+ *               ★ ナレッジ本文は複製せず、参照はチャンクIDだけを持つ
+ *   トークン・OAuth情報は保存しない。
+ */
+db.version(3).stores({
+  settings: 'key',
+  files: 'fileId, name, mimeType, modifiedTime, syncState, folderId, folderName, isKnowledge, lastSyncedAt, errorCode',
+  documents: 'fileId, updatedAt, charCount',
+  chunks: 'chunkId, fileId, chunkIndex, [fileId+chunkIndex], updatedTime',
+  searchIndex: 'id, builtAt',
+  syncLogs: '++id, at, level, fileId, code',
+  conversations: 'id, updatedAt, createdAt',
+});
+
 /* settings テーブルのキー。文字列を直書きしない。 */
 export const SettingKey = Object.freeze({
   SELECTED_FOLDER: 'selectedFolder',
@@ -81,6 +111,8 @@ export const SettingKey = Object.freeze({
   UI_PREFERENCES: 'uiPreferences',
   /* セットアップウィザードの進捗と完了状態（進捗フラグと時刻のみ）。 */
   SETUP_STATE: 'setupState',
+  /* AIナレッジチャットの設定（モデルID・生成パラメータ・検索件数）。 */
+  CHAT_SETTINGS: 'chatSettings',
 });
 
 export const SEARCH_INDEX_ID = 'main';
