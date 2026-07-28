@@ -27,6 +27,7 @@ import {
 } from './auth-config.js';
 
 import { loadGisScript } from './gis-loader.js';
+import { ACCOUNT_LINKS, isAllowedExternalUrl } from './shared/external-links.js';
 
 import {
   loadProfile,
@@ -260,6 +261,90 @@ function collectElements() {
   return found;
 }
 
+/* ---------- アカウントをお持ちでない方への案内 ---------- */
+
+/*
+ * Googleアカウントを持っていない利用者向けのリンクを作る。
+ *
+ * ------------------------------------------------------------------
+ * HTMLではなくJSで作る理由
+ * ------------------------------------------------------------------
+ * この領域は index.html と favorites.html の両方に必要になる。
+ * HTMLへ書くとURLと注意書きが2か所へ複製され、
+ * 片方だけ直して片方が古いまま、という事故が起きる。
+ *
+ * 正本は shared/external-links.js の1か所だけとし、
+ * 表示は全ページで同じこの関数が作る。
+ * ------------------------------------------------------------------
+ *
+ * 生成にはDOM APIだけを使う（innerHTML は使わない）。
+ */
+function buildAccountLinks() {
+  const section = document.createElement('section');
+  section.className = 'auth-signup';
+  section.id = 'auth-signup';
+  section.hidden = true;
+  section.setAttribute('aria-labelledby', 'auth-signup-title');
+
+  const title = document.createElement('h3');
+  title.className = 'auth-signup__title';
+  title.id = 'auth-signup-title';
+  title.textContent = 'Googleアカウントをお持ちでない方';
+  section.append(title);
+
+  ACCOUNT_LINKS.forEach((item) => {
+    /*
+     * 正本の値が壊れていたら、そのリンクだけ出さない。
+     * 行き先の分からないリンクを見せるより、出さないほうが安全である。
+     */
+    if (!isAllowedExternalUrl(item.url)) {
+      console.warn(`[apps] 外部リンクの設定が不正です: ${item.id}`);
+      return;
+    }
+
+    const group = document.createElement('div');
+    group.className = 'auth-signup__item';
+    group.dataset.linkId = item.id;
+
+    const lead = document.createElement('p');
+    lead.className = 'auth-signup__lead';
+    lead.textContent = item.lead;
+
+    const link = document.createElement('a');
+    link.className = 'auth-signup__link';
+    link.href = item.url;
+    /* 作業中の画面を失わせないため別タブで開く。 */
+    link.target = '_blank';
+    /*
+     * noopener … 遷移先から window.opener を触らせない
+     * noreferrer … 参照元URLを渡さない
+     * 両方必要。noopener だけでは Referer が漏れる。
+     */
+    link.rel = 'noopener noreferrer';
+    /* 外部へ出ることを、目に見える文字で書く。aria任せにしない。 */
+    link.textContent = `${item.label}（外部サイト・新しいタブで開きます）`;
+
+    const note = document.createElement('p');
+    note.className = 'auth-signup__note';
+    note.textContent = item.note;
+
+    group.append(lead, link, note);
+    section.append(group);
+  });
+
+  return section;
+}
+
+/* 一度だけ作ってパネルへ差し込む。 */
+function ensureAccountLinks() {
+  if (!el?.panel || el.signup) {
+    return;
+  }
+
+  el.signup = buildAccountLinks();
+  el.panel.append(el.signup);
+}
+
 /* 表示名が無い場合の代替テキスト。 */
 function resolveDisplayName(profile) {
   if (profile?.name) {
@@ -351,6 +436,20 @@ export function renderAuthState(status, profile = null) {
     setText(el.status, view.sentence);
     setHidden(el.signin, !view.signin);
     setHidden(el.account, !view.account);
+
+    /*
+     * アカウント作成の案内は「ログインしていないとき」に出す。
+     *
+     * 読み込み中（loading）は出さない。
+     * 直後にログイン済みだと分かることがあり、
+     * 一瞬だけ「お持ちでない方」が見えるのは落ち着かない。
+     *
+     * 準備中（unavailable）と失敗（error）では出す。
+     * Googleログインが使えない状態こそ、
+     * アカウントを持っていない利用者が見ている可能性が高い。
+     */
+    ensureAccountLinks();
+    setHidden(el.signup, view.account || resolvedStatus === AUTH_STATUS.LOADING);
 
     if (el.signout) {
       el.signout.disabled = !view.account;

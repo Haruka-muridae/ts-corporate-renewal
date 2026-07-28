@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>アカウント設定 | TSAM AI</title>
+  <meta name="description" content="TSAM AIのアカウント設定です。">
+
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light">
+
+  <link rel="icon" href="../../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../account.css">
+</head>
+<body class="account-page">
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <!-- 未ログインで開いた場合、account.js がログイン画面へ差し替える。 -->
+  <main id="main-content" class="account-main" tabindex="-1" hidden>
+    <div class="account-shell account-shell--wide">
+      <div class="account-brand">
+        <span class="account-brand__name" lang="en">TSAM AI</span>
+      </div>
+
+      <nav class="breadcrumb-simple" aria-label="パンくずリスト">
+        <a href="../home/">マイページへ戻る</a>
+      </nav>
+
+      <h1 class="account-page-title">アカウント設定</h1>
+
+      <!-- ── アカウント情報 ── -->
+      <section class="account-section" aria-labelledby="account-info-title">
+        <h2 class="account-section__title" id="account-info-title">アカウント</h2>
+
+        <dl class="account-detail">
+          <div class="account-detail__row">
+            <dt>メールアドレス</dt>
+            <dd id="account-email"></dd>
+          </div>
+          <div class="account-detail__row">
+            <dt>メールの確認</dt>
+            <dd id="account-email-status"></dd>
+          </div>
+          <div class="account-detail__row">
+            <dt>二段階認証</dt>
+            <dd id="account-mfa-status"></dd>
+          </div>
+        </dl>
+
+        <p class="account-message" id="account-email-message" tabindex="-1" hidden></p>
+
+        <div class="account-actions" id="account-email-actions" hidden>
+          <button class="account-button account-button--ghost" id="account-resend" type="button">確認メールを再送する</button>
+        </div>
+      </section>
+
+      <!-- ── 二段階認証 ── -->
+      <section class="account-section" aria-labelledby="account-mfa-title">
+        <h2 class="account-section__title" id="account-mfa-title">二段階認証（TOTP）</h2>
+        <p class="account-section__lead">
+          認証アプリ（Google Authenticator、1Password、Authy など）で6桁のコードを生成し、
+          ログイン時にパスワードと合わせて入力する方式です。
+          パスワードが漏れた場合でも、コードが無ければログインできません。
+        </p>
+
+        <p class="account-message" id="account-mfa-message" tabindex="-1" hidden></p>
+
+        <!-- 未登録のとき -->
+        <div id="mfa-state-off" hidden>
+          <div class="account-actions">
+            <button class="account-button" id="mfa-start" type="button">二段階認証を設定する</button>
+          </div>
+        </div>
+
+        <!-- 登録手続き中 -->
+        <div id="mfa-state-enrolling" hidden>
+          <ol class="account-steps">
+            <li>
+              認証アプリでこのQRコードを読み取ります。
+              <!--
+                qr は Supabase が返す SVG の data URI。
+                img の src として渡し、innerHTML では描画しない
+                （外部由来のマークアップを実行しないため）。
+              -->
+              <p class="account-qr">
+                <img id="mfa-qr" alt="二段階認証の設定用QRコード" width="200" height="200">
+              </p>
+            </li>
+            <li>
+              QRコードを読み取れない場合は、次の文字列を手入力します。
+              <p class="account-secret"><code id="mfa-secret"></code></p>
+            </li>
+            <li>
+              認証アプリに表示された6桁のコードを入力します。
+              <form class="account-form account-form--inline" id="mfa-confirm-form" novalidate>
+                <div class="field">
+                  <label class="field__label" for="mfa-confirm-code">確認コード</label>
+                  <input
+                    class="field__input field__input--code"
+                    id="mfa-confirm-code"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    autocomplete="one-time-code"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    maxlength="6"
+                    required
+                  >
+                </div>
+                <button class="account-button" id="mfa-confirm" type="submit">設定を完了する</button>
+                <button class="account-button account-button--ghost" id="mfa-abort" type="button">中止する</button>
+              </form>
+            </li>
+          </ol>
+        </div>
+
+        <!-- 登録済みのとき -->
+        <div id="mfa-state-on" hidden>
+          <p class="account-note" id="mfa-enabled-note"></p>
+          <div class="account-actions">
+            <button class="account-button account-button--ghost" id="mfa-disable" type="button">二段階認証を解除する</button>
+          </div>
+        </div>
+
+        <!-- 対応していないとき -->
+        <p class="account-notice" id="mfa-unavailable" hidden>
+          <strong class="account-notice__label">準備中</strong>
+          <span id="mfa-unavailable-reason">二段階認証は現在ご利用いただけません。</span>
+        </p>
+      </section>
+
+      <!-- ── パスワード変更 ── -->
+      <section class="account-section" id="account-password-section" aria-labelledby="account-password-title">
+        <h2 class="account-section__title" id="account-password-title">パスワードの変更</h2>
+
+        <form class="account-form" id="password-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="new-password">新しいパスワード</label>
+            <div class="field__control">
+              <input
+                class="field__input"
+                id="new-password"
+                type="password"
+                autocomplete="new-password"
+                autocapitalize="none"
+                spellcheck="false"
+                maxlength="72"
+                required
+                aria-describedby="new-password-hint"
+              >
+              <button
+                class="field__toggle"
+                id="new-password-toggle"
+                type="button"
+                aria-pressed="false"
+                aria-controls="new-password"
+              >表示</button>
+            </div>
+            <p class="field__hint" id="new-password-hint">8文字以上で入力します。</p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="new-password-confirm">新しいパスワード（確認）</label>
+            <input
+              class="field__input"
+              id="new-password-confirm"
+              type="password"
+              autocomplete="new-password"
+              autocapitalize="none"
+              spellcheck="false"
+              maxlength="72"
+              required
+            >
+          </div>
+
+          <p class="account-message" id="password-message" tabindex="-1" hidden></p>
+
+          <button class="account-button" id="password-submit" type="submit">パスワードを変更する</button>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <noscript>
+    <p class="account-message" style="margin:32px 16px">
+      JavaScriptが無効なため、この画面は利用できません。ブラウザの設定でJavaScriptを有効にしてください。
+    </p>
+  </noscript>
+
+  <footer class="account-footer">
+    <p><a href="../../index.html">TSアセットマネジメント合同会社</a></p>
+    <p><small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small></p>
+  </footer>
+
+  <script type="module" src="account.js"></script>
+</body>
+</html>

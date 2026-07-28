@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ログイン | TSAM AI</title>
+  <meta name="description" content="TSAM AIへログインします。">
+
+  <!--
+    ログイン画面は検索結果に出す必要がない。
+    また、入力内容を外部へ渡さないよう referrer を絞る。
+  -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light">
+
+  <!-- TODO: 公開URLの確定後に canonical を追加 -->
+
+  <link rel="icon" href="../../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../account.css">
+</head>
+<body class="account-page">
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <main id="main-content" class="account-main" tabindex="-1">
+    <div class="account-shell">
+      <div class="account-brand">
+        <a class="account-brand__link" href="../../index.html">
+          <span class="account-brand__name" lang="en">TSAM AI</span>
+        </a>
+        <p class="account-brand__owner">TSアセットマネジメント合同会社</p>
+      </div>
+
+      <div class="account-card">
+        <!--
+          第1段階: メールアドレスとパスワード。
+          第2段階: 二段階認証のコード（登録済みの利用者のみ）。
+          切り替えは login.js が hidden で行う。
+        -->
+        <section id="login-step-password">
+          <h1 class="account-card__title">ログイン</h1>
+          <p class="account-card__lead">メールアドレスとパスワードを入力してください。</p>
+
+          <!--
+            認証基盤が未設定のときの注意書き。
+            Supabase を設定すると login.js が自動的に非表示にする。
+          -->
+          <p class="account-notice" id="login-dummy-notice" hidden>
+            <strong class="account-notice__label">動作確認用</strong>
+            <span id="login-dummy-reason">現在は画面遷移を確認するための仮ログインです。パスワードは照合されず、入力内容が端末の外へ送信されることもありません。</span>
+          </p>
+
+          <!--
+            action を持たないフォーム。送信は login.js が preventDefault で受け、
+            ページ遷移による入力値の露出（URLへの付与）を起こさない。
+          -->
+          <form class="account-form" id="login-form" novalidate>
+            <div class="field">
+              <label class="field__label" for="login-id">メールアドレス</label>
+              <input
+                class="field__input"
+                id="login-id"
+                name="loginId"
+                type="email"
+                inputmode="email"
+                autocomplete="username"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                maxlength="254"
+                required
+                aria-describedby="login-id-hint"
+              >
+              <p class="field__hint" id="login-id-hint">登録に使用したメールアドレスを入力します。</p>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="login-password">パスワード</label>
+              <div class="field__control">
+                <input
+                  class="field__input"
+                  id="login-password"
+                  name="password"
+                  type="password"
+                  autocomplete="current-password"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  maxlength="256"
+                  required
+                  aria-describedby="login-password-hint"
+                >
+                <!-- 表示切替。aria-pressed で現在の状態を伝える。 -->
+                <button
+                  class="field__toggle"
+                  id="login-password-toggle"
+                  type="button"
+                  aria-pressed="false"
+                  aria-controls="login-password"
+                >表示</button>
+              </div>
+              <p class="field__hint" id="login-password-hint">8文字以上で入力します。</p>
+            </div>
+
+            <!--
+              エラーと結果の通知先。
+              role は login.js が状況に応じて付け替える（常時 alert にしない）。
+            -->
+            <p class="account-message" id="login-message" tabindex="-1" hidden></p>
+
+            <button class="account-button" id="login-submit" type="submit">ログイン</button>
+          </form>
+
+          <div class="account-links">
+            <ul class="account-links__list">
+              <!-- パスワード再設定。認証基盤が未設定のときは login.js が準備中表示へ戻す。 -->
+              <li id="login-reset-item" class="account-links__pending">パスワードを忘れた方</li>
+              <!-- TODO: 利用規約ページの公開後にリンクへ差し替える -->
+              <li class="account-links__pending">利用規約</li>
+              <!-- TODO: プライバシーポリシーページの公開後にリンクへ差し替える -->
+              <li class="account-links__pending">プライバシーポリシー</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 第2段階: 二段階認証。 -->
+        <section id="login-step-mfa" hidden>
+          <h1 class="account-card__title">二段階認証</h1>
+          <p class="account-card__lead">認証アプリに表示されている6桁のコードを入力してください。</p>
+
+          <form class="account-form" id="mfa-form" novalidate>
+            <div class="field">
+              <label class="field__label" for="mfa-code">確認コード</label>
+              <input
+                class="field__input field__input--code"
+                id="mfa-code"
+                name="code"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                autocomplete="one-time-code"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                maxlength="6"
+                required
+                aria-describedby="mfa-code-hint"
+              >
+              <p class="field__hint" id="mfa-code-hint">コードは30秒ごとに変わります。切り替わった直後の値を入力してください。</p>
+            </div>
+
+            <p class="account-message" id="mfa-message" tabindex="-1" hidden></p>
+
+            <button class="account-button" id="mfa-submit" type="submit">確認</button>
+            <button class="account-button account-button--ghost" id="mfa-cancel" type="button">最初からやり直す</button>
+          </form>
+        </section>
+      </div>
+
+      <noscript>
+        <p class="account-message" style="margin-top:20px">
+          JavaScriptが無効なため、ログインできません。ブラウザの設定でJavaScriptを有効にしてください。
+        </p>
+      </noscript>
+    </div>
+  </main>
+
+  <footer class="account-footer">
+    <p><a href="../../index.html">TSアセットマネジメント合同会社</a></p>
+    <p><small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small></p>
+  </footer>
+
+  <script type="module" src="login.js"></script>
+</body>
+</html>
