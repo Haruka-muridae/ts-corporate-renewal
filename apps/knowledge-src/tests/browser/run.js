@@ -17,6 +17,8 @@ import {
 import { scanFolderStructure, createMissingFolders, isCreatingFolders } from '../../src/drive/folder-create.js';
 import { PlanStatus } from '../../src/drive/folder-plan.js';
 import { createSampleFiles } from '../../src/drive/sample-files.js';
+import { uploadKnowledge } from '../../src/drive/knowledge-upload.js';
+import { buildUploadPlan } from '../../src/drive/upload-plan.js';
 import { requestWriteToken, discardWriteToken } from '../../src/auth/google-auth.js';
 import { makeSetupRecord, createProgress } from '../../src/setup/wizard-state.js';
 import {
@@ -1263,12 +1265,117 @@ async function main() {
     check('作成したサンプルを検索できる',
       sampleHit.hits.some((hit) => hit.fileName === 'サンプル.txt'), sampleHit.hits.map((h) => h.fileName));
 
+    /* ============================================================ */
+    section('21-4. 端末からのナレッジ追加（上書きなし・同期連携）');
+
+    const directFile = new File(
+      ['端末アップロード固有語きくけこ。検索反映を確認します。'],
+      '追加資料.txt',
+      { type: 'text/plain' },
+    );
+    const duplicateFile = new File(
+      ['重複名は既存ファイルを上書きせず、別名で保存します。'],
+      'サンプル.txt',
+      { type: 'text/plain' },
+    );
+    const folderFile = new File(
+      ['# フォルダ資料\n\n階層アップロード固有語さしすせそ。'],
+      '調査.md',
+      { type: 'text/markdown' },
+    );
+    Object.defineProperty(folderFile, 'webkitRelativePath', { value: '研究/2026/調査.md' });
+    const storeOnlyFile = new File(
+      ['fake-xlsx-content'],
+      '集計.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    );
+
+    let knowledgePlan = buildUploadPlan([directFile, duplicateFile, folderFile, storeOnlyFile]);
+    check('4件をアップロード計画へ入れる', knowledgePlan.accepted.length === 4, knowledgePlan);
+    check('XLSXは保存のみとして残す', knowledgePlan.storeOnlyCount === 1);
+
+    at = mark();
+    const progressEvents = [];
+    let knowledgeUpload = await uploadKnowledge({
+      folderId: 'f-kn',
+      entries: knowledgePlan.accepted,
+      isBusy: () => false,
+      onProgress: (progress) => progressEvents.push({ ...progress }),
+    });
+    let knowledgeRequests = from(at);
+    let knowledgeUploads = knowledgeRequests.filter((request) => request.isUpload);
+    let knowledgeFolders = knowledgeRequests.filter((request) => request.method === 'POST' && !request.isUpload);
+
+    check('4件すべてDriveへ保存', knowledgeUpload.uploaded.length === 4, knowledgeUpload);
+    check('アップロードPOSTは4件', knowledgeUploads.length === 4, knowledgeUploads.length);
+    check('フォルダ構造は不足2階層だけ作る', knowledgeFolders.length === 2, knowledgeFolders.map((r) => r.body?.name));
+    check('研究→2026の順に作る', knowledgeFolders.map((r) => r.body?.name).join('/') === '研究/2026');
+    check('保存先の起点は01_ナレッジ', knowledgeFolders[0].body.parents[0] === 'f-kn');
+    check('既存同名は別名保存',
+      knowledgeUpload.uploaded.find((item) => item.entry.sourceName === 'サンプル.txt').uploadName === 'サンプル (1).txt');
+    check('既存サンプルは上書きしない',
+      [...tree.values()].filter((node) => node.parent === 'f-kn' && node.name === 'サンプル.txt').length === 1);
+    check('multipartで新規作成', knowledgeUploads.every((r) => r.uploadType === 'multipart'));
+    check('アップロードのメタデータは3項目だけ',
+      knowledgeUploads.every((r) => Object.keys(r.body).sort().join(',') === 'mimeType,name,parents'));
+    check('書き込みトークンで送る', knowledgeUploads.every((r) => r.writeToken === true));
+    check('進捗をファイル単位で通知', progressEvents.filter((e) => e.itemStatus === 'saved').length === 4);
+    check('処理後は書き込みトークンを破棄', hasWriteToken() === false);
+
+    const addedSync = await runSync({ folder: FOLDER });
+    check('アップロード後の既存同期が完了', addedSync.failed === 0, addedSync);
+    const addedFiles = await listFiles();
+    const addedIds = new Set(knowledgeUpload.uploaded.map((item) => item.file.id));
+    const addedRows = addedFiles.filter((file) => addedIds.has(file.fileId));
+    check('アップロード4件が一覧へ反映', addedRows.length === 4, addedRows.map((f) => f.name));
+    check('解析対応3件が索引済み',
+      addedRows.filter((file) => file.syncState === FileSyncState.INDEXED).length === 3, addedRows);
+    check('XLSXは解析非対応でスキップ',
+      addedRows.some((file) => file.name === '集計.xlsx' && file.syncState === FileSyncState.SKIPPED));
+    check('端末アップロード本文を検索できる',
+      (await search('端末アップロード固有語きくけこ')).hits.some((hit) => hit.fileName === '追加資料.txt'));
+    check('フォルダアップロード本文を検索できる',
+      (await search('階層アップロード固有語さしすせそ')).hits.some((hit) => hit.fileName === '調査.md'));
+    check('作ったフォルダ名が検索メタデータへ入る',
+      (await search('2026')).hits.some((hit) => hit.fileName === '調査.md'));
+
+    /* 429は既存の再試行方針で1回だけやり直す。 */
+    let uploadRetry = 0;
+    scenario.inject = (kind) => {
+      if (kind === 'upload' && uploadRetry === 0) {
+        uploadRetry += 1;
+        return driveError(429, 'rateLimitExceeded', { 'Retry-After': '0.001' });
+      }
+      return null;
+    };
+    at = mark();
+    knowledgePlan = buildUploadPlan([new File(['再試行成功'], '再試行.txt', { type: 'text/plain' })]);
+    knowledgeUpload = await uploadKnowledge({ folderId: 'f-kn', entries: knowledgePlan.accepted });
+    check('429後に再試行して成功', knowledgeUpload.ok === true && knowledgeUpload.uploaded.length === 1);
+    check('429の分だけPOSTが増える', from(at).filter((r) => r.isUpload).length === 2);
+
+    /* 401は再試行せず、残りがあれば未実行にする。 */
+    scenario.inject = (kind) => (kind === 'upload' ? driveError(401, 'authError') : null);
+    at = mark();
+    knowledgePlan = buildUploadPlan([
+      new File(['失敗1'], '認証失敗1.txt', { type: 'text/plain' }),
+      new File(['失敗2'], '認証失敗2.txt', { type: 'text/plain' }),
+    ]);
+    knowledgeUpload = await uploadKnowledge({ folderId: 'f-kn', entries: knowledgePlan.accepted });
+    check('OAuth期限切れは失敗として返す', knowledgeUpload.failed[0]?.error?.code === ErrorCode.AUTH_EXPIRED);
+    check('OAuth期限切れは再試行しない', from(at).filter((r) => r.isUpload).length === 1);
+    check('OAuth期限切れ後の残りは未実行', knowledgeUpload.skipped.length === 1);
+    check('失敗後も書き込みトークンを残さない', hasWriteToken() === false);
+    scenario.inject = undefined;
+
+    check('端末アップロードでもPUT/PATCH/DELETE 0件', net.forbiddenWrites().length === 0);
+
     restoreTree();
     await clearAllCache({ keepSettings: true });
     await clearIndex();
 
     /* ============================================================ */
-    section('21-4. セットアップ状態の保存');
+    section('21-5. セットアップ状態の保存');
 
     const fresh = await getSetupState();
     check('初回は未完了', fresh.completed === false);
@@ -1303,9 +1410,8 @@ async function main() {
       [...new Set(net.nonGet().map((r) => r.path))]);
     check('フォルダ作成はフォルダのMIMEだけ',
       net.creates().every((r) => r.body?.mimeType === MIMES.FOLDER));
-    check('アップロードはサンプル2種類だけ',
-      net.uploads().every((r) => ['README.md', 'サンプル.txt'].includes(r.body?.name)),
-      [...new Set(net.uploads().map((r) => r.body?.name))]);
+    check('アップロードは利用者が明示した新規作成だけ',
+      net.uploads().every((r) => r.method === 'POST' && r.uploadType === 'multipart' && r.body?.parents?.length === 1));
     check('PUT/PATCH/DELETE は最後まで0件', net.forbiddenWrites().length === 0);
 
     section('22. トークンが残らない');

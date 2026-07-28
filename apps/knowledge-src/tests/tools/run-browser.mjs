@@ -182,12 +182,12 @@ function waitFor(url, timeoutMs = 60000, expectSubstring = '') {
 
 /* ---- CDP ---- */
 
-async function connect(urlFilter, timeoutMs = 30000) {
+async function connect(urlFilter, timeoutMs = 30000, cdpPort = CDP_PORT) {
   const deadline = Date.now() + timeoutMs;
 
   for (;;) {
     try {
-      const list = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json();
+      const list = await (await fetch(`http://127.0.0.1:${cdpPort}/json/list`)).json();
       const page = list.find((t) => t.type === 'page' && t.url.includes(urlFilter));
       if (page) {
         return page;
@@ -238,9 +238,56 @@ function killTree(child) {
  * dev モードはページごとに別プロファイルを使う。
  * dist モードは前の読み込みの IndexedDB を引き継ぐ必要があるため既定のまま。
  */
+/*
+ * Chrome を正常終了させる。
+ *
+ * killTree による強制終了だけだと、IndexedDB の書き込みがプロファイルへ
+ * 反映されないまま失われることがある。dist モードは1回目に書いた
+ * setupState を2回目の起動で読むため、書き込みが失われると2回目が
+ * 「初回アクセス」と判定され、巡回の途中でウィザードへ切り替わる。
+ * 先に Browser.close で終了させ、Chrome自身にフラッシュさせる。
+ */
+async function closeBrowserGracefully(cdpPort, exited, timeoutMs = 10000) {
+  let ws = null;
+
+  try {
+    const version = await (await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).json();
+
+    if (!version.webSocketDebuggerUrl) {
+      return false;
+    }
+
+    ws = new WebSocket(version.webSocketDebuggerUrl);
+
+    await new Promise((done, fail) => {
+      ws.addEventListener('open', done);
+      ws.addEventListener('error', fail);
+    });
+
+    ws.send(JSON.stringify({ id: 1, method: 'Browser.close', params: {} }));
+
+    return await Promise.race([
+      exited.then(() => true),
+      new Promise((r) => setTimeout(() => r(false), timeoutMs)),
+    ]);
+  } catch {
+    /* 応答しない場合は呼び出し側が強制終了する。 */
+    return false;
+  } finally {
+    try {
+      ws?.close();
+    } catch {
+      /* 既に切れている。 */
+    }
+  }
+}
+
 async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression, profile = 'chrome-test-profile' } = {}) {
   /* ページごとに空きポートを取り直す（前ページの後始末に依存しない）。 */
   CDP_PORT = await findFreePort();
+
+  /* この呼び出しの間だけ使うポート（次のページで CDP_PORT は変わる）。 */
+  const cdpPort = CDP_PORT;
 
   const chrome = spawn(chromePath, [
     '--headless=new',
@@ -248,15 +295,19 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression, profil
     '--no-sandbox',
     '--no-first-run',
     '--disable-extensions',
-    `--remote-debugging-port=${CDP_PORT}`,
+    `--remote-debugging-port=${cdpPort}`,
     `--user-data-dir=${resolve(root, `node_modules/.cache/${profile}`)}`,
     pageUrl,
   ], { stdio: 'ignore' });
 
+  const chromeExited = new Promise((done) => {
+    chrome.once('exit', () => done(true));
+  });
+
   const consoleLogs = [];
 
   try {
-    const target = await connect(urlFilter);
+    const target = await connect(urlFilter, 30000, cdpPort);
     const ws = new WebSocket(target.webSocketDebuggerUrl);
     const pending = new Map();
     let nextId = 0;
@@ -443,6 +494,10 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression, profil
 
     return { title, output, consoleLogs };
   } finally {
+    /* まず正常終了させ、IndexedDB への書き込みを確実にディスクへ反映させる。 */
+    await closeBrowserGracefully(cdpPort, chromeExited);
+
+    /* 応答しない場合や残った子プロセスは、木ごと落とす。 */
     killTree(chrome);
   }
 }
@@ -450,6 +505,18 @@ async function runPage(pageUrl, urlFilter, { waitMs = 300000, expression, profil
 /* ---- 実行 ---- */
 
 if (mode === 'dev' || mode === 'ui') {
+  /*
+   * 同じoriginの前回キャッシュや、異常終了したCDPページを再利用すると、
+   * 編集前のテストモジュールを実行してしまう。毎回専用プロファイルを
+   * 初期化し、現在のソースだけを検証する。
+   */
+  await rm(resolve(root, 'node_modules/.cache/chrome-test-profile'), { recursive: true, force: true })
+    .catch(() => { /* 初回は存在しない。 */ });
+  await Promise.all([0, 1].map((index) => (
+    rm(resolve(root, `node_modules/.cache/chrome-test-profile-${index}`), { recursive: true, force: true })
+      .catch(() => { /* 初回は存在しない。 */ })
+  )));
+
   /* dev は統合テストとUIテストの両方、ui はUIテストだけを流す。 */
   const pages = mode === 'ui'
     ? [{ file: 'ui.html', label: 'UI' }, { file: 'chat.html', label: 'チャットUI' }]
@@ -470,7 +537,8 @@ if (mode === 'dev' || mode === 'ui') {
   let bad = 0;
 
   try {
-    for (const page of pages) {
+    for (let index = 0; index < pages.length; index += 1) {
+      const page = pages[index];
       const url = `http://localhost:${DEV_PORT}/tests/browser/${page.file}`;
       /*
        * 自分が起動した dev サーバーの、期待したテストページであることを確かめる。
@@ -556,15 +624,130 @@ if (mode === 'dist') {
         if (nav.length === 0) {
           return JSON.stringify({ ...out, bootFailed: true });
         }
-        for (let i = 0; i < nav.length; i += 1) {
-          nav[i].click();
-          await new Promise((r) => setTimeout(r, 350));
+
+        /*
+         * ナビは setupState を読み終える前に描画される（読み込み前は通常画面のまま）。
+         * 読み終えた時点で「未完了」と判定されるとウィザードへ切り替わり、
+         * 以降のタブ操作は無視される。巡回を始める前に、1回目で書いた
+         * setupState が実際に保存されていることを確かめる。
+         */
+        out.setupPersisted = await new Promise((resolve) => {
+          const open = indexedDB.open('tsam-knowledge');
+          open.onerror = () => resolve('open-failed');
+          open.onsuccess = () => {
+            const dbi = open.result;
+            try {
+              const req = dbi.transaction('settings', 'readonly').objectStore('settings').get('setupState');
+              req.onsuccess = () => {
+                const value = req.result?.value;
+                dbi.close();
+                resolve(value?.completed === true ? 'completed' : JSON.stringify(value ?? null));
+              };
+              req.onerror = () => { dbi.close(); resolve('get-failed'); };
+            } catch (e) {
+              dbi.close();
+              resolve(String(e).slice(0, 80));
+            }
+          };
+        });
+
+        /*
+         * ウィザード判定が確定するまで待つ。
+         *
+         * setupState を読み終えるまでのあいだ、アプリは通常画面のまま描画する。
+         * 読み終えた時点でウィザードへ切り替わると、そのあいだのタブ操作は
+         * 無視される。ナビが出ていてウィザードが無い状態が続くのを確かめてから
+         * 巡回を始める。
+         */
+        out.settled = await (async () => {
+          const limit = Date.now() + 15000;
+          let stableSince = null;
+
+          while (Date.now() < limit) {
+            const calm = !document.querySelector('.wizard')
+              && document.querySelector('.app-nav')?.hidden === false;
+
+            if (!calm) {
+              stableSince = null;
+            } else if (stableSince === null) {
+              stableSince = Date.now();
+            } else if (Date.now() - stableSince >= 1000) {
+              return true;
+            }
+
+            await new Promise((r) => setTimeout(r, 100));
+          }
+
+          return false;
+        })();
+
+        /*
+         * 6画面を実際に巡回する。固定待ちではなく、その画面だけに出る
+         * 見出しが現れるまで待ってから次へ進む。
+         */
+        const screens = [
+          { id: 'setup', label: '初期設定', marker: '1. 設定状況' },
+          { id: 'files', label: 'ファイル管理', marker: '同期状況' },
+          { id: 'search', label: 'ナレッジ検索', marker: 'ナレッジ検索' },
+          { id: 'storage', label: 'ストレージ', marker: 'ストレージ使用量' },
+          { id: 'logs', label: 'エラーログ', marker: 'エラーログ' },
+          { id: 'settings', label: '設定', marker: 'チャンク分割' },
+        ];
+
+        const mainEl = document.getElementById('main');
+        const hasMarker = (marker) => (mainEl?.textContent ?? '').includes(marker);
+
+        /*
+         * クリックが無視される状態（描画途中・一時的なウィザード表示）でも
+         * 取りこぼさないよう、見出しが出るまで押し直しながら待つ。
+         */
+        const showScreen = async (index, marker) => {
+          const limit = Date.now() + 10000;
+
+          while (Date.now() < limit) {
+            /* 再描画でボタンが差し替わっても良いように毎回引き直す。 */
+            const button = document.querySelectorAll('.app-nav__button')[index];
+
+            if (button) {
+              button.click();
+            }
+
+            const until = Date.now() + 500;
+            while (Date.now() < until) {
+              if (hasMarker(marker)) {
+                return true;
+              }
+              await new Promise((r) => setTimeout(r, 50));
+            }
+          }
+
+          return false;
+        };
+
+        out.screens = [];
+
+        for (let i = 0; i < screens.length; i += 1) {
+          const shown = await showScreen(i, screens[i].marker);
+          const button = document.querySelectorAll('.app-nav__button')[i];
+
+          out.screens.push({
+            label: screens[i].label,
+            navLabel: button?.textContent ?? null,
+            hash: location.hash,
+            current: button?.getAttribute('aria-current') === 'page',
+            shown,
+          });
         }
+
+        /* 巡回の途中でウィザードへ戻っていないこと。 */
+        out.wizardDuringNav = Boolean(document.querySelector('.wizard'));
+        out.navHiddenAfterNav = document.querySelector('.app-nav')?.hidden === true;
+
+        /* 最後は設定画面。設定項目と診断ボタンがそろっていること。 */
         out.settingsInputs = document.querySelectorAll('input[type=number]').length;
         out.diagButton = Array.from(document.querySelectorAll('button')).some((b) => b.textContent === '診断を実行');
 
-        nav[0].click();
-        await new Promise((r) => setTimeout(r, 300));
+        await showScreen(0, '1. 設定状況');
 
         out.absoluteRefs = Array.from(document.querySelectorAll('[src],[href]'))
           .map((e) => e.getAttribute('src') || e.getAttribute('href'))
@@ -782,7 +965,18 @@ if (mode === 'dist') {
     check('完了後は通常画面が出る', result.nav.length === 6, result.nav);
     check('深いサブパスで表示できる', result.nav.length === 6, result.nav);
     check('スコープを表示している', result.badges.some((b) => b.includes('drive.readonly')), result.badges);
+    check('完了状態が2回目の起動へ引き継がれる', result.setupPersisted === 'completed', result.setupPersisted);
+    check('巡回前に表示状態が確定する', result.settled === true, result.settled);
     check('6画面すべて切り替えられる', result.settingsInputs === 7 && result.diagButton, { inputs: result.settingsInputs, diag: result.diagButton });
+    check(
+      '6画面それぞれの内容が出る',
+      Array.isArray(result.screens) && result.screens.length === 6
+        && result.screens.every((s) => s.shown === true && s.current === true),
+      result.screens,
+    );
+    check('巡回中にウィザードへ戻らない', result.wizardDuringNav === false && result.navHiddenAfterNav === false, {
+      wizard: result.wizardDuringNav, navHidden: result.navHiddenAfterNav,
+    });
     check('絶対パス参照が無い', result.absoluteRefs.length === 0, result.absoluteRefs);
     check('CMapを取得できる', result.assets.cmap === 200, result.assets);
     check('CID用CMapを取得できる', result.assets.ucs2 === 200);

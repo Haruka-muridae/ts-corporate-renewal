@@ -623,7 +623,11 @@ table.data tr:hover td {
 }
 
 .dialog__head {
+  align-items: flex-start;
   border-bottom: 1px solid var(--color-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
   padding: 14px 18px;
 }
 
@@ -640,6 +644,97 @@ table.data tr:hover td {
   gap: 8px;
   justify-content: flex-end;
   padding: 12px 18px;
+}
+
+.dialog--wide {
+  max-height: 92vh;
+  max-width: 980px;
+}
+
+.dialog--wide .dialog__body {
+  max-height: 68vh;
+}
+
+.icon-button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  padding: 5px 9px;
+}
+
+.visually-hidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* ---------- ナレッジ追加 ---------- */
+
+.upload-drop {
+  align-items: center;
+  background: var(--color-surface-alt);
+  border: 2px dashed var(--color-border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  min-height: 150px;
+  padding: 20px;
+  text-align: center;
+}
+
+.upload-drop:hover,
+.upload-drop:focus-visible,
+.upload-drop--active {
+  border-color: var(--color-primary);
+  outline: 2px solid transparent;
+}
+
+.upload-choices,
+.upload-complete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.upload-summary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  margin: 12px 0;
+}
+
+.upload-summary .stat {
+  padding: 8px;
+}
+
+.upload-table {
+  margin-top: 12px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.upload-table td:first-child {
+  max-width: 280px;
+  overflow-wrap: anywhere;
+}
+
+.upload-dialog__body .notice ul {
+  margin-bottom: 0;
 }
 
 .breadcrumb {
@@ -777,6 +872,12 @@ table.data tr:hover td {
   margin-top: 8px;
 }
 
+.wizard,
+.wizard .card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .wizard__list {
   display: flex;
   flex-wrap: wrap;
@@ -893,6 +994,24 @@ table.data tr:hover td {
 
   .stat__value {
     font-size: 18px;
+  }
+
+  .dialog {
+    max-height: 96vh;
+    width: calc(100% - 16px);
+  }
+
+  .dialog--wide .dialog__body {
+    max-height: 72vh;
+  }
+
+  .upload-summary {
+    grid-template-columns: repeat(2, minmax(100px, 1fr));
+  }
+
+  .upload-drop {
+    min-height: 120px;
+    padding: 14px;
   }
 }
 

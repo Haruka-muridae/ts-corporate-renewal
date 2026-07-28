@@ -93,9 +93,9 @@ export function getDriveScope(mode = SCOPE_MODE) {
  * マイドライブ直下から順に、**親フォルダIDを指定しながら1階層ずつ**探索する。
  * フォルダ名だけの全体検索は行わない（同名フォルダの誤選択を避けるため）。
  *
- * 見つからない場合は、どの階層で失敗したかを画面へ出し、
- * フォルダ選択へ誘導する。**自動でフォルダを作成しない**
- * （書き込み権限を持たないため、そもそも作成できない）。
+ * 見つからない場合は、どの階層で失敗したかを画面へ出す。
+ * 探索だけでは作成せず、利用者が不足フォルダ作成を明示確認した場合に限り
+ * 別経路で一時的な書き込み権限を要求する。
  */
 export const KNOWLEDGE_FOLDER_PATH = Object.freeze(['TSAM AI', 'ローカルLLM', '01_ナレッジ']);
 
@@ -217,11 +217,58 @@ export const SCRIPT_LOAD_TIMEOUT_MS = 15000;
 export const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 
 /*
- * 本文つきファイルを作るときだけ使う配信元。
- * セットアップウィザードの「サンプルファイル作成」でしか呼ばない。
+ * 本文つきファイルを新規作成するときだけ使う配信元。
+ * セットアップのサンプル作成と、利用者が明示確認した端末アップロードで使う。
  * 通常の探索・同期・検索からは到達しない（src/drive/drive-writer.js に閉じている）。
  */
 export const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
+
+/*
+ * 利用者が端末から追加できるファイルの制限。
+ *
+ * 1ファイルの上限は同期側と同じ40MBにそろえる。Driveへ保存できても、
+ * 直後の同期で取得できない大きさを受け付けると「保存だけ成功」の状態を
+ * 不用意に作るためである。
+ */
+export const KNOWLEDGE_UPLOAD_LIMITS = Object.freeze({
+  maxFiles: 50,
+  maxFileBytes: 40 * 1024 * 1024,
+  maxTotalBytes: 200 * 1024 * 1024,
+  maxNameCodePoints: 180,
+  maxFolderDepth: 5,
+});
+
+/*
+ * 端末からのアップロードで受け付ける拡張子。
+ *
+ * parseable=true は、既存の同期エンジンが実際に解析できる形式だけ。
+ * HTML / PPTX / XLSX は要望された選択肢としてDrive保存を許可するが、
+ * 現在の解析器では検索対象にできないため、画面で「保存のみ」と明示する。
+ */
+export const KNOWLEDGE_UPLOAD_TYPES = Object.freeze({
+  '.pdf': Object.freeze({ mimeType: 'application/pdf', label: 'PDF', parseable: true }),
+  '.txt': Object.freeze({ mimeType: 'text/plain', label: 'テキスト', parseable: true }),
+  '.md': Object.freeze({ mimeType: 'text/markdown', label: 'Markdown', parseable: true }),
+  '.markdown': Object.freeze({ mimeType: 'text/markdown', label: 'Markdown', parseable: true }),
+  '.csv': Object.freeze({ mimeType: 'text/csv', label: 'CSV', parseable: true }),
+  '.docx': Object.freeze({
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    label: 'DOCX',
+    parseable: true,
+  }),
+  '.html': Object.freeze({ mimeType: 'text/html', label: 'HTML', parseable: false }),
+  '.htm': Object.freeze({ mimeType: 'text/html', label: 'HTML', parseable: false }),
+  '.pptx': Object.freeze({
+    mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    label: 'PPTX',
+    parseable: false,
+  }),
+  '.xlsx': Object.freeze({
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    label: 'XLSX',
+    parseable: false,
+  }),
+});
 
 /*
  * 01_ナレッジ を新規作成したときだけ置く、動作確認用のファイル。
@@ -260,8 +307,9 @@ export const SAMPLE_FILES = Object.freeze([
       '',
       '## 注意',
       '',
-      'アプリは Drive を **読み取り専用** で扱います。',
-      'ファイルの編集・移動・削除は行いません。',
+      '通常の探索・同期・検索では、アプリは Drive を **読み取り専用** で扱います。',
+      '「ナレッジを追加」を確認した場合だけ新しいファイルを作成できますが、',
+      '既存ファイルの編集・移動・削除・上書きは行いません。',
       '抽出したテキストと検索インデックスはブラウザの中（IndexedDB）にだけ保存され、',
       'Drive へは書き戻しません。',
       '',
