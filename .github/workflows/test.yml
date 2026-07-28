@@ -1,0 +1,108 @@
+# npm test を Pull Request と main への push で実行する。
+#
+# ------------------------------------------------------------------
+# このワークフローが必要な理由
+# ------------------------------------------------------------------
+# これまで有効な CI が無く、テストは手元で走らせるしかなかった。
+# 実行し忘れても、途中で止まっても、誰も気づけない状態だった。
+#
+# ここで見るのは apps/tests/ の全スイート（Node と実ブラウザ）である。
+# 外部サービスへは接続しない。secrets も使わない。
+# ------------------------------------------------------------------
+
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# 読み取りだけでよい。デプロイもコメント投稿もしない。
+permissions:
+  contents: read
+
+# 同じブランチで新しい push があったら、古い実行は止める。
+# ブラウザテストはポートを固定しているため、
+# 同時に走らせると互いに邪魔をする。
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # 手元での実測は約2分半。詰まったときに気づけるよう余裕を持たせる。
+    timeout-minutes: 20
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------
+      # Node のバージョン
+      # ------------------------------------------------------------
+      # 下限は package.json の engines（">=22.4.0"）で決まる。
+      # ブラウザテストがグローバル WebSocket を使うためで、
+      # フラグ無しで使えるのは Node 22.0 から、
+      # 実験的でなくなるのは 22.4 から。
+      #
+      # ここでは開発環境と揃えて 24（LTS）を使う。
+      # 下限そのものを確かめたいときは、この値を 22.4 にして試す。
+      # ------------------------------------------------------------
+      - name: Node.js を用意
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: 依存関係を取得
+        # テスト自体は Node 標準機能だけで動くが、
+        # package-lock.json があるため再現可能な形で入れておく。
+        run: npm ci
+
+      # ------------------------------------------------------------
+      # Chrome
+      # ------------------------------------------------------------
+      # ubuntu-latest には Google Chrome が入っている。
+      # ただし入っている前提で決め打ちにはしない。
+      # 見つからなければ、その場で明確に失敗させる。
+      # ------------------------------------------------------------
+      - name: Chrome を探す
+        run: |
+          set -euo pipefail
+          for name in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$name" >/dev/null 2>&1; then
+              found="$(command -v "$name")"
+              echo "CHROME_PATH=$found" >> "$GITHUB_ENV"
+              echo "使用する Chrome: $found"
+              "$found" --version || true
+              exit 0
+            fi
+          done
+          echo "::error::Chrome が見つかりません。ブラウザテストを実行できません。" >&2
+          exit 1
+
+      - name: テストを実行
+        run: npm test
+        env:
+          # 手元より遅いことがあるため、ブラウザスイートの上限を延ばす。
+          # 打ち切りが早すぎると、正常なテストを落としてしまう。
+          TEST_TIMEOUT_BROWSER_MS: '420000'
+          TEST_TIMEOUT_UNIT_MS: '180000'
+
+      # 失敗したときだけ、原因を追うための情報を残す。
+      # 成功時に artifact を増やさない。
+      - name: 失敗時の環境情報
+        if: failure()
+        run: |
+          echo "--- node ---"
+          node --version
+          echo "--- chrome ---"
+          "${CHROME_PATH:-google-chrome}" --version || true
+          echo "--- 残っているプロセス ---"
+          pgrep -a -f 'chrome|chromium' || echo "なし"
+          echo "--- 使用中のポート ---"
+          (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -E ':(53[0-9]{2}|94[0-9]{2})' || echo "なし"
