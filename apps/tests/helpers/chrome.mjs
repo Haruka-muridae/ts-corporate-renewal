@@ -12,9 +12,64 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+/* 一時プロファイルの名前の頭。掃除するときの目印にする。 */
+export const PROFILE_PREFIX = 'tsam-chrome-';
+
+/*
+ * 前回の実行が残した一時プロファイルを消す。
+ *
+ * ------------------------------------------------------------------
+ * 実行開始時に掃除する理由
+ * ------------------------------------------------------------------
+ * スイートがタイムアウトで打ち切られると、プロセスは SIGKILL で死ぬ。
+ * SIGKILL は捕まえられないため、終了フックの rmSync は動かない。
+ * つまり「タイムアウトのたびにプロファイルが1つ残る」。
+ *
+ * 消すのは実行の**開始時**にする。
+ * その時点ではまだどのスイートも動いておらず、
+ * 残っているものは前回の残骸だと確実に分かる。
+ * 実行中に消すと、動いている Chrome の足元を掃うことになる。
+ *
+ * テストは（ポートを固定しているため）同時に走らせない前提である。
+ * ------------------------------------------------------------------
+ *
+ * 戻り値: 消した数
+ */
+export async function sweepStaleProfiles() {
+  const base = tmpdir();
+  let removed = 0;
+  let entries;
+
+  try {
+    entries = await readdir(base, { withFileTypes: true });
+  } catch {
+    /* 読めなくてもテストは続けられる。 */
+    return 0;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(PROFILE_PREFIX)) {
+      continue;
+    }
+
+    try {
+      /* eslint-disable-next-line no-await-in-loop */
+      await rm(join(base, entry.name), { recursive: true, force: true });
+      removed += 1;
+    } catch {
+      /*
+       * 消せないものは飛ばす。OSがまだ掴んでいることがある。
+       * ここで失敗してもテスト結果には影響しない。
+       */
+    }
+  }
+
+  return removed;
+}
 
 /*
  * 起動した Chrome の後始末を保証するための保険。
@@ -97,7 +152,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 export async function launchChrome({ port, startUrl = 'about:blank' }) {
   const chromePath = findChrome();
-  const profileDir = await mkdtemp(join(tmpdir(), 'tsam-chrome-'));
+  const profileDir = await mkdtemp(join(tmpdir(), PROFILE_PREFIX));
 
   installExitHook();
 
