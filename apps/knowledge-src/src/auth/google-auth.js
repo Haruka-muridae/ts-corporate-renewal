@@ -17,7 +17,9 @@
  * 書き込みスコープ（drive / drive.appdata の書き込み用途）は追加しない。
  */
 
-import { AUTH_CONFIG, getDriveScope, isClientIdConfigured } from '../config.js';
+import {
+  AUTH_CONFIG, getDriveScope, isClientIdConfigured, getFolderCreateScope,
+} from '../config.js';
 import { loadGis } from './script-loader.js';
 import { AppError, ErrorCode } from '../core/errors.js';
 import { logger } from '../core/logger.js';
@@ -87,6 +89,9 @@ export function signOut() {
   clearAccessToken();
   cachedProfile = null;
 
+  /* 書き込み用トークンを持ったままログアウトさせない。 */
+  discardWriteToken();
+
   /*
    * Google側の付与も取り消す。失敗しても画面は進める
    * （手元のトークンは既に破棄しているため）。
@@ -120,19 +125,7 @@ function toAuthError(response) {
 }
 
 function hasRequiredScope(response) {
-  const scope = getDriveScope();
-  const oauth2 = globalThis.google?.accounts?.oauth2;
-
-  if (typeof oauth2?.hasGrantedAllScopes === 'function') {
-    try {
-      return oauth2.hasGrantedAllScopes(response, scope);
-    } catch {
-      /* 判定できない場合は下の文字列判定へ落とす。 */
-    }
-  }
-
-  const granted = typeof response?.scope === 'string' ? response.scope.split(/\s+/) : [];
-  return granted.includes(scope);
+  return hasGrantedScope(response, getDriveScope());
 }
 
 function createTokenClient() {
@@ -274,6 +267,184 @@ export function setProfile(profile) {
   notify();
 }
 
+/* ================================================================
+ * 書き込み用トークン（不足フォルダの作成のときだけ）
+ * ================================================================
+ *
+ * 通常の探索・同期・検索は上の読み取り専用トークンだけで動く。
+ * 利用者が「不足フォルダを作成」を押したときに限り、ここで
+ * 追加スコープのトークンを取り、**使い終わったら即座に捨てる**。
+ *
+ * 保存しない場所（要件）:
+ *   localStorage / sessionStorage / Cookie / IndexedDB /
+ *   Cache Storage / Service Worker / URL / DOM / console / アプリログ
+ * 値は下のモジュール内変数にしか置かず、ログには長さすら出さない。
+ * ================================================================ */
+
+let writeToken = null;
+let writeTokenExpiresAt = 0;
+let writeTokenClient = null;
+let pendingWriteRequest = null;
+
+export function hasWriteToken() {
+  return writeToken !== null && Date.now() < writeTokenExpiresAt;
+}
+
+/*
+ * 書き込み用トークンをアプリ内部から消す。
+ *
+ * Google 側の付与そのものは残る（revoke すると同じ付与にぶら下がる
+ * 読み取りトークンまで無効になり、利用者が再ログインを強いられるため）。
+ * 付与の取り消し手順は画面と KNOWLEDGE_SETUP.md に案内を出す。
+ */
+export function discardWriteToken() {
+  const had = writeToken !== null;
+
+  writeToken = null;
+  writeTokenExpiresAt = 0;
+
+  if (had) {
+    logger.info('auth:write-token-discarded');
+  }
+
+  return had;
+}
+
+/* 書き込み用トークンを読む。作成処理以外から呼ばないこと。 */
+export function peekWriteToken() {
+  return hasWriteToken() ? writeToken : null;
+}
+
+function createWriteTokenClient() {
+  const oauth2 = globalThis.google?.accounts?.oauth2;
+
+  if (!oauth2 || typeof oauth2.initTokenClient !== 'function') {
+    throw new AppError(ErrorCode.GIS_LOAD_FAILED, 'oauth2_unavailable');
+  }
+
+  return oauth2.initTokenClient({
+    client_id: AUTH_CONFIG.clientId,
+    scope: getFolderCreateScope(),
+
+    callback: (response) => {
+      const request = pendingWriteRequest;
+      pendingWriteRequest = null;
+
+      if (!request) {
+        return;
+      }
+
+      if (response?.error) {
+        request.reject(toAuthError(response));
+        return;
+      }
+
+      const token = response?.access_token;
+
+      if (typeof token !== 'string' || token === '') {
+        request.reject(new AppError(ErrorCode.AUTH_FAILED, 'empty_token'));
+        return;
+      }
+
+      if (!hasGrantedScope(response, getFolderCreateScope())) {
+        request.reject(new AppError(ErrorCode.WRITE_SCOPE_NOT_GRANTED, 'scope_missing'));
+        return;
+      }
+
+      const lifetimeSeconds = Number(response.expires_in);
+      const lifetimeMs = Number.isFinite(lifetimeSeconds) && lifetimeSeconds > 0
+        ? lifetimeSeconds * 1000
+        : 3600 * 1000;
+
+      writeToken = token;
+      writeTokenExpiresAt = Date.now() + Math.max(0, lifetimeMs - EXPIRY_MARGIN_MS);
+
+      /* トークン本体も長さも記録しない。 */
+      logger.info('auth:write-token-acquired');
+      request.resolve(token);
+    },
+
+    error_callback: (error) => {
+      const request = pendingWriteRequest;
+      pendingWriteRequest = null;
+      logger.warn('auth:write-error-callback', { type: error?.type ?? 'unknown' });
+      request?.reject(toAuthError(error));
+    },
+  });
+}
+
+/*
+ * 書き込み用トークンを取得する。
+ *
+ * **利用者の操作（確認ダイアログの「作成する」）から同期的に呼ぶこと。**
+ * 既に有効なものがあれば使い回す（連続作成で同意画面を何度も出さない）。
+ */
+export async function requestWriteToken() {
+  if (hasWriteToken()) {
+    return writeToken;
+  }
+
+  if (!isClientIdConfigured()) {
+    throw new AppError(ErrorCode.CLIENT_ID_MISSING);
+  }
+
+  await loadGis();
+
+  if (!writeTokenClient) {
+    writeTokenClient = createWriteTokenClient();
+  }
+
+  if (pendingWriteRequest) {
+    throw new AppError(ErrorCode.AUTH_FAILED, 'write_request_in_flight');
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (pendingWriteRequest?.timer === timer) {
+        pendingWriteRequest = null;
+        logger.warn('auth:write-response-timeout', { timeoutMs: AUTH_RESPONSE_TIMEOUT_MS });
+        reject(new AppError(ErrorCode.AUTH_TIMEOUT, 'no_response'));
+      }
+    }, AUTH_RESPONSE_TIMEOUT_MS);
+
+    pendingWriteRequest = {
+      timer,
+      resolve: (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    };
+
+    try {
+      writeTokenClient.requestAccessToken({ prompt: '' });
+    } catch (error) {
+      clearTimeout(timer);
+      pendingWriteRequest = null;
+      reject(new AppError(ErrorCode.AUTH_FAILED, error?.name ?? 'request_failed'));
+    }
+  });
+}
+
+/* 付与されたスコープに wanted が含まれるか。 */
+function hasGrantedScope(response, wanted) {
+  const oauth2 = globalThis.google?.accounts?.oauth2;
+
+  if (typeof oauth2?.hasGrantedAllScopes === 'function') {
+    try {
+      return oauth2.hasGrantedAllScopes(response, wanted);
+    } catch {
+      /* 判定できない場合は下の文字列判定へ落とす。 */
+    }
+  }
+
+  const granted = typeof response?.scope === 'string' ? response.scope.split(/\s+/) : [];
+  return granted.includes(wanted);
+}
+
 /* テスト・リセット用。 */
 export function resetAuth() {
   accessToken = null;
@@ -286,5 +457,14 @@ export function resetAuth() {
 
   pendingRequest = null;
   cachedProfile = null;
+
+  if (pendingWriteRequest?.timer) {
+    clearTimeout(pendingWriteRequest.timer);
+  }
+
+  pendingWriteRequest = null;
+  writeTokenClient = null;
+  discardWriteToken();
+
   notify();
 }

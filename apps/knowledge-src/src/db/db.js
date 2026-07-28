@@ -79,6 +79,8 @@ export const SettingKey = Object.freeze({
   LAST_SYNC_AT: 'lastSyncAt',
   SCHEMA_VERSION: 'schemaVersion',
   UI_PREFERENCES: 'uiPreferences',
+  /* セットアップウィザードの進捗と完了状態（進捗フラグと時刻のみ）。 */
+  SETUP_STATE: 'setupState',
 });
 
 export const SEARCH_INDEX_ID = 'main';

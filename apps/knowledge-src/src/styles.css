@@ -699,6 +699,149 @@ table.data tr:hover td {
   text-decoration: underline;
 }
 
+/* ---------- フォルダ構成の表示 ---------- */
+
+.tree-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+
+.tree-list__item {
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+/* 階層はインデントで表す。深さは0〜2の3段階しか使わない。 */
+.tree-list__item--depth1 { padding-left: 20px; }
+.tree-list__item--depth2 { padding-left: 40px; }
+
+.tree-list__name {
+  flex: 1;
+  min-width: 140px;
+  word-break: break-word;
+}
+
+/*
+ * 状態のラベル。色だけに頼らず、必ず文字でも状態が分かるようにしてある
+ * （renderTreeRow / renderStructureTree が LABEL_BY_STATUS を入れている）。
+ */
+.tag {
+  background: var(--color-surface-alt, #f1f3f5);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+.tag--new {
+  background: #fff4e5;
+  border-color: #f0b37e;
+  color: #8a4b08;
+}
+
+.plain-list {
+  margin: 4px 0 12px;
+  padding-left: 20px;
+}
+
+.plain-list li {
+  word-break: break-word;
+}
+
+.progress-block {
+  margin: 12px 0;
+}
+
+.progress-block p {
+  margin: 0 0 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tag--new {
+    background: #3a2a12;
+    border-color: #8a5a1f;
+    color: #f0c68a;
+  }
+}
+
+/* ---------- セットアップウィザード ---------- */
+
+.wizard__head .progress {
+  margin-top: 8px;
+}
+
+.wizard__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.wizard__list-item {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.wizard__num {
+  color: var(--color-text-muted);
+}
+
+/* 実施中の手順は太字にする（色だけに頼らない）。 */
+.wizard__list-item--current .wizard__label {
+  font-weight: 700;
+}
+
+.wizard__list-item--pending .wizard__label,
+.wizard__list-item--blocked .wizard__label {
+  color: var(--color-text-muted);
+}
+
+/* 実施中でない手順は控えめにする。中身は残す（読める状態を保つ）。 */
+.wizard__step--blocked,
+.wizard__step--pending {
+  opacity: 0.75;
+}
+
+.diag-table {
+  border-collapse: collapse;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.diag-table th,
+.diag-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.diag-table th[scope='row'] {
+  white-space: nowrap;
+}
+
+.diag-table__detail {
+  color: var(--color-text-muted);
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .diag-table th[scope='row'] {
+    white-space: normal;
+  }
+}
+
 /* ---------- フッター ---------- */
 
 .app-footer {

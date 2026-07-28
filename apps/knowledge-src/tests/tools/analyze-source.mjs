@@ -190,8 +190,23 @@ const DANGEROUS = [
   { re: /localStorage\./, label: 'localStorage 利用' },
   { re: /sessionStorage\./, label: 'sessionStorage 利用' },
   { re: /document\.cookie/, label: 'cookie 利用' },
-  { re: /method:\s*['"](POST|PUT|PATCH|DELETE)['"]/, label: '書き込みHTTPメソッド' },
-  { re: /uploadType|\/upload\//, label: 'Drive アップロード経路' },
+  /*
+   * PUT / PATCH / DELETE はどこにも書かせない。
+   * POST は「フォルダ作成の唯一の経路」である drive-writer.js だけ許す
+   * （下の allowIn を参照）。他のファイルに現れたら失敗させる。
+   */
+  { re: /method:\s*['"](PUT|PATCH|DELETE)['"]/, label: '禁止された書き込みHTTPメソッド' },
+  { re: /method:\s*['"]POST['"]/, label: '想定外の POST', allowIn: /drive[\\/]drive-writer\.js$/ },
+  /*
+   * アップロード経路も drive-writer.js だけに閉じる。
+   * 使うのはセットアップの「サンプルファイル作成」1か所からのみ。
+   */
+  {
+    re: /uploadType|\/upload\//,
+    label: '想定外の Drive アップロード経路',
+    /* URL の定義は config.js、実際の呼び出しは drive-writer.js だけに閉じる。 */
+    allowIn: /(drive[\\/]drive-writer\.js|src[\\/]config\.js)$/,
+  },
   { re: /client_secret|clientSecret|GOCSPX|refresh_token|private_key/, label: '秘密情報らしき文字列' },
   { re: /\bya29\./, label: 'アクセストークンらしき文字列' },
 ];
@@ -207,12 +222,30 @@ for (const [file, src] of sources) {
     }
 
     for (const rule of DANGEROUS) {
-      if (rule.re.test(line)) {
-        fail(`${rule.label}: ${rel(file)}:${index + 1}`);
-        dangerous += 1;
+      if (!rule.re.test(line)) {
+        continue;
       }
+      /* 例外を認めたファイルだけは通す（経路を1か所に閉じ込めるため）。 */
+      if (rule.allowIn && rule.allowIn.test(file)) {
+        continue;
+      }
+      fail(`${rule.label}: ${rel(file)}:${index + 1}`);
+      dangerous += 1;
     }
   });
+}
+
+/*
+ * 書き込み経路が1ファイルに閉じていることを、逆方向からも確かめる。
+ * drive-writer.js 以外に fetch(..., { method: ... }) が現れたら異常。
+ */
+const writerFiles = [...sources.keys()].filter((file) => /method:\s*['"]POST['"]/.test(sources.get(file)));
+
+if (writerFiles.length === 1 && /drive-writer\.js$/.test(writerFiles[0])) {
+  ok('非GETの経路は drive-writer.js の1ファイルだけ');
+} else {
+  fail(`非GETの経路が想定外のファイルにある: ${writerFiles.map(rel).join(', ')}`);
+  dangerous += 1;
 }
 
 if (dangerous === 0) {

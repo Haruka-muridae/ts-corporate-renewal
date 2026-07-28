@@ -86,6 +86,27 @@ export function createStore(initial = {}) {
     folder: null,          // { id, name, path }
     folderResolve: null,   // 固定パス探索の結果（folder-path.js の戻り値）
     folderResolving: false,
+
+    /* 不足フォルダの確認・作成 */
+    structure: null,             // scanFolderStructure() の結果
+    structureScanning: false,
+    folderCreating: false,
+    folderCreateProgress: null,  // { phase, done, total, currentName }
+    folderCreateResult: null,    // 表示用に整形した作成結果
+
+    /*
+     * セットアップウィザード。
+     * null は「まだ読み込んでいない」＝通常画面を出す、という意味にする。
+     * main.js が IndexedDB から読み込んだ時点で実体が入る。
+     */
+    setup: null,                 // { version, completed, completedAt, progress }
+    samplesCreating: false,
+    samplesProgress: null,
+    samplesResult: null,         // 表示用に整形したサンプルファイル作成結果
+    setupSearch: null,           // { term, hits, names }
+    setupDiagnosing: false,
+    setupDiagnosis: null,        // summarizeDiagnosis() の7分類
+
     files: [],             // files テーブルのスナップショット
     progress: null,        // { phase, done, total, currentName }
     lastError: null,       // { code, message }

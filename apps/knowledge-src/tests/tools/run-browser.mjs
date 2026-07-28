@@ -17,7 +17,7 @@
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, resolve, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -354,6 +354,13 @@ if (mode === 'dev' || mode === 'ui') {
 }
 
 if (mode === 'dist') {
+  /*
+   * 「初回アクセス」から始めるため、ブラウザのプロファイル（IndexedDBを含む）を消す。
+   * 消さないと前回の実行でセットアップ済みになっていて、ウィザードを確認できない。
+   */
+  await rm(resolve(root, 'node_modules/.cache/chrome-test-profile'), { recursive: true, force: true })
+    .catch(() => { /* 初回は存在しない。 */ });
+
   const distDir = resolve(repoApps, 'knowledge');
   /* GitHub Pages のプロジェクトページを想定した深いサブパス。 */
   const prefix = '/myrepo/apps/knowledge';
@@ -452,6 +459,61 @@ if (mode === 'dist') {
       })()
     `.replace('JAPANESE_PDF_BASE64', (await readFile(resolve(root, 'tests/fixtures/generated/japanese.pdf'))).toString('base64'));
 
+    /*
+     * 初回アクセスではセットアップウィザードが出る。
+     * 1回目でウィザードを確認し、完了状態を書き込んでから、
+     * 2回目で通常画面（タブ）を確認する。
+     * プロファイルは dist モードの開始時に消しているので、必ず「初回」から始まる。
+     */
+    const wizardExpression = `
+      (async () => {
+        const out = { errors: [], rejections: [] };
+        const deadline = Date.now() + 30000;
+        while (!document.querySelector('.wizard') && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
+
+        const wizard = document.querySelector('.wizard');
+        out.wizardShown = Boolean(wizard);
+        out.navHidden = document.querySelector('.app-nav')?.hidden === true;
+        out.steps = Array.from(document.querySelectorAll('.wizard__label')).map((e) => e.textContent);
+        out.hasSignInButton = Boolean(document.querySelector('[data-role="wizard-signin"]'));
+        out.text = (wizard?.textContent ?? '').slice(0, 4000);
+
+        /*
+         * 完了状態を直接書き込む（アプリと同じ設定テーブル）。
+         * 次の読み込みで通常画面になることを確かめるため。
+         */
+        out.wrote = await new Promise((resolve) => {
+          const open = indexedDB.open('tsam-knowledge');
+          open.onerror = () => resolve('open-failed');
+          open.onsuccess = () => {
+            const dbi = open.result;
+            try {
+              const tx = dbi.transaction('settings', 'readwrite');
+              tx.objectStore('settings').put({
+                key: 'setupState',
+                value: { version: 1, completed: true, completedAt: '2026-07-28T00:00:00.000Z', progress: {} },
+                updatedAt: '2026-07-28T00:00:00.000Z',
+              });
+              tx.oncomplete = () => { dbi.close(); resolve('ok'); };
+              tx.onerror = () => { dbi.close(); resolve('tx-failed'); };
+            } catch (e) {
+              dbi.close();
+              resolve(String(e).slice(0, 80));
+            }
+          };
+        });
+
+        return JSON.stringify(out);
+      })()
+    `;
+
+    const first = await runPage(pageUrl, 'myrepo/apps/knowledge', { expression: wizardExpression });
+    const wizardResult = first.custom.error || typeof first.custom.value !== 'string'
+      ? null
+      : JSON.parse(first.custom.value);
+
     const { custom, consoleLogs } = await runPage(pageUrl, 'myrepo/apps/knowledge', { expression });
 
     if (custom.error || typeof custom.value !== 'string') {
@@ -475,7 +537,18 @@ if (mode === 'dist') {
     };
 
     console.log(`--- 本番配信物の検査（${prefix}/） ---`);
+
+    /* 1回目：初回アクセス（セットアップウィザード） */
+    check('初回アクセスでウィザードが出る', wizardResult?.wizardShown === true, first.custom.error ?? wizardResult);
+    check('ウィザード中はナビを隠す', wizardResult?.navHidden === true);
+    check('手順が7つ並ぶ', wizardResult?.steps?.length === 7, wizardResult?.steps);
+    check('最初はログインの案内', wizardResult?.hasSignInButton === true);
+    check('読み取り専用であることを案内する', wizardResult?.text?.includes('drive.readonly') === true);
+    check('完了状態を保存できる', wizardResult?.wrote === 'ok', wizardResult?.wrote);
+
+    /* 2回目：完了後の通常画面 */
     check('起動できる', !result.bootFailed, result);
+    check('完了後は通常画面が出る', result.nav.length === 6, result.nav);
     check('深いサブパスで表示できる', result.nav.length === 6, result.nav);
     check('スコープを表示している', result.badges.some((b) => b.includes('drive.readonly')), result.badges);
     check('6画面すべて切り替えられる', result.settingsInputs === 7 && result.diagButton, { inputs: result.settingsInputs, diag: result.diagButton });

@@ -12,7 +12,13 @@ import { loadFixtures, installFakeGis, installFakeFetch, createTree, MIMES, driv
 
 import {
   ensureAccessToken, hasValidAccessToken, signOut, resetAuth, getProfile, subscribeAuth, clearAccessToken,
+  hasWriteToken,
 } from '../../src/auth/google-auth.js';
+import { scanFolderStructure, createMissingFolders, isCreatingFolders } from '../../src/drive/folder-create.js';
+import { PlanStatus } from '../../src/drive/folder-plan.js';
+import { createSampleFiles } from '../../src/drive/sample-files.js';
+import { requestWriteToken, discardWriteToken } from '../../src/auth/google-auth.js';
+import { makeSetupRecord, createProgress } from '../../src/setup/wizard-state.js';
 import {
   fetchAbout, findFoldersByName, listFilesInFolder, exportGoogleDoc, downloadFile, collectFolderTree,
 } from '../../src/drive/drive-client.js';
@@ -23,7 +29,7 @@ import { openDb, runWrite, db } from '../../src/db/db.js';
 import {
   listFiles, getDocument, getChunksByFile, collectStats, clearAllCache,
   setSyncOptions, getSyncOptions, listLogs, trimLogs, deleteFileData, setChunkOptions,
-  cleanupOrphans, listFileIdsWithChunks,
+  cleanupOrphans, listFileIdsWithChunks, getSetupState, setSetupState,
 } from '../../src/db/repo.js';
 import { ErrorCode } from '../../src/core/errors.js';
 import { FileSyncState } from '../../src/core/state.js';
@@ -796,6 +802,507 @@ async function main() {
 
     const evil = el('a', { href: 'javascript:alert(1)', text: 'x' });
     check('el() は危険なhrefを設定しない', !evil.hasAttribute('href'));
+
+    /* ============================================================ */
+    section('21-2. 不足フォルダの作成（POST files.create）');
+
+    /* 木構造を何度も作り替えるので、初期状態を控えておく。 */
+    const treeSnapshot = new Map([...tree.entries()].map(([id, node]) => [id, { ...node }]));
+    const restoreTree = () => {
+      tree.clear();
+      treeSnapshot.forEach((node, id) => tree.set(id, { ...node }));
+    };
+    /* 対象階層のフォルダだけを消す（ファイルは触らない）。 */
+    const dropFolders = (...ids) => ids.forEach((id) => tree.delete(id));
+    const mark = () => net.requests.length;
+    const from = (n) => net.requests.slice(n);
+    const names = (list) => list.map((item) => item.node.name).join(',');
+
+    /* --- 一部存在（既定の木：01_ナレッジ まである） --- */
+    let at = mark();
+    let plan = await scanFolderStructure();
+    check('一部存在：既存3件', plan.existing.length === 3, names(plan.existing));
+    check('一部存在：不足3件', plan.missing.length === 3, names(plan.missing));
+    check('一部存在：不足は02/03/99', names(plan.missing) === '02_未整理,03_アーカイブ,99_システム');
+    check('一部存在：作成できる', plan.canCreate === true);
+    check('確認だけでは書き込まない', from(at).every((r) => r.method === 'GET'));
+    check('確認だけでは書き込みトークンを取らない', gis.writeRequests === 0, gis.writeRequests);
+
+    at = mark();
+    let result = await createMissingFolders({ isBusy: () => false });
+    let posts = from(at).filter((r) => r.method === 'POST');
+
+    check('一部存在：3件作成できる', result.ok === true && result.created.length === 3, result.error?.code);
+    check('一部存在：POSTは3件', posts.length === 3, posts.length);
+    check('一部存在：作成順序が仕様どおり',
+      posts.map((r) => r.body.name).join(',') === '02_未整理,03_アーカイブ,99_システム',
+      posts.map((r) => r.body.name));
+    check('すべて POST /files', posts.every((r) => r.path.endsWith('/files')));
+    check('mimeType はフォルダ', posts.every((r) => r.body.mimeType === MIMES.FOLDER));
+    check('parents はちょうど1件', posts.every((r) => Array.isArray(r.body.parents) && r.body.parents.length === 1));
+    check('親は ローカルLLM', posts.every((r) => r.body.parents[0] === 'f-llm'));
+    check('fields が要件どおり', posts.every((r) => r.fields === 'id,name,mimeType,parents,webViewLink'));
+    check('本文に余計な項目が無い',
+      posts.every((r) => Object.keys(r.body).sort().join(',') === 'mimeType,name,parents'));
+    check('作成には書き込みトークンを使う', posts.every((r) => r.writeToken === true));
+    check('一覧取得は読み取りトークンのまま',
+      from(at).filter((r) => r.method === 'GET').every((r) => r.writeToken === false));
+    check('書き込みトークンの要求は1回', gis.writeRequests === 1, gis.writeRequests);
+    check('作成後に書き込みトークンを破棄する', hasWriteToken() === false);
+    check('作成済みリンクを返す', result.created.every((item) => item.folder.webViewLink.startsWith('https://drive.google.com/')));
+
+    /* --- 全部存在（作成不要） --- */
+    at = mark();
+    plan = await scanFolderStructure();
+    check('全部存在：COMPLETE', plan.status === PlanStatus.COMPLETE, plan.status);
+    check('全部存在：作成不要', plan.needsCreation === false);
+    result = await createMissingFolders({ isBusy: () => false });
+    check('全部存在：何も作らない', result.ok === true && result.created.length === 0);
+    check('全部存在：POSTが発生しない', from(at).filter((r) => r.method === 'POST').length === 0);
+    check('全部存在：書き込みトークンを取らない', gis.writeRequests === 1, gis.writeRequests);
+
+    /* --- 作成後の再探索（固定パスが解決できる） --- */
+    const afterCreate = await resolveKnowledgeFolder();
+    check('作成後も固定パスを解決できる', afterCreate.status === PathResolveStatus.RESOLVED);
+    check('作成後の対象は 01_ナレッジ', afterCreate.folder.id === 'f-kn');
+
+    /* --- TSAM AI のみ存在 --- */
+    restoreTree();
+    dropFolders('f-llm', 'f-kn', 'f-sub');
+    at = mark();
+    plan = await scanFolderStructure();
+    check('TSAM AIのみ：既存1件', plan.existing.length === 1 && plan.existing[0].node.name === 'TSAM AI');
+    check('TSAM AIのみ：不足5件', plan.missing.length === 5, names(plan.missing));
+
+    at = mark();
+    result = await createMissingFolders({ isBusy: () => false });
+    posts = from(at).filter((r) => r.method === 'POST');
+    check('TSAM AIのみ：5件作成', result.ok === true && result.created.length === 5, result.error?.code);
+    check('TSAM AIのみ：既存は作り直さない', !posts.some((r) => r.body.name === 'TSAM AI'));
+    check('TSAM AIのみ：ローカルLLMの親は既存のTSAM AI',
+      posts[0].body.name === 'ローカルLLM' && posts[0].body.parents[0] === 'f-tsam');
+    check('TSAM AIのみ：子の親は新しいローカルLLM',
+      new Set(posts.slice(1).map((r) => r.body.parents[0])).size === 1
+      && posts.slice(1)[0].body.parents[0] === result.created[0].folder.id);
+
+    /* --- 全フォルダ不存在 --- */
+    restoreTree();
+    dropFolders('f-tsam', 'f-llm', 'f-kn', 'f-sub');
+    at = mark();
+    plan = await scanFolderStructure();
+    check('全て不存在：既存0件', plan.existing.length === 0);
+    check('全て不存在：不足6件', plan.missing.length === 6, names(plan.missing));
+    check('全て不存在でもゴミ箱のTSAM AIを拾わない', plan.missing[0].node.name === 'TSAM AI');
+
+    at = mark();
+    result = await createMissingFolders({ isBusy: () => false });
+    posts = from(at).filter((r) => r.method === 'POST');
+    check('全て不存在：6件作成', result.ok === true && result.created.length === 6, result.error?.code);
+    check('全て不存在：作成順序',
+      posts.map((r) => r.body.name).join(',') === 'TSAM AI,ローカルLLM,01_ナレッジ,02_未整理,03_アーカイブ,99_システム',
+      posts.map((r) => r.body.name));
+    check('全て不存在：最初の親はroot', posts[0].body.parents[0] === 'root');
+    check('全て不存在：2段目の親は1段目のID', posts[1].body.parents[0] === result.created[0].folder.id);
+    check('全て不存在：3段目以降の親は2段目のID',
+      posts.slice(2).every((r) => r.body.parents[0] === result.created[1].folder.id));
+
+    /* --- 同名複数 --- */
+    restoreTree();
+    tree.set('f-llm-dup', {
+      id: 'f-llm-dup', parent: 'f-tsam', name: 'ローカルLLM', mimeType: MIMES.FOLDER,
+      modifiedTime: '2026-01-01T00:00:00.000Z', version: '1', trashed: false,
+      webViewLink: 'https://drive.google.com/drive/folders/f-llm-dup',
+    });
+    at = mark();
+    plan = await scanFolderStructure();
+    check('同名複数：AMBIGUOUS', plan.status === PlanStatus.AMBIGUOUS, plan.status);
+    check('同名複数：作成させない', plan.canCreate === false);
+    check('同名複数：候補を返す', plan.ambiguous[0].candidates.length === 2);
+    check('同名複数：自動選択しない', plan.ambiguous[0].folder === null);
+    check('同名複数：その先は判定しない', plan.blocked.length === 4, plan.blocked.length);
+
+    at = mark();
+    result = await createMissingFolders({ isBusy: () => false });
+    check('同名複数：作成を拒否する', result.error?.code === ErrorCode.FOLDER_CREATE_AMBIGUOUS, result.error?.code);
+    check('同名複数：POSTが発生しない', from(at).filter((r) => r.method === 'POST').length === 0);
+    check('同名複数：書き込みトークンを取らない', gis.writeRequests === 3, gis.writeRequests);
+    tree.delete('f-llm-dup');
+
+    /* --- 409相当（走査後・作成前に他者が作った） --- */
+    restoreTree();
+    at = mark();
+    result = await createMissingFolders({
+      isBusy: () => false,
+      onProgress: (progress) => {
+        /* 認可の直後、まだ1件も作っていない時点で外から 02_未整理 を作る。 */
+        if (progress.phase === 'authorizing' && !tree.has('f-race')) {
+          tree.set('f-race', {
+            id: 'f-race', parent: 'f-llm', name: '02_未整理', mimeType: MIMES.FOLDER,
+            modifiedTime: '2026-03-01T00:00:00.000Z', version: '1', trashed: false,
+            webViewLink: 'https://drive.google.com/drive/folders/f-race',
+          });
+        }
+      },
+    });
+    posts = from(at).filter((r) => r.method === 'POST');
+    check('409相当：二重に作らない', !posts.some((r) => r.body.name === '02_未整理'), posts.map((r) => r.body.name));
+    check('409相当：既存として再利用する', result.reused.some((item) => item.node.name === '02_未整理'));
+    check('409相当：残りは作成する', posts.length === 2, posts.length);
+    check('409相当：全体としては成功', result.ok === true, result.error?.code);
+
+    /* --- HTTP 409 が返った場合（再試行しない） --- */
+    restoreTree();
+    at = mark();
+    scenario.inject = (kind) => (kind === 'create' ? driveError(409, 'duplicate') : null);
+    result = await createMissingFolders({ isBusy: () => false });
+    posts = from(at).filter((r) => r.method === 'POST');
+    /* 409 は再試行しない。ただし致命的ではないので、残りのノードは試す。 */
+    check('409：1ノードあたり1回しか送らない',
+      posts.length === 3 && new Set(posts.map((r) => r.body.name)).size === 3, posts.map((r) => r.body.name));
+    check('409：失敗として記録する', result.failed.length === 3 && result.ok === false, result.failed.length);
+    check('409：作成扱いにしない', result.created.length === 0);
+    scenario.inject = undefined;
+
+    /* --- 401（再試行しない） --- */
+    restoreTree();
+    at = mark();
+    scenario.inject = (kind) => (kind === 'create' ? driveError(401, 'authError') : null);
+    result = await createMissingFolders({ isBusy: () => false });
+    posts = from(at).filter((r) => r.method === 'POST');
+    check('401：再試行しない', posts.length === 1, posts.length);
+    check('401：認証エラーとして扱う', result.failed[0]?.error?.code === ErrorCode.AUTH_EXPIRED, result.failed[0]?.error?.code);
+    check('401：残りは実行しない', result.skipped.length === 2, result.skipped.length);
+    scenario.inject = undefined;
+
+    /* --- 403（再試行しない） --- */
+    restoreTree();
+    at = mark();
+    scenario.inject = (kind) => (kind === 'create' ? driveError(403, 'insufficientFilePermissions') : null);
+    result = await createMissingFolders({ isBusy: () => false });
+    posts = from(at).filter((r) => r.method === 'POST');
+    check('403：再試行しない', posts.length === 1, posts.length);
+    check('403：権限不足として扱う', result.failed[0]?.error?.code === ErrorCode.DRIVE_PERMISSION_DENIED);
+    check('403：残りは実行しない', result.skipped.length === 2);
+    scenario.inject = undefined;
+
+    /* --- 429（Retry-After を尊重して再試行し、成功する） --- */
+    restoreTree();
+    at = mark();
+    let rateLimited = 0;
+    scenario.inject = (kind) => {
+      if (kind !== 'create') return null;
+      rateLimited += 1;
+      return rateLimited <= 2 ? driveError(429, 'rateLimitExceeded', { 'retry-after': '0' }) : null;
+    };
+    result = await createMissingFolders({ isBusy: () => false });
+    posts = from(at).filter((r) => r.method === 'POST');
+    check('429：再試行して成功する', result.ok === true, result.error?.code);
+    check('429：再試行分だけPOSTが増える', posts.length === 5, posts.length);
+    check('429：作成結果は3件', result.created.length === 3);
+    scenario.inject = undefined;
+
+    /* --- 5xx（上限まで再試行して失敗する） --- */
+    restoreTree();
+    at = mark();
+    scenario.inject = (kind) => (kind === 'create' ? driveError(503, 'backendError', { 'retry-after': '0' }) : null);
+    result = await createMissingFolders({ isBusy: () => false });
+    posts = from(at).filter((r) => r.method === 'POST');
+    /* 1ノードにつき「初回 + 再試行3回」= 4回。不足3件なので合計12回。 */
+    check('5xx：1ノードあたり4回試す', posts.length === 12, posts.length);
+    check('5xx：ノードごとの試行回数が4回',
+      ['02_未整理', '03_アーカイブ', '99_システム']
+        .every((name) => posts.filter((r) => r.body.name === name).length === 4),
+      posts.map((r) => r.body.name));
+    check('5xx：サーバーエラーとして扱う', result.failed[0]?.error?.code === ErrorCode.SERVER_ERROR);
+    check('5xx：後続は続行する', result.failed.length + result.created.length === 3, result);
+    scenario.inject = undefined;
+
+    /* --- ネットワーク中断 --- */
+    restoreTree();
+    at = mark();
+    scenario.inject = (kind) => {
+      if (kind === 'create') throw new TypeError('Failed to fetch');
+      return null;
+    };
+    result = await createMissingFolders({ isBusy: () => false });
+    check('ネットワーク中断：通信エラーとして扱う',
+      result.failed[0]?.error?.code === ErrorCode.NETWORK_ERROR, result.failed[0]?.error?.code);
+    check('ネットワーク中断：成功扱いにしない', result.ok === false);
+    scenario.inject = undefined;
+
+    /* --- 部分失敗からの再開 --- */
+    restoreTree();
+    at = mark();
+    scenario.inject = (kind, info) => {
+      /* 03_アーカイブ だけ失敗させる。 */
+      if (kind === 'create' && info?.body?.name === '03_アーカイブ') {
+        return driveError(503, 'backendError', { 'retry-after': '0' });
+      }
+      return null;
+    };
+    const firstRun = await createMissingFolders({ isBusy: () => false });
+    check('再開：1回目は2件成功1件失敗',
+      firstRun.created.length === 2 && firstRun.failed.length === 1, firstRun);
+    check('再開：1回目は未完了', firstRun.ok === false);
+    check('再開：失敗したのは03_アーカイブ', firstRun.failed[0].node.name === '03_アーカイブ');
+
+    scenario.inject = undefined;
+    at = mark();
+    const secondRun = await createMissingFolders({ isBusy: () => false });
+    posts = from(at).filter((r) => r.method === 'POST');
+    check('再開：2回目は残り1件だけ作る', posts.length === 1, posts.map((r) => r.body.name));
+    check('再開：作り直したのは03_アーカイブ', posts[0].body.name === '03_アーカイブ');
+    check('再開：1回目の成功分は作り直さない',
+      !posts.some((r) => ['02_未整理', '99_システム'].includes(r.body.name)));
+    check('再開：2回目で完了する', secondRun.ok === true, secondRun.error?.code);
+
+    /* --- 二重実行の防止 --- */
+    restoreTree();
+    at = mark();
+    const [runA, runB] = await Promise.all([
+      createMissingFolders({ isBusy: () => false }),
+      createMissingFolders({ isBusy: () => false }),
+    ]);
+    const rejected = [runA, runB].filter((r) => r.error?.code === ErrorCode.FOLDER_CREATE_IN_PROGRESS);
+    check('二重実行：片方だけ実行される', rejected.length === 1, [runA.error?.code, runB.error?.code]);
+    check('二重実行：POSTは3件のまま', from(at).filter((r) => r.method === 'POST').length === 3);
+    check('二重実行：実行中フラグが戻る', isCreatingFolders() === false);
+
+    /* --- 別タブが実行中（Web Locks） --- */
+    restoreTree();
+    if (navigator.locks?.request) {
+      let release;
+      const held = new Promise((resolve) => { release = resolve; });
+      const lockHeld = navigator.locks.request('tsam-knowledge-folder-create', () => held);
+
+      at = mark();
+      const lockedOut = await createMissingFolders({ isBusy: () => false });
+      check('別タブ実行中：作成を断る', lockedOut.error?.code === ErrorCode.FOLDER_CREATE_IN_PROGRESS, lockedOut.error?.code);
+      check('別タブ実行中：POSTが発生しない', from(at).filter((r) => r.method === 'POST').length === 0);
+
+      release();
+      await lockHeld;
+      check('別タブのロックが外れたら実行できる',
+        (await createMissingFolders({ isBusy: () => false })).ok === true);
+    } else {
+      check('別タブ実行中：作成を断る（Web Locks非対応のため省略）', true);
+      check('別タブ実行中：POSTが発生しない（同上）', true);
+      check('別タブのロックが外れたら実行できる（同上）', true);
+    }
+
+    /* --- 同期中は作成しない --- */
+    restoreTree();
+    at = mark();
+    const busyResult = await createMissingFolders({ isBusy: () => true });
+    check('同期中：作成を断る', busyResult.error?.code === ErrorCode.FOLDER_CREATE_BLOCKED_BY_SYNC);
+    check('同期中：POSTが発生しない', from(at).filter((r) => r.method === 'POST').length === 0);
+
+    /* --- 途中で同期が始まったら止める --- */
+    restoreTree();
+    at = mark();
+    let syncStarted = false;
+    const interrupted = await createMissingFolders({
+      isBusy: () => syncStarted,
+      onProgress: (progress) => {
+        if (progress.phase === 'creating' && progress.done === 1) {
+          syncStarted = true;
+        }
+      },
+    });
+    check('作成中に同期が始まったら残りを止める', interrupted.skipped.length > 0, interrupted.skipped.length);
+    check('止めた分は未実行として記録する',
+      interrupted.skipped.every((item) => item.reason === ErrorCode.FOLDER_CREATE_BLOCKED_BY_SYNC));
+
+    /* --- 中断（AbortSignal） --- */
+    restoreTree();
+    at = mark();
+    const aborter = new AbortController();
+    aborter.abort();
+    const abortedRun = await createMissingFolders({ isBusy: () => false, signal: aborter.signal });
+    check('中断：作成しない', from(at).filter((r) => r.method === 'POST').length === 0);
+    check('中断：未実行として記録する', abortedRun.skipped.length === 3 || abortedRun.error !== null, abortedRun);
+
+    /* --- 書き込みメソッドの集計 --- */
+    restoreTree();
+    check('PUT/PATCH/DELETE は1件も無い', net.forbiddenWrites().length === 0, net.forbiddenWrites());
+    check('非GETはすべて POST /files',
+      net.nonGet().every((r) => r.method === 'POST' && r.path.endsWith('/files')),
+      net.nonGet().filter((r) => r.method !== 'POST').map((r) => r.method));
+    check('非GETはすべてフォルダ作成',
+      net.nonGet().every((r) => r.body?.mimeType === MIMES.FOLDER));
+    check('uploadエンドポイントを呼ばない', !net.requests.some((r) => r.url.includes('/upload/')));
+    check('作成にも必ず Authorization を付ける', net.creates().every((r) => r.hasAuthHeader));
+
+    /* --- 書き込みトークンが残らない --- */
+    check('作成後に書き込みトークンを保持しない', hasWriteToken() === false);
+    const writeLogs = JSON.stringify(await listLogs(1000));
+    check('ログに書き込みトークンが無い', !writeLogs.includes('fake-write-token'));
+    const writeStorages = JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, cookie: document.cookie });
+    check('ストレージに書き込みトークンが無い', !writeStorages.includes('fake-write-token'));
+    check('DOMに書き込みトークンが無い', !document.body.textContent.includes('fake-write-token'));
+    const writeDbDump = JSON.stringify(await db.settings.toArray());
+    check('IndexedDBに書き込みトークンが無い', !writeDbDump.includes('fake-write-token'));
+
+    /* 木を元に戻してから次の節へ進む。 */
+    restoreTree();
+
+    /* ============================================================ */
+    section('21-3. サンプルファイルの作成（初回のみ・上書きしない）');
+
+    /* 01_ナレッジ を作り直した状態を作る（中身は空）。 */
+    const emptyKnowledge = () => {
+      restoreTree();
+      [...tree.keys()].forEach((id) => {
+        if (tree.get(id)?.parent === 'f-kn') {
+          tree.delete(id);
+        }
+      });
+    };
+
+    emptyKnowledge();
+    at = mark();
+    await requestWriteToken();
+    let samples = await createSampleFiles({ folderId: 'f-kn' });
+    discardWriteToken();
+    let uploads = from(at).filter((r) => r.isUpload);
+
+    check('空のフォルダなら2件作る', samples.ok === true && samples.created.length === 2,
+      samples.failed.map((f) => ({ name: f.name, code: f.error?.code, detail: f.error?.detail })));
+    check('アップロードは2件', uploads.length === 2, uploads.length);
+    check('作成順序は README.md → サンプル.txt',
+      uploads.map((r) => r.body.name).join(',') === 'README.md,サンプル.txt', uploads.map((r) => r.body.name));
+    check('multipart で送る', uploads.every((r) => r.uploadType === 'multipart'));
+    check('Content-Type が multipart/related', uploads.every((r) => r.contentType.startsWith('multipart/related')));
+    check('メタデータは3項目だけ',
+      uploads.every((r) => Object.keys(r.body).sort().join(',') === 'mimeType,name,parents'));
+    check('親は 01_ナレッジ', uploads.every((r) => r.body.parents[0] === 'f-kn'));
+    check('fields は要件どおり', uploads.every((r) => r.fields === 'id,name,mimeType,parents,webViewLink'));
+    check('本文が入っている', uploads.every((r) => typeof r.content === 'string' && r.content.length > 50));
+    check('検索テスト用の語を含む',
+      uploads.some((r) => r.content.includes('テスト用キーワードあいうえお')));
+    check('READMEのMIMEはMarkdown',
+      uploads.find((r) => r.body.name === 'README.md').body.mimeType === 'text/markdown');
+    check('作成には書き込みトークンを使う', uploads.every((r) => r.writeToken === true));
+    check('Driveリンクを返す',
+      samples.created.every((item) => item.file.webViewLink.startsWith('https://drive.google.com/')));
+    check('Drive上に実体ができる', tree.has(samples.created[0].file.id));
+
+    /* --- 既存ファイルがある場合は上書きしない --- */
+    at = mark();
+    await requestWriteToken();
+    samples = await createSampleFiles({ folderId: 'f-kn' });
+    discardWriteToken();
+    uploads = from(at).filter((r) => r.isUpload);
+
+    check('2回目はアップロードしない', uploads.length === 0, uploads.length);
+    check('2回目は既存として扱う', samples.skipped.length === 2, samples.skipped.length);
+    check('2回目も成功として返す', samples.ok === true);
+    check('二重に作られていない',
+      [...tree.values()].filter((n) => n.parent === 'f-kn' && n.name === 'README.md').length === 1);
+
+    /* --- 片方だけ既にある --- */
+    emptyKnowledge();
+    tree.set('f-existing-readme', {
+      id: 'f-existing-readme', parent: 'f-kn', name: 'README.md', mimeType: 'text/markdown',
+      modifiedTime: '2026-01-01T00:00:00.000Z', version: '1', trashed: false,
+      body: new TextEncoder().encode('利用者が先に置いた README です。').buffer,
+      webViewLink: 'https://drive.google.com/file/d/f-existing-readme/view',
+    });
+
+    at = mark();
+    await requestWriteToken();
+    samples = await createSampleFiles({ folderId: 'f-kn' });
+    discardWriteToken();
+    uploads = from(at).filter((r) => r.isUpload);
+
+    check('既にある方は作らない', uploads.length === 1 && uploads[0].body.name === 'サンプル.txt', uploads.map((r) => r.body.name));
+    check('既存ファイルの中身を変えない',
+      new TextDecoder().decode(tree.get('f-existing-readme').body).includes('利用者が先に置いた'));
+    check('既存ファイルへのPUT/PATCHは無い', net.forbiddenWrites().length === 0);
+
+    /* --- 失敗と再実行 --- */
+    emptyKnowledge();
+    at = mark();
+    scenario.inject = (kind, info) => (kind === 'upload' && info?.body?.name === 'サンプル.txt'
+      ? driveError(403, 'insufficientFilePermissions')
+      : null);
+    await requestWriteToken();
+    samples = await createSampleFiles({ folderId: 'f-kn' });
+    discardWriteToken();
+
+    check('失敗した分を記録する', samples.failed.length === 1 && samples.ok === false);
+    check('成功した分は残す', samples.created.length === 1 && samples.created[0].name === 'README.md');
+
+    scenario.inject = undefined;
+    at = mark();
+    await requestWriteToken();
+    samples = await createSampleFiles({ folderId: 'f-kn' });
+    discardWriteToken();
+    uploads = from(at).filter((r) => r.isUpload);
+
+    check('再実行は残り1件だけ', uploads.length === 1 && uploads[0].body.name === 'サンプル.txt');
+    check('再実行で完了する', samples.ok === true);
+    check('README を作り直さない', samples.skipped.some((item) => item.name === 'README.md'));
+
+    /* --- フォルダ未指定 --- */
+    const noFolder = await createSampleFiles({});
+    check('フォルダが無ければ実行しない', noFolder.error?.code === ErrorCode.SETUP_STEP_BLOCKED);
+
+    /* --- 作ったサンプルを検索できる --- */
+    emptyKnowledge();
+    await requestWriteToken();
+    await createSampleFiles({ folderId: 'f-kn' });
+    discardWriteToken();
+
+    await runSync({ folder: FOLDER });
+    const sampleHit = await search('テスト用キーワードあいうえお');
+    check('作成したサンプルを検索できる',
+      sampleHit.hits.some((hit) => hit.fileName === 'サンプル.txt'), sampleHit.hits.map((h) => h.fileName));
+
+    restoreTree();
+    await clearAllCache({ keepSettings: true });
+    await clearIndex();
+
+    /* ============================================================ */
+    section('21-4. セットアップ状態の保存');
+
+    const fresh = await getSetupState();
+    check('初回は未完了', fresh.completed === false);
+    check('初回は進捗が空', Object.values(fresh.progress).every((v) => v === false));
+
+    await setSetupState(makeSetupRecord({ signIn: true, folder: true }, { completed: false }));
+    const midway = await getSetupState();
+    check('途中経過を保存できる', midway.progress.signIn === true && midway.progress.folder === true);
+    check('保存しても未完了のまま', midway.completed === false);
+
+    await setSetupState(makeSetupRecord(midway.progress, { completed: true }));
+    const completed = await getSetupState();
+    check('完了を保存できる', completed.completed === true);
+    check('完了時刻が入る', typeof completed.completedAt === 'string' && completed.completedAt.length > 0);
+
+    const setupDump = JSON.stringify(await db.settings.toArray());
+    check('保存値にトークンが無い', !setupDump.includes('fake-token') && !setupDump.includes('fake-write-token'));
+    check('保存値に本文が入らない', !setupDump.includes('テスト用キーワード'));
+
+    /* 全キャッシュ削除では消えない（設定領域のため）。 */
+    await clearAllCache({ keepSettings: true });
+    check('キャッシュ削除後も完了状態が残る', (await getSetupState()).completed === true);
+
+    /* 再実行のために初期化できる。 */
+    await setSetupState(makeSetupRecord(createProgress(), { completed: false }));
+    check('再実行のため初期化できる', (await getSetupState()).completed === false);
+
+    /* --- 書き込み経路の総括 --- */
+    check('非GETは POST だけ', net.nonGet().every((r) => r.method === 'POST'));
+    check('非GETの宛先は2種類だけ',
+      net.nonGet().every((r) => r.path === '/drive/v3/files' || r.path === '/upload/drive/v3/files'),
+      [...new Set(net.nonGet().map((r) => r.path))]);
+    check('フォルダ作成はフォルダのMIMEだけ',
+      net.creates().every((r) => r.body?.mimeType === MIMES.FOLDER));
+    check('アップロードはサンプル2種類だけ',
+      net.uploads().every((r) => ['README.md', 'サンプル.txt'].includes(r.body?.name)),
+      [...new Set(net.uploads().map((r) => r.body?.name))]);
+    check('PUT/PATCH/DELETE は最後まで0件', net.forbiddenWrites().length === 0);
 
     section('22. トークンが残らない');
 

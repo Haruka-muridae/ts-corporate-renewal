@@ -15,6 +15,10 @@ import { mountApp } from '../../src/ui/app.js';
 import { openDb } from '../../src/db/db.js';
 import { clearAllCache, putFile, setSelectedFolder } from '../../src/db/repo.js';
 import { openFolderBrowser } from '../../src/ui/folder-browser.js';
+import { openCreateFoldersDialog } from '../../src/ui/create-folders-dialog.js';
+import { buildFolderPlan, classifyPlan, summarizePlan, formatNodePath } from '../../src/drive/folder-plan.js';
+import { makeSetupRecord, createProgress, summarizeDiagnosis } from '../../src/setup/wizard-state.js';
+import { FOLDER_STRUCTURE } from '../../src/config.js';
 import { formatBytes, formatDateTime, formatNumber, el, clear } from '../../src/core/dom.js';
 
 const out = document.getElementById('out');
@@ -290,6 +294,410 @@ async function main() {
     check('認証済みなら名前を出す', document.getElementById('account-area').textContent.includes('テスト太郎'));
     check('ログアウトボタンを出す', document.getElementById('account-area').textContent.includes('ログアウト'));
     check('画像が無ければイニシャル', document.querySelector('.account-avatar')?.textContent === 'テ');
+
+    /* ============================================================ */
+    section('11. 不足フォルダの作成');
+
+    const nodes = buildFolderPlan(FOLDER_STRUCTURE);
+    const asFound = (keys) => new Map(keys.map((key, i) => [key, {
+      status: 'found', folder: { id: `id${i}`, name: key.split('/').pop() },
+    }]));
+    const makeStructure = (keys) => {
+      const s = summarizePlan(classifyPlan(nodes, asFound(keys)));
+      return {
+        ...s,
+        entries: s.entries.map((e) => ({ ...e, path: formatNodePath(e.node) })),
+        missing: s.missing.map((e) => ({ ...e, path: formatNodePath(e.node) })),
+        existing: s.existing.map((e) => ({ ...e, path: formatNodePath(e.node) })),
+      };
+    };
+
+    const ALL_KEYS = nodes.map((n) => n.key);
+    const PARTIAL_KEYS = ALL_KEYS.slice(0, 3);
+
+    store.setAppState(AppState.NO_FOLDER);
+    app.navigate('setup');
+    store.patch({ structure: null, folderCreating: false, folderCreateResult: null });
+    await wait(150);
+
+    const createButton = () => document.querySelector('[data-role="create-folders"]');
+    const textOf = () => document.querySelector('.app-main')?.textContent ?? document.body.textContent;
+
+    /* --- ボタンの表示条件 --- */
+    check('未確認では作成ボタンを出さない', createButton() === null);
+    check('目標の構成を常に表示する', textOf().includes('99_システム'));
+    check('必要な権限を表示する', textOf().includes('drive（フォルダ作成のあいだだけ）'));
+
+    store.patch({ structure: makeStructure(ALL_KEYS) });
+    await wait(120);
+    check('全部揃っていれば作成ボタンを出さない', createButton() === null);
+    check('全部揃っていればその旨を出す', textOf().includes('すべて揃っています'));
+
+    store.patch({ structure: makeStructure(PARTIAL_KEYS) });
+    await wait(120);
+    check('不足があれば作成ボタンを出す', createButton() !== null);
+    check('不足件数をボタンに出す', createButton().textContent.includes('3 件'), createButton()?.textContent);
+    check('不足フォルダ名を一覧に出す', textOf().includes('02_未整理') && textOf().includes('03_アーカイブ'));
+    check('既存は「既存（再利用）」と出す', textOf().includes('既存（再利用）'));
+    check('不足は「新規作成」と出す', textOf().includes('新規作成'));
+
+    /* --- 同名複数のときは作成させない --- */
+    const dupFound = asFound(['TSAM AI']);
+    dupFound.set('TSAM AI', { status: 'ambiguous', candidates: [{ id: 'a', name: 'TSAM AI', parentName: 'マイドライブ' }, { id: 'b', name: 'TSAM AI', parentName: 'マイドライブ' }] });
+    const dupStructure = summarizePlan(classifyPlan(nodes, dupFound));
+    store.patch({
+      structure: {
+        ...dupStructure,
+        entries: dupStructure.entries.map((e) => ({ ...e, path: formatNodePath(e.node) })),
+        missing: [],
+        existing: [],
+        ambiguous: dupStructure.ambiguous.map((e) => ({ ...e, path: formatNodePath(e.node) })),
+        needsCreation: true,
+      },
+    });
+    await wait(120);
+    check('同名複数では作成ボタンを無効化する', createButton()?.disabled === true);
+    check('同名複数では理由を出す', textOf().includes('重複が解消されるまで'));
+    check('同名複数では候補を出す', textOf().includes('このフォルダを使う'));
+
+    /* --- 3連打でも1回 --- */
+    store.patch({ structure: makeStructure(PARTIAL_KEYS), folderCreateResult: null });
+    await wait(120);
+    calls.length = 0;
+    createButton().click();
+    createButton().click();
+    createButton().click();
+    await wait(200);
+    check('作成ボタンを3連打しても1回だけ実行する',
+      calls.filter((c) => c.name === 'createMissingFolders').length === 1,
+      calls.map((c) => c.name));
+
+    /* --- 作成中の進捗と無効化 --- */
+    store.patch({
+      folderCreating: true,
+      folderCreateProgress: { phase: 'creating', done: 1, total: 3, currentName: '02_未整理' },
+    });
+    await wait(120);
+    const createBar = document.querySelector('progress[role="progressbar"]');
+    check('作成中は進捗バーを出す', Boolean(bar));
+    check('進捗に aria-valuenow', createBar?.getAttribute('aria-valuenow') === '1', createBar?.getAttribute('aria-valuenow'));
+    check('進捗に aria-label', createBar?.getAttribute('aria-label') === 'フォルダ作成の進捗');
+    check('進捗を文字でも出す', textOf().includes('1 / 3') && textOf().includes('02_未整理'));
+    check('進捗は aria-live で伝える', document.querySelector('.progress-block')?.getAttribute('aria-live') === 'polite');
+    check('作成中はボタンを無効化する', createButton()?.disabled === true);
+    check('作成中は「作成中…」と出す', createButton()?.textContent === '作成中…');
+
+    store.patch({
+      folderCreating: true,
+      folderCreateProgress: { phase: 'authorizing', done: 0, total: 3, currentName: '' },
+    });
+    await wait(120);
+    check('認可待ちを文字で出す', textOf().includes('許可を求めています'));
+
+    /* --- 成功表示 --- */
+    store.patch({
+      folderCreating: false,
+      folderCreateProgress: null,
+      folderCreateResult: {
+        ok: true,
+        created: [
+          { key: 'a', name: '02_未整理', path: 'マイドライブ / TSAM AI / ローカルLLM / 02_未整理', id: 'n1', webViewLink: 'https://drive.google.com/drive/folders/n1' },
+          { key: 'b', name: '03_アーカイブ', path: 'マイドライブ / TSAM AI / ローカルLLM / 03_アーカイブ', id: 'n2', webViewLink: 'https://drive.google.com/drive/folders/n2' },
+        ],
+        reused: [{ key: 'c', name: '01_ナレッジ', path: 'x' }],
+        failed: [],
+        skipped: [],
+        error: null,
+      },
+    });
+    await wait(120);
+    check('成功を文字で伝える', textOf().includes('作成が完了しました'));
+    check('成功メッセージは role=status', Boolean(document.querySelector('.notice--success[role="status"]')));
+    const driveLinks = Array.from(document.querySelectorAll('a[href^="https://drive.google.com/"]'));
+    check('作成済みフォルダのリンクを出す', driveLinks.length === 2, driveLinks.length);
+    check('リンクは新しいタブで開く', driveLinks.every((a) => a.target === '_blank' && a.rel.includes('noopener')));
+    check('再実行ボタンに切り替わる', createButton()?.textContent === '作成を再実行');
+
+    /* --- 失敗表示 --- */
+    store.patch({
+      folderCreateResult: {
+        ok: false,
+        created: [{ key: 'a', name: '02_未整理', path: 'マイドライブ / TSAM AI / ローカルLLM / 02_未整理', id: 'n1', webViewLink: '' }],
+        reused: [],
+        failed: [{ key: 'b', name: '03_アーカイブ', path: 'マイドライブ / TSAM AI / ローカルLLM / 03_アーカイブ', message: 'Google側で問題が発生しています。', code: 'SERVER_ERROR' }],
+        skipped: [{ key: 'c', name: '99_システム', path: 'マイドライブ / TSAM AI / ローカルLLM / 99_システム', message: '前の段階が完了しなかったため実行していません。', code: 'SERVER_ERROR' }],
+        error: { code: 'FOLDER_CREATE_FAILED', message: 'フォルダの作成に失敗しました。成功した分は作成済みです。' },
+      },
+    });
+    await wait(120);
+    check('失敗を文字で伝える', textOf().includes('フォルダの作成に失敗しました'));
+    check('失敗メッセージは role=status', Boolean(document.querySelector('.notice--error[role="status"]')));
+    check('失敗したフォルダ名を出す', textOf().includes('03_アーカイブ'));
+    check('未実行のフォルダも出す', textOf().includes('99_システム') && textOf().includes('実行していません'));
+    check('成功した分は表示に残る', textOf().includes('作成したフォルダ'));
+    check('再実行を案内する', textOf().includes('続きから作り直せます'));
+
+    /* --- 権限拒否 --- */
+    store.patch({
+      folderCreateResult: {
+        ok: false,
+        created: [],
+        reused: [],
+        failed: [{ key: 'a', name: '02_未整理', path: 'マイドライブ / TSAM AI / ローカルLLM / 02_未整理', message: 'フォルダを作成する権限が許可されませんでした。 同意画面でDriveのチェックを外さずに「許可」を選んでください。作成しない場合はキャンセルで戻れます。', code: 'WRITE_SCOPE_NOT_GRANTED' }],
+        skipped: [],
+        error: { code: 'WRITE_SCOPE_NOT_GRANTED', message: 'フォルダを作成する権限が許可されませんでした。' },
+      },
+    });
+    await wait(120);
+    check('権限拒否を文字で伝える', textOf().includes('権限が許可されませんでした'));
+    check('権限拒否でも再実行できる', createButton()?.disabled === false);
+
+    /* --- 確認ダイアログ --- */
+    const planForDialog = makeStructure(PARTIAL_KEYS);
+
+    const cancelPromise = openCreateFoldersDialog(planForDialog);
+    await wait(120);
+    const createDialog = document.querySelector('dialog[aria-label="不足フォルダの作成を確認"]');
+    check('確認ダイアログが開く', Boolean(createDialog));
+    check('モーダルとして開く（背面を操作できない）', createDialog.matches(':modal'));
+    check('ダイアログに aria-label', createDialog.getAttribute('aria-label') === '不足フォルダの作成を確認');
+    check('作成予定の階層を出す', createDialog.textContent.includes('作成後の階層'));
+    check('既存フォルダを出す', createDialog.textContent.includes('既存フォルダ（再利用：3 件）'));
+    check('新規作成するフォルダを出す', createDialog.textContent.includes('新規作成するフォルダ（3 件）'));
+    /* 要件で決められた4点が必ず読めること。 */
+    check('「フォルダのみ作成」と明記する', createDialog.textContent.includes('フォルダのみ作成します'));
+    check('「既存ファイルは編集・削除しない」と明記する', createDialog.textContent.includes('既存ファイルは編集・削除しません'));
+    check('「同期は開始しない」と明記する', createDialog.textContent.includes('同期は開始しません'));
+    check('「Drive編集権限を一時的に使用」と明記する', createDialog.textContent.includes('GoogleのDrive編集権限を一時的に使用します'));
+    check('必要な権限を出す', createDialog.textContent.includes('必要な権限'));
+    check('作成後に権限を破棄すると明記する', createDialog.textContent.includes('アプリ内部から破棄されます'));
+    check('キャンセルボタンがある', Array.from(createDialog.querySelectorAll('button')).some((b) => b.textContent === 'キャンセル'));
+    check('作成ボタンに件数を出す', Array.from(createDialog.querySelectorAll('button')).some((b) => b.textContent === '3 件を作成する'));
+    check('既定のフォーカスはキャンセル', document.activeElement?.textContent === 'キャンセル');
+
+    /* Esc で閉じるとキャンセル扱い */
+    createDialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+    check('Escでキャンセルになる', (await cancelPromise) === false);
+    check('閉じたら要素が残らない', document.querySelector('dialog[aria-label="不足フォルダの作成を確認"]') === null);
+
+    /* キャンセルボタン */
+    const cancelByButton = openCreateFoldersDialog(planForDialog);
+    await wait(80);
+    Array.from(document.querySelectorAll('dialog button')).find((b) => b.textContent === 'キャンセル').click();
+    check('キャンセルボタンで false を返す', (await cancelByButton) === false);
+
+    /* 作成する */
+    const confirmPromise = openCreateFoldersDialog(planForDialog);
+    await wait(80);
+    Array.from(document.querySelectorAll('dialog button')).find((b) => b.textContent === '3 件を作成する').click();
+    check('「作成する」で true を返す', (await confirmPromise) === true);
+    check('確認後もダイアログを残さない', document.querySelector('dialog[aria-label="不足フォルダの作成を確認"]') === null);
+
+    /* ============================================================ */
+    section('12. セットアップウィザード');
+
+    /* 初回アクセスの状況に合わせる（未認証から始める）。 */
+    store.setAppState(AppState.UNAUTHENTICATED);
+
+    const navEl = document.querySelector('.app-nav');
+    const wizardText = () => document.querySelector('.wizard')?.textContent ?? '';
+    const roleButton = (role) => document.querySelector(`[data-role="${role}"]`);
+    const stepItems = () => Array.from(document.querySelectorAll('.wizard__list-item'));
+
+    /* --- 表示条件 --- */
+    check('setup が未読込なら通常画面のまま', document.querySelector('.wizard') === null);
+    check('通常画面ではナビが見えている', navEl.hidden === false);
+
+    store.patch({ setup: makeSetupRecord(createProgress(), { completed: true }) });
+    await wait(120);
+    check('完了済みならウィザードを出さない', document.querySelector('.wizard') === null);
+
+    store.patch({ setup: makeSetupRecord(createProgress(), { completed: false }) });
+    await wait(150);
+    check('未完了ならウィザードを出す', document.querySelector('.wizard') !== null);
+    check('ウィザード中はナビを隠す', navEl.hidden === true);
+    check('タブは切り替わらない', (() => { app.navigate('storage'); return document.querySelector('.wizard') !== null; })());
+
+    /* --- ステップの一覧 --- */
+    check('手順は7つ', stepItems().length === 7, stepItems().length);
+    check('手順の名称',
+      stepItems().map((li) => li.querySelector('.wizard__label').textContent).join('/')
+      === 'Googleにログイン/フォルダ構成を確認/不足フォルダを作成/初回同期/検索テスト/診断/完了',
+      stepItems().map((li) => li.querySelector('.wizard__label').textContent));
+    check('実施中の手順に aria-current', stepItems()[0].getAttribute('aria-current') === 'step');
+    check('他の手順に aria-current は無い', !stepItems()[1].hasAttribute('aria-current'));
+    check('状態を文字で出す（色だけに頼らない）',
+      stepItems()[0].querySelector('.tag').textContent === '実施中');
+    check('進み具合を progressbar で出す',
+      document.querySelector('.wizard__head progress[role="progressbar"]')?.getAttribute('aria-valuemax') === '6');
+
+    /* --- ステップ1: ログイン --- */
+    check('ログインボタンが出る', Boolean(roleButton('wizard-signin')));
+    check('要求スコープを明示する', wizardText().includes('https://www.googleapis.com/auth/drive.readonly'));
+    check('この時点で書き込まないと明示する', wizardText().includes('この時点ではDriveへ何も書き込みません'));
+    calls.length = 0;
+    roleButton('wizard-signin').click();
+    roleButton('wizard-signin').click();
+    roleButton('wizard-signin').click();
+    await wait(200);
+    check('ログインボタンを3連打しても1回', calls.filter((c) => c.name === 'signIn').length === 1, calls.map((c) => c.name));
+
+    /* --- ステップ2以降は前の手順待ち --- */
+    check('先の手順は前の手順待ちと出す', wizardText().includes('前の手順が終わると実行できます'));
+    check('先の手順のボタンは出さない', roleButton('wizard-folder') === null);
+
+    /* --- 進捗を進める --- */
+    let progress = { ...createProgress(), signIn: true };
+    store.patch({ setup: makeSetupRecord(progress, { completed: false }) });
+    await wait(120);
+    check('ログイン後はフォルダ確認が実施中', stepItems()[1].getAttribute('aria-current') === 'step');
+    check('フォルダ確認のボタンが出る', Boolean(roleButton('wizard-folder')));
+    check('完了した手順は完了と出す', stepItems()[0].querySelector('.tag').textContent === '完了');
+
+    progress = { ...progress, folder: true };
+    store.patch({
+      setup: makeSetupRecord(progress, { completed: false }),
+      structure: makeStructure(PARTIAL_KEYS),
+    });
+    await wait(120);
+    check('作成ボタンが出る', Boolean(roleButton('wizard-create')));
+    check('作成対象を並べる', wizardText().includes('02_未整理'));
+    check('必要な権限を出す', wizardText().includes('drive（フォルダ作成のあいだだけ）'));
+    check('スキップできる', Boolean(roleButton('wizard-skip-create')));
+
+    calls.length = 0;
+    roleButton('wizard-skip-create').click();
+    await wait(150);
+    check('スキップで skipSetupStep を呼ぶ',
+      calls.some((c) => c.name === 'skipSetupStep' && c.args[0] === 'create'), calls.map((c) => c.name));
+
+    /* --- 作成中の進捗 --- */
+    store.patch({
+      folderCreating: true,
+      folderCreateProgress: { phase: 'creating', done: 2, total: 3, currentName: '03_アーカイブ' },
+    });
+    await wait(120);
+    check('作成中は進捗を出す', wizardText().includes('2 / 3') && wizardText().includes('03_アーカイブ'));
+    check('作成中はボタンを無効化する', roleButton('wizard-create')?.disabled === true);
+    store.patch({ folderCreating: false, folderCreateProgress: null });
+
+    /* --- サンプルファイルの手順（01_ナレッジ を新規作成したときだけ） --- */
+    progress = { ...progress, createSkipped: true };
+    store.patch({ setup: makeSetupRecord(progress, { completed: false }) });
+    await wait(120);
+    check('通常はサンプル手順を出さない', !wizardText().includes('サンプルファイルを作成'), stepItems().length);
+
+    progress = { ...progress, knowledgeFolderCreated: true };
+    store.patch({ setup: makeSetupRecord(progress, { completed: false }) });
+    await wait(120);
+    check('01_ナレッジを新規作成した場合だけ出す', stepItems().length === 8, stepItems().length);
+    check('サンプル手順のボタンが出る', Boolean(roleButton('wizard-samples')));
+    check('作成するファイル名を出す', wizardText().includes('README.md') && wizardText().includes('サンプル.txt'));
+    check('上書きしないと明記する', wizardText().includes('上書きはしません'));
+    check('初回だけと明記する', wizardText().includes('初回の1度だけ'));
+
+    store.patch({
+      samplesResult: {
+        ok: true,
+        created: [{ name: 'README.md', webViewLink: 'https://drive.google.com/file/d/x/view' }],
+        skipped: [{ name: 'サンプル.txt' }],
+        failed: [],
+        error: null,
+      },
+    });
+    await wait(120);
+    check('サンプル作成の結果を出す', wizardText().includes('サンプルファイルの作成が完了しました'));
+    check('作成したファイルのリンクを出す',
+      Array.from(document.querySelectorAll('.wizard a[href^="https://drive.google.com/"]')).length === 1);
+    check('既存で作らなかったものも出す', wizardText().includes('既にあったため作成しなかったファイル'));
+
+    /* --- 同期・検索テスト --- */
+    progress = { ...progress, samplesSkipped: true };
+    store.patch({
+      setup: makeSetupRecord(progress, { completed: false }),
+      folder: { id: 'f-kn', name: '01_ナレッジ', path: 'マイドライブ / TSAM AI / ローカルLLM / 01_ナレッジ' },
+    });
+    await wait(120);
+    check('同期のボタンが出る', Boolean(roleButton('wizard-sync')));
+    check('読み取りだけと明記する', wizardText().includes('読み取りのリクエストしか送りません'));
+
+    progress = { ...progress, sync: true };
+    store.patch({ setup: makeSetupRecord(progress, { completed: false }) });
+    await wait(120);
+    check('検索テストのボタンが出る', Boolean(roleButton('wizard-search')));
+    check('検索する語を出す', wizardText().includes('テスト用キーワードあいうえお'));
+
+    store.patch({ setupSearch: { term: 'テスト用キーワードあいうえお', hits: 2, names: ['サンプル.txt', 'test.txt'] } });
+    await wait(120);
+    check('検索テストの結果を出す', wizardText().includes('2 件ヒットしました'));
+    check('ヒットしたファイル名を出す', wizardText().includes('サンプル.txt'));
+
+    store.patch({ setupSearch: { term: 'x', hits: 0, names: [] } });
+    await wait(120);
+    check('ヒットしない場合も案内を出す', wizardText().includes('ヒットしませんでした'));
+
+    /* --- 診断 --- */
+    progress = { ...progress, search: true };
+    store.patch({ setup: makeSetupRecord(progress, { completed: false }) });
+    await wait(120);
+    check('診断のボタンが出る', Boolean(roleButton('wizard-diagnose')));
+
+    store.patch({
+      setupDiagnosis: summarizeDiagnosis({
+        gis: { id: 'gis', label: 'GIS', status: 'success', message: 'ok' },
+        folder1: { id: 'folder1', label: '1段目', status: 'failure', message: '見つかりません' },
+      }, { scope: 'https://www.googleapis.com/auth/drive.readonly', writeTokenHeld: false }),
+    });
+    await wait(120);
+    const diagRows = Array.from(document.querySelectorAll('.diag-table tbody tr'));
+    check('診断は7項目を表で出す', diagRows.length === 7, diagRows.length);
+    check('診断の項目名',
+      diagRows.map((tr) => tr.querySelector('th').textContent).join('/')
+      === 'OAuth（Googleログイン）/Drive API への接続/フォルダ構成/同期/検索/ブラウザ内データベース/権限');
+    check('成功・失敗を文字で出す', diagRows[0].querySelector('.tag').textContent === '成功');
+    check('失敗も文字で出す', diagRows[2].querySelector('.tag').textContent === '失敗');
+    check('未実行も文字で出す', diagRows[3].querySelector('.tag').textContent === '未実行');
+    check('権限の判定を出す', diagRows[6].textContent.includes('書き込み用の権限は保持していません'));
+
+    /* --- 完了 --- */
+    check('未完了のあいだは開始ボタンを押せない', roleButton('wizard-finish')?.disabled !== false);
+
+    progress = { ...progress, diagnose: true };
+    store.patch({ setup: makeSetupRecord(progress, { completed: false }) });
+    await wait(120);
+    check('すべて片付くと開始ボタンが押せる', roleButton('wizard-finish')?.disabled === false);
+    check('完了の案内を出す', wizardText().includes('すべての手順が終わりました'));
+    check('再実行できることを案内する', wizardText().includes('セットアップを再実行'));
+
+    calls.length = 0;
+    roleButton('wizard-finish').click();
+    await wait(150);
+    check('開始ボタンで finishSetup を呼ぶ', calls.some((c) => c.name === 'finishSetup'), calls.map((c) => c.name));
+
+    store.patch({ setup: makeSetupRecord(progress, { completed: true }) });
+    await wait(150);
+    check('完了すると通常画面へ戻る', document.querySelector('.wizard') === null);
+    check('完了するとナビが戻る', navEl.hidden === false);
+    check('通常画面のタブが6つに戻る', document.querySelectorAll('.app-nav__button').length === 6);
+
+    /* --- 設定からの再実行 --- */
+    app.navigate('settings');
+    await wait(200);
+    const restart = document.querySelector('[data-role="restart-setup"]');
+    check('設定に再実行ボタンがある', Boolean(restart));
+    check('完了時刻を案内する', document.querySelector('.app-main').textContent.includes('セットアップ済み'));
+    calls.length = 0;
+    restart.click();
+    await wait(150);
+    check('再実行で restartSetup を呼ぶ', calls.some((c) => c.name === 'restartSetup'), calls.map((c) => c.name));
+
+    store.patch({ setup: makeSetupRecord(createProgress(), { completed: false }) });
+    await wait(150);
+    check('再実行するとウィザードへ戻る', document.querySelector('.wizard') !== null);
+
+    /* 後片付け（以降のテストへ影響させない）。 */
+    store.patch({ setup: null });
+    await wait(120);
   } catch (error) {
     failed += 1;
     failures.push('FATAL');

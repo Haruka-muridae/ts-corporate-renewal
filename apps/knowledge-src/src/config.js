@@ -103,6 +103,86 @@ export const KNOWLEDGE_FOLDER_PATH = Object.freeze(['TSAM AI', 'ローカルLLM'
 export const DRIVE_ROOT_LABEL = 'マイドライブ';
 
 /*
+ * ------------------------------------------------------------------
+ * 不足フォルダの作成（利用者が明示的にボタンを押したときだけ）
+ * ------------------------------------------------------------------
+ * 目標とする構成:
+ *
+ *   マイドライブ
+ *   └─ TSAM AI            ← base[0]
+ *      └─ ローカルLLM      ← base[1]
+ *         ├─ 01_ナレッジ    ← children[0]（同期対象。KNOWLEDGE_FOLDER_PATH の末端）
+ *         ├─ 02_未整理      ← children[1]
+ *         ├─ 03_アーカイブ  ← children[2]
+ *         └─ 99_システム    ← children[3]
+ *
+ * 作成順序は「上から順、同階層は配列順」で固定する（folder-plan.js）。
+ * 既にあるフォルダは再利用し、欠けているものだけを作る。
+ */
+export const FOLDER_STRUCTURE = Object.freeze({
+  base: Object.freeze(['TSAM AI', 'ローカルLLM']),
+  children: Object.freeze(['01_ナレッジ', '02_未整理', '03_アーカイブ', '99_システム']),
+  /* 同期対象。base + [knowledge] が KNOWLEDGE_FOLDER_PATH と一致していること。 */
+  knowledge: '01_ナレッジ',
+});
+
+/*
+ * フォルダ作成に使うスコープ。
+ *
+ * ------------------------------------------------------------------
+ * なぜ readonly では作れないのか（実測にもとづく）
+ * ------------------------------------------------------------------
+ * Drive API v3 のディスカバリ文書（revision 20260720）が示す
+ * files.create の受付スコープは次の3つだけである。
+ *
+ *     https://www.googleapis.com/auth/drive
+ *     https://www.googleapis.com/auth/drive.appdata
+ *     https://www.googleapis.com/auth/drive.file
+ *
+ * drive.readonly と drive.metadata は含まれない。
+ * したがって作成には必ず追加スコープの認可が要る。
+ *
+ * ------------------------------------------------------------------
+ * 'drive'（採用） … 通常は readonly。ボタンを押したときだけ drive を追加要求し、
+ *                   POST /files を1回ずつ実行したら、そのトークンを即破棄する。
+ *                   既存の TSAM AI（利用者が作ったフォルダ）配下にも作れる。
+ *
+ * 'file'  （保留） … drive.file は「アプリが作った／利用者がPickerで選んだ」
+ *                   資源にしか触れない。既存の TSAM AI 配下へ作るには
+ *                   Picker で親フォルダを選ばせて権限を付与する必要があり、
+ *                   pickerApiKey / pickerAppId の設定が前提になる。
+ *                   両方が設定されるまでは選べない。
+ * ------------------------------------------------------------------
+ */
+export const FOLDER_CREATE_SCOPE_MODE = 'drive';
+
+const CREATE_SCOPE_BY_MODE = Object.freeze({
+  drive: 'https://www.googleapis.com/auth/drive',
+  file: 'https://www.googleapis.com/auth/drive.file',
+});
+
+export function getFolderCreateScope(mode = FOLDER_CREATE_SCOPE_MODE) {
+  return CREATE_SCOPE_BY_MODE[mode] ?? CREATE_SCOPE_BY_MODE.drive;
+}
+
+/* 画面に出す「必要な権限」の短い説明。 */
+export const FOLDER_CREATE_SCOPE_LABEL = Object.freeze({
+  drive: 'drive（フォルダ作成のあいだだけ）',
+  file: 'drive.file（Pickerで選んだフォルダのみ）',
+});
+
+/*
+ * 'file' モードは Picker が設定済みのときしか成立しない。
+ * 設定不足のまま切り替えられても、作成前にここで止める。
+ */
+export function isFolderCreateModeAvailable(mode = FOLDER_CREATE_SCOPE_MODE) {
+  if (mode === 'file') {
+    return isPickerConfigured() && String(AUTH_CONFIG.pickerAppId ?? '').trim() !== '';
+  }
+  return mode === 'drive';
+}
+
+/*
  * PDF.js の補助アセットの配置場所。
  *
  * 日本語PDFは定義済みCMap（90ms-RKSJ-H など）を使うことが多く、
@@ -133,8 +213,84 @@ export const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 export const GAPI_SCRIPT_URL = 'https://apis.google.com/js/api.js';
 export const SCRIPT_LOAD_TIMEOUT_MS = 15000;
 
-/* Drive API v3 のエンドポイント。書き込み系は一切呼ばない。 */
+/* Drive API v3 のエンドポイント。読み取りはここだけを使う。 */
 export const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
+
+/*
+ * 本文つきファイルを作るときだけ使う配信元。
+ * セットアップウィザードの「サンプルファイル作成」でしか呼ばない。
+ * 通常の探索・同期・検索からは到達しない（src/drive/drive-writer.js に閉じている）。
+ */
+export const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
+
+/*
+ * 01_ナレッジ を新規作成したときだけ置く、動作確認用のファイル。
+ *
+ * 生成するのは初回の1度だけ。同じ名前のファイルが既にあれば **作らない**
+ * （上書き・更新は行わない。そもそも更新用のAPIを実装していない）。
+ */
+export const SAMPLE_FILES = Object.freeze([
+  Object.freeze({
+    name: 'README.md',
+    mimeType: 'text/markdown',
+    description: 'このフォルダの使い方',
+    content: [
+      '# 01_ナレッジ フォルダについて',
+      '',
+      'このフォルダは、ナレッジ管理・検索アプリの **取り込み対象** です。',
+      '',
+      '## 置いてよいファイル',
+      '',
+      '- Googleドキュメント',
+      '- PDF（テキストを含むもの）',
+      '- Word（.docx）',
+      '- テキスト（.txt）',
+      '- Markdown（.md）',
+      '',
+      'スプレッドシート・スライド・画像は現在の版では対象外です。',
+      '',
+      '## 隣のフォルダの使い分け',
+      '',
+      '| フォルダ | 用途 |',
+      '| --- | --- |',
+      '| 01_ナレッジ | 検索対象にしたい資料 |',
+      '| 02_未整理 | これから仕分けする資料 |',
+      '| 03_アーカイブ | 参照しなくなった資料 |',
+      '| 99_システム | 運用メモなど |',
+      '',
+      '## 注意',
+      '',
+      'アプリは Drive を **読み取り専用** で扱います。',
+      'ファイルの編集・移動・削除は行いません。',
+      '抽出したテキストと検索インデックスはブラウザの中（IndexedDB）にだけ保存され、',
+      'Drive へは書き戻しません。',
+      '',
+    ].join('\n'),
+  }),
+  Object.freeze({
+    name: 'サンプル.txt',
+    mimeType: 'text/plain',
+    description: '検索テスト用のテキスト',
+    content: [
+      'ナレッジ検索の動作確認用ファイルです。',
+      '',
+      'このファイルには、検索テスト用のキーワードとして',
+      'テスト用キーワードあいうえお',
+      'を入れてあります。',
+      '',
+      'セットアップウィザードの「検索テスト」で、この語を検索して',
+      'このファイルがヒットすれば、取得・抽出・分割・索引・検索の',
+      'すべてが正しく動いています。',
+      '',
+      '確認が済んだら、このファイルは削除しても構いません。',
+      '（削除は Drive 上で手動で行ってください。アプリからは削除できません。）',
+      '',
+    ].join('\n'),
+  }),
+]);
+
+/* 検索テストで使うキーワード。サンプル.txt の本文と一致させること。 */
+export const SAMPLE_SEARCH_TERM = 'テスト用キーワードあいうえお';
 
 /* テキスト正規化・チャンク分割の初期値。設定画面から上書きできる。 */
 export const CHUNK_DEFAULTS = Object.freeze({

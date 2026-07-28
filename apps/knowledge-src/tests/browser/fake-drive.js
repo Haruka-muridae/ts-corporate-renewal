@@ -40,53 +40,89 @@ export async function loadFixtures(names) {
 
 /* ---------- GIS ---------- */
 
+const READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+const WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
+
 export function installFakeGis(options = {}) {
   const state = {
     requests: 0,
     lastPrompt: null,
     revoked: 0,
     mode: options.mode ?? 'ok',   // 'ok' | 'popup_closed' | 'popup_blocked' | 'access_denied' | 'silent' | 'wrong_scope'
-    scope: options.scope ?? 'https://www.googleapis.com/auth/drive.readonly',
+    scope: options.scope ?? READONLY_SCOPE,
+
+    /*
+     * 書き込みスコープ（フォルダ作成用）の認可は読み取りと別に制御する。
+     * 'ok' 以外にすると「作成の同意だけ拒否された」状況を再現できる。
+     */
+    writeRequests: 0,
+    writeMode: options.writeMode ?? 'ok',
+    writeScope: options.writeScope ?? WRITE_SCOPE,
+  };
+
+  const respond = ({ mode, scope, token, callback, error_callback }) => {
+    if (mode === 'silent') {
+      /* 何も返さない（利用者が同意画面を放置した状況）。 */
+      return;
+    }
+    if (mode === 'popup_closed') {
+      error_callback?.({ type: 'popup_closed' });
+      return;
+    }
+    if (mode === 'popup_blocked') {
+      error_callback?.({ type: 'popup_failed_to_open' });
+      return;
+    }
+    if (mode === 'access_denied') {
+      callback({ error: 'access_denied' });
+      return;
+    }
+    if (mode === 'wrong_scope') {
+      callback({ access_token: 'fake-token-wrong', expires_in: 3600, scope: 'https://www.googleapis.com/auth/userinfo.email' });
+      return;
+    }
+
+    callback({
+      access_token: token,
+      expires_in: options.expiresIn ?? 3600,
+      scope,
+      token_type: 'Bearer',
+    });
   };
 
   globalThis.google = {
     accounts: {
       oauth2: {
-        initTokenClient({ callback, error_callback }) {
+        /* 初期化時に渡されたスコープを覚え、その種類ごとに応答を変える。 */
+        initTokenClient({ callback, error_callback, scope: requested }) {
+          const isWrite = String(requested ?? '') === state.writeScope;
+
           return {
             requestAccessToken(params = {}) {
-              state.requests += 1;
               state.lastPrompt = params.prompt ?? '';
 
-              setTimeout(() => {
-                if (state.mode === 'silent') {
-                  /* 何も返さない（利用者が同意画面を放置した状況）。 */
-                  return;
-                }
-                if (state.mode === 'popup_closed') {
-                  error_callback?.({ type: 'popup_closed' });
-                  return;
-                }
-                if (state.mode === 'popup_blocked') {
-                  error_callback?.({ type: 'popup_failed_to_open' });
-                  return;
-                }
-                if (state.mode === 'access_denied') {
-                  callback({ error: 'access_denied' });
-                  return;
-                }
-                if (state.mode === 'wrong_scope') {
-                  callback({ access_token: 'fake-token-wrong', expires_in: 3600, scope: 'https://www.googleapis.com/auth/userinfo.email' });
-                  return;
-                }
+              if (isWrite) {
+                state.writeRequests += 1;
+                const n = state.writeRequests;
+                setTimeout(() => respond({
+                  mode: state.writeMode,
+                  scope: state.writeScope,
+                  token: `fake-write-token-${n}`,
+                  callback,
+                  error_callback,
+                }), 0);
+                return;
+              }
 
-                callback({
-                  access_token: `fake-token-${state.requests}`,
-                  expires_in: options.expiresIn ?? 3600,
-                  scope: state.scope,
-                  token_type: 'Bearer',
-                });
-              }, 0);
+              state.requests += 1;
+              const n = state.requests;
+              setTimeout(() => respond({
+                mode: state.mode,
+                scope: state.scope,
+                token: `fake-token-${n}`,
+                callback,
+                error_callback,
+              }), 0);
             },
           };
         },
@@ -174,6 +210,38 @@ function toResource(node) {
   return resource;
 }
 
+/*
+ * multipart/related の本文を、メタデータ部と本文部へ分ける。
+ * Google が受け取る形式を、テスト側でも同じ規則で解釈する。
+ */
+function parseMultipart(raw, contentType) {
+  const boundary = /boundary=([^;]+)/.exec(contentType)?.[1]?.trim();
+
+  if (!boundary) {
+    return { metadata: null, content: null };
+  }
+
+  const parts = String(raw)
+    .split(`--${boundary}`)
+    .map((part) => part.trim())
+    .filter((part) => part !== '' && part !== '--');
+
+  const bodies = parts.map((part) => {
+    const separator = part.indexOf('\r\n\r\n');
+    return separator === -1 ? '' : part.slice(separator + 4);
+  });
+
+  let metadata = null;
+
+  try {
+    metadata = JSON.parse(bodies[0] ?? '');
+  } catch {
+    metadata = null;
+  }
+
+  return { metadata, content: bodies[1] ?? null };
+}
+
 const json = (status, body, headers = {}) => new Response(JSON.stringify(body), {
   status,
   headers: { 'Content-Type': 'application/json', ...headers },
@@ -199,13 +267,36 @@ export function installFakeFetch({ tree, scenario }) {
   const router = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url);
 
-    if (!url.includes('googleapis.com/drive/v3')) {
+    /*
+     * 読み取りは .../drive/v3/...、本文つき作成は .../upload/drive/v3/... へ行く。
+     * どちらも捕まえないと、テストが実際のGoogleへ通信してしまう。
+     */
+    if (!url.includes('googleapis.com/drive/v3') && !url.includes('googleapis.com/upload/drive/v3')) {
       return realFetch(input, init);
     }
 
     const parsed = new URL(url);
     const method = (init.method ?? 'GET').toUpperCase();
     const auth = init.headers?.Authorization ?? init.headers?.authorization ?? '';
+
+    /* 送信本文は検証のために残す（トークンは含まれない）。 */
+    const contentType = init.headers?.['Content-Type'] ?? init.headers?.['content-type'] ?? '';
+    let sentBody = null;
+    let sentContent = null;
+
+    if (typeof init.body === 'string') {
+      if (contentType.startsWith('multipart/related')) {
+        const parsed = parseMultipart(init.body, contentType);
+        sentBody = parsed.metadata;
+        sentContent = parsed.content;
+      } else {
+        try {
+          sentBody = JSON.parse(init.body);
+        } catch {
+          sentBody = { raw: String(init.body).slice(0, 200) };
+        }
+      }
+    }
 
     requests.push({
       url: parsed.pathname + parsed.search,
@@ -214,7 +305,15 @@ export function installFakeFetch({ tree, scenario }) {
       hasAuthHeader: auth.startsWith('Bearer '),
       /* トークンの値そのものは保持しない（漏洩検査で誤検知しないため）。 */
       authLength: auth.length,
+      /* 読み取り用と書き込み用のどちらのトークンで来たか（値は残さない）。 */
+      writeToken: auth.includes('fake-write-token-'),
       pageToken: parsed.searchParams.get('pageToken'),
+      fields: parsed.searchParams.get('fields'),
+      uploadType: parsed.searchParams.get('uploadType'),
+      isUpload: parsed.pathname.startsWith('/upload/'),
+      contentType,
+      body: sentBody,
+      content: sentContent,
     });
 
     if (init.signal?.aborted) {
@@ -265,6 +364,94 @@ export function installFakeFetch({ tree, scenario }) {
       return new Response(node.body, { status: 200, headers: { 'Content-Type': node.mimeType } });
     }
 
+    /*
+     * フォルダ作成（POST /files）。
+     * 実装が守るべき約束をここで機械的に確認する。
+     *   - メソッドが POST であること
+     *   - mimeType がフォルダであること
+     *   - parents がちょうど1件であること
+     *   - fields が要件どおりであること
+     * 違反したら 400 を返し、テスト側が気づけるようにする。
+     */
+    if (parsed.pathname.endsWith('/files') && method === 'POST') {
+      const upload = parsed.pathname.startsWith('/upload/');
+      const injected = scenario.inject?.(upload ? 'upload' : 'create', {
+        body: sentBody, content: sentContent, parent: sentBody?.parents?.[0],
+      });
+      if (injected) return injected;
+
+      /* 本文つきファイル作成（multipart）。 */
+      if (upload) {
+        if (parsed.searchParams.get('uploadType') !== 'multipart') return driveError(400, 'invalidUploadType');
+        if (!sentBody || typeof sentBody.name !== 'string' || sentBody.name === '') return driveError(400, 'invalidName');
+        if (!Array.isArray(sentBody.parents) || sentBody.parents.length !== 1) return driveError(400, 'invalidParents');
+        if (typeof sentContent !== 'string' || sentContent === '') return driveError(400, 'invalidContent');
+
+        const uploadParent = String(sentBody.parents[0]);
+        if (uploadParent !== 'root' && !tree.has(uploadParent)) return driveError(404, 'notFound');
+
+        const fileId = `f-file-${(scenario.uploadedCount = (scenario.uploadedCount ?? 0) + 1)}`;
+        const encoded = new TextEncoder().encode(sentContent);
+
+        tree.set(fileId, {
+          id: fileId,
+          parent: uploadParent,
+          name: sentBody.name,
+          mimeType: sentBody.mimeType,
+          modifiedTime: '2026-03-01T00:00:00.000Z',
+          version: '1',
+          trashed: false,
+          body: encoded.buffer,
+          webViewLink: `https://drive.google.com/file/d/${fileId}/view`,
+        });
+
+        return json(200, {
+          id: fileId,
+          name: sentBody.name,
+          mimeType: sentBody.mimeType,
+          parents: [uploadParent],
+          webViewLink: `https://drive.google.com/file/d/${fileId}/view`,
+        });
+      }
+
+      if (sentBody?.mimeType !== FOLDER) return driveError(400, 'invalidMimeType');
+      if (!Array.isArray(sentBody?.parents) || sentBody.parents.length !== 1) return driveError(400, 'invalidParents');
+      if (typeof sentBody?.name !== 'string' || sentBody.name === '') return driveError(400, 'invalidName');
+
+      const parentId = String(sentBody.parents[0]);
+
+      /* 親が存在しない（root は常に有効）。 */
+      if (parentId !== 'root' && !tree.has(parentId)) {
+        return driveError(404, 'notFound');
+      }
+
+      const id = `f-new-${(scenario.createdCount = (scenario.createdCount ?? 0) + 1)}`;
+
+      tree.set(id, {
+        id,
+        parent: parentId,
+        name: sentBody.name,
+        mimeType: FOLDER,
+        modifiedTime: '2026-03-01T00:00:00.000Z',
+        version: '1',
+        trashed: false,
+        webViewLink: `https://drive.google.com/drive/folders/${id}`,
+      });
+
+      return json(200, {
+        id,
+        name: sentBody.name,
+        mimeType: FOLDER,
+        parents: [parentId],
+        webViewLink: `https://drive.google.com/drive/folders/${id}`,
+      });
+    }
+
+    /* POST 以外の書き込みメソッドは実装しない（呼ばれたら必ず落ちる）。 */
+    if (method !== 'GET') {
+      return driveError(405, 'methodNotAllowed');
+    }
+
     if (parsed.pathname.endsWith('/files')) {
       const q = parsed.searchParams.get('q') ?? '';
       const injected = scenario.inject?.('list', { q, pageToken: parsed.searchParams.get('pageToken') });
@@ -310,8 +497,15 @@ export function installFakeFetch({ tree, scenario }) {
     restore: () => { globalThis.fetch = realFetch; },
     countMedia: () => requests.filter((r) => r.url.includes('alt=media')).length,
     countExport: () => requests.filter((r) => r.path.includes('/export')).length,
-    countList: () => requests.filter((r) => r.path.endsWith('/files')).length,
+    countList: () => requests.filter((r) => r.path.endsWith('/files') && r.method === 'GET').length,
     nonGet: () => requests.filter((r) => r.method !== 'GET'),
     missingAuth: () => requests.filter((r) => !r.hasAuthHeader),
+
+    /* フォルダ作成の検証用。 */
+    creates: () => requests.filter((r) => r.method === 'POST' && r.path.endsWith('/files') && !r.isUpload),
+    /* 本文つきファイル作成（サンプルファイル）の検証用。 */
+    uploads: () => requests.filter((r) => r.method === 'POST' && r.isUpload),
+    /* POST 以外の書き込み（PUT / PATCH / DELETE）が1件でもあれば異常。 */
+    forbiddenWrites: () => requests.filter((r) => ['PUT', 'PATCH', 'DELETE'].includes(r.method)),
   };
 }

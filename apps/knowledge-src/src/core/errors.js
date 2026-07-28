@@ -21,6 +21,20 @@ export const ErrorCode = Object.freeze({
   AUTH_FAILED: 'AUTH_FAILED',
   AUTH_EXPIRED: 'AUTH_EXPIRED',
   AUTH_TIMEOUT: 'AUTH_TIMEOUT',
+  WRITE_SCOPE_NOT_GRANTED: 'WRITE_SCOPE_NOT_GRANTED',
+
+  /* 不足フォルダの作成 */
+  FOLDER_CREATE_IN_PROGRESS: 'FOLDER_CREATE_IN_PROGRESS',
+  FOLDER_CREATE_BLOCKED_BY_SYNC: 'FOLDER_CREATE_BLOCKED_BY_SYNC',
+  FOLDER_CREATE_AMBIGUOUS: 'FOLDER_CREATE_AMBIGUOUS',
+  FOLDER_CREATE_FAILED: 'FOLDER_CREATE_FAILED',
+  FOLDER_CREATE_UNVERIFIED: 'FOLDER_CREATE_UNVERIFIED',
+  FOLDER_CREATE_MODE_UNAVAILABLE: 'FOLDER_CREATE_MODE_UNAVAILABLE',
+
+  /* セットアップウィザード */
+  SAMPLE_CREATE_FAILED: 'SAMPLE_CREATE_FAILED',
+  SAMPLE_CREATE_UNVERIFIED: 'SAMPLE_CREATE_UNVERIFIED',
+  SETUP_STEP_BLOCKED: 'SETUP_STEP_BLOCKED',
 
   /* Drive API */
   DRIVE_API_ERROR: 'DRIVE_API_ERROR',
@@ -103,6 +117,49 @@ const MESSAGES = Object.freeze({
   [ErrorCode.AUTH_TIMEOUT]: {
     title: '認証の応答がありませんでした。',
     hint: '認証画面が開いたままになっていないかご確認のうえ、もう一度お試しください。',
+  },
+
+  [ErrorCode.WRITE_SCOPE_NOT_GRANTED]: {
+    title: 'フォルダを作成する権限が許可されませんでした。',
+    hint: '同意画面でDriveのチェックを外さずに「許可」を選んでください。作成しない場合はキャンセルで戻れます。',
+  },
+
+  [ErrorCode.FOLDER_CREATE_IN_PROGRESS]: {
+    title: 'フォルダの作成を実行中です。',
+    hint: '完了するまでお待ちください。別のタブで実行中の場合もあります。',
+  },
+  [ErrorCode.FOLDER_CREATE_BLOCKED_BY_SYNC]: {
+    title: '同期中はフォルダを作成できません。',
+    hint: '同期が終わってから、もう一度お試しください。',
+  },
+  [ErrorCode.FOLDER_CREATE_AMBIGUOUS]: {
+    title: '同じ名前のフォルダが複数あるため、作成を中止しました。',
+    hint: 'どのフォルダを使うかを選ぶか、Drive上で重複を解消してください。',
+  },
+  [ErrorCode.FOLDER_CREATE_FAILED]: {
+    title: 'フォルダの作成に失敗しました。',
+    hint: '成功した分は作成済みです。「作成を再実行」で続きからやり直せます。',
+  },
+  [ErrorCode.FOLDER_CREATE_UNVERIFIED]: {
+    title: '作成したフォルダの内容を確認できませんでした。',
+    hint: 'Drive上の状態をご確認のうえ、「不足フォルダを確認」を実行してください。',
+  },
+  [ErrorCode.FOLDER_CREATE_MODE_UNAVAILABLE]: {
+    title: '現在の設定ではフォルダを作成できません。',
+    hint: '管理者にPicker用APIキーとプロジェクト番号の設定をご確認ください。',
+  },
+
+  [ErrorCode.SAMPLE_CREATE_FAILED]: {
+    title: 'サンプルファイルの作成に失敗しました。',
+    hint: 'この手順は省略できます。「スキップ」を押して先へ進めます。',
+  },
+  [ErrorCode.SAMPLE_CREATE_UNVERIFIED]: {
+    title: '作成したサンプルファイルの内容を確認できませんでした。',
+    hint: 'Drive上の 01_ナレッジ フォルダをご確認ください。',
+  },
+  [ErrorCode.SETUP_STEP_BLOCKED]: {
+    title: '前の手順が終わっていないため、この手順は実行できません。',
+    hint: '前の手順に戻って完了させてください。',
   },
 
   [ErrorCode.DRIVE_API_ERROR]: {

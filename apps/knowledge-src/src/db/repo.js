@@ -6,6 +6,7 @@
 import { db, runWrite, SettingKey, SEARCH_INDEX_ID } from './db.js';
 import { logger } from '../core/logger.js';
 import { CHUNK_DEFAULTS, SYNC_DEFAULTS } from '../config.js';
+import { parseSetupRecord } from '../setup/wizard-state.js';
 
 /* ---------- settings ---------- */
 
@@ -28,6 +29,20 @@ export async function getSelectedFolder() {
 
 export async function setSelectedFolder(folder) {
   return setSetting(SettingKey.SELECTED_FOLDER, folder);
+}
+
+/*
+ * セットアップウィザードの状態。
+ *
+ * 保存するのは進捗フラグと完了時刻だけ。
+ * トークン・ファイル本文・個人情報は入れない（全キャッシュ削除でも残す設定領域のため）。
+ */
+export async function getSetupState() {
+  return parseSetupRecord(await getSetting(SettingKey.SETUP_STATE, null));
+}
+
+export async function setSetupState(record) {
+  return setSetting(SettingKey.SETUP_STATE, record);
 }
 
 export async function getChunkOptions() {

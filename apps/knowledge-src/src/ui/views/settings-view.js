@@ -6,7 +6,7 @@
  * ブラウザ側に置くと利用者ごとに食い違うため、src/config.js の1か所で管理する。
  */
 
-import { el, replaceChildren, formatBytes } from '../../core/dom.js';
+import { el, replaceChildren, formatBytes, formatDateTime } from '../../core/dom.js';
 import {
   CHUNK_DEFAULTS, SYNC_DEFAULTS, FEATURE_FLAGS, SCOPE_MODE, getDriveScope,
   KNOWLEDGE_FOLDER_PATH, DRIVE_ROOT_LABEL, isPickerConfigured,
@@ -77,6 +77,7 @@ export function createSettingsView(ctx) {
   ]);
 
   const infoGrid = el('div', { class: 'stat-grid' });
+  const setupStatus = el('p', { class: 'muted', role: 'status', 'aria-live': 'polite', text: '' });
 
   const element = el('section', {}, [
     el('div', { class: 'card' }, [
@@ -87,6 +88,29 @@ export function createSettingsView(ctx) {
           + '既存のナレッジにも新しい設定が反映されます。',
       }),
       form,
+    ]),
+
+    /*
+     * セットアップウィザードの再実行。
+     * 完了状態を初期化するだけで、Drive にも取り込み済みデータにも影響しない。
+     */
+    el('div', { class: 'card' }, [
+      el('h2', { class: 'card__title', text: 'セットアップ' }),
+      el('p', {
+        class: 'card__desc',
+        text: '初回に表示される案内（ログイン → フォルダ確認 → 不足フォルダ作成 → 初回同期 → 検索テスト → 診断）を'
+          + 'もう一度実行します。取り込み済みのデータやDrive上のファイルには影響しません。',
+      }),
+      setupStatus,
+      el('div', { class: 'card__actions' }, [
+        el('button', {
+          type: 'button',
+          class: 'button button--secondary',
+          'data-role': 'restart-setup',
+          text: 'セットアップを再実行',
+          onClick: () => ctx.actions.restartSetup(),
+        }),
+      ]),
     ]),
 
     diagnostics.element,
@@ -199,6 +223,14 @@ export function createSettingsView(ctx) {
   }
 
   const update = (state) => {
+    const setup = state.setup;
+
+    setupStatus.textContent = setup
+      ? (setup.completed
+        ? `セットアップ済み（${formatDateTime(setup.completedAt)}）。押すと最初から案内をやり直します。`
+        : 'セットアップは未完了です。押すと案内画面へ戻ります。')
+      : 'セットアップの状態を読み込み中です。';
+
     replaceChildren(infoGrid, [
       info('要求スコープ', SCOPE_MODE === 'file' ? 'drive.file' : 'drive.readonly', getDriveScope()),
       info('Driveへの書き込み', 'なし', '読み取り専用のAPIのみ'),

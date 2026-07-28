@@ -16,6 +16,7 @@ import { createSearchView } from './views/search-view.js';
 import { createStorageView } from './views/storage-view.js';
 import { createLogsView } from './views/logs-view.js';
 import { createSettingsView } from './views/settings-view.js';
+import { createWizardView } from './views/wizard-view.js';
 
 const BADGE_CLASS = {
   [AppState.UNAUTHENTICATED]: 'state-badge--idle',
@@ -68,7 +69,50 @@ export function mountApp(ctx) {
     return el('li', {}, [button]);
   }));
 
+  /*
+   * セットアップウィザード。
+   *
+   * タブには入れない。未完了のあいだは main を占有し、ナビゲーションを隠す。
+   * 「ナレッジ管理を開始」を押すと completed になり、通常のタブ表示へ戻る。
+   */
+  const wizard = createWizardView(ctx);
+  let wizardMode = false;
+
+  function applyMode(state) {
+    /* setup が null のあいだ（読み込み前・テスト）は通常画面のままにする。 */
+    const next = Boolean(state.setup) && state.setup.completed !== true;
+
+    if (next === wizardMode) {
+      return;
+    }
+
+    wizardMode = next;
+
+    const nav = document.querySelector('.app-nav');
+    if (nav) {
+      nav.hidden = next;
+    }
+
+    if (next) {
+      currentId = null;
+      clear(main);
+      main.append(wizard.element);
+      wizard.update(state);
+      return;
+    }
+
+    /* 通常画面へ戻す。 */
+    currentId = null;
+    clear(main);
+    navigate(window.location.hash.replace('#', '') || 'setup', { updateHash: false });
+  }
+
   function navigate(id, { updateHash = true } = {}) {
+    /* ウィザード表示中はタブ切り替えを受け付けない。 */
+    if (wizardMode) {
+      return;
+    }
+
     const view = byId.get(id) ?? views[0];
 
     if (currentId === view.id) {
@@ -107,14 +151,23 @@ export function mountApp(ctx) {
     renderStatus(statusBar, state);
     renderAccount(accountArea, state, ctx);
 
+    applyMode(state);
+
+    if (wizardMode) {
+      wizard.update(state);
+      return;
+    }
+
     const view = byId.get(currentId);
     view?.instance.update(state);
   });
 
   navigate(window.location.hash.replace('#', '') || 'setup', { updateHash: false });
+  applyMode(ctx.store.get());
 
   return {
     navigate,
+    isWizardMode: () => wizardMode,
     focusSearch() {
       navigate('search');
       byId.get('search')?.instance.focus?.();
