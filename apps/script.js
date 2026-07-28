@@ -70,6 +70,14 @@ const APPS = [
     tags: ['文字起こし', '音声認識'],
     icon: 'mic',
   },
+  {
+    name: 'AIナレッジチャット',
+    description: 'Google Driveと同期した資料を参照して、ローカルLLMに質問できます。',
+    status: 'coming',
+    url: '/apps/knowledge/chat/',
+    tags: ['ローカルLLM', 'Google Drive'],
+    icon: 'app',
+  },
 ];
 
 /*
