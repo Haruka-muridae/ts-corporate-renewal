@@ -48,6 +48,7 @@ const SUITES = [
   { name: 'browser:login-flow', file: 'browser/login-flow.mjs', kind: 'browser', groups: ['auth'] },
   { name: 'browser:phase3-screens', file: 'browser/phase3-screens.mjs', kind: 'browser', groups: ['auth'] },
   { name: 'browser:audit', file: 'browser/audit.mjs', kind: 'browser', groups: ['auth', 'audit'] },
+  { name: 'browser:google-links', file: 'browser/google-links.mjs', kind: 'browser', groups: ['auth'] },
 ];
 
 const mode = process.argv[2] ?? 'all';

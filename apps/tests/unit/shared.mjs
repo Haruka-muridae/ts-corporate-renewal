@@ -290,4 +290,70 @@ check('DriveAuthError(GIS_LOAD_FAILED) になる',
   `${retryError?.name}/${retryError?.code}`);
 check('retryResult は未設定', retryResult === null);
 
+/*
+ * 外部リンクの正本。
+ *
+ * ここでは値と検査だけを確かめる。
+ * **実際にURLを開かない。** 紹介プログラム側へ、
+ * テストのたびに通信を発生させないため。
+ */
+section("外部リンク（shared/external-links.js）");
+const links = await import(url('external-links.js'));
+
+check('Googleアカウント作成URL',
+  links.GOOGLE_ACCOUNT_CREATE_URL === 'https://accounts.google.com/signup',
+  links.GOOGLE_ACCOUNT_CREATE_URL);
+check('Workspace紹介URL',
+  links.GOOGLE_WORKSPACE_REFERRAL_URL === 'https://referworkspace.app.goo.gl/2KTq',
+  links.GOOGLE_WORKSPACE_REFERRAL_URL);
+
+for (const [name, value] of [
+  ['アカウント作成', links.GOOGLE_ACCOUNT_CREATE_URL],
+  ['Workspace紹介', links.GOOGLE_WORKSPACE_REFERRAL_URL],
+]) {
+  check(`${name}: HTTPS`, new URL(value).protocol === 'https:');
+  check(`${name}: 許可ドメイン`, links.isAllowedExternalUrl(value) === true);
+}
+
+/* 紹介URLはクエリを持たない短縮URL。落とすべきクエリが無いことを確認する。 */
+check('紹介URLのクエリを削っていない',
+  new URL(links.GOOGLE_WORKSPACE_REFERRAL_URL).search === '');
+
+section("外部リンクの検査（isAllowedExternalUrl）");
+check('http は拒否', links.isAllowedExternalUrl('http://accounts.google.com/signup') === false);
+check('未知のホストは拒否', links.isAllowedExternalUrl('https://evil.example/signup') === false);
+/* endsWith 判定だと通ってしまう形。完全一致でなければならない。 */
+check('★接尾辞が一致するだけの偽ホストを拒否',
+  links.isAllowedExternalUrl('https://evil-accounts.google.com.attacker.test/') === false);
+check('サブドメイン偽装を拒否',
+  links.isAllowedExternalUrl('https://accounts.google.com.attacker.test/') === false);
+check('javascript: を拒否', links.isAllowedExternalUrl('javascript:alert(1)') === false);
+check('data: を拒否', links.isAllowedExternalUrl('data:text/html,x') === false);
+check('空文字を拒否', links.isAllowedExternalUrl('') === false);
+check('前後空白を拒否', links.isAllowedExternalUrl(' https://accounts.google.com/signup ') === false);
+check('文字列以外を拒否', links.isAllowedExternalUrl(null) === false);
+check('workspace.google.com は許可（転送先）',
+  links.isAllowedExternalUrl('https://workspace.google.com/pricing') === true);
+
+section("外部リンクの文言");
+const byId = Object.fromEntries(links.ACCOUNT_LINKS.map((item) => [item.id, item]));
+check('2件ある', links.ACCOUNT_LINKS.length === 2, String(links.ACCOUNT_LINKS.length));
+
+const personal = byId['google-account'];
+const workspace = byId['workspace-referral'];
+
+check('通常アカウント側に「無料」がある', personal.lead.includes('無料'));
+check('★Workspace側に「無料」が無い',
+  !`${workspace.lead}${workspace.note}${workspace.label}`.includes('無料'),
+  workspace.note);
+check('Workspace: 紹介プログラムと明記', workspace.note.includes('紹介プログラム'));
+check('Workspace: 有料と明記', workspace.note.includes('有料'));
+check('Workspace: Google LLC 提供と明記', workspace.note.includes('Google LLC'));
+check('通常アカウント: 外部サイトと明記', personal.note.includes('外部サイト'));
+
+/* 正本が凍結されていること（実行時に書き換えられない）。 */
+check('ACCOUNT_LINKS が凍結', Object.isFrozen(links.ACCOUNT_LINKS));
+check('各項目が凍結', links.ACCOUNT_LINKS.every((item) => Object.isFrozen(item)));
+check('ALLOWED_HOSTS が凍結', Object.isFrozen(links.ALLOWED_HOSTS));
+
 finish();
