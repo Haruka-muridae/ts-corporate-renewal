@@ -7,6 +7,22 @@
 
 ---
 
+## 必要なもの
+
+| | 要件 |
+|---|---|
+| Node.js | **22.4 以上**（開発と CI は 24） |
+| Chrome | Chrome または Chromium。Edge でも動く |
+
+`package.json` の `engines` は `>=20.9.0` だが、
+**ブラウザテストは Node 20 では動かない。**
+`helpers/chrome.mjs` が DevTools Protocol を叩くのにグローバルの
+`WebSocket` を使い、これが既定で有効になるのは Node 22.4 以降のため。
+
+Node 20 でも `npm run test:unit`（Chrome 不要）は動く。
+
+---
+
 ## 実行方法
 
 リポジトリのルートから実行する。
@@ -25,9 +41,12 @@ npm run test:audit    # 監査で追加した分だけ
 node apps/tests/run.mjs
 node apps/tests/run.mjs unit
 node apps/tests/run.mjs browser
+node apps/tests/run.mjs runner   # 実行役自身の検査
 ```
 
 成功で終了コード 0、失敗で 1 を返す。
+
+**同時に2つ走らせないこと。** ポートを固定しているため互いに邪魔をする。
 
 ---
 
@@ -80,6 +99,63 @@ export CHROME_PATH=/usr/bin/google-chrome
 ```
 
 Edge でも動く（Chromium系のため）。
+
+---
+
+## タイムアウト
+
+スイート1本ごとに上限がある。上限を超えると、そのスイートを
+**プロセスツリーごと**終了して次へ進み、終了コード 1 で終わる。
+
+| 対象 | 既定 | 環境変数 |
+|---|---|---|
+| Node のスイート | 120秒 | `TEST_TIMEOUT_UNIT_MS` |
+| ブラウザのスイート | 300秒 | `TEST_TIMEOUT_BROWSER_MS` |
+| 結果出力後の猶予 | 10秒 | `TEST_EXIT_GRACE_MS` |
+
+```sh
+# 遅い環境で伸ばす
+TEST_TIMEOUT_BROWSER_MS=600000 npm test
+
+# 打ち切りの挙動を確かめる（わざと落とす）
+TEST_TIMEOUT_BROWSER_MS=3000 node apps/tests/run.mjs browser
+```
+
+### 「結果出力後の猶予」とは
+
+スイートは `finish()` で `process.exit()` を呼ばず、自然終了に任せている
+（Windows で内部ハンドルの警告が出るため）。
+
+この作りでは、ハンドルが1つでも閉じ残るとプロセスが永久に終わらない。
+そこで、結果を出したあと一定時間たっても終われない場合は強制終了する。
+
+保険は `unref()` したタイマーで実装してあるため、
+**正常に終われる場合は一度も発火しない。**
+
+---
+
+## 詰まったときの調べ方
+
+```powershell
+# Windows
+tasklist | findstr chrome
+netstat -ano | findstr :5313
+dir %TEMP%\tsam-chrome-*
+```
+
+```sh
+# macOS / Linux
+pgrep -a -f 'chrome|chromium'
+ss -ltnp | grep -E ':(53[0-9]{2}|94[0-9]{2})'
+ls -d /tmp/tsam-chrome-*
+```
+
+**利用者が普段使っている Chrome を止めないこと。**
+テストが起動したものは `--headless` と `tsam-chrome-` を含む。
+
+前回の一時プロファイルは、次に `npm test` を実行したとき
+**開始時に自動で片付ける**（タイムアウトで打ち切られた場合、
+SIGKILL は捕まえられないため終了フックが動かない）。
 
 ---
 
@@ -151,6 +227,63 @@ http://127.0.0.1:5313/ts-corporate-renewal/apps/login/   プロジェクトPages
 tasklist | findstr chrome
 dir %TEMP%\tsam-chrome-*
 ```
+
+---
+
+## GitHub Actions
+
+`.github/workflows/test.yml` が次のときに `npm test` を走らせる。
+
+```text
+Pull Request を出したとき
+main へ push したとき
+手動実行（workflow_dispatch）
+```
+
+| 項目 | 値 |
+|---|---|
+| 実行環境 | `ubuntu-latest` |
+| Node | 24 |
+| Chrome | `google-chrome` などを検出し `CHROME_PATH` へ設定。無ければ失敗 |
+| 権限 | `contents: read` のみ |
+| 上限 | 20分 |
+| 同時実行 | 同じブランチの古い実行は取り消す |
+
+### CI が触らないもの
+
+**secrets を一切使わない。**
+
+```text
+Supabase へ接続しない（設定はプレースホルダーのまま）
+Google OAuth の設定を読まない
+Google Drive の認可を求めない
+Workspace 紹介リンクへアクセスしない
+外部へデプロイしない
+```
+
+通信するのは、テストが自分で立てる `127.0.0.1` の HTTP サーバーと、
+Chrome の DevTools Protocol（ローカル）だけである。
+
+ブラウザテストは CDP で外部ホストを遮断してから画面を開く。
+
+---
+
+## 実行役自身の検査
+
+`unit/runner.mjs` が、実行役の後始末を検査する。
+
+```text
+正常終了・非ゼロ終了・タイムアウト
+タイムアウト時に子と孫（Chrome 相当）が残らないこと
+孫が掴んだポートが解放されること
+起動に失敗しても固まらないこと
+後始末を二重に呼んでも壊れないこと
+一時プロファイルの掃除
+Windows と POSIX の終了方法の違い
+```
+
+タイムアウトの検査には短い上限（1〜3秒）を渡すため、
+待ち時間は数秒で済む。
 
 ---
 
