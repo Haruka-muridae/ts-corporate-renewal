@@ -78,6 +78,14 @@ const APPS = [
     tags: ['ローカルLLM', 'Google Drive'],
     icon: 'app',
   },
+  {
+    name: 'ナレッジ管理',
+    description: 'Google Drive上の資料を同期・解析し、ブラウザ内で検索できます。',
+    status: 'public',
+    url: '/apps/knowledge/',
+    tags: ['ナレッジ管理', 'Google Drive'],
+    icon: 'app',
+  },
 ];
 
 /*
