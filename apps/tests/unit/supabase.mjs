@@ -176,6 +176,42 @@ check('anon キーは誤検出しない',
   config.looksLikeServiceRoleKey(`eyJhbGciOiJIUzI1NiJ9.${anonPayload}.sig`) === false);
 check('未設定の理由が説明される', typeof config.describeConfig().reason === 'string');
 
+/*
+ * 利用者向けの文言に、内部のファイル構成を出さない。
+ *
+ * reason は login / account / password-reset の3画面が
+ * `（${status.reason}）` の形でそのまま表示する。
+ * ここに設定ファイルのパスが入ると、自分では直せない内部情報を
+ * 一般の利用者へ見せることになる。
+ */
+section("1-b. 未設定時の文言に内部情報を出さない");
+const desc = config.describeConfig();
+
+check('★内部パスを出さない', !desc.reason.includes('supabase-config.js'), desc.reason);
+check('★.js のファイル名を出さない', !/\.js\b/.test(desc.reason), desc.reason);
+check('★ディレクトリ表記を出さない', !desc.reason.includes('apps/'), desc.reason);
+check('★準備中と伝える', desc.reason === 'ログイン機能は現在準備中です。', desc.reason);
+check('技術用語を出さない',
+  !/Supabase|anon|service_role|Project URL/.test(desc.reason), desc.reason);
+
+/* 開発者向けの詳細は残す。ただし画面へは出さない側に置く。 */
+check('detail に原因が残る', typeof desc.detail === 'string' && desc.detail.length > 0, String(desc.detail));
+check('detail と reason は別物', desc.detail !== desc.reason);
+
+/* 戻り値の形を固定する。detail を足し忘れると開発者が原因を追えない。 */
+check('reason / detail / configured が揃う',
+  ['configured', 'reason', 'detail'].every((k) => k in desc), Object.keys(desc).join(','));
+
+/* getProviderStatus 経由でも漏れないこと（画面が実際に読む経路）。 */
+const statusFresh = await import(`${url('auth.js')}?leak=1`);
+const st = statusFresh.getProviderStatus();
+check('★getProviderStatus でも内部パスなし',
+  !String(st.reason).includes('supabase-config.js'), String(st.reason));
+check('★getProviderStatus は準備中を返す',
+  st.reason === 'ログイン機能は現在準備中です。', String(st.reason));
+check('★getProviderStatus は detail を渡さない',
+  st.detail === undefined, String(st.detail));
+
 section("2. 未設定時はダミーのまま");
 const fresh = await import(`${url('auth.js')}?fresh=1`);
 check('自動選択はダミー', fresh.isUsingDummyProvider() === true);

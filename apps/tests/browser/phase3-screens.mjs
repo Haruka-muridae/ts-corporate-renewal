@@ -59,9 +59,17 @@ check('★Supabaseへの通信も無い', external.length === 0, external.join('
 
 section("3. ログイン画面（未設定）");
 check('準備中の注意書きが出る', (await evaluate('!document.getElementById("login-dummy-notice").hidden')) === true);
-check('理由が添えられる',
-  (await evaluate('document.getElementById("login-dummy-reason").textContent')).includes('未設定'),
-  await evaluate('document.getElementById("login-dummy-reason").textContent'));
+/*
+ * 注意書きは「仮ログインである説明」と「準備中である案内」を持つ。
+ * 以前はここへ設定ファイルのパスが入っていた。
+ * 一般の利用者には直せない内部情報であり、出さない。
+ */
+const dummyReason = await evaluate('document.getElementById("login-dummy-reason").textContent');
+check('仮ログインであることを説明する', dummyReason.includes('仮ログイン'), dummyReason);
+check('準備中であることを伝える', dummyReason.includes('ログイン機能は現在準備中です'), dummyReason);
+check('★内部の設定ファイルパスを出さない',
+  !dummyReason.includes('supabase-config.js') && !dummyReason.includes('apps/'), dummyReason);
+check('★.js のファイル名を出さない', !/\.js\b/.test(dummyReason), dummyReason);
 check('メールアドレス欄になっている',
   (await evaluate('document.getElementById("login-id").type')) === 'email');
 check('パスワード再設定はリンクにしない（未対応のため）',

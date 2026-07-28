@@ -213,7 +213,11 @@ function applyProviderStatus() {
   if (dummy && el.noticeReason) {
     const status = getProviderStatus();
 
-    /* 設定漏れの理由が分かる場合は、それも開発者向けに添える。 */
+    /*
+     * status.reason は利用者向けの文言だけを持つ。
+     * 原因の詳細（describeConfig().detail）をここへ足さないこと。
+     * 内部のファイル構成を利用者へ見せることになる。
+     */
     if (status.reason) {
       el.noticeReason.textContent = '現在は画面遷移を確認するための仮ログインです。'
         + 'パスワードは照合されず、入力内容が端末の外へ送信されることもありません。'

@@ -157,14 +157,36 @@ export function isSupabaseConfigured() {
 }
 
 /*
- * 設定状態の説明。画面や開発者向けの案内に使う。
- * 戻り値: { configured, reason }
+ * 設定状態の説明。
+ *
+ * ------------------------------------------------------------------
+ * reason と detail を分ける理由
+ * ------------------------------------------------------------------
+ * reason は**画面へそのまま出る**。login / account / password-reset の
+ * 3画面が `（${status.reason}）` の形で表示している。
+ *
+ * そこへ「apps/shared/supabase-config.js を設定してください」と書くと、
+ * 一般の利用者に、自分では直せない内部のファイル構成を見せることになる。
+ * 直し方の案内にはならず、不信感だけが残る。
+ *
+ * detail は開発者向けで、**画面へ出してはならない**。
+ * 原因を切り分けたいときに DevTools から読む。
+ * ------------------------------------------------------------------
+ *
+ * 戻り値: { configured, reason, detail }
+ *   reason … 利用者へ見せてよい文言
+ *   detail … 開発者向け。表示禁止
  */
+
+/* 利用者向けの文言。原因によらず同じにする（内部構成を推測させない）。 */
+const NOT_READY_MESSAGE = 'ログイン機能は現在準備中です。';
+
 export function describeConfig() {
   if (looksLikeServiceRoleKey()) {
     return {
       configured: false,
-      reason: 'service_role キーが設定されています。anon / public キーに置き換え、'
+      reason: NOT_READY_MESSAGE,
+      detail: 'service_role キーが設定されています。anon / public キーに置き換え、'
         + 'Supabase 側で service_role キーを必ず無効化（rotate）してください。',
     };
   }
@@ -172,16 +194,18 @@ export function describeConfig() {
   if (!isUrlConfigured()) {
     return {
       configured: false,
-      reason: 'Supabase の Project URL が未設定です。apps/shared/supabase-config.js を設定してください。',
+      reason: NOT_READY_MESSAGE,
+      detail: 'Supabase の Project URL が未設定です。',
     };
   }
 
   if (!isAnonKeyConfigured()) {
     return {
       configured: false,
-      reason: 'Supabase の anon key が未設定です。apps/shared/supabase-config.js を設定してください。',
+      reason: NOT_READY_MESSAGE,
+      detail: 'Supabase の anon key が未設定です。',
     };
   }
 
-  return { configured: true, reason: null };
+  return { configured: true, reason: null, detail: null };
 }
