@@ -164,8 +164,35 @@ for (const result of results) {
 console.log('-'.repeat(width + 10));
 console.log(`${'合計'.padEnd(width - 2)}${`${totalPass}/${totalPass + totalFail}`.padStart(10)}`);
 
+/*
+ * 異常終了したスイートは結果行を出さないため、
+ * その中の件数は上の合計に入っていない。
+ *
+ * これを書かないと「合計 401/401」だけが目に入り、
+ * 全部通ったように読めてしまう。
+ * 終了コードは 1 なので機械は正しく判定するが、人が誤読する。
+ */
+const crashedCount = results.filter((r) => r.crashed).length;
+
+if (crashedCount > 0) {
+  console.log(
+    `\n★ ${crashedCount} スイートが異常終了しました。`
+    + '上の合計には、そのスイートの件数が含まれていません。',
+  );
+}
+
 if (totalFail > 0 || broken.length > 0) {
-  console.log(`\n不合格: ${totalFail} 件`);
+  const parts = [];
+
+  if (totalFail > 0) {
+    parts.push(`不合格 ${totalFail} 件`);
+  }
+
+  if (crashedCount > 0) {
+    parts.push(`異常終了 ${crashedCount} スイート`);
+  }
+
+  console.log(`\n${parts.join(' / ')}`);
   process.exit(1);
 }
 
