@@ -93,7 +93,11 @@ export async function postAction(action, body = {}) {
 
   const payload = { action, ...body };
 
-  /* ログの参考情報。利用者が詐称できる値であり、判定には使わない。 */
+  /*
+   * ログの参考情報。利用者が詐称できる値であり、判定には使わない。
+   * GAS の doPost(e) は HTTPヘッダーを受け取れないため、
+   * サーバー側で User-Agent を取得できない（docs/specs §14）。
+   */
   if (typeof navigator !== 'undefined' && typeof navigator.userAgent === 'string') {
     payload.userAgent = navigator.userAgent.slice(0, 300);
   }

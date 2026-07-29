@@ -102,6 +102,10 @@ function dispatchPost_(action, body) {
     return respond_(performLogin_({
       email: body.email,
       password: body.password,
+      /*
+       * Boolean() での正規化は不可。Boolean('false') === true となり、
+       * 30日セッションを誤発行する（docs/specs §14）。
+       */
       remember: body.remember === true,
       userAgent: body.userAgent
     }));
