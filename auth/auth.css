@@ -1,0 +1,558 @@
+/*
+ * 本番認証系（/login/, /pricing/, /portal/, /password/*, /payment/*）の
+ * 共通スタイル。
+ *
+ * css/style.css を読み込んだうえで、この2〜3種類の画面に固有の
+ * クラスだけを追加する。既存クラスは上書きしない。
+ *
+ * 320px から積み上げるモバイルファースト。
+ * 375 / 768 / 1024 / 1440px で横スクロールが出ないことを前提に組む。
+ *
+ * 色・フォント・角丸・余白は css/style.css のカスタムプロパティを使い、
+ * ここで新しい色を定義しない（コーポレートサイトと見た目を揃えるため）。
+ */
+
+/*
+ * hidden 属性の保証。
+ * このファイルには display を持つクラスがあり、作者スタイルは
+ * UA の [hidden]{display:none} より優先されるため hidden が効かなくなる。
+ */
+[hidden] {
+  display: none !important;
+}
+
+/* 見た目には出さず、支援技術へは伝える。 */
+.auth-visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+}
+
+/* ---------- 画面全体 ---------- */
+
+.auth-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--color-off-white);
+}
+
+.auth-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  padding: 32px 16px 40px;
+}
+
+/* ログイン・パスワード系のカード幅。要件どおり最大420px。 */
+.auth-shell {
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+}
+
+/* 料金プランとPortalは項目が多いため広くとる。 */
+.auth-shell--wide {
+  max-width: 960px;
+}
+
+.auth-shell--medium {
+  max-width: 640px;
+}
+
+/* ---------- ブランド ---------- */
+
+.auth-brand {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.auth-brand__link {
+  display: inline-block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.auth-brand__link:hover {
+  text-decoration: underline;
+}
+
+.auth-brand__name {
+  color: var(--c-main);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+}
+
+.auth-brand__owner {
+  margin-top: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/* ---------- カード ---------- */
+
+.auth-card {
+  padding: 24px 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.auth-card__title {
+  margin-bottom: 4px;
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+.auth-card__lead {
+  margin-bottom: 20px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+/* ---------- 入力欄 ---------- */
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-field__label {
+  color: var(--c-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.auth-field__control {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.auth-field__input {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.auth-field__input:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 1px;
+}
+
+/* 入力に問題があることを、枠線だけでなくメッセージでも伝える。 */
+.auth-field__input[aria-invalid='true'] {
+  border-color: #a3221f;
+}
+
+.auth-field__toggle {
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg-sub);
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-field__toggle:hover {
+  background-color: var(--c-border);
+}
+
+.auth-field__hint {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+/* ---------- チェックボックス ---------- */
+
+.auth-checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.auth-checkbox__input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+/* ---------- ボタン ---------- */
+
+.auth-button {
+  display: block;
+  width: 100%;
+  padding: 13px 16px;
+  border: 1px solid var(--c-main);
+  border-radius: var(--radius-button);
+  background-color: var(--c-main);
+  color: var(--color-white);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.auth-button:hover:not(:disabled) {
+  background-color: var(--c-main-dark);
+  border-color: var(--c-main-dark);
+}
+
+.auth-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.auth-button--ghost {
+  margin-top: 10px;
+  border-color: var(--c-border-strong);
+  background-color: transparent;
+  color: var(--c-main);
+}
+
+.auth-button--ghost:hover:not(:disabled) {
+  background-color: var(--c-bg-sub);
+  border-color: var(--c-border-strong);
+}
+
+/* ---------- メッセージ ---------- */
+
+/*
+ * 色だけに頼らない。
+ * 先頭に「エラー」「完了」などの語を必ず出す（ui.js が入れる）。
+ */
+.auth-message {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--c-border-strong);
+  border-left-width: 4px;
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg-sub);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.auth-message:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 2px;
+}
+
+.auth-message__label {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.auth-message__label::after {
+  content: '：';
+}
+
+.auth-message__body {
+  flex: 1 1 200px;
+}
+
+/* コントラスト比 4.5:1 以上になる濃さを選ぶ。 */
+.auth-message[data-kind='error'] {
+  border-color: #a3221f;
+  background-color: #fdf3f2;
+  color: #7a1917;
+}
+
+.auth-message[data-kind='success'] {
+  border-color: #1f6b3a;
+  background-color: #f1f8f3;
+  color: #175530;
+}
+
+.auth-message[data-kind='info'] {
+  border-color: var(--c-main);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text);
+}
+
+/* ---------- リンク群 ---------- */
+
+.auth-links {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--c-border);
+}
+
+.auth-links__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.auth-links__list a {
+  color: var(--c-main);
+}
+
+/* 公開前のリンクは、リンクに見せない。 */
+.auth-links__pending {
+  color: var(--c-text-muted);
+}
+
+.auth-divider {
+  margin: 20px 0 16px;
+  padding-top: 18px;
+  border-top: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+/* ---------- 料金プラン ---------- */
+
+.auth-plans {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.auth-plan {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.auth-plan__name {
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+
+.auth-plan__price {
+  margin-top: 8px;
+  color: var(--c-main);
+  font-family: var(--font-num), var(--font-ja);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.auth-plan__interval {
+  margin-left: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.auth-plan__features {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.auth-plan__features li {
+  padding-left: 18px;
+  position: relative;
+}
+
+.auth-plan__features li::before {
+  content: '・';
+  position: absolute;
+  left: 0;
+  color: var(--c-accent);
+}
+
+.auth-plan__action {
+  margin-top: 20px;
+}
+
+/* 契約条件の要約。表で並べる。 */
+.auth-terms {
+  margin-top: 28px;
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.auth-terms__title {
+  margin-bottom: 12px;
+  font-size: 1rem;
+}
+
+.auth-terms__list {
+  display: grid;
+  gap: 10px;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.auth-terms__list dt {
+  font-weight: 700;
+}
+
+.auth-terms__list dd {
+  color: var(--c-text-muted);
+}
+
+/* ---------- Portal ---------- */
+
+.auth-portal-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.auth-portal-header__user {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.auth-portal-header__actions {
+  flex: 0 0 auto;
+}
+
+.auth-portal-header__actions .auth-button {
+  width: auto;
+  padding: 8px 14px;
+  font-size: 0.8125rem;
+}
+
+.auth-apps {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-app-card {
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.auth-app-card__name {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.auth-app-card__desc {
+  margin-top: 8px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.auth-app-card__link {
+  margin-top: 14px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.auth-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--c-accent);
+  border-radius: var(--radius-tag);
+  color: var(--color-gold-text);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* ---------- 読み込み中 ---------- */
+
+.auth-loading {
+  padding: 32px 0;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ---------- フッター ---------- */
+
+.auth-footer {
+  padding: 24px 16px 32px;
+  border-top: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.auth-footer a {
+  color: inherit;
+}
+
+/* ---------- 画面幅 ---------- */
+
+@media (min-width: 768px) {
+  .auth-main {
+    padding: 48px 24px 56px;
+  }
+
+  .auth-card {
+    padding: 32px 28px;
+  }
+
+  .auth-plans {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .auth-apps {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+/* 過度なアニメーションは使わない。切り替えの明滅だけ抑える。 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

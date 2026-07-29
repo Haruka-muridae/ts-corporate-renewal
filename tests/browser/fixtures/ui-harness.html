@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>auth/ui.js の動作確認用</title>
+  <meta name="robots" content="noindex, nofollow">
+  <!--
+    これはテスト専用のページ。公開画面ではない。
+    auth/ui.js の共通部品（メッセージ・二重送信防止・表示切替）を
+    実際のDOM上で動かすためだけに存在する。
+  -->
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../auth/auth.css">
+</head>
+<body class="auth-page">
+  <main class="auth-main">
+    <div class="auth-shell">
+      <div class="auth-card">
+        <h1 class="auth-card__title">ui.js harness</h1>
+
+        <div class="auth-field">
+          <label class="auth-field__label" for="password">パスワード</label>
+          <div class="auth-field__control">
+            <input class="auth-field__input" id="password" type="password" value="secret-value">
+            <button
+              class="auth-field__toggle"
+              id="toggle"
+              type="button"
+              aria-pressed="false"
+              aria-controls="password"
+            >表示</button>
+          </div>
+        </div>
+
+        <p class="auth-message" id="message" tabindex="-1" hidden></p>
+
+        <form id="form" novalidate>
+          <button class="auth-button" id="submit" type="submit">送信する</button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import {
+      createMessageArea,
+      createSubmitButton,
+      attachPasswordToggle,
+    } from '../../../auth/ui.js';
+
+    const messageElement = document.getElementById('message');
+    const message = createMessageArea(messageElement);
+    const submit = createSubmitButton(document.getElementById('submit'), {
+      busyLabel: 'ログインしています…',
+    });
+
+    attachPasswordToggle(document.getElementById('toggle'), document.getElementById('password'));
+
+    /* テストから状態を観察するための入れ物。 */
+    window.__harness = {
+      message,
+      submit,
+      /* 送信ハンドラが実際に走った回数。二重送信の防止を数で確かめる。 */
+      submitCount: 0,
+      /* 進行中の処理を任意のタイミングで終わらせる。 */
+      release: null,
+    };
+
+    document.getElementById('form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      /* 二重送信の防止。ここを通れたときだけ数える。 */
+      if (submit.isBusy()) {
+        return;
+      }
+
+      window.__harness.submitCount += 1;
+      submit.start();
+
+      try {
+        await new Promise((resolve) => {
+          window.__harness.release = resolve;
+        });
+      } finally {
+        submit.stop();
+      }
+    });
+  </script>
+</body>
+</html>
