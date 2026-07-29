@@ -360,6 +360,90 @@ try {
     env.sentMails.every((mail) => !mail.body.includes('New-Password-After-Change-2026')),
   );
 
+  /*
+   * 変更前のセッションが、API から見ても入れなくなることを確かめる。
+   * 上の確認は内部関数の理由コード（REVOKED）を見ているが、
+   * 画面が実際に受け取るのは verifySession の応答である。
+   * 仕様書 docs/specs/login-page-detailed-spec-v3.md §5.5 / §12
+   */
+  const revokedResponse = env.readOutput(gas.doPost({
+    parameter: {},
+    postData: { contents: JSON.stringify({ action: 'verifySession', sessionToken: sessionA.token }) },
+  }));
+
+  check('変更前のセッションは API から SESSION_INVALID が返る', revokedResponse.success === false);
+  check(
+    '失効理由を区別しない単一コードで返る',
+    revokedResponse.error.code === 'SESSION_INVALID',
+    revokedResponse.error.code,
+  );
+
+  check(
+    '応答に内部の失効理由が含まれない',
+    !JSON.stringify(revokedResponse).includes('REVOKED'),
+  );
+
+  /* ---------------------------------------------------------------- */
+  section('Session fixation 対策');
+
+  /*
+   * ログイン成功のたびに新しいトークンを発行し、
+   * 直前まで有効だったトークンを使い回さないことを確かめる。
+   * 使い回すと、攻撃者が事前に握らせたトークンがログイン後も通ってしまう。
+   * 仕様書 docs/specs/login-page-detailed-spec-v3.md §7
+   */
+  const fixationUser = createActiveUser(env, {
+    email: 'fixation@example.com',
+    password: 'Fixation-Test-Password-2026',
+  });
+
+  function signIn(remember) {
+    const result = gas.performLogin_({
+      email: fixationUser.email,
+      password: fixationUser.password,
+      remember: remember === true,
+    });
+
+    if (!result.ok) {
+      throw new Error('テストの前提が崩れています: ログインに失敗しました。');
+    }
+
+    return result.data.sessionToken;
+  }
+
+  const firstToken = signIn(false);
+  const secondToken = signIn(false);
+
+  check('再ログインで別のトークンが発行される', firstToken !== secondToken);
+
+  check(
+    '1回目のトークンはそのままでは通らない形で置き換わる（使い回しなし）',
+    gas.findRows_('sessions', (values) => (
+      String(values[gas.SESSION_COL.TOKEN_HASH - 1]).trim()
+      === gas.hmacHex_(firstToken, env.properties.SESSION_SECRET)
+    )).length === 1,
+  );
+
+  check(
+    '2つのトークンは別々のセッション行として記録される',
+    gas.findRows_('sessions', (values) => (
+      String(values[gas.SESSION_COL.USER_ID - 1]).trim() === fixationUser.user.userId
+    )).length === 2,
+  );
+
+  const tokenSet = new Set([firstToken, secondToken]);
+
+  for (let i = 0; i < 5; i += 1) {
+    tokenSet.add(signIn(i % 2 === 0));
+  }
+
+  check('何度ログインしてもトークンが重複しない', tokenSet.size === 7, tokenSet.size);
+
+  check(
+    'remember の有無にかかわらず新規発行される',
+    signIn(true) !== signIn(true),
+  );
+
   /* ---------------------------------------------------------------- */
   section('掃除');
 
