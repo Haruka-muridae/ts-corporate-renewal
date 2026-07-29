@@ -91,53 +91,14 @@ export function clearSessionToken() {
 
   try {
     storage.removeItem(AUTH_CONFIG.sessionStorageKey);
-    storage.removeItem(AUTH_CONFIG.profileStorageKey);
+    /*
+     * 旧版が保存していた表示用の写し。
+     * 現在は書き込んでいないが、既存利用者の端末には残っているため、
+     * ログアウト時に消す（AUTH_CONFIG.legacyProfileStorageKey の注記を参照）。
+     */
+    storage.removeItem(AUTH_CONFIG.legacyProfileStorageKey);
   } catch {
     /* 消せなくても、サーバー側が失効していれば入れない。 */
-  }
-}
-
-/* ---------- 表示用の写し ---------- */
-
-/*
- * 表示名やロールの写し。**認証の根拠ではない**。
- * サーバー確認が返るまでのあいだ、画面の骨格を出すためだけに使う。
- */
-export function readProfile() {
-  const storage = getStorage();
-
-  if (!storage) {
-    return null;
-  }
-
-  try {
-    const raw = storage.getItem(AUTH_CONFIG.profileStorageKey);
-    const parsed = raw ? JSON.parse(raw) : null;
-
-    if (!parsed || typeof parsed !== 'object') {
-      return null;
-    }
-
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-export function writeProfile(user) {
-  const storage = getStorage();
-
-  if (!storage || !user) {
-    return;
-  }
-
-  try {
-    storage.setItem(AUTH_CONFIG.profileStorageKey, JSON.stringify({
-      email: typeof user.email === 'string' ? user.email : '',
-      role: typeof user.role === 'string' ? user.role : '',
-    }));
-  } catch {
-    /* 書けなくても画面は動く。 */
   }
 }
 
@@ -220,7 +181,6 @@ export async function guardPage({ next = 'portal' } = {}) {
       return null;
     }
 
-    writeProfile(data.user);
     return data.user;
   } catch (error) {
     /*
@@ -255,7 +215,6 @@ export async function redirectIfSignedIn(nextName = 'portal') {
     const data = await verifySessionApi(token);
 
     if (data?.user) {
-      writeProfile(data.user);
       goToScreen(safeNextName(nextName));
       return true;
     }

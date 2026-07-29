@@ -15,7 +15,6 @@ import { setScreenDepth, screenPath } from '../auth/config.js';
 import { login as loginApi, ApiError } from '../auth/api.js';
 import {
   writeSessionToken,
-  writeProfile,
   clearSessionToken,
   redirectIfSignedIn,
   readNextParam,
@@ -152,7 +151,6 @@ form.addEventListener('submit', async (event) => {
       return;
     }
 
-    writeProfile(data.user);
     goToScreen(nextName);
   } catch (error) {
     passwordInput.value = '';

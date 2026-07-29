@@ -41,8 +41,17 @@ export const AUTH_CONFIG = Object.freeze({
    */
   sessionStorageKey: 'tsam-auth-session',
 
-  /* 画面表示用の写し（表示名・ロール）。認証の根拠にはしない。 */
-  profileStorageKey: 'tsam-auth-profile',
+  /*
+   * 旧版が「画面表示用の写し」として使っていたキー。
+   *
+   * 現在は書き込みも読み出しも行わない。
+   * 保存するのはセッショントークンだけ、という原則を実装でも
+   * 成立させるため削除した（docs/specs/login-page-detailed-spec-v3.md §7 / §15）。
+   *
+   * このキーが残っているのは、既存利用者の端末に残った値を
+   * ログアウト時に消すためだけ。新しい用途に再利用しないこと。
+   */
+  legacyProfileStorageKey: 'tsam-auth-profile',
 
   /* パスワード最低文字数の初期表示。実際の判定はサーバーが行う。 */
   passwordMinLength: 12,

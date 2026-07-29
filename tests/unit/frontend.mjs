@@ -240,12 +240,20 @@ try {
   check('保存先が無ければ利用不可と答える', session.isStorageAvailable() === false);
   check('読み出しは null', session.readSessionToken() === null);
   check('書き込みは false', session.writeSessionToken('token') === false);
-  check('プロフィールも null', session.readProfile() === null);
 
   /* 例外を投げないことの確認。 */
   session.clearSessionToken();
-  session.writeProfile({ email: 'a@example.com', role: 'member' });
-  check('片付け・書き込みで例外が出ない', true);
+  check('片付けで例外が出ない', true);
+
+  /*
+   * 保存するのはセッショントークンだけにする（仕様書 §7）。
+   * 表示用の写しを保存する口が復活していないことを、
+   * 公開されている名前の側から確かめる。
+   */
+  check(
+    '表示用の写しを読み書きする関数を公開していない',
+    session.readProfile === undefined && session.writeProfile === undefined,
+  );
 
   finish();
 } catch (error) {
