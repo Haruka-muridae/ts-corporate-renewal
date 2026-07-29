@@ -61,10 +61,7 @@ redirectIfSignedIn(nextName).catch(() => {
 });
 
 if (!isStorageAvailable()) {
-  message.show(
-    'このブラウザではログイン状態を保持できません。プライベートモードを解除してお試しください。',
-    'info',
-  );
+  message.show(MESSAGES.storageUnavailable, 'info');
 }
 
 /* 入力し直したらエラー表示を消す（古いエラーを残さない）。 */
@@ -151,7 +148,7 @@ form.addEventListener('submit', async (event) => {
     }
 
     if (!writeSessionToken(data.sessionToken)) {
-      showError('このブラウザではログイン状態を保持できません。プライベートモードを解除してお試しください。');
+      showError(MESSAGES.storageUnavailable);
       return;
     }
 

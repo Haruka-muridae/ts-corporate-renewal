@@ -50,7 +50,7 @@
 | 認証失敗 | AUTH_FAILED 文言 | このコードのときのみパスワード欄へフォーカス |
 | ロック中 | LOCKED 文言 | |
 | 通信失敗 | NETWORK 文言 | |
-| ストレージ利用不可 | 専用文言(現在 login.js 内。ui.js MESSAGES への移動が課題 §13) | |
+| ストレージ利用不可 | 専用文言(ui.js MESSAGES.storageUnavailable) | |
 | ログイン済みで到達 | verifySession → 有効なら即遷移 | フォームを見せない |
 
 ---
@@ -230,7 +230,7 @@ REST パス形式を採らないのは GAS の単一エンドポイント制約�
 | パスワード強度の個別理由 | GAS: Password.gs(動的生成) |
 | 入力検証(未入力・形式) | フロント: ui.js MESSAGES |
 | 通信失敗 / API 未設定 | フロント: api.js |
-| ストレージ利用不可 | フロント: login.js 内(移動課題 §13) |
+| ストレージ利用不可 | フロント: ui.js MESSAGES |
 
 ---
 
@@ -276,10 +276,14 @@ REST パス形式を採らないのは GAS の単一エンドポイント制約�
 
 ---
 
-## 13. 既知の課題(未解消)
+## 13. 既知の課題(解消済み)
 
-1. 文言の二重定義: ui.js の notConfigured が未参照で、実表示は api.js 側の別文言。どちらかへ統一し未使用側を削除する
-2. ストレージ利用不可文言の login.js 直書き。ui.js MESSAGES への移動が望ましい
+1. ~~文言の二重定義: ui.js の notConfigured が未参照で、実表示は api.js 側の別文言~~
+   → **解消済み(2026-07-29)**。api.js の NOT_CONFIGURED_MESSAGE を正とし、ui.js の未使用定義 MESSAGES.notConfigured を削除した
+2. ~~ストレージ利用不可文言の login.js 直書き~~
+   → **解消済み(2026-07-29)**。ui.js の MESSAGES.storageUnavailable へ移動し、login.js は MESSAGES 経由で参照する。表示文字列は変更していない
+
+いずれも表示文言・タイミングを変えない整理であり、挙動は変わっていない。
 
 ---
 
