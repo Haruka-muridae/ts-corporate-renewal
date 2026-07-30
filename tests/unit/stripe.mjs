@@ -95,6 +95,17 @@ try {
   check('入力されたメールアドレスを渡す', payload.includes('buyer@example.com'));
   check('プランコードを metadata に残す', payload.includes('plan_code'));
 
+  /*
+   * payment モード専用のパラメータを混ぜない。
+   * customer_creation を subscription モードで送ると Stripe が
+   * `customer_creation` can only be used in `payment` mode. で拒否する。
+   */
+  check(
+    'payment モード専用のパラメータを送らない',
+    !payload.includes('customer_creation'),
+    payload,
+  );
+
   check(
     '応答に秘密鍵が含まれない',
     !JSON.stringify(created).includes(SECRET_KEY),
