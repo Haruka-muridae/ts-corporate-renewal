@@ -37,12 +37,23 @@ try {
   /* ---------------------------------------------------------------- */
   section('設定');
 
+  /*
+   * apiUrl は Apps Script Webアプリの公開エンドポイントであり、秘密ではない。
+   * 設定済みであることと、GAS 以外へ向いていないことを確かめる。
+   */
   check(
-    'apiUrl は未設定のままコミットされている（実URLを埋め込まない）',
-    config.AUTH_CONFIG.apiUrl === '',
+    'apiUrl が設定済みである',
+    config.isApiConfigured() === true,
+    config.AUTH_CONFIG.apiUrl,
   );
 
-  check('未設定は isApiConfigured が false', config.isApiConfigured() === false);
+  check(
+    'apiUrl は Apps Script の /exec を指している',
+    /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(config.AUTH_CONFIG.apiUrl),
+    config.AUTH_CONFIG.apiUrl,
+  );
+
+  check('空文字は isApiConfigured が false', config.isApiConfigured('') === false);
 
   check(
     '正しい /exec URL を設定済みと判定する',

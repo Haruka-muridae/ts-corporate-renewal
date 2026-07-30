@@ -27,10 +27,15 @@
 export const AUTH_CONFIG = Object.freeze({
   /*
    * Apps Script Webアプリの /exec URL。
-   * 例: 'https://script.google.com/macros/s/AKfycb.../exec'
    * gas-auth/ をデプロイして得たURLをここへ貼る。
+   *
+   * 秘密情報ではない。静的サイトのフロントから呼ぶ公開エンドポイントであり、
+   * 認可はセッショントークンとサーバー側の検証で行う（README / SECURITY_NOTES.md）。
+   *
+   * デプロイをやり直して /exec URL が変わった場合は、ここと
+   * Stripe の Webhook エンドポイントURLの両方を更新すること。
    */
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbwK-Kw9ynTbDpUG7e5pHgXSPLFg1ur62ukbHLHdHBogqcz3YT0Hn3nQg74SpHOzvXAN/exec',
 
   /* 通信のタイムアウト（ミリ秒）。パスワードハッシュの計算があるため長めにとる。 */
   requestTimeoutMs: 30000,

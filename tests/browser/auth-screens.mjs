@@ -13,12 +13,15 @@
  *   - コンソールエラーが出ない
  *
  * ------------------------------------------------------------------
- * この時点では auth/config.js の apiUrl が未設定である
+ * 本番のエンドポイントへ送らないこと
  * ------------------------------------------------------------------
- * そのため通信は発生せず、API を呼ぶ操作は
- * 「この機能は現在ご利用いただけません。」で止まる。
- * それ自体も確認対象にする（未設定のまま公開しても
- * 画面が壊れず、案内が出ること）。
+ * auth/config.js の apiUrl には本番の Apps Script URL が入っている。
+ * API を呼ぶ操作を試すときは fetch を差し替えて通信を遮断し、
+ * テストが本番の認証ログへ行を作らないようにする。
+ *
+ * ただし /password/setup/ と /password/reset/ は、読み込み時に
+ * publicConfig（参照のみ・副作用なし）を取得する。この2画面の確認では
+ * 実際の GET が1回発生する。
  * ------------------------------------------------------------------
  */
 
@@ -454,16 +457,50 @@ try {
   await page.sleep(100);
 
   /* ---------------------------------------------------------------- */
-  section('未設定時の案内（apiUrl が空）');
+  section('通信できないときの案内');
 
+  /*
+   * ------------------------------------------------------------------
+   * 本番のエンドポイントへ実際に送らない（重要）
+   * ------------------------------------------------------------------
+   * auth/config.js の apiUrl には本番の Apps Script URL が入っている。
+   * そのまま送信すると、テストのたびに本番へログイン要求が飛び、
+   * 認証ログへ行が増え、パスワードハッシュの計算も消費される。
+   *
+   * そこで fetch を差し替えて通信を遮断し、
+   * 「API へ到達できないときに画面が壊れず案内が出る」ことだけを確かめる。
+   * ------------------------------------------------------------------
+   */
   await page.goto(`${origin}/login/`);
 
-  const notConfigured = await submitAndReadMessage('taro@example.com', 'Password-For-Test-2026');
+  page.resetRequests();
+
+  await page.evaluate(`
+    window.__fetchCalls = 0;
+    window.fetch = () => {
+      window.__fetchCalls += 1;
+      return Promise.reject(new TypeError('blocked by test'));
+    };
+  `);
+
+  const unreachable = await submitAndReadMessage('taro@example.com', 'Password-For-Test-2026');
 
   check(
-    '通信せずに案内文を出す',
-    notConfigured === 'この機能は現在ご利用いただけません。',
-    notConfigured,
+    '通信に失敗したら案内文を出す',
+    unreachable === '通信に失敗しました。時間をおいて再度お試しください。',
+    unreachable,
+  );
+
+  check(
+    '送信は1回だけ試みる',
+    (await page.evaluate('window.__fetchCalls')) === 1,
+    await page.evaluate('window.__fetchCalls'),
+  );
+
+  check(
+    '本番エンドポイントへ実際のリクエストが出ていない',
+    page.getRequests().every((url) => !url.includes('script.google.com')),
+    page.getRequests().filter((url) => url.includes('script.google.com')).join(' / '),
   );
 
   check(
@@ -494,12 +531,32 @@ try {
     (await page.evaluate('new URLSearchParams(location.search).get("next")')) === 'portal',
   );
 
-  /* 写しだけを偽造しても入れないこと。 */
+  /*
+   * 写しだけを偽造しても入れないこと。
+   *
+   * 偽造トークンの検証を本番のエンドポイントへ問い合わせに行かせない。
+   * 実際に送ると、本番の応答時間に結果が左右されて不安定になる。
+   * サーバーが「そのトークンは無効」と答えた場合の挙動だけを見たいので、
+   * 遷移をまたいで残る差し替えを入れ、応答を固定する。
+   */
+  const stub = await page.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      window.fetch = () => Promise.resolve(new Response(
+        JSON.stringify({
+          success: false,
+          error: { code: 'SESSION_INVALID', message: 'ログインの有効期限が切れました。もう一度ログインしてください。' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ));
+    `,
+  });
+
   await page.evaluate(`
     localStorage.setItem("tsam-auth-session", "forged-token-value");
     localStorage.setItem("tsam-auth-profile", JSON.stringify({ email: "attacker@example.com", role: "admin" }));
   `);
 
+  page.resetRequests();
   await page.goto(`${origin}/portal/`, 1500);
 
   check(
@@ -508,11 +565,37 @@ try {
     await page.evaluate('location.pathname'),
   );
 
+  check(
+    '偽造トークンの検証で本番エンドポイントへ実際のリクエストが出ていない',
+    page.getRequests().every((url) => !url.includes('script.google.com')),
+    page.getRequests().filter((url) => url.includes('script.google.com')).join(' / '),
+  );
+
+  check(
+    '無効と判定されたトークンは手元から消える',
+    (await page.evaluate('localStorage.getItem("tsam-auth-session")')) === null,
+  );
+
+  check(
+    '旧版の表示用の写しもログイン画面へ戻る過程で消える',
+    (await page.evaluate('localStorage.getItem("tsam-auth-profile")')) === null,
+  );
+
+  /* 差し替えを外し、以降の確認へ持ち込まない。 */
+  await page.send('Page.removeScriptToEvaluateOnNewDocument', {
+    identifier: stub.result.identifier,
+  });
+
   /*
    * 「確認が済むまで描画しない」ことは、配信されるHTMLそのもので確かめる。
    * 遷移が速いため画面を覗く方法では取り逃す。
    * hidden が最初から付いていれば、JS が動く前に中身が出ることはない。
+   *
+   * 差し替えは新しい文書にしか効かないため、いったん読み込み直して
+   * 素の fetch を取り戻してから取得する。
    */
+  await page.goto(`${origin}/login/`);
+
   const portalHtml = await page.evaluate(
     `fetch(${JSON.stringify(`${origin}/portal/`)}).then((r) => r.text())`,
   );
@@ -603,7 +686,16 @@ try {
     await page.evaluate('document.getElementById("reset-step-set").hidden === true'),
   );
 
+  /*
+   * 再設定の申し込みは、本番へ送ると実際にメールが飛びうる操作である。
+   * サーバーは登録の有無にかかわらず成功を返す仕様なので、
+   * その応答を固定したうえで画面の文言だけを確かめる。
+   */
   await page.evaluate(`
+    window.fetch = () => Promise.resolve(new Response(
+      JSON.stringify({ success: true, data: {} }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
     document.getElementById("request-email").value = "nobody@example.com";
     document.getElementById("request-form").requestSubmit();
   `);
@@ -613,7 +705,10 @@ try {
     'メール送信の案内は登録の有無を示さない文言',
     (await page.evaluate(
       'document.getElementById("request-message").querySelector(".auth-message__body")?.textContent ?? ""',
-    )).includes('この機能は現在ご利用いただけません') === true,
+    )) === '登録されているメールアドレスの場合、パスワード再設定のご案内を送信しました。',
+    await page.evaluate(
+      'document.getElementById("request-message").querySelector(".auth-message__body")?.textContent ?? ""',
+    ),
   );
 
   await page.goto(`${origin}/password/reset/?token=abcDEF123456`, 1200);
