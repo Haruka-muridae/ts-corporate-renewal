@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>お申し込みを受け付けました | TSAM AI</title>
+  <meta name="description" content="TSAM AIのお申し込み手続きが完了しました。">
+
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light">
+
+  <link rel="icon" href="../../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../auth/auth.css">
+</head>
+<body class="auth-page">
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <main id="main-content" class="auth-main" tabindex="-1">
+    <div class="auth-shell auth-shell--medium">
+      <div class="auth-brand">
+        <a class="auth-brand__link" href="../../index.html">
+          <span class="auth-brand__name" lang="en">TSAM AI</span>
+        </a>
+        <p class="auth-brand__owner">TSアセットマネジメント合同会社</p>
+      </div>
+
+      <div class="auth-card">
+        <h1 class="auth-card__title">お申し込みを受け付けました</h1>
+        <p class="auth-card__lead">
+          ご登録のメールアドレス宛に、パスワード設定のご案内をお送りします。<br>
+          メールが届きましたら、記載のURLからパスワードを設定してください。
+        </p>
+
+        <p class="auth-message" id="success-message" tabindex="-1" hidden></p>
+
+        <section class="auth-terms" aria-labelledby="success-next-title" style="margin-top:0">
+          <h2 class="auth-terms__title" id="success-next-title">このあとの手順</h2>
+          <dl class="auth-terms__list">
+            <div>
+              <dt>1. 案内メールを開く</dt>
+              <dd id="success-email-note">ご登録のメールアドレス宛にお送りします。数分かかることがあります。</dd>
+            </div>
+            <div>
+              <dt>2. パスワードを設定する</dt>
+              <dd>メール内のURLから設定します。URLには有効期限があります。</dd>
+            </div>
+            <div>
+              <dt>3. ログインする</dt>
+              <dd>設定したパスワードでログインし、Portalをご利用ください。</dd>
+            </div>
+          </dl>
+        </section>
+
+        <p class="auth-field__hint" style="margin-top:16px">
+          メールが届かない場合は、迷惑メールフォルダをご確認ください。
+          それでも届かない場合は、ログイン画面の「パスワードをお忘れですか？」からお手続きいただけます。
+        </p>
+
+        <div class="auth-links">
+          <ul class="auth-links__list">
+            <li><a href="../../login/">ログイン画面へ</a></li>
+            <li><a href="../../password/reset/">案内メールが届かない場合</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="auth-footer">
+    <p><a href="../../index.html">TSアセットマネジメント合同会社</a></p>
+    <p><small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small></p>
+  </footer>
+
+  <script type="module" src="success.js"></script>
+</body>
+</html>

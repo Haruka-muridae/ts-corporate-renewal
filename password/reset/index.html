@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>パスワードの再設定 | TSAM AI</title>
+  <meta name="description" content="TSAM AIのログイン用パスワードを再設定します。">
+
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light">
+
+  <link rel="icon" href="../../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../auth/auth.css">
+</head>
+<body class="auth-page">
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <main id="main-content" class="auth-main" tabindex="-1">
+    <div class="auth-shell">
+      <div class="auth-brand">
+        <a class="auth-brand__link" href="../../index.html">
+          <span class="auth-brand__name" lang="en">TSAM AI</span>
+        </a>
+        <p class="auth-brand__owner">TSアセットマネジメント合同会社</p>
+      </div>
+
+      <div class="auth-card">
+        <!--
+          第1段階: メールアドレスの入力（リンクを送る）
+          第2段階: 新しいパスワードの入力（メールのリンクから来た場合）
+          切り替えは reset.js が hidden で行う。
+        -->
+        <section id="reset-step-request">
+          <h1 class="auth-card__title">パスワードの再設定</h1>
+          <p class="auth-card__lead">ご登録のメールアドレスを入力してください。再設定用のご案内をお送りします。</p>
+
+          <p class="auth-message" id="request-message" tabindex="-1" hidden></p>
+
+          <form class="auth-form" id="request-form" novalidate>
+            <div class="auth-field">
+              <label class="auth-field__label" for="request-email">メールアドレス</label>
+              <input
+                class="auth-field__input"
+                id="request-email"
+                name="email"
+                type="email"
+                inputmode="email"
+                autocomplete="username"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                maxlength="254"
+                required
+              >
+            </div>
+
+            <button class="auth-button" id="request-submit" type="submit">再設定のご案内を送る</button>
+          </form>
+        </section>
+
+        <section id="reset-step-set" hidden>
+          <h1 class="auth-card__title">新しいパスワードの設定</h1>
+          <p class="auth-card__lead">新しいパスワードを入力してください。設定すると、これまでのログイン状態はすべて解除されます。</p>
+
+          <p class="auth-message" id="reset-message" tabindex="-1" hidden></p>
+
+          <form class="auth-form" id="reset-form" novalidate>
+            <div class="auth-field">
+              <label class="auth-field__label" for="reset-password">新しいパスワード</label>
+              <div class="auth-field__control">
+                <input
+                  class="auth-field__input"
+                  id="reset-password"
+                  name="password"
+                  type="password"
+                  autocomplete="new-password"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  maxlength="128"
+                  required
+                  aria-describedby="reset-password-hint"
+                >
+                <button
+                  class="auth-field__toggle"
+                  id="reset-password-toggle"
+                  type="button"
+                  aria-pressed="false"
+                  aria-controls="reset-password"
+                >表示</button>
+              </div>
+              <p class="auth-field__hint" id="reset-password-hint">12文字以上で設定してください。</p>
+            </div>
+
+            <div class="auth-field">
+              <label class="auth-field__label" for="reset-confirm">新しいパスワード（確認用）</label>
+              <div class="auth-field__control">
+                <input
+                  class="auth-field__input"
+                  id="reset-confirm"
+                  name="passwordConfirm"
+                  type="password"
+                  autocomplete="new-password"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  maxlength="128"
+                  required
+                >
+                <button
+                  class="auth-field__toggle"
+                  id="reset-confirm-toggle"
+                  type="button"
+                  aria-pressed="false"
+                  aria-controls="reset-confirm"
+                >表示</button>
+              </div>
+            </div>
+
+            <button class="auth-button" id="reset-submit" type="submit">パスワードを変更する</button>
+          </form>
+
+          <div id="reset-done" hidden>
+            <a class="auth-button" href="../../login/">ログイン画面へ</a>
+          </div>
+        </section>
+
+        <div class="auth-links">
+          <ul class="auth-links__list">
+            <li><a href="../../login/">ログイン画面へ戻る</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <noscript>
+        <p class="auth-message" data-kind="error" style="margin-top:20px">
+          <strong class="auth-message__label">エラー</strong>
+          <span class="auth-message__body">JavaScriptが無効なため、パスワードを再設定できません。ブラウザの設定でJavaScriptを有効にしてください。</span>
+        </p>
+      </noscript>
+    </div>
+  </main>
+
+  <footer class="auth-footer">
+    <p><a href="../../index.html">TSアセットマネジメント合同会社</a></p>
+    <p><small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small></p>
+  </footer>
+
+  <script type="module" src="reset.js"></script>
+</body>
+</html>

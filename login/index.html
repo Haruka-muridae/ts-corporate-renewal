@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ログイン | TSAM AI</title>
+  <meta name="description" content="TSAM AIへログインします。">
+
+  <!--
+    ログイン画面は検索結果に出す必要がない。
+    また、入力内容を外部へ渡さないよう referrer を絞る。
+  -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light">
+
+  <!-- TODO: 公開URLの確定後に canonical を追加 -->
+
+  <link rel="icon" href="../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../auth/auth.css">
+</head>
+<body class="auth-page">
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <main id="main-content" class="auth-main" tabindex="-1">
+    <div class="auth-shell">
+      <div class="auth-brand">
+        <a class="auth-brand__link" href="../index.html">
+          <span class="auth-brand__name" lang="en">TSAM AI</span>
+        </a>
+        <p class="auth-brand__owner">TSアセットマネジメント合同会社</p>
+      </div>
+
+      <div class="auth-card">
+        <h1 class="auth-card__title">ログイン</h1>
+        <p class="auth-card__lead">TSAM AIサービスをご利用いただくには<br>ログインしてください。</p>
+
+        <!--
+          action を持たないフォーム。送信は login.js が preventDefault で受け、
+          ページ遷移による入力値の露出（URLへの付与）を起こさない。
+          novalidate にして、エラー文言をブラウザ既定ではなく要件どおりに出す。
+        -->
+        <form class="auth-form" id="login-form" novalidate>
+          <div class="auth-field">
+            <label class="auth-field__label" for="login-email">メールアドレス</label>
+            <input
+              class="auth-field__input"
+              id="login-email"
+              name="email"
+              type="email"
+              inputmode="email"
+              autocomplete="username"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              maxlength="254"
+              required
+              aria-describedby="login-email-hint"
+            >
+            <p class="auth-field__hint" id="login-email-hint">お申し込み時に登録したメールアドレスを入力します。</p>
+          </div>
+
+          <div class="auth-field">
+            <label class="auth-field__label" for="login-password">パスワード</label>
+            <div class="auth-field__control">
+              <input
+                class="auth-field__input"
+                id="login-password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                autocapitalize="none"
+                spellcheck="false"
+                maxlength="128"
+                required
+              >
+              <!-- 表示切替。状態は aria-pressed と aria-label で伝える（ui.js が設定）。 -->
+              <button
+                class="auth-field__toggle"
+                id="login-password-toggle"
+                type="button"
+                aria-pressed="false"
+                aria-controls="login-password"
+              >表示</button>
+            </div>
+          </div>
+
+          <label class="auth-checkbox" for="login-remember">
+            <input class="auth-checkbox__input" id="login-remember" name="remember" type="checkbox">
+            <span>ログイン状態を保持する</span>
+          </label>
+
+          <!-- エラーと結果の通知先。role は ui.js が状況に応じて付け替える。 -->
+          <p class="auth-message" id="login-message" tabindex="-1" hidden></p>
+
+          <button class="auth-button" id="login-submit" type="submit">ログイン</button>
+        </form>
+
+        <div class="auth-links">
+          <ul class="auth-links__list">
+            <li><a href="../password/reset/">パスワードをお忘れですか？</a></li>
+          </ul>
+        </div>
+
+        <p class="auth-divider">初めてご利用の方</p>
+        <a class="auth-button auth-button--ghost" id="login-signup" href="../pricing/">サービスを申し込む</a>
+
+        <div class="auth-links">
+          <ul class="auth-links__list">
+            <!-- TODO: 利用規約ページの公開URL確定後にリンクへ差し替える -->
+            <li class="auth-links__pending">利用規約（準備中）</li>
+            <!-- TODO: プライバシーポリシーページの公開URL確定後にリンクへ差し替える -->
+            <li class="auth-links__pending">プライバシーポリシー（準備中）</li>
+          </ul>
+        </div>
+      </div>
+
+      <noscript>
+        <p class="auth-message" data-kind="error" style="margin-top:20px">
+          <strong class="auth-message__label">エラー</strong>
+          <span class="auth-message__body">JavaScriptが無効なため、ログインできません。ブラウザの設定でJavaScriptを有効にしてください。</span>
+        </p>
+      </noscript>
+    </div>
+  </main>
+
+  <footer class="auth-footer">
+    <p><a href="../index.html">TSアセットマネジメント合同会社</a></p>
+    <p><small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small></p>
+  </footer>
+
+  <script type="module" src="login.js"></script>
+</body>
+</html>
