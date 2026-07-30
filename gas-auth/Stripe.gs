@@ -258,11 +258,18 @@ function createCheckoutSession_(input) {
     client_reference_id: plan.planCode,
     line_items: [{ price: plan.priceId, quantity: 1 }],
     subscription_data: { metadata: { plan_code: plan.planCode } },
-    metadata: { plan_code: plan.planCode },
-    /* 決済時のメールアドレスをそのままログイン用に使う。 */
-    customer_creation: 'always'
+    metadata: { plan_code: plan.planCode }
   };
 
+  /*
+   * customer_creation は送らない。
+   * payment モード専用のパラメータで、subscription モードで送ると
+   * Stripe が `customer_creation` can only be used in `payment` mode. で拒否する。
+   * subscription モードでは Customer が常に自動作成されるため指定は不要。
+   *
+   * 決済時のメールアドレスは customer_email として渡し、
+   * そのままログイン用のアドレスになる。
+   */
   var email = normalizeEmail_(input.email);
 
   if (isValidEmail_(email)) {
