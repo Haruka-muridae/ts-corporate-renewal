@@ -105,7 +105,10 @@ export default async function ConfirmPage({
             </div>
             <div className="event-outline__row">
               <dt>開催日時</dt>
-              <dd>{formatEventDateTime(new Date(event.event_date))}</dd>
+              <dd>{formatEventDateTime(
+                      new Date(event.event_date),
+                      event.event_end_at ? new Date(event.event_end_at) : null,
+                    )}</dd>
             </div>
             <div className="event-outline__row">
               <dt>開催場所</dt>

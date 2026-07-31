@@ -21,6 +21,8 @@ export type EventRow = {
   name: string;
   description: string | null;
   event_date: string;
+  /* 終了時刻。設定されていないイベントもある。 */
+  event_end_at: string | null;
   venue: string;
   capacity: number | null;
   base_price: number;
