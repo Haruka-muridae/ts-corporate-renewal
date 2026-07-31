@@ -51,6 +51,21 @@
   padding: 32px 16px 40px;
 }
 
+/*
+ * 上端から詰めるレイアウト（Portal 用）。
+ *
+ * 既定の縦センタリングは、入力欄が数個のログイン系画面のためのもの。
+ * 一覧が縦に伸びる画面に当てると、内容が画面の高さより低いあいだ
+ * 上に大きな空白ができ、ヘッダーバーが宙に浮く。
+ *
+ * 上余白は 0 にして、帯そのものをビューポート上端へ接させる。
+ * 文字の逃げは .auth-portal-bar の内側の余白で作る。
+ */
+.auth-main--top {
+  justify-content: flex-start;
+  padding-top: 0;
+}
+
 /* ログイン・パスワード系のカード幅。要件どおり最大420px。 */
 .auth-shell {
   width: 100%;
@@ -451,6 +466,8 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  /* 上余白は .auth-main--top が 0 にした分をここで受け持つ。 */
+  padding-top: 14px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--c-border);
 }
@@ -608,21 +625,24 @@
   line-height: 1.5;
 }
 
-.auth-account__line {
-  color: var(--c-text-muted);
+/*
+ * 項目名と値を縦に積む。
+ * 1行に繋ぐと、長いメールアドレスと契約状態の区切りが読み取りにくい。
+ */
+.auth-account__list {
+  display: grid;
+  gap: 10px;
   font-size: 0.8125rem;
   line-height: 1.8;
+}
+
+.auth-account__list dt {
+  font-weight: 700;
+}
+
+.auth-account__list dd {
+  color: var(--c-text-muted);
   word-break: break-all;
-}
-
-.auth-account__separator {
-  padding: 0 4px;
-  color: var(--c-border-strong);
-}
-
-.auth-account__action {
-  margin-top: 8px;
-  font-size: 0.8125rem;
 }
 
 .auth-badge {
@@ -672,6 +692,11 @@
 @media (min-width: 768px) {
   .auth-main {
     padding: 48px 24px 56px;
+  }
+
+  /* 一括指定で上余白が戻るため、ここでも 0 に戻す。 */
+  .auth-main--top {
+    padding-top: 0;
   }
 
   .auth-card {
