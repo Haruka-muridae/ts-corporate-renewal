@@ -1322,7 +1322,7 @@ try {
   check(
     'Google AI Studio への導線がある',
     await page.evaluate(`(() => {
-      const a = document.querySelector('#portal-api-panel a[href="https://aistudio.google.com/"]');
+      const a = document.querySelector('#portal-api-panel a[href="https://aistudio.google.com/apikey"]');
       return a !== null
         && a.textContent.trim() === "Google AI Studio"
         && a.target === "_blank"
@@ -1333,6 +1333,9 @@ try {
   /*
    * リンクだけでなく、URL そのものも文字として読めること。
    * リンクを踏まずに行き先を確かめてから移動できるようにするため。
+   *
+   * 表示は完全一致で見る。/apikey が落ちても
+   * 「aistudio.google.com を含む」だけの検査では通ってしまう。
    */
   check(
     'AI Studio の URL が文字としても見えている',
@@ -1340,12 +1343,33 @@ try {
       const panel = document.getElementById("portal-api-panel");
       const url = [...panel.querySelectorAll(".auth-api-panel__url")]
         .map((el) => el.textContent.trim());
-      return url.includes("https://aistudio.google.com/")
-        && panel.innerText.includes("https://aistudio.google.com/");
+      return url.includes("https://aistudio.google.com/apikey")
+        && panel.innerText.includes("https://aistudio.google.com/apikey");
     })()`),
     await page.evaluate(`
       JSON.stringify([...document.querySelectorAll("#portal-api-panel .auth-api-panel__url")]
         .map((el) => el.textContent.trim()))
+    `),
+  );
+
+  /*
+   * トップURLへの逆戻り検知。
+   * Playground に着地してしまい、キー取得までメニューを探す必要が出る。
+   */
+  check(
+    'トップURL（/）へ戻っていない',
+    await page.evaluate(`(() => {
+      const panel = document.getElementById("portal-api-panel");
+      const hrefs = [...panel.querySelectorAll('a[href*="aistudio.google.com"]')]
+        .map((a) => a.getAttribute("href"));
+      const shown = [...panel.querySelectorAll(".auth-api-panel__url")]
+        .map((el) => el.textContent.trim());
+      return hrefs.every((h) => h.endsWith("/apikey"))
+        && shown.every((s) => !/^https:\\/\\/aistudio\\.google\\.com\\/?$/.test(s));
+    })()`),
+    await page.evaluate(`
+      JSON.stringify([...document.querySelectorAll('#portal-api-panel a[href*="aistudio.google.com"]')]
+        .map((a) => a.getAttribute("href")))
     `),
   );
 
