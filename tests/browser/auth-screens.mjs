@@ -1317,12 +1317,137 @@ try {
     `),
   );
 
+  /* ---- 案内文（キーの取得手順） ---- */
+
   check(
     'Google AI Studio への導線がある',
     await page.evaluate(`(() => {
-      const a = document.querySelector('#portal-api-panel a[href^="https://aistudio.google.com"]');
-      return a !== null && a.rel.includes("noopener");
+      const a = document.querySelector('#portal-api-panel a[href="https://aistudio.google.com/"]');
+      return a !== null
+        && a.textContent.trim() === "Google AI Studio"
+        && a.target === "_blank"
+        && a.rel.includes("noopener") && a.rel.includes("noreferrer");
     })()`),
+  );
+
+  /*
+   * リンクだけでなく、URL そのものも文字として読めること。
+   * リンクを踏まずに行き先を確かめてから移動できるようにするため。
+   */
+  check(
+    'AI Studio の URL が文字としても見えている',
+    await page.evaluate(`(() => {
+      const panel = document.getElementById("portal-api-panel");
+      const url = [...panel.querySelectorAll(".auth-api-panel__url")]
+        .map((el) => el.textContent.trim());
+      return url.includes("https://aistudio.google.com/")
+        && panel.innerText.includes("https://aistudio.google.com/");
+    })()`),
+    await page.evaluate(`
+      JSON.stringify([...document.querySelectorAll("#portal-api-panel .auth-api-panel__url")]
+        .map((el) => el.textContent.trim()))
+    `),
+  );
+
+  check(
+    '無料のGoogleアカウントで発行できる旨が書いてある',
+    await page.evaluate(`
+      document.getElementById("portal-api-panel").innerText
+        .includes("Googleアカウントがあれば無料で発行できます")
+    `),
+  );
+
+  check(
+    '有料契約が不要である旨が書いてある',
+    await page.evaluate(`
+      document.getElementById("portal-api-panel").innerText
+        .includes("Google Workspace などの有料契約は必要ありません")
+    `),
+  );
+
+  /* ---- 案内文（Google Workspace の紹介） ---- */
+
+  check(
+    '紹介リンクの href が正しい',
+    (await page.evaluate(`
+      document.getElementById("portal-workspace-link").getAttribute("href")
+    `)) === 'https://referworkspace.app.goo.gl/2KTq',
+    await page.evaluate('document.getElementById("portal-workspace-link").getAttribute("href")'),
+  );
+
+  check(
+    '紹介リンクは別タブ・noopener noreferrer',
+    await page.evaluate(`(() => {
+      const a = document.getElementById("portal-workspace-link");
+      return a.target === "_blank" && a.rel.includes("noopener") && a.rel.includes("noreferrer");
+    })()`),
+    await page.evaluate('document.getElementById("portal-workspace-link").rel'),
+  );
+
+  /*
+   * 「紹介である」ことは表示から落ちてはならない。
+   * リンクと同じ段落の中に出ていることまで見る。
+   */
+  check(
+    '【紹介リンク】がリンクと同じ段落に出ている',
+    await page.evaluate(`(() => {
+      const p = document.getElementById("portal-workspace-link").closest("p");
+      return p.innerText.includes("【紹介リンク】");
+    })()`),
+    await page.evaluate(`
+      document.getElementById("portal-workspace-link").closest("p").innerText
+    `),
+  );
+
+  check(
+    '有料サービスであることを明記している',
+    await page.evaluate(`
+      document.getElementById("portal-api-panel").innerText
+        .includes("Google Workspace は有料サービス")
+    `),
+  );
+
+  /*
+   * 誤読の防止。
+   * 「キーを取るには Workspace が要る」と読ませない。
+   */
+  check(
+    'キー取得に Workspace が不要である旨を明記している',
+    await page.evaluate(`
+      document.getElementById("portal-api-panel").innerText
+        .includes("Gemini APIキーの取得に Google Workspace は必要ありません")
+    `),
+  );
+
+  check(
+    '紹介ブロックは手順文と区切られている（区切り線を持つ別ブロック）',
+    await page.evaluate(`(() => {
+      const promo = document.querySelector("#portal-api-panel .auth-api-panel__promo");
+      const s = getComputedStyle(promo);
+      return promo !== null
+        && promo.tagName === "ASIDE"
+        && s.borderTopStyle === "solid"
+        && parseFloat(s.borderTopWidth) >= 1;
+    })()`),
+  );
+
+  /* 紹介が入力欄より前に出て、キーを入れに来た人を押し下げないこと。 */
+  check(
+    '紹介ブロックは入力欄より後ろにある',
+    await page.evaluate(`
+      document.getElementById("portal-api-form").compareDocumentPosition(
+        document.querySelector("#portal-api-panel .auth-api-panel__promo")
+      ) === Node.DOCUMENT_POSITION_FOLLOWING
+    `),
+  );
+
+  /* 見出しの階層を飛ばさない（パネルの h2 の下に h3）。 */
+  check(
+    '紹介ブロックの見出しは h3',
+    await page.evaluate(`
+      document.getElementById("portal-api-promo-title").tagName === "H3"
+      && document.getElementById("portal-api-title").tagName === "H2"
+    `),
   );
 
   check(
@@ -1588,6 +1713,28 @@ try {
       'document.documentElement.scrollWidth - document.documentElement.clientWidth',
     );
     check(`${width}px: API設定パネルを開いても横スクロールしない`, apiOverflow <= 0, apiOverflow);
+
+    /*
+     * 案内文の中身が枠から出ないこと。
+     * 生のURLは1語が長く、折り返さないと 320px で溢れる。
+     */
+    check(
+      `${width}px: 案内文と紹介ブロックがパネルの枠に収まる`,
+      await page.evaluate(`(() => {
+        const panel = document.getElementById("portal-api-panel").getBoundingClientRect();
+        const parts = [...document.querySelectorAll(
+          "#portal-api-panel .auth-api-panel__url, #portal-api-panel .auth-api-panel__promo")];
+        return parts.length >= 2 && parts.every((el) => {
+          const r = el.getBoundingClientRect();
+          return r.left >= panel.left - 1 && r.right <= panel.right + 1;
+        });
+      })()`),
+      await page.evaluate(`JSON.stringify({
+        panel: document.getElementById("portal-api-panel").getBoundingClientRect().right,
+        url: document.querySelector("#portal-api-panel .auth-api-panel__url").getBoundingClientRect().right,
+        promo: document.querySelector("#portal-api-panel .auth-api-panel__promo").getBoundingClientRect().right,
+      })`),
+    );
 
     check(
       `${width}px: 帯の3つが1行に収まる`,

@@ -730,6 +730,56 @@
   color: var(--c-main);
 }
 
+/*
+ * リンクの隣に出す生のURL。
+ * 踏まずに行き先を確かめられるようにするため、文字として読める形で置く。
+ * 320px でも溢れないよう、どこでも折り返す。
+ */
+.auth-api-panel__url {
+  font-family: var(--font-num), monospace;
+  word-break: break-all;
+}
+
+/*
+ * Google Workspace の紹介。
+ * キーの取得手順とは別の話なので、区切り線で分ける。
+ */
+.auth-api-panel__promo {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--c-border);
+}
+
+.auth-api-panel__promo-title {
+  margin-bottom: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.auth-api-panel__promo-body,
+.auth-api-panel__promo-note {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
+
+.auth-api-panel__promo-note {
+  margin-top: 6px;
+}
+
+.auth-api-panel__promo-body a {
+  color: var(--c-main);
+}
+
+/*
+ * 紹介であることは、表示から落ちてはならない項目。
+ * 地の文より小さくせず、途中で改行もさせない。
+ */
+.auth-api-panel__promo-tag {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .auth-api-panel__save {
   margin-top: 14px;
 }
