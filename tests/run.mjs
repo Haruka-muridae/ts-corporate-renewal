@@ -40,6 +40,7 @@ const SUITES = [
   { name: 'setup', file: 'unit/setup.mjs', kind: 'unit' },
   { name: 'frontend', file: 'unit/frontend.mjs', kind: 'unit' },
   { name: 'event-pricing', file: 'unit/event-pricing.mjs', kind: 'unit' },
+  { name: 'event-mail', file: 'unit/event-mail.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
 

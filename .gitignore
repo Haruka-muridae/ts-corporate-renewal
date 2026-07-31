@@ -14,4 +14,14 @@ next-env.d.ts
 # アプリ個別に列挙せず、apps/ 配下すべてをまとめて対象にする
 # （新しいアプリを足したときに、書き忘れでキーが追跡されるのを防ぐため）。
 # 雛形の picker-key.local.example.js はキーを含まないので追跡する。
+# Vercel CLI がリンク情報を書き出す場所。プロジェクトIDと組織IDを含む。
+.vercel/
+
+# Supabase CLI の作業用ディレクトリ（一時ファイルとローカル設定）。
+supabase/.temp/
+supabase/.branches/
+
+# Google Picker のブラウザ用APIキー（ローカル確認用）。実キーはこのファイルにだけ置く。
+# 静的サイトを public/ へ移したため、移動前後のどちらの配置でも無視されるようにする。
 apps/*/picker-key.local.js
+public/apps/*/picker-key.local.js

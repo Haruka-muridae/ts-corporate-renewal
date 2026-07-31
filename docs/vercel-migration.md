@@ -58,8 +58,10 @@ Vercelへ移せる構成に変更した。
    * `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`
    * `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
    * `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`
-   * `RESEND_API_KEY`
-   * `NEXT_PUBLIC_BASE_URL`（本番: `https://tsam-ai.com/event`）
+   * `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GMAIL_REFRESH_TOKEN` / `MAIL_FROM`
+     （参加確定メールの送信。取得手順は `docs/gmail-setup.md`）
+   * `NEXT_PUBLIC_BASE_URL`（本番: `https://tsam-ai.com/event`。
+     DNS切替前のVercel検証中は `https://ts-corporate-renewal.vercel.app/event`）
 3. **プレビューURLでの検証**：`/`、`/event/`、`/apps/`、`/legal/tokusho/`、`/login/`、
    `/portal/` が現行と同じ内容で表示されることを確認する
 4. **DNS切替**：切替前にTTLを短縮しておく。切替後にGitHub Pagesの設定を無効化する
