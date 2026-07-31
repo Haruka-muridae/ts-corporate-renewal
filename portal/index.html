@@ -66,7 +66,23 @@
             </h1>
             <span id="portal-user-badge" hidden></span>
           </div>
-          <button class="auth-button auth-button--ghost auth-portal-bar__logout" id="portal-logout" type="button">ログアウト</button>
+          <div class="auth-portal-bar__actions">
+            <!--
+              API設定の開閉トグル。アカウント側（左）と同じ作りにする。
+              見出しを包む必要がないぶん、こちらは button 単体で置ける。
+            -->
+            <button class="auth-portal-bar__toggle auth-portal-bar__toggle--api"
+                    id="portal-api-toggle" type="button"
+                    aria-expanded="false" aria-controls="portal-api-panel">
+              API設定
+              <svg class="auth-portal-bar__chevron" viewBox="0 0 24 24" width="16" height="16"
+                   fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <path d="m6 9 6 6 6-6"></path>
+              </svg>
+            </button>
+            <button class="auth-button auth-button--ghost auth-portal-bar__logout" id="portal-logout" type="button">ログアウト</button>
+          </div>
         </div>
 
         <!--
@@ -93,11 +109,74 @@
           </dl>
         </section>
 
+        <!--
+          Gemini APIキー。アカウント情報と同じ型の開閉パネル。
+          2枚は排他で、一方を開くともう一方が閉じる。
+
+          キーはこの端末の localStorage にだけ入る。
+          読み書きは auth/keystore.js（KeyStore）だけが行う。
+          詳細は docs/specs/keystore-spec-v1.md。
+        -->
+        <section class="auth-account auth-api-panel" id="portal-api-panel"
+                 aria-labelledby="portal-api-title" hidden>
+          <h2 class="auth-account__title" id="portal-api-title">Gemini APIキー</h2>
+
+          <p class="auth-api-panel__note">
+            Gemini APIキーはお使いの端末（ブラウザ）にのみ保存され、当社サーバーには送信されません。
+          </p>
+          <p class="auth-api-panel__note">
+            キーは
+            <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
+            で取得できます（新しいタブで開きます）。
+          </p>
+
+          <!-- 未保存のとき、または「変更」を押したとき。 -->
+          <div id="portal-api-form">
+            <div class="auth-field">
+              <label class="auth-field__label" for="portal-api-key">APIキー</label>
+              <div class="auth-field__control">
+                <input class="auth-field__input" id="portal-api-key" type="password"
+                       autocomplete="off" autocapitalize="off" autocorrect="off"
+                       spellcheck="false" enterkeyhint="done">
+                <button class="auth-field__toggle" id="portal-api-key-visibility" type="button">表示</button>
+              </div>
+            </div>
+            <button class="auth-button auth-api-panel__save" id="portal-api-save" type="button">保存する</button>
+          </div>
+
+          <!-- 保存済みのとき。値そのものは出さず、前後4文字だけ見せる。 -->
+          <div id="portal-api-saved" hidden>
+            <p class="auth-api-panel__masked">
+              <span class="auth-api-panel__masked-label">保存済みのキー</span>
+              <code class="auth-api-panel__masked-value" id="portal-api-masked"></code>
+            </p>
+            <div class="auth-api-panel__actions">
+              <button class="auth-button auth-button--ghost" id="portal-api-change" type="button">変更</button>
+              <button class="auth-button auth-button--ghost" id="portal-api-delete" type="button">削除</button>
+            </div>
+
+            <!-- 削除は取り消せないので、一度受け止める。 -->
+            <div class="auth-api-panel__confirm" id="portal-api-confirm" role="group"
+                 aria-labelledby="portal-api-confirm-text" hidden>
+              <p class="auth-api-panel__confirm-text" id="portal-api-confirm-text">
+                保存したAPIキーをこの端末から削除します。よろしいですか。
+              </p>
+              <div class="auth-api-panel__actions">
+                <button class="auth-button auth-api-panel__danger" id="portal-api-delete-confirm" type="button">削除する</button>
+                <button class="auth-button auth-button--ghost" id="portal-api-delete-cancel" type="button">やめる</button>
+              </div>
+            </div>
+          </div>
+
+          <p class="auth-message auth-api-panel__message" id="portal-api-message" tabindex="-1" hidden></p>
+        </section>
+
         <p class="auth-message" id="portal-message" tabindex="-1" hidden></p>
 
         <!--
-          APIキー未設定の警告。
-          キー管理画面が未実装のあいだは表示しない（行き先のない導線を出さない）。
+          APIキー未設定の案内。
+          KeyStore に gemini のキーが無いあいだだけ出す。
+          押すとページを移動せず、上のAPI設定パネルを開く。
           表示条件は portal.js の shouldShowApiKeyBanner() にある。
           詳細は docs/specs/portal-spec-v1.md §5。
         -->
@@ -111,7 +190,7 @@
             <path d="M14.5 8.5 17 11"></path>
           </svg>
           <p class="auth-portal-banner__body">Gemini APIキーが未設定です。</p>
-          <a class="auth-portal-banner__action" id="portal-api-key-link" href="">APIキーを設定する</a>
+          <button class="auth-portal-banner__action" id="portal-api-key-action" type="button">APIキーを設定する</button>
         </div>
 
         <ul class="auth-apps" id="portal-apps"></ul>

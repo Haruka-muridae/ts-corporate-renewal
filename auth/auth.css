@@ -533,6 +533,24 @@
   transform: rotate(180deg);
 }
 
+/*
+ * 帯の右側。API設定トグルとログアウトを並べる。
+ * トグルは見出しの内側ではないので、ここでは書体を自前で指定する。
+ */
+.auth-portal-bar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.auth-portal-bar__toggle--api {
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .auth-portal-bar__logout {
   flex: 0 0 auto;
   width: auto;
@@ -569,10 +587,27 @@
   line-height: 1.7;
 }
 
+/*
+ * 導線はページ移動ではなく、同じ画面のパネルを開く操作。
+ * したがって a ではなく button にし、見た目だけリンクに寄せる。
+ */
 .auth-portal-banner__action {
   flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-main);
+  font-family: inherit;
   font-size: 0.8125rem;
   font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.auth-portal-banner__action:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 2px;
 }
 
 /* スマホ1列 → 2列 → PC3列。 */
@@ -676,6 +711,101 @@
 .auth-account__list dd {
   color: var(--c-text-muted);
   word-break: break-all;
+}
+
+/* ---------- APIキー設定パネル ---------- */
+
+/*
+ * アカウント情報と同じ枠（.auth-account）を土台にして、
+ * 中身だけをここで組む。2枚のパネルの見た目を揃えるため。
+ */
+.auth-api-panel__note {
+  margin-bottom: 8px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
+
+.auth-api-panel__note a {
+  color: var(--c-main);
+}
+
+.auth-api-panel__save {
+  margin-top: 14px;
+}
+
+/*
+ * 保存済みの表示。値そのものは出さず、前後4文字だけ見せる。
+ * 全体を出すと、肩越しに見られたときにそのまま持ち出される。
+ */
+.auth-api-panel__masked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  margin-top: 14px;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.auth-api-panel__masked-label {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.auth-api-panel__masked-value {
+  min-width: 0;
+  color: var(--c-text-muted);
+  font-family: var(--font-num), monospace;
+  word-break: break-all;
+}
+
+.auth-api-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* 帯の中では全幅ボタンにしない。横に並べる。 */
+.auth-api-panel__actions .auth-button {
+  width: auto;
+  margin-top: 0;
+  padding: 9px 16px;
+  font-size: 0.8125rem;
+}
+
+/* 削除は取り消せないので、押す前に一度受け止める。 */
+.auth-api-panel__confirm {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg-sub);
+}
+
+.auth-api-panel__confirm-text {
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+/*
+ * 取り消せない操作。色だけに頼らず「削除する」という語でも示す。
+ * コントラスト比 4.5:1 以上になる濃さを選ぶ。
+ */
+.auth-api-panel__danger {
+  border-color: #a3221f;
+  background-color: #a3221f;
+  color: var(--color-white);
+}
+
+.auth-api-panel__danger:hover:not(:disabled) {
+  border-color: #7a1917;
+  background-color: #7a1917;
+}
+
+.auth-api-panel__message {
+  margin-top: 14px;
 }
 
 .auth-badge {

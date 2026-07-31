@@ -741,12 +741,13 @@ try {
     `),
   );
 
-  /* 帯の右側はログアウトだけ。押せるものが他に無いことを数で押さえる。 */
+  /* 帯にあるのは3つだけ。押せるものが他に無いことを数で押さえる。 */
   check(
-    'ヘッダーバーの押せる要素はトグルとログアウトの2つだけ',
+    'ヘッダーバーの押せる要素はアカウント・API設定・ログアウトの3つだけ',
     (await page.evaluate(`
-      document.querySelectorAll(".auth-portal-bar button, .auth-portal-bar a").length
-    `)) === 2,
+      JSON.stringify([...document.querySelectorAll(".auth-portal-bar button, .auth-portal-bar a")]
+        .map((el) => el.id))
+    `)) === JSON.stringify(['portal-account-toggle', 'portal-api-toggle', 'portal-logout']),
     await page.evaluate(`
       JSON.stringify([...document.querySelectorAll(".auth-portal-bar button, .auth-portal-bar a")]
         .map((el) => el.id || el.tagName))
@@ -781,7 +782,7 @@ try {
   check('逆三角はログアウトの左（左ブロック側）', bar.chevronBeforeLogout, barLayout);
   check('1行に収まる細い帯になっている', bar.sameLine && bar.barHeight < 90, barLayout);
 
-  /* ---- APIキー未設定バナー ---- */
+  /* ---- APIキー未設定バナー（KeyStore が未保存のあいだ出る） ---- */
 
   check(
     'バナーの要素は用意されている',
@@ -789,29 +790,41 @@ try {
   );
 
   check(
-    'バナーは表示しない（キー管理画面が未実装のため）',
-    await page.evaluate('document.getElementById("portal-api-key-banner").hidden === true'),
-  );
-
-  /*
-   * textContent は隠れている要素も拾うため、描画結果で確かめる。
-   * innerText は表示されている文字だけを返す。
-   */
-  check(
-    'バナーの文言が画面に出ていない',
-    await page.evaluate('!document.body.innerText.includes("Gemini APIキーが未設定です")'),
-  );
-
-  check(
-    'バナーは面積を持たない',
+    'キーが未保存なのでバナーが出る',
     await page.evaluate(`
-      document.getElementById("portal-api-key-banner").getBoundingClientRect().height === 0
+      document.getElementById("portal-api-key-banner").hidden === false
+      && document.getElementById("portal-api-key-banner").getBoundingClientRect().height > 0
     `),
   );
 
   check(
-    '行き先の無いリンクを踏ませない（href が空のまま）',
-    (await page.evaluate('document.getElementById("portal-api-key-link").getAttribute("href")')) === '',
+    '鍵の図・本文・導線がそろって出る',
+    await page.evaluate(`(() => {
+      const banner = document.getElementById("portal-api-key-banner");
+      return banner.querySelector("svg") !== null
+        && banner.innerText.includes("Gemini APIキーが未設定です。")
+        && banner.querySelector(".auth-portal-banner__action") !== null;
+    })()`),
+  );
+
+  check(
+    'アプリ一覧より上に出る',
+    await page.evaluate(`
+      document.getElementById("portal-api-key-banner").getBoundingClientRect().bottom
+      <= document.getElementById("portal-apps").getBoundingClientRect().top + 1
+    `),
+  );
+
+  /*
+   * 導線はページ移動ではない。button であり、href を持たない。
+   * a のままだと、押した瞬間に画面が切り替わってしまう。
+   */
+  check(
+    '導線はリンクではなくボタン',
+    await page.evaluate(`
+      document.getElementById("portal-api-key-action").tagName === "BUTTON"
+      && document.getElementById("portal-api-key-action").getAttribute("href") === null
+    `),
   );
 
   /*
@@ -820,56 +833,29 @@ try {
    * 画面が使っているのと同一の実装が返る。
    */
   const bannerLogic = JSON.parse(await page.evaluate(`
-    import('./portal.js').then((m) => JSON.stringify({
-      未設定と分かっていても: m.shouldShowApiKeyBanner({ geminiApiKeyConfigured: false }),
-      サーバーが答えていない: m.shouldShowApiKeyBanner({}),
-      設定済み: m.shouldShowApiKeyBanner({ geminiApiKeyConfigured: true }),
-      利用者情報が無い: m.shouldShowApiKeyBanner(null),
-    }))
+    import('./portal.js').then(async (m) => {
+      const { KeyStore } = await import('../auth/keystore.js');
+      const before = m.shouldShowApiKeyBanner();
+      KeyStore.set('gemini', 'AIzaSyDUMMY0000000000000000000000000000');
+      const after = m.shouldShowApiKeyBanner();
+      KeyStore.remove('gemini');
+      const removed = m.shouldShowApiKeyBanner();
+      return JSON.stringify({ 未保存: before, 保存済み: after, 削除後: removed });
+    })
   `));
 
   check(
-    '遷移先が未定のうちは、どの状態でも表示しない',
-    Object.values(bannerLogic).every((value) => value === false),
+    '表示条件は KeyStore の保存状態だけで決まる',
+    bannerLogic.未保存 === true && bannerLogic.保存済み === false && bannerLogic.削除後 === true,
     JSON.stringify(bannerLogic),
   );
 
-  /*
-   * 将来有効化したときに崩れないことだけ、いま見ておく。
-   * 表示条件を通さずに hidden を外し、体裁を確かめる。
-   */
-  await page.evaluate(`(() => {
-    const banner = document.getElementById("portal-api-key-banner");
-    document.getElementById("portal-api-key-link").href = "../portal/";
-    banner.hidden = false;
-  })()`);
-  await page.sleep(120);
-
-  check(
-    '有効化したときは鍵の図・本文・導線がそろって出る',
-    await page.evaluate(`(() => {
-      const banner = document.getElementById("portal-api-key-banner");
-      return banner.getBoundingClientRect().height > 0
-        && banner.querySelector("svg") !== null
-        && banner.innerText.includes("Gemini APIキーが未設定です。")
-        && banner.querySelector(".auth-portal-banner__action") !== null;
-    })()`),
-  );
-
-  check(
-    '有効化してもアプリ一覧より上に出る',
-    await page.evaluate(`
-      document.getElementById("portal-api-key-banner").getBoundingClientRect().bottom
-      <= document.getElementById("portal-apps").getBoundingClientRect().top + 1
-    `),
-  );
-
-  /* 320px でも折り返して収まること（有効化したときに初めて分かっては遅い）。 */
+  /* 320px でも折り返して収まること。 */
   await page.setViewport(320, 900);
   await page.sleep(150);
 
   check(
-    '有効化しても320pxで横スクロールしない',
+    'バナーが出ていても320pxで横スクロールしない',
     (await page.evaluate(
       'document.documentElement.scrollWidth - document.documentElement.clientWidth',
     )) <= 0,
@@ -877,11 +863,6 @@ try {
 
   await page.clearViewport();
   await page.sleep(120);
-
-  await page.evaluate(`(() => {
-    document.getElementById("portal-api-key-banner").hidden = true;
-    document.getElementById("portal-api-key-link").setAttribute("href", "");
-  })()`);
 
   /* ---- アプリグリッド ---- */
 
@@ -915,10 +896,22 @@ try {
     await page.sleep(120);
   };
 
+  /*
+   * 枠（.auth-account）はアカウント情報とAPI設定の2枚。
+   * どちらもヘッダーバー直下にあり、アプリ一覧より下には1枚も無い。
+   */
   check(
     '下部のアカウント情報カードは無くなっている',
-    (await page.evaluate('document.querySelectorAll(".auth-account").length')) === 1,
-    await page.evaluate('document.querySelectorAll(".auth-account").length'),
+    await page.evaluate(`(() => {
+      const panels = [...document.querySelectorAll(".auth-account")];
+      const apps = document.getElementById("portal-apps");
+      return panels.length === 2
+        && panels.every((p) =>
+          p.compareDocumentPosition(apps) === Node.DOCUMENT_POSITION_FOLLOWING);
+    })()`),
+    await page.evaluate(`
+      JSON.stringify([...document.querySelectorAll(".auth-account")].map((p) => p.id))
+    `),
   );
 
   check(
@@ -1181,6 +1174,449 @@ try {
     `),
     await page.evaluate('JSON.stringify(Object.keys(localStorage))'),
   );
+
+  /* ---------------------------------------------------------------- */
+  section('Gemini APIキーの設定');
+
+  /*
+   * 実際の Gemini API へは絶対に通信させない。
+   * portalStub の window.fetch をさらに包み、
+   *   - generativelanguage.googleapis.com は必ずスタブが返す
+   *   - すべての呼び出しを __fetchCalls へ記録する
+   * ようにする。記録は「GASへキーを送っていない」ことの確認にも使う。
+   */
+  const apiStub = await page.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      window.__fetchCalls = [];
+      window.__geminiStatus = 200;
+
+      const inner = window.fetch;
+
+      window.fetch = (url, options) => {
+        window.__fetchCalls.push({
+          url: String(url),
+          headers: JSON.stringify(options?.headers ?? null),
+          body: typeof options?.body === 'string' ? options.body : null,
+        });
+
+        if (String(url).includes('generativelanguage.googleapis.com')) {
+          return Promise.resolve(new Response(
+            JSON.stringify({ models: [] }),
+            { status: window.__geminiStatus, headers: { 'Content-Type': 'application/json' } },
+          ));
+        }
+
+        return inner(url, options);
+      };
+    `,
+  });
+
+  /* AIza ＋ 35文字 ＝ 39文字。Google の採番に合わせた形。 */
+  const VALID_KEY = 'AIzaSyTESTKEY0123456789abcdefghijKLMNOP';
+  const ODD_KEY = 'not-a-google-shaped-key';
+
+  await page.evaluate('localStorage.removeItem("tsam-api-keys")');
+  await page.goto(`${origin}/portal/`, 1500);
+
+  /* ---- トグルとパネルの体裁 ---- */
+
+  check(
+    'API設定トグルは button で aria が揃っている',
+    await page.evaluate(`(() => {
+      const t = document.getElementById("portal-api-toggle");
+      return t.tagName === "BUTTON"
+        && t.getAttribute("type") === "button"
+        && t.getAttribute("aria-expanded") === "false"
+        && t.getAttribute("aria-controls") === "portal-api-panel";
+    })()`),
+  );
+
+  check(
+    'API設定トグルはログアウトの左隣にある',
+    await page.evaluate(`(() => {
+      const t = document.getElementById("portal-api-toggle").getBoundingClientRect();
+      const l = document.getElementById("portal-logout").getBoundingClientRect();
+      return t.right <= l.left + 1 && Math.abs(t.top - l.top) < 24;
+    })()`),
+  );
+
+  check(
+    'トグルの押下領域は44px以上',
+    (await page.evaluate(`
+      document.getElementById("portal-api-toggle").getBoundingClientRect().height
+    `)) >= 44,
+    await page.evaluate(`
+      document.getElementById("portal-api-toggle").getBoundingClientRect().height
+    `),
+  );
+
+  check(
+    '初期状態でAPI設定パネルは閉じている',
+    await page.evaluate('document.getElementById("portal-api-panel").hidden === true'),
+  );
+
+  /* ---- 2枚のパネルは排他 ---- */
+
+  await page.evaluate('document.getElementById("portal-api-toggle").click()');
+  await page.sleep(400);
+
+  check(
+    'API設定を開くとパネルが出て、逆三角が180度回る',
+    await page.evaluate(`(() => {
+      const panel = document.getElementById("portal-api-panel");
+      const chev = document.getElementById("portal-api-toggle")
+        .querySelector(".auth-portal-bar__chevron");
+      const m = getComputedStyle(chev).transform.match(/matrix\\(([^)]+)\\)/);
+      const [a, b] = m ? m[1].split(",").map(Number) : [1, 0];
+      const deg = Math.round(Math.abs(Math.atan2(b, a) * 180 / Math.PI));
+      return panel.hidden === false && panel.getBoundingClientRect().height > 0
+        && Math.abs(deg - 180) <= 2;
+    })()`),
+  );
+
+  await page.evaluate('document.getElementById("portal-account-toggle").click()');
+  await page.sleep(200);
+
+  check(
+    'アカウント情報を開くとAPI設定が閉じる（排他）',
+    await page.evaluate(`
+      document.getElementById("portal-account-panel").hidden === false
+      && document.getElementById("portal-api-panel").hidden === true
+      && document.getElementById("portal-api-toggle").getAttribute("aria-expanded") === "false"
+    `),
+  );
+
+  await page.evaluate('document.getElementById("portal-api-toggle").click()');
+  await page.sleep(200);
+
+  check(
+    'API設定を開くとアカウント情報が閉じる（排他・逆向き）',
+    await page.evaluate(`
+      document.getElementById("portal-api-panel").hidden === false
+      && document.getElementById("portal-account-panel").hidden === true
+      && document.getElementById("portal-account-toggle").getAttribute("aria-expanded") === "false"
+    `),
+  );
+
+  /* ---- 未保存のときの中身 ---- */
+
+  check(
+    '未保存のときは入力欄と保存ボタンが出る',
+    await page.evaluate(`
+      document.getElementById("portal-api-form").hidden === false
+      && document.getElementById("portal-api-saved").hidden === true
+      && document.getElementById("portal-api-key").type === "password"
+    `),
+  );
+
+  check(
+    '説明文に「当社サーバーには送信されません」が入っている',
+    await page.evaluate(`
+      document.getElementById("portal-api-panel").innerText
+        .includes("お使いの端末（ブラウザ）にのみ保存され、当社サーバーには送信されません")
+    `),
+  );
+
+  check(
+    'Google AI Studio への導線がある',
+    await page.evaluate(`(() => {
+      const a = document.querySelector('#portal-api-panel a[href^="https://aistudio.google.com"]');
+      return a !== null && a.rel.includes("noopener");
+    })()`),
+  );
+
+  check(
+    '表示切替でキーが読める形になる',
+    await page.evaluate(`(() => {
+      document.getElementById("portal-api-key-visibility").click();
+      const shown = document.getElementById("portal-api-key").type === "text";
+      document.getElementById("portal-api-key-visibility").click();
+      return shown && document.getElementById("portal-api-key").type === "password";
+    })()`),
+  );
+
+  /* ---- 保存する（疎通テストは成功を返す） ---- */
+
+  await page.evaluate(`(() => {
+    window.__geminiStatus = 200;
+    document.getElementById("portal-api-key").value = ${JSON.stringify(VALID_KEY)};
+    document.getElementById("portal-api-save").click();
+  })()`);
+  await page.sleep(500);
+
+  check(
+    '保存すると localStorage に JSON 1件で入る',
+    (await page.evaluate('localStorage.getItem("tsam-api-keys")'))
+      === JSON.stringify({ gemini: VALID_KEY }),
+    await page.evaluate('localStorage.getItem("tsam-api-keys")'),
+  );
+
+  check(
+    '保存キーは tsam-api-keys の1つだけ（プロバイダーごとに増やさない）',
+    (await page.evaluate(`
+      JSON.stringify(Object.keys(localStorage).filter((k) => /api|key/i.test(k)))
+    `)) === JSON.stringify(['tsam-api-keys']),
+    await page.evaluate('JSON.stringify(Object.keys(localStorage))'),
+  );
+
+  check(
+    '保存後は伏せ字表示と「変更」「削除」に切り替わる',
+    await page.evaluate(`
+      document.getElementById("portal-api-saved").hidden === false
+      && document.getElementById("portal-api-form").hidden === true
+    `),
+  );
+
+  check(
+    '伏せ字は先頭4文字＋伏せ字＋末尾4文字',
+    (await page.evaluate('document.getElementById("portal-api-masked").textContent'))
+      === `${VALID_KEY.slice(0, 4)}${'•'.repeat(VALID_KEY.length - 8)}${VALID_KEY.slice(-4)}`,
+    await page.evaluate('document.getElementById("portal-api-masked").textContent'),
+  );
+
+  check(
+    '伏せ字の中にキーの中身が出ていない',
+    await page.evaluate(`
+      !document.getElementById("portal-api-panel").innerText.includes(${JSON.stringify(VALID_KEY.slice(8, 30))})
+    `),
+  );
+
+  check(
+    '疎通に成功したので「接続を確認しました。」が出る',
+    await page.evaluate(`
+      document.getElementById("portal-api-message").innerText.includes("接続を確認しました。")
+      && document.getElementById("portal-api-message").dataset.kind === "success"
+    `),
+    await page.evaluate('document.getElementById("portal-api-message").innerText'),
+  );
+
+  check(
+    '保存が済むとバナーは即時に消える',
+    await page.evaluate('document.getElementById("portal-api-key-banner").hidden === true'),
+  );
+
+  /* ---- キーの送り先を確かめる ---- */
+
+  const fetchCalls = JSON.parse(await page.evaluate('JSON.stringify(window.__fetchCalls)'));
+
+  check(
+    '疎通テストは Gemini のモデル一覧を GET している',
+    fetchCalls.some((c) => c.url === 'https://generativelanguage.googleapis.com/v1beta/models'),
+    JSON.stringify(fetchCalls.map((c) => c.url)),
+  );
+
+  check(
+    'キーはURLではなくヘッダー（x-goog-api-key）で送る',
+    fetchCalls.some((c) => c.headers?.includes('x-goog-api-key') && c.headers.includes(VALID_KEY))
+    && !fetchCalls.some((c) => c.url.includes(VALID_KEY)),
+    JSON.stringify(fetchCalls.map((c) => c.url)),
+  );
+
+  check(
+    'キーを当社サーバー（GAS）へ送っていない',
+    !fetchCalls.some((c) => c.url.includes('script.google.com')
+      && `${c.url}${c.body ?? ''}${c.headers ?? ''}`.includes(VALID_KEY)),
+    JSON.stringify(fetchCalls.filter((c) => c.url.includes('script.google.com')).map((c) => c.body)),
+  );
+
+  /* ---- ログアウトしてもキーは残る ---- */
+
+  await page.evaluate(`
+    import('../auth/session.js').then((m) => m.signOut()).then(() => { window.__signedOut = true; })
+  `);
+  await page.sleep(500);
+
+  check(
+    'signOut がセッショントークンを消している（前提）',
+    await page.evaluate('window.__signedOut === true && localStorage.getItem("tsam-auth-session") === null'),
+  );
+
+  check(
+    'ログアウトしてもAPIキーは消えない',
+    (await page.evaluate('localStorage.getItem("tsam-api-keys")'))
+      === JSON.stringify({ gemini: VALID_KEY }),
+    await page.evaluate('localStorage.getItem("tsam-api-keys")'),
+  );
+
+  /* ---- 削除は確認を挟む ---- */
+
+  await page.evaluate('localStorage.setItem("tsam-auth-session", "stub-session-token")');
+  await page.goto(`${origin}/portal/`, 1500);
+  await page.evaluate('document.getElementById("portal-api-toggle").click()');
+  await page.sleep(200);
+
+  check(
+    '保存済みなら再読み込み後もバナーは出ない',
+    await page.evaluate('document.getElementById("portal-api-key-banner").hidden === true'),
+  );
+
+  await page.evaluate('document.getElementById("portal-api-delete").click()');
+  await page.sleep(200);
+
+  check(
+    '削除を押すといきなり消さず、確認が出る',
+    await page.evaluate(`
+      document.getElementById("portal-api-confirm").hidden === false
+      && localStorage.getItem("tsam-api-keys") !== null
+    `),
+  );
+
+  await page.evaluate('document.getElementById("portal-api-delete-cancel").click()');
+  await page.sleep(200);
+
+  check(
+    '「やめる」ならキーは残る',
+    await page.evaluate(`
+      document.getElementById("portal-api-confirm").hidden === true
+      && localStorage.getItem("tsam-api-keys") !== null
+    `),
+  );
+
+  await page.evaluate('document.getElementById("portal-api-delete").click()');
+  await page.sleep(150);
+  await page.evaluate('document.getElementById("portal-api-delete-confirm").click()');
+  await page.sleep(250);
+
+  check(
+    '「削除する」でキーが消える',
+    (await page.evaluate('localStorage.getItem("tsam-api-keys")')) === null,
+    await page.evaluate('localStorage.getItem("tsam-api-keys")'),
+  );
+
+  check(
+    '削除すると入力欄に戻り、バナーが再表示される',
+    await page.evaluate(`
+      document.getElementById("portal-api-form").hidden === false
+      && document.getElementById("portal-api-saved").hidden === true
+      && document.getElementById("portal-api-key-banner").hidden === false
+    `),
+  );
+
+  /* ---- 形式が違っても保存は拒否しない ---- */
+
+  await page.evaluate(`(() => {
+    window.__geminiStatus = 200;
+    document.getElementById("portal-api-key").value = ${JSON.stringify(ODD_KEY)};
+    document.getElementById("portal-api-save").click();
+  })()`);
+  await page.sleep(500);
+
+  check(
+    '形式が違っても保存される（拒否しない）',
+    (await page.evaluate('localStorage.getItem("tsam-api-keys")'))
+      === JSON.stringify({ gemini: ODD_KEY }),
+    await page.evaluate('localStorage.getItem("tsam-api-keys")'),
+  );
+
+  check(
+    '形式が違うときは警告を添える',
+    await page.evaluate(`
+      document.getElementById("portal-api-message").innerText
+        .includes("一般的なGemini APIキーの形式と異なります。")
+    `),
+    await page.evaluate('document.getElementById("portal-api-message").innerText'),
+  );
+
+  check(
+    '警告があるときは「完了」と言い切らない',
+    (await page.evaluate('document.getElementById("portal-api-message").dataset.kind')) === 'info',
+    await page.evaluate('document.getElementById("portal-api-message").dataset.kind'),
+  );
+
+  /* ---- 疎通に失敗しても保存は残る ---- */
+
+  await page.evaluate('document.getElementById("portal-api-change").click()');
+  await page.sleep(150);
+
+  await page.evaluate(`(() => {
+    window.__geminiStatus = 403;
+    document.getElementById("portal-api-key").value = ${JSON.stringify(VALID_KEY)};
+    document.getElementById("portal-api-save").click();
+  })()`);
+  await page.sleep(500);
+
+  check(
+    '疎通に失敗するとエラー文言が出る',
+    await page.evaluate(`
+      document.getElementById("portal-api-message").innerText
+        .includes("このAPIキーでは接続できませんでした。")
+      && document.getElementById("portal-api-message").dataset.kind === "error"
+    `),
+    await page.evaluate('document.getElementById("portal-api-message").innerText'),
+  );
+
+  check(
+    '疎通に失敗しても保存は残る（あとから直せる）',
+    (await page.evaluate('localStorage.getItem("tsam-api-keys")'))
+      === JSON.stringify({ gemini: VALID_KEY })
+    && await page.evaluate('document.getElementById("portal-api-saved").hidden === false'),
+    await page.evaluate('localStorage.getItem("tsam-api-keys")'),
+  );
+
+  /* ---- バナーの導線はパネルを開く ---- */
+
+  await page.evaluate('localStorage.removeItem("tsam-api-keys")');
+  await page.goto(`${origin}/portal/`, 1500);
+
+  check(
+    'キーが無ければバナーが戻る',
+    await page.evaluate('document.getElementById("portal-api-key-banner").hidden === false'),
+  );
+
+  await page.evaluate('document.getElementById("portal-api-key-action").click()');
+  await page.sleep(250);
+
+  check(
+    'バナーを押すと画面は移動せず、API設定パネルが開く',
+    await page.evaluate(`
+      location.pathname.endsWith("/portal/")
+      && document.getElementById("portal-api-panel").hidden === false
+      && document.getElementById("portal-api-toggle").getAttribute("aria-expanded") === "true"
+    `),
+    await page.evaluate('location.pathname'),
+  );
+
+  /* ---- 画面幅ごとの収まり ---- */
+
+  for (const width of WIDTHS) {
+    await page.setViewport(width, 900);
+    await page.goto(`${origin}/portal/`, 1200);
+    await page.evaluate('document.getElementById("portal-api-toggle").click()');
+    await page.sleep(200);
+
+    const apiOverflow = await page.evaluate(
+      'document.documentElement.scrollWidth - document.documentElement.clientWidth',
+    );
+    check(`${width}px: API設定パネルを開いても横スクロールしない`, apiOverflow <= 0, apiOverflow);
+
+    check(
+      `${width}px: 帯の3つが1行に収まる`,
+      await page.evaluate(`(() => {
+        const a = document.getElementById("portal-account-toggle").getBoundingClientRect();
+        const t = document.getElementById("portal-api-toggle").getBoundingClientRect();
+        const l = document.getElementById("portal-logout").getBoundingClientRect();
+        return Math.abs(a.top - l.top) < 24 && Math.abs(t.top - l.top) < 24
+          && a.right <= t.left + 1 && t.right <= l.left + 1;
+      })()`),
+      await page.evaluate(`JSON.stringify({
+        account: document.getElementById("portal-account-toggle").getBoundingClientRect(),
+        api: document.getElementById("portal-api-toggle").getBoundingClientRect(),
+        logout: document.getElementById("portal-logout").getBoundingClientRect(),
+      })`),
+    );
+  }
+
+  await page.clearViewport();
+
+  /* 元の状態へ戻す。以降の検査は portalStub のままで動かす。 */
+  await page.send('Page.removeScriptToEvaluateOnNewDocument', {
+    identifier: apiStub.result.identifier,
+  });
+  await page.evaluate('localStorage.removeItem("tsam-api-keys")');
+  await page.goto(`${origin}/portal/`, 1500);
+
+  /* ---------------------------------------------------------------- */
+  section('Portal のレイアウト（続き）');
 
   /* ---- ダミーのアプリを入れてカードの体裁を見る ---- */
 

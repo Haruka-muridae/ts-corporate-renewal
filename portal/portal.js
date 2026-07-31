@@ -19,7 +19,8 @@
 import { setScreenDepth, rootPath } from '../auth/config.js';
 import { guardPage, signOut, goToLogin } from '../auth/session.js';
 import { PORTAL_APPS } from '../auth/apps.js';
-import { createMessageArea, createSubmitButton } from '../auth/ui.js';
+import { KeyStore, PROVIDERS, isKeyStoreAvailable } from '../auth/keystore.js';
+import { createMessageArea, createSubmitButton, attachPasswordToggle } from '../auth/ui.js';
 
 setScreenDepth(1);
 
@@ -35,53 +36,50 @@ const accountPanel = document.getElementById('portal-account-panel');
 const logoutButton = document.getElementById('portal-logout');
 const messageElement = document.getElementById('portal-message');
 const apiKeyBannerElement = document.getElementById('portal-api-key-banner');
-const apiKeyLinkElement = document.getElementById('portal-api-key-link');
+const apiKeyActionElement = document.getElementById('portal-api-key-action');
+
+const apiToggle = document.getElementById('portal-api-toggle');
+const apiPanel = document.getElementById('portal-api-panel');
+const apiFormElement = document.getElementById('portal-api-form');
+const apiSavedElement = document.getElementById('portal-api-saved');
+const apiInput = document.getElementById('portal-api-key');
+const apiVisibilityButton = document.getElementById('portal-api-key-visibility');
+const apiSaveButton = document.getElementById('portal-api-save');
+const apiMaskedElement = document.getElementById('portal-api-masked');
+const apiChangeButton = document.getElementById('portal-api-change');
+const apiDeleteButton = document.getElementById('portal-api-delete');
+const apiConfirmElement = document.getElementById('portal-api-confirm');
+const apiDeleteConfirmButton = document.getElementById('portal-api-delete-confirm');
+const apiDeleteCancelButton = document.getElementById('portal-api-delete-cancel');
+const apiMessageElement = document.getElementById('portal-api-message');
 
 const message = createMessageArea(messageElement);
+const apiMessage = createMessageArea(apiMessageElement);
 
 /*
  * ------------------------------------------------------------------
- * APIキー未設定バナー（今は出さない）
+ * APIキー未設定バナー
  * ------------------------------------------------------------------
- * キー管理画面が未実装のため、遷移先が無い。
- * 「未設定です」と言いながら設定できない画面は、利用者を行き止まりへ
- * 連れて行くだけなので、行き先が決まるまで出さない。
+ * 判断の材料はこの端末の KeyStore だけにする。
+ * サーバーへは一度も問い合わせない（キーを預けていないのだから、
+ * サーバーは設定済みかどうかを知らないし、知る必要もない）。
  *
- * 有効化の手順は2つだけ:
- *   1. キー管理画面を作り、そのパスを API_KEY_SETTINGS_PATH に入れる
- *   2. verifySession の応答に「キー設定済みか」を載せる
- *      （portal.js 側は user.geminiApiKeyConfigured を見る）
- *
- * パスが空のあいだは shouldShowApiKeyBanner() が必ず false を返すため、
- * フラグの消し忘れで行き先の無いリンクが出ることはない。
+ * 押しても画面は移動しない。同じ画面のAPI設定パネルを開く。
  * 詳細は docs/specs/portal-spec-v1.md §5。
  * ------------------------------------------------------------------
  */
-const API_KEY_SETTINGS_PATH = '';
 
 /**
  * バナーを出すかどうか。
  *
- * サーバーが「設定済みか」を答えられない段階では出さない。
- * 未設定と決めつけて警告すると、設定済みの利用者にも出てしまう。
+ * 保存済みなら出さない。それだけの条件にする。
  */
-export function shouldShowApiKeyBanner(user) {
-  /* 遷移先が無いうちは、どんな状態でも出さない。 */
-  if (API_KEY_SETTINGS_PATH === '') {
-    return false;
-  }
-
-  /* サーバーが答えていない（undefined）ときも出さない。 */
-  return user?.geminiApiKeyConfigured === false;
+export function shouldShowApiKeyBanner() {
+  return !KeyStore.has(PROVIDERS.gemini);
 }
 
-function renderApiKeyBanner(user) {
-  if (!shouldShowApiKeyBanner(user)) {
-    return;
-  }
-
-  apiKeyLinkElement.href = `${rootPath()}${API_KEY_SETTINGS_PATH}`;
-  apiKeyBannerElement.hidden = false;
+function renderApiKeyBanner() {
+  apiKeyBannerElement.hidden = !shouldShowApiKeyBanner();
 }
 
 /* 契約状態の表示。内部値をそのまま出さない。 */
@@ -167,27 +165,282 @@ function renderApps() {
 
 /*
  * ------------------------------------------------------------------
- * アカウント情報パネルの開閉
+ * ヘッダーバー直下のパネル（アカウント情報／API設定）
  * ------------------------------------------------------------------
  * 状態を持つのは aria-expanded と hidden の2つだけで、
  * 見た目（逆三角の回転）は CSS が aria-expanded を見て決める。
  * JS 専用のクラスを別に持たないため、表示と支援技術がずれない。
  *
+ * 2枚は排他とする。両方開くとヘッダーの下が渋滞し、
+ * アプリの一覧が画面の外へ押し出される。
+ *
  * 開閉状態は保存しない。読み込むたびに閉じた状態から始める。
- * アカウント情報は普段見るものではなく、開いたままにしておく理由がない。
  * ------------------------------------------------------------------
  */
-function setAccountPanelOpen(open) {
-  accountToggle.setAttribute('aria-expanded', String(open));
-  accountPanel.hidden = !open;
+const PANELS = [
+  { toggle: accountToggle, panel: accountPanel },
+  { toggle: apiToggle, panel: apiPanel },
+];
+
+function setPanelOpen(entry, open) {
+  entry.toggle.setAttribute('aria-expanded', String(open));
+  entry.panel.hidden = !open;
+
+  if (!open) {
+    return;
+  }
+
+  /* 開いたほうが勝つ。もう一方は閉じる。 */
+  PANELS.filter((other) => other !== entry)
+    .forEach((other) => setPanelOpen(other, false));
+}
+
+function isPanelOpen(entry) {
+  return entry.toggle.getAttribute('aria-expanded') === 'true';
 }
 
 /*
  * button 要素なので Enter と Space は既定動作で click になる。
  * keydown を自前で拾うと二重に発火するため、click だけを見る。
  */
-accountToggle.addEventListener('click', () => {
-  setAccountPanelOpen(accountToggle.getAttribute('aria-expanded') !== 'true');
+PANELS.forEach((entry) => {
+  entry.toggle.addEventListener('click', () => {
+    setPanelOpen(entry, !isPanelOpen(entry));
+  });
+});
+
+const API_PANEL = PANELS[1];
+
+/*
+ * ------------------------------------------------------------------
+ * Gemini APIキーの設定
+ * ------------------------------------------------------------------
+ * キーの読み書きは KeyStore だけが行う。ここで localStorage を直接触らない。
+ * キーを当社サーバー（GAS）へ送らない。console にも出さない。
+ * ------------------------------------------------------------------
+ */
+
+/* Google AI Studio が発行するキーの見た目。AIza ＋ 35文字で合計39文字。 */
+const GEMINI_KEY_PATTERN = /^AIza[A-Za-z0-9_-]{35}$/;
+
+/**
+ * 一般的な Gemini APIキーの形に見えるか。
+ *
+ * **保存の可否には使わない。** 形が違っても保存はする。
+ * Google 側が採番を変えたときに、こちらの正規表現のせいで
+ * 正しいキーを保存できなくなるほうが困る。警告に留める。
+ */
+export function looksLikeGeminiApiKey(value) {
+  return GEMINI_KEY_PATTERN.test(String(value ?? '').trim());
+}
+
+/**
+ * 保存済みのキーの伏せ字表示。先頭4文字と末尾4文字だけ残す。
+ *
+ * 短すぎて前後が重なる値は、全部伏せる。
+ * 「先頭4＋末尾4」を機械的に当てると、8文字なら全部見えてしまう。
+ */
+export function maskApiKey(value) {
+  const key = String(value ?? '').trim();
+
+  if (key === '') {
+    return '';
+  }
+
+  if (key.length <= 12) {
+    return '•'.repeat(key.length);
+  }
+
+  return `${key.slice(0, 4)}${'•'.repeat(key.length - 8)}${key.slice(-4)}`;
+}
+
+/*
+ * 疎通テスト。
+ *
+ * モデル一覧の取得（GET）だけを使う。参照系なので、
+ * 押し間違いで利用者の課金や保存済みデータに影響しない。
+ *
+ * キーは URL ではなくヘッダー（x-goog-api-key）へ載せる。
+ * クエリ文字列に置くと、開発者ツールの履歴や拡張機能から
+ * 拾える場所が1つ増える。
+ */
+const GEMINI_MODELS_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+/**
+ * キーが通るかを1回だけ確かめる。
+ *
+ * 戻り値は { ok, status }。status 0 は「応答そのものが得られなかった」。
+ * 例外は投げない。テストの失敗で保存が巻き戻ることを避けるため。
+ */
+export async function testGeminiApiKey(key) {
+  try {
+    const response = await globalThis.fetch(GEMINI_MODELS_URL, {
+      method: 'GET',
+      headers: { 'x-goog-api-key': String(key ?? '') },
+    });
+
+    return { ok: response.ok === true, status: Number(response.status) || 0 };
+  } catch {
+    /* 通信そのものが成立しなかった。キーの正否は判定できない。 */
+    return { ok: false, status: 0 };
+  }
+}
+
+/** 疎通テストの結果を、利用者に見せる言葉へ変える。 */
+export function describeTestResult({ ok, status }) {
+  if (ok) {
+    return { text: '接続を確認しました。', kind: 'success' };
+  }
+
+  if (status === 400 || status === 401 || status === 403) {
+    return {
+      text: 'このAPIキーでは接続できませんでした。Google AI Studio で発行したキーをご確認ください。',
+      kind: 'error',
+    };
+  }
+
+  if (status === 429) {
+    return {
+      text: '利用上限に達している可能性があります。時間をおいて再度お試しください。',
+      kind: 'error',
+    };
+  }
+
+  if (status === 0) {
+    return {
+      text: '接続を確認できませんでした。通信環境をご確認ください。',
+      kind: 'error',
+    };
+  }
+
+  return { text: `接続を確認できませんでした（HTTP ${status}）。`, kind: 'error' };
+}
+
+/*
+ * パネルの表示を、保存状態に合わせる。
+ *
+ * 保存済みなら伏せ字と「変更／削除」、未保存なら入力欄と「保存する」。
+ * バナーの出し入れも同じ判断から作るため、ここで一緒に呼ぶ。
+ */
+function renderApiKeyState() {
+  const saved = KeyStore.get(PROVIDERS.gemini);
+
+  if (saved !== null) {
+    apiMaskedElement.textContent = maskApiKey(saved);
+    apiSavedElement.hidden = false;
+    apiFormElement.hidden = true;
+  } else {
+    apiSavedElement.hidden = true;
+    apiFormElement.hidden = false;
+  }
+
+  /* 確認は開いたままにしない。次に押すときは最初から。 */
+  apiConfirmElement.hidden = true;
+
+  renderApiKeyBanner();
+}
+
+/* 入力欄は毎回空にする。保存済みの値を書き戻さない（画面に平文を置かない）。 */
+function showApiKeyForm() {
+  apiInput.value = '';
+  apiSavedElement.hidden = true;
+  apiFormElement.hidden = false;
+  apiConfirmElement.hidden = true;
+  apiInput.focus();
+}
+
+attachPasswordToggle(apiVisibilityButton, apiInput);
+
+const apiSave = createSubmitButton(apiSaveButton, { busyLabel: '確認しています…' });
+
+apiSaveButton.addEventListener('click', async () => {
+  if (apiSave.isBusy()) {
+    return;
+  }
+
+  const value = apiInput.value.trim();
+
+  if (value === '') {
+    apiMessage.show('APIキーを入力してください。', 'error');
+    apiMessage.focus();
+    apiInput.focus();
+    return;
+  }
+
+  if (!isKeyStoreAvailable() || !KeyStore.set(PROVIDERS.gemini, value)) {
+    apiMessage.show(
+      'このブラウザではAPIキーを保存できません。プライベートモードを解除してお試しください。',
+      'error',
+    );
+    apiMessage.focus();
+    return;
+  }
+
+  /*
+   * 保存はここで確定している。疎通テストの結果によらず残す。
+   * 「テストが通らないと保存されない」形にすると、
+   * 一時的な通信不良のたびに入力し直しになる。
+   */
+  apiInput.value = '';
+  renderApiKeyState();
+
+  apiSave.start();
+
+  const result = await testGeminiApiKey(value);
+
+  apiSave.stop();
+
+  const described = describeTestResult(result);
+
+  /* 形式の警告は、保存を妨げずに添えるだけ。 */
+  const warned = !looksLikeGeminiApiKey(value);
+  const lines = ['保存しました。'];
+
+  if (warned) {
+    lines.push('一般的なGemini APIキーの形式と異なります。');
+  }
+
+  lines.push(described.text);
+
+  /*
+   * 通ったのに形式が違うときは success にしない。
+   * 「完了」とだけ読み上げると、添えた警告が流される。
+   */
+  let kind = 'error';
+
+  if (described.kind === 'success') {
+    kind = warned ? 'info' : 'success';
+  }
+
+  apiMessage.show(lines.join(' '), kind);
+});
+
+apiChangeButton.addEventListener('click', () => {
+  apiMessage.clear();
+  showApiKeyForm();
+});
+
+apiDeleteButton.addEventListener('click', () => {
+  apiMessage.clear();
+  apiConfirmElement.hidden = false;
+  apiDeleteConfirmButton.focus();
+});
+
+apiDeleteCancelButton.addEventListener('click', () => {
+  apiConfirmElement.hidden = true;
+  apiDeleteButton.focus();
+});
+
+apiDeleteConfirmButton.addEventListener('click', () => {
+  KeyStore.remove(PROVIDERS.gemini);
+  renderApiKeyState();
+  apiMessage.show('APIキーをこの端末から削除しました。', 'info');
+});
+
+/* バナーの導線。ページを移動せず、同じ画面のパネルを開く。 */
+apiKeyActionElement.addEventListener('click', () => {
+  setPanelOpen(API_PANEL, true);
+  apiInput.focus();
 });
 
 function render(user) {
@@ -205,7 +458,7 @@ function render(user) {
     badgeElement.hidden = false;
   }
 
-  renderApiKeyBanner(user);
+  renderApiKeyState();
   renderApps();
 
   loadingElement.hidden = true;
