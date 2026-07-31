@@ -678,8 +678,13 @@
     border-right: 0;
   }
 
+  /*
+   * 行の境界は上の行の下罫線が引くため、2行目以降の上罫線を落とす。
+   * ここで tr を限定せず td 全体から上罫線を外すと、1行目の td にも
+   * 効いてしまい、表の上辺が th の幅（34%）で途切れて右上角が開く。
+   */
   .auth-legal__table tr + tr th,
-  .auth-legal__table td {
+  .auth-legal__table tr + tr td {
     border-top: 0;
   }
 }
