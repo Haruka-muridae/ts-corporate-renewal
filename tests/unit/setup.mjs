@@ -43,9 +43,14 @@ try {
   const fileNames = authFolder.files.map((file) => file.getName()).sort();
 
   check(
-    '3つのスプレッドシートが Auth フォルダに置かれる',
+    '4つのスプレッドシートが Auth フォルダに置かれる',
     JSON.stringify(fileNames) === JSON.stringify(
-      ['TSAM AI ユーザー管理', 'TSAM AI 認証ログ', 'TSAM AI 認証設定'].sort(),
+      [
+        'TSAM AI ユーザー管理',
+        'TSAM AI 認証ログ',
+        'TSAM AI 認証設定',
+        'TSAM AI 法務文書',
+      ].sort(),
     ),
     fileNames.join(' / '),
   );
@@ -203,7 +208,7 @@ try {
 
   check(
     'スプレッドシートは増えない',
-    authFolder.files.length === 3,
+    authFolder.files.length === 4,
     authFolder.files.length,
   );
 

@@ -21,6 +21,21 @@ var PROP = {
   USER_SPREADSHEET_ID: 'AUTH_USER_SPREADSHEET_ID',
   LOG_SPREADSHEET_ID: 'AUTH_LOG_SPREADSHEET_ID',
   CONFIG_SPREADSHEET_ID: 'AUTH_CONFIG_SPREADSHEET_ID',
+  /** 法務文書（利用規約・プライバシーポリシー・特商法表記）の編集元。 */
+  LEGAL_SPREADSHEET_ID: 'AUTH_LEGAL_SPREADSHEET_ID',
+
+  /**
+   * GitHub の Fine-grained personal access token。
+   * legal/*\/index.html を main へコミットするためだけに使う。
+   * 作成手順は docs/instructions/2026-07-31-github-token.md を参照。
+   */
+  GITHUB_TOKEN: 'GITHUB_TOKEN',
+
+  /**
+   * 法務文書を最後に公開したときの版。文書ごとに末尾へ doc_id を付ける。
+   * 版が上がったことを検知して TOS_VERSION の更新漏れを警告するために使う。
+   */
+  LEGAL_PUBLISHED_VERSION_PREFIX: 'LEGAL_PUBLISHED_VERSION_',
 
   STRIPE_SECRET_KEY: 'STRIPE_SECRET_KEY',
   STRIPE_WEBHOOK_SECRET: 'STRIPE_WEBHOOK_SECRET',
@@ -44,7 +59,9 @@ var SECRET_KEYS = [
   PROP.STRIPE_WEBHOOK_URL_KEY,
   PROP.SESSION_SECRET,
   PROP.TOKEN_SECRET,
-  PROP.PASSWORD_PEPPER
+  PROP.PASSWORD_PEPPER,
+  /* リポジトリへの書き込み権限を持つ。設定シートから読めてはならない。 */
+  PROP.GITHUB_TOKEN
 ];
 
 /** Drive 上のフォルダ名。 */
@@ -53,7 +70,10 @@ var DRIVE = {
   AUTH_FOLDER_NAME: 'Auth',
   USER_FILE_NAME: 'TSAM AI ユーザー管理',
   LOG_FILE_NAME: 'TSAM AI 認証ログ',
-  CONFIG_FILE_NAME: 'TSAM AI 認証設定'
+  CONFIG_FILE_NAME: 'TSAM AI 認証設定',
+  LEGAL_FILE_NAME: 'TSAM AI 法務文書',
+  /** 公開前に見た目を確かめる生成物の置き場。 */
+  PREVIEW_FOLDER_NAME: 'preview'
 };
 
 /** シート名。 */
@@ -70,7 +90,13 @@ var SHEETS = {
   SETTINGS: 'settings',
   PLANS: 'plans',
   CONSENT_ITEMS: 'consent_items',
-  CONFIRM_SECTIONS: 'confirm_sections'
+  CONFIRM_SECTIONS: 'confirm_sections',
+
+  /* 法務文書スプレッドシート。 */
+  LEGAL_META: 'meta',
+  LEGAL_TERMS: 'terms',
+  LEGAL_PRIVACY: 'privacy',
+  LEGAL_TOKUSHO: 'tokusho'
 };
 
 /** 各シートのヘッダー。列の順序はここが正本。 */
@@ -112,6 +138,14 @@ HEADERS[SHEETS.CONSENT_ITEMS] = [
 HEADERS[SHEETS.CONFIRM_SECTIONS] = [
   'section', 'item_label', 'item_value', 'emphasis', 'sort_order'
 ];
+HEADERS[SHEETS.LEGAL_META] = [
+  'doc_id', 'title', 'subtitle', 'established_date', 'revised_date', 'version'
+];
+/* 利用規約とプライバシーポリシーは条単位。列は同じ。 */
+HEADERS[SHEETS.LEGAL_TERMS] = ['block_id', 'heading', 'body', 'sort_order', 'enabled'];
+HEADERS[SHEETS.LEGAL_PRIVACY] = HEADERS[SHEETS.LEGAL_TERMS];
+/* 特商法表記は表の行単位。 */
+HEADERS[SHEETS.LEGAL_TOKUSHO] = ['row_id', 'item_label', 'item_value', 'sort_order', 'enabled'];
 
 /** users シートの列番号（1始まり）。HEADERS と必ず一致させる。 */
 var USER_COL = {
@@ -162,6 +196,75 @@ var CONSENT_COL = {
 var CONFIRM_COL = {
   SECTION: 1, ITEM_LABEL: 2, ITEM_VALUE: 3, EMPHASIS: 4, SORT_ORDER: 5
 };
+
+/** 法務文書 meta シートの列（1始まり）。 */
+var LEGAL_META_COL = {
+  DOC_ID: 1, TITLE: 2, SUBTITLE: 3, ESTABLISHED_DATE: 4, REVISED_DATE: 5, VERSION: 6
+};
+
+/** terms / privacy シートの列（1始まり）。 */
+var LEGAL_BLOCK_COL = {
+  BLOCK_ID: 1, HEADING: 2, BODY: 3, SORT_ORDER: 4, ENABLED: 5
+};
+
+/** tokusho シートの列（1始まり）。 */
+var LEGAL_TOKUSHO_COL = {
+  ROW_ID: 1, ITEM_LABEL: 2, ITEM_VALUE: 3, SORT_ORDER: 4, ENABLED: 5
+};
+
+/**
+ * 生成する法務ページの一覧。
+ *
+ * kind:
+ *   article … 見出し＋本文が並ぶ文書（利用規約・プライバシーポリシー）
+ *   table   … 項目／内容の表（特商法表記）
+ *
+ * path は GitHub リポジトリのルートからの相対パス。
+ * どのページも legal/<doc_id>/index.html なので、CSS・favicon への
+ * 相対パスは全ページ共通で ../../ になる。
+ */
+var LEGAL_DOCS = [
+  {
+    docId: 'terms',
+    sheet: SHEETS.LEGAL_TERMS,
+    kind: 'article',
+    path: 'legal/terms/index.html',
+    pageTitle: '利用規約',
+    description: 'TSAM AIの利用規約です。'
+  },
+  {
+    docId: 'privacy',
+    sheet: SHEETS.LEGAL_PRIVACY,
+    kind: 'article',
+    path: 'legal/privacy/index.html',
+    pageTitle: 'プライバシーポリシー',
+    description: 'TSAM AIのプライバシーポリシーです。'
+  },
+  {
+    docId: 'tokusho',
+    sheet: SHEETS.LEGAL_TOKUSHO,
+    kind: 'table',
+    path: 'legal/tokusho/index.html',
+    pageTitle: '特定商取引法に基づく表記',
+    description: 'TSAM AIの特定商取引法に基づく表記です。'
+  }
+];
+
+/**
+ * 本文中で使える差し込み記法。
+ * 文書間のリンクを相対パスで書かせないための仕組みで、
+ * ディレクトリ構成が変わってもここだけ直せば済む。
+ */
+var LEGAL_CONTACT_EMAIL = 'architect@potenitas.com';
+var LEGAL_LINKS = [
+  { token: '{terms}', href: '../terms/', label: '利用規約' },
+  { token: '{privacy}', href: '../privacy/', label: 'プライバシーポリシー' },
+  { token: '{tokusho}', href: '../tokusho/', label: '特定商取引法に基づく表記' }
+];
+
+/** 生成物であることを示す印。手で編集させないための警告。 */
+var LEGAL_GENERATED_MARK = '<!-- GENERATED FILE: 編集はスプレッドシート「'
+  + DRIVE.LEGAL_FILE_NAME + '」から。\n     直接編集禁止(次回公開で上書きされます) -->';
 
 /** アカウント状態。Stripe の契約状態とは別物。 */
 var ACCOUNT_STATUS = {
@@ -249,7 +352,14 @@ var DEFAULT_SETTINGS = {
   TOS_VERSION: '1.0',
 
   /* 申込み前に赤枠で出す警告文。 */
-  CONSENT_WARNING_TEXT: '本サービスは月額550円（税込）の1か月単位の自動更新契約です。解約されるまで毎月自動的に決済されます。AI機能のAPI利用料は月額料金に含まれず、利用者が各AIプロバイダーへ直接支払います。'
+  CONSENT_WARNING_TEXT: '本サービスは月額550円（税込）の1か月単位の自動更新契約です。解約されるまで毎月自動的に決済されます。AI機能のAPI利用料は月額料金に含まれず、利用者が各AIプロバイダーへ直接支払います。',
+
+  /*
+   * 法務ページの公開先。owner/repo と、コミット先のブランチ。
+   * トークンだけは秘密情報なので Script Properties に置く（SECRET_KEYS）。
+   */
+  GITHUB_REPO: 'Haruka-muridae/ts-corporate-renewal',
+  GITHUB_BRANCH: 'main'
 };
 
 /**

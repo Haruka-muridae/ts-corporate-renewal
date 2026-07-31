@@ -122,7 +122,9 @@ function ensureDefaultSettings_(sheet) {
     MAIL_ENABLED: 'メール送信を行うか（TRUE/FALSE）',
     CHECKOUT_HOURLY_LIMIT: 'Checkout Session の1時間あたり作成上限',
     TOS_VERSION: '同意を取得した利用規約の版。改訂したら上げる（古い版の同意は無効になる）',
-    CONSENT_WARNING_TEXT: '申込み前に赤枠で表示する警告文'
+    CONSENT_WARNING_TEXT: '申込み前に赤枠で表示する警告文',
+    GITHUB_REPO: '法務ページの公開先リポジトリ（owner/repo）',
+    GITHUB_BRANCH: '法務ページをコミットするブランチ'
   };
 
   var keys = Object.keys(DEFAULT_SETTINGS);
@@ -283,15 +285,29 @@ function setupAuthSystem() {
   var confirmSheet = ensureSheet_(configBook, SHEETS.CONFIRM_SECTIONS);
   removeDefaultSheet_(configBook);
 
+  /*
+   * 法務文書は別ファイルにする。
+   * 認証設定には秘密ではないが運用上触ってほしくない値が並ぶ一方、
+   * 法務文書は条文を書き換えるための編集画面であり、開く目的が違う。
+   */
+  var legalBook = ensureSpreadsheet_(authFolder, DRIVE.LEGAL_FILE_NAME);
+  ensureSheet_(legalBook, SHEETS.LEGAL_META);
+  ensureSheet_(legalBook, SHEETS.LEGAL_TERMS);
+  ensureSheet_(legalBook, SHEETS.LEGAL_PRIVACY);
+  ensureSheet_(legalBook, SHEETS.LEGAL_TOKUSHO);
+  removeDefaultSheet_(legalBook);
+
   /* ---- 5. ID を保存（これ以降は名前で検索しない） ---- */
   setProperty_(PROP.USER_SPREADSHEET_ID, userBook.getId());
   setProperty_(PROP.LOG_SPREADSHEET_ID, logBook.getId());
   setProperty_(PROP.CONFIG_SPREADSHEET_ID, configBook.getId());
+  setProperty_(PROP.LEGAL_SPREADSHEET_ID, legalBook.getId());
 
   report.push('スプレッドシート:');
   report.push('  ' + DRIVE.USER_FILE_NAME + ' = ' + userBook.getId());
   report.push('  ' + DRIVE.LOG_FILE_NAME + ' = ' + logBook.getId());
   report.push('  ' + DRIVE.CONFIG_FILE_NAME + ' = ' + configBook.getId());
+  report.push('  ' + DRIVE.LEGAL_FILE_NAME + ' = ' + legalBook.getId());
 
   /* ID を保存したあとで設定を読み直す。 */
   clearSettingsCache_();
@@ -307,6 +323,21 @@ function setupAuthSystem() {
 
   report.push('同意項目: ' + (addedConsent > 0 ? addedConsent + ' 件の初期データを追加しました。' : '既存の行を維持しました。'));
   report.push('確認表: ' + (addedConfirm > 0 ? addedConfirm + ' 行の初期データを追加しました。' : '既存の行を維持しました。'));
+
+  /* 法務文書は、シートが空のときだけ制定時点の条文を入れる。 */
+  var importedLegal = importLegalDocsFromCurrent_();
+  var legalTotal = 0;
+  var legalSheetNames = Object.keys(importedLegal);
+
+  for (var n = 0; n < legalSheetNames.length; n++) {
+    legalTotal += importedLegal[legalSheetNames[n]];
+  }
+
+  report.push('法務文書: ' + (legalTotal > 0
+    ? legalSheetNames.map(function (name) {
+      return name + '=' + importedLegal[name];
+    }).join(' / ') + ' 行を投入しました。'
+    : '既存の行を維持しました。'));
 
   clearSettingsCache_();
 

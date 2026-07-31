@@ -41,8 +41,19 @@ function getConfigSpreadsheet_() {
   return openSpreadsheetByProperty_(PROP.CONFIG_SPREADSHEET_ID, DRIVE.CONFIG_FILE_NAME);
 }
 
+function getLegalSpreadsheet_() {
+  return openSpreadsheetByProperty_(PROP.LEGAL_SPREADSHEET_ID, DRIVE.LEGAL_FILE_NAME);
+}
+
 /** シート名から、それが属するスプレッドシートを決める。 */
 function spreadsheetForSheet_(sheetName) {
+  if (sheetName === SHEETS.LEGAL_META
+    || sheetName === SHEETS.LEGAL_TERMS
+    || sheetName === SHEETS.LEGAL_PRIVACY
+    || sheetName === SHEETS.LEGAL_TOKUSHO) {
+    return getLegalSpreadsheet_();
+  }
+
   if (sheetName === SHEETS.SETTINGS
     || sheetName === SHEETS.PLANS
     || sheetName === SHEETS.CONSENT_ITEMS
