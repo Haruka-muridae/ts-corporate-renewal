@@ -16,7 +16,7 @@ Webhook を転送し、実ブラウザ（CDP経由）で申込フォームから
 | 3 | ブラウザ側で金額を改ざんしても決済額に反映されない | ok | 隠しフィールド `amount=100` などをDOMに差し込んで送信 → DBもStripeも7,700円 |
 | 4 | Stripe Checkoutで決済でき、Webhookで「支払済み」に更新される | ok | テストカード4242…で決済 → status=paid、受付番号 TSAM-0001 発行 |
 | 5 | 同一Webhookを2回受信してもメール・受付番号が重複しない | ok | 実イベントを正しい署名で再送 → 応答200、メール1件のまま、受付番号も不変 |
-| 6 | 決済完了後に参加確定メールとStripe領収書が届く | **条件付き** | 参加確定メールは Gmail API で送信し、実際の受信も確認済み。Stripe領収書は `receipt_email` が設定され領収書URLも発行されるが、**領収書メールは未送信**。ダッシュボードの設定が必要（下記） |
+| 6 | 決済完了後に参加確定メールとStripe領収書が届く | **条件付き** | 参加確定メールは Gmail API で送信し、実際の受信も確認済み。Stripe領収書は `receipt_email` の設定と領収書URLの発行まで確認（実装側の準備は完了）。**送信の確認はサンドボックスでは構造的に不可能**で、本番切替時に確認する（下記） |
 | 7 | `async_payment_succeeded` 経由でも4〜6が成立する（PayPay想定） | ok | completed(unpaid)では支払済みにせず受付番号も出さない → async_payment_succeeded で支払済み・受付番号 TSAM-0002・メール1通 |
 | 8 | 同意チェック3つが未チェックだと決済へ進めない。同意日時・ポリシー版が保存される | ok | 未チェックで送信 → 3件のエラーで遷移せず。同意後は agreed_at とポリシー版1.0を保存 |
 | 9 | Stripeから手動返金するとステータスが「返金済み（例外対応）」になる | ok | Refunds APIで返金 → charge.refunded 受信 → status=refunded、返金額7,700を記録 |
@@ -28,24 +28,39 @@ Webhook を転送し、実ブラウザ（CDP経由）で申込フォームから
 
 ## 条件6が「条件付き」である理由
 
-Stripe の領収書メールは、ダッシュボードで有効にしないと送信されない。
-テストモードで決済した請求 `ch_3TzIvACL3niUmYGZ1bPrNcAF` を確認したところ、
-`receipt_email` に `architect@potenitas.com` は設定されているものの
-`receipt_number` が付いておらず、**領収書メールは送信されていない**。
+**テスト環境（サンドボックス）では、領収書メールの送信を確認できない。**
+
+* 領収書メールの設定（Customer emails → Successful payments）は
+  サンドボックスでグレーアウトしており、**変更できない**（事業者確認済み）
+* 決済詳細からの手動送信も効かない。請求の `receipt_email` を再設定して
+  送信を促しても `receipt_number` は採番されなかった
+* 返金済みの請求が原因ではないことも確かめた。**未返金の請求**
+  （`pi_3TzJKDCL3niUmYGZ0Vg5w0zl`、7,700円、`succeeded`）を新たに作って
+  同じく確認したが、30秒待っても `receipt_number` は採番されなかった
+  （確認後に返金済み）
+
 Stripe は領収書を送信した時点で `receipt_number` を採番するため、
-これが未採番＝未送信の確かな手掛かりになる。
+未採番であることが未送信の確かな手掛かりになる。
 
-設定を入れれば送信される。**コード側の対応は不要**。
+### 現時点で確認できていること（実装側の準備は完了）
 
-Checkout Session に `customer_email` を渡しているため、設定を入れれば
-その宛先に届く。
+* Checkout Session に `customer_email`（申込者のメールアドレス）を渡している
+* 決済後の請求に `receipt_email` が正しく設定される
+* 領収書のURL（`receipt_url`）も発行される
 
-| 環境 | 設定画面 |
-| --- | --- |
-| テスト | <https://dashboard.stripe.com/test/settings/emails> |
-| 本番 | <https://dashboard.stripe.com/settings/emails> |
+**コードの変更は不要。** 本番で設定を入れれば送信される。
 
-「Successful payments」をオンにする。テストと本番は別管理のため、両方で操作する。
+### 最終確認をどこで行うか
+
+本番切替の工程に組み込んである（`docs/production-cutover.md`）。
+
+1. 「6-1. 領収書メールを有効にする」で本番の設定をオンにする
+   <https://dashboard.stripe.com/settings/emails>
+2. 「8. 本番での動作確認」の実決済で、領収書メールの受信と
+   `receipt_number` の採番を確認する
+
+テスト環境の設定画面（<https://dashboard.stripe.com/test/settings/emails>）は
+変更できないため、この記録では未確認のままとする。
 
 ## 本番切替の手順
 
