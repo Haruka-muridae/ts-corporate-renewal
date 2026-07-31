@@ -627,6 +627,468 @@ try {
   await page.evaluate('localStorage.clear()');
 
   /* ---------------------------------------------------------------- */
+  section('Portal のレイアウト（応答を固定して確認）');
+
+  /*
+   * ここから先はログイン済みの画面を見る。
+   * 本番のエンドポイントへは送らず、verifySession の応答だけを差し替える。
+   *
+   * 差し替えるのは応答であって guardPage の手順ではない。
+   * 「サーバーが有効と答えたときだけ描画する」という順序は本物のまま動く。
+   */
+  const portalStub = await page.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      window.fetch = (url, options) => {
+        const body = JSON.parse(options?.body ?? '{}');
+
+        if (body.action === 'verifySession') {
+          return Promise.resolve(new Response(
+            JSON.stringify({ success: true, data: { user: {
+              email: 'member@example.com',
+              role: 'member',
+              isAdmin: false,
+              subscriptionStatus: 'active',
+              paymentExempt: false,
+            } } }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ));
+        }
+
+        return Promise.resolve(new Response(
+          JSON.stringify({ success: true, data: {} }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ));
+      };
+    `,
+  });
+
+  await page.evaluate('localStorage.setItem("tsam-auth-session", "stub-session-token")');
+  await page.goto(`${origin}/portal/`, 1500);
+
+  check(
+    'セッションが有効なら内容が表示される',
+    await page.evaluate('document.getElementById("portal-content").hidden === false'),
+  );
+
+  /* ---- ブランドブロックの不在 ---- */
+
+  check(
+    'ブランドブロック（auth-brand）が無い',
+    await page.evaluate('document.querySelectorAll(".auth-brand").length === 0'),
+    await page.evaluate('document.querySelectorAll(".auth-brand").length'),
+  );
+
+  check(
+    '本文に社名の見出しを重ねて出さない（フッターの1回だけ）',
+    (await page.evaluate(`
+      [...document.querySelectorAll("main *")].filter(
+        (el) => el.children.length === 0 && el.textContent.trim() === "TSアセットマネジメント合同会社").length
+    `)) === 0,
+  );
+
+  check(
+    '導入文「ご利用になるアプリを選択してください。」が無い',
+    await page.evaluate('!document.body.textContent.includes("ご利用になるアプリを選択してください")'),
+  );
+
+  /* ---- ヘッダーバーの構成 ---- */
+
+  check(
+    'ヘッダーバーが1本だけある',
+    await page.evaluate('document.querySelectorAll(".auth-portal-bar").length === 1'),
+  );
+
+  check(
+    '見出しは「Portal」で、h1 のまま',
+    await page.evaluate(`
+      document.querySelector("h1").textContent.trim() === "Portal"
+      && document.querySelector("h1").closest(".auth-portal-bar") !== null
+    `),
+  );
+
+  check(
+    'メールアドレスがヘッダーバーに出る',
+    (await page.evaluate('document.getElementById("portal-user-email").textContent'))
+      === 'member@example.com',
+  );
+
+  check(
+    'ログアウトボタンがヘッダーバーにある',
+    await page.evaluate(`
+      document.getElementById("portal-logout").closest(".auth-portal-bar") !== null
+    `),
+  );
+
+  check(
+    '管理者でなければロールバッジは出ない',
+    await page.evaluate('document.getElementById("portal-user-badge").hidden === true'),
+  );
+
+  /* 左＝Portal＋バッジ、右＝メール＋ログアウト。実際の座標で確かめる。 */
+  const barLayout = await page.evaluate(`(() => {
+    const bar = document.querySelector(".auth-portal-bar").getBoundingClientRect();
+    const title = document.querySelector(".auth-portal-bar__title").getBoundingClientRect();
+    const logout = document.getElementById("portal-logout").getBoundingClientRect();
+    const email = document.getElementById("portal-user-email").getBoundingClientRect();
+
+    return JSON.stringify({
+      titleAtLeft: Math.abs(title.left - bar.left) < 2,
+      logoutAtRight: Math.abs(bar.right - logout.right) < 2,
+      emailBeforeLogout: email.right <= logout.left + 1,
+      sameLine: Math.abs(title.top - logout.top) < 24,
+      barHeight: bar.height,
+    });
+  })()`);
+
+  const bar = JSON.parse(barLayout);
+
+  check('左端が「Portal」', bar.titleAtLeft, barLayout);
+  check('右端がログアウト', bar.logoutAtRight, barLayout);
+  check('メールアドレスはログアウトの左', bar.emailBeforeLogout, barLayout);
+  check('1行に収まる細い帯になっている', bar.sameLine && bar.barHeight < 90, barLayout);
+
+  /* ---- APIキー未設定バナー ---- */
+
+  check(
+    'バナーの要素は用意されている',
+    await page.evaluate('document.getElementById("portal-api-key-banner") !== null'),
+  );
+
+  check(
+    'バナーは表示しない（キー管理画面が未実装のため）',
+    await page.evaluate('document.getElementById("portal-api-key-banner").hidden === true'),
+  );
+
+  /*
+   * textContent は隠れている要素も拾うため、描画結果で確かめる。
+   * innerText は表示されている文字だけを返す。
+   */
+  check(
+    'バナーの文言が画面に出ていない',
+    await page.evaluate('!document.body.innerText.includes("Gemini APIキーが未設定です")'),
+  );
+
+  check(
+    'バナーは面積を持たない',
+    await page.evaluate(`
+      document.getElementById("portal-api-key-banner").getBoundingClientRect().height === 0
+    `),
+  );
+
+  check(
+    '行き先の無いリンクを踏ませない（href が空のまま）',
+    (await page.evaluate('document.getElementById("portal-api-key-link").getAttribute("href")')) === '',
+  );
+
+  /*
+   * 表示条件そのものを呼んで確かめる。
+   * 同じページの module は再読み込みされないため、
+   * 画面が使っているのと同一の実装が返る。
+   */
+  const bannerLogic = JSON.parse(await page.evaluate(`
+    import('./portal.js').then((m) => JSON.stringify({
+      未設定と分かっていても: m.shouldShowApiKeyBanner({ geminiApiKeyConfigured: false }),
+      サーバーが答えていない: m.shouldShowApiKeyBanner({}),
+      設定済み: m.shouldShowApiKeyBanner({ geminiApiKeyConfigured: true }),
+      利用者情報が無い: m.shouldShowApiKeyBanner(null),
+    }))
+  `));
+
+  check(
+    '遷移先が未定のうちは、どの状態でも表示しない',
+    Object.values(bannerLogic).every((value) => value === false),
+    JSON.stringify(bannerLogic),
+  );
+
+  /*
+   * 将来有効化したときに崩れないことだけ、いま見ておく。
+   * 表示条件を通さずに hidden を外し、体裁を確かめる。
+   */
+  await page.evaluate(`(() => {
+    const banner = document.getElementById("portal-api-key-banner");
+    document.getElementById("portal-api-key-link").href = "../portal/";
+    banner.hidden = false;
+  })()`);
+  await page.sleep(120);
+
+  check(
+    '有効化したときは鍵の図・本文・導線がそろって出る',
+    await page.evaluate(`(() => {
+      const banner = document.getElementById("portal-api-key-banner");
+      return banner.getBoundingClientRect().height > 0
+        && banner.querySelector("svg") !== null
+        && banner.innerText.includes("Gemini APIキーが未設定です。")
+        && banner.querySelector(".auth-portal-banner__action") !== null;
+    })()`),
+  );
+
+  check(
+    '有効化してもアプリ一覧より上に出る',
+    await page.evaluate(`
+      document.getElementById("portal-api-key-banner").getBoundingClientRect().bottom
+      <= document.getElementById("portal-apps").getBoundingClientRect().top + 1
+    `),
+  );
+
+  /* 320px でも折り返して収まること（有効化したときに初めて分かっては遅い）。 */
+  await page.setViewport(320, 900);
+  await page.sleep(150);
+
+  check(
+    '有効化しても320pxで横スクロールしない',
+    (await page.evaluate(
+      'document.documentElement.scrollWidth - document.documentElement.clientWidth',
+    )) <= 0,
+  );
+
+  await page.clearViewport();
+  await page.sleep(120);
+
+  await page.evaluate(`(() => {
+    document.getElementById("portal-api-key-banner").hidden = true;
+    document.getElementById("portal-api-key-link").setAttribute("href", "");
+  })()`);
+
+  /* ---- アプリグリッド ---- */
+
+  check(
+    'apps.js が空なので案内文が出る',
+    await page.evaluate(`
+      document.getElementById("portal-apps-empty").hidden === false
+      && document.getElementById("portal-apps").children.length === 0
+    `),
+  );
+
+  check(
+    '案内文は従来どおり',
+    (await page.evaluate('document.getElementById("portal-apps-empty").textContent.trim()'))
+      === 'ご利用可能なアプリは順次追加されます。',
+  );
+
+  /* ---- アカウント情報 ---- */
+
+  check(
+    'アカウント情報が下部の小型カードになっている',
+    await page.evaluate(`
+      document.querySelector(".auth-account") !== null
+      && document.querySelector(".auth-account").getBoundingClientRect().top
+         > document.getElementById("portal-apps-empty").getBoundingClientRect().top
+    `),
+  );
+
+  check(
+    'メールと契約状態が1行に並ぶ',
+    await page.evaluate(`(() => {
+      const email = document.getElementById("portal-account-email").getBoundingClientRect();
+      const state = document.getElementById("portal-account-subscription").getBoundingClientRect();
+      return Math.abs(email.top - state.top) < 2 && state.left > email.left;
+    })()`),
+  );
+
+  check(
+    '契約状態は内部値ではなく日本語で出る',
+    (await page.evaluate('document.getElementById("portal-account-subscription").textContent'))
+      === 'ご利用中',
+  );
+
+  check(
+    'パスワード変更への導線が残っている',
+    await page.evaluate(`
+      [...document.querySelectorAll(".auth-account a")].some(
+        (a) => a.getAttribute("href") === "../password/reset/")
+    `),
+  );
+
+  /* ---- ダミーのアプリを入れてカードの体裁を見る ---- */
+
+  await page.evaluate(`(() => {
+    const list = document.getElementById("portal-apps");
+    document.getElementById("portal-apps-empty").hidden = true;
+
+    for (const app of [
+      { name: '音声録音・MP3変換', desc: '会議の録音をMP3にします。', icon: '録' },
+      { name: 'ナレッジチャット', desc: '社内資料に質問できます。', icon: '' },
+      { name: '名刺読み取り', desc: '名刺を一覧にします。', icon: '' },
+    ]) {
+      const item = document.createElement('li');
+      item.className = 'auth-app-card';
+
+      const link = document.createElement('a');
+      link.className = 'auth-app-card__link';
+      link.href = '../portal/';
+
+      const icon = document.createElement('span');
+      icon.className = 'auth-app-card__icon';
+      icon.textContent = app.icon !== '' ? app.icon : app.name.slice(0, 1);
+      icon.setAttribute('aria-hidden', 'true');
+      link.append(icon);
+
+      const name = document.createElement('h2');
+      name.className = 'auth-app-card__name';
+      name.textContent = app.name;
+      link.append(name);
+
+      const desc = document.createElement('p');
+      desc.className = 'auth-app-card__desc';
+      desc.textContent = app.desc;
+      link.append(desc);
+
+      item.append(link);
+      list.append(item);
+    }
+  })()`);
+
+  await page.sleep(150);
+
+  check(
+    'カードはアイコン・名前・説明の3つを持つ',
+    await page.evaluate(`
+      [...document.querySelectorAll(".auth-app-card")].every((card) =>
+        card.querySelector(".auth-app-card__icon")
+        && card.querySelector(".auth-app-card__name")
+        && card.querySelector(".auth-app-card__desc"))
+    `),
+  );
+
+  check(
+    'カード全体が1つのリンクになっている',
+    await page.evaluate(`
+      [...document.querySelectorAll(".auth-app-card")].every((card) =>
+        card.children.length === 1 && card.firstElementChild.tagName === "A")
+    `),
+  );
+
+  check(
+    'カードの角丸が12px',
+    await page.evaluate(`
+      getComputedStyle(document.querySelector(".auth-app-card__link")).borderTopLeftRadius === "12px"
+    `),
+    await page.evaluate('getComputedStyle(document.querySelector(".auth-app-card__link")).borderTopLeftRadius'),
+  );
+
+  check(
+    'カードの中身が中央寄せ',
+    await page.evaluate(`
+      getComputedStyle(document.querySelector(".auth-app-card__link")).textAlign === "center"
+    `),
+  );
+
+  check(
+    'アイコンが省略されたら名前の1文字目を使う',
+    (await page.evaluate('document.querySelectorAll(".auth-app-card__icon")[1].textContent')) === 'ナ',
+  );
+
+  /* ---- 画面幅ごとの列数と横スクロール ---- */
+
+  const PORTAL_WIDTHS = [
+    [320, 1],
+    [375, 1],
+    [768, 3],
+    [1024, 3],
+    [1440, 3],
+  ];
+
+  /* 同じ高さに並ぶカードの数を数えて、実際の列数を測る。 */
+  const COLUMN_PROBE = `(() => {
+    const cards = [...document.querySelectorAll(".auth-app-card")];
+    const top = Math.min(...cards.map((c) => c.getBoundingClientRect().top));
+    return cards.filter((c) => Math.abs(c.getBoundingClientRect().top - top) < 2).length;
+  })()`;
+
+  for (const [width, expected] of PORTAL_WIDTHS) {
+    await page.setViewport(width, 900);
+    await page.goto(`${origin}/portal/`, 1200);
+
+    /* 遷移でカードは消えるため、幅ごとに入れ直す。 */
+    await page.evaluate(`(() => {
+      const list = document.getElementById("portal-apps");
+      for (let i = 0; i < 3; i += 1) {
+        const item = document.createElement('li');
+        item.className = 'auth-app-card';
+        const link = document.createElement('a');
+        link.className = 'auth-app-card__link';
+        link.href = '../portal/';
+        link.textContent = 'テスト用アプリ' + (i + 1);
+        item.append(link);
+        list.append(item);
+      }
+    })()`);
+    await page.sleep(120);
+
+    check(
+      `${width}px: アプリが${expected}列に並ぶ`,
+      (await page.evaluate(COLUMN_PROBE)) === expected,
+      await page.evaluate(COLUMN_PROBE),
+    );
+
+    const overflow = await page.evaluate(
+      'document.documentElement.scrollWidth - document.documentElement.clientWidth',
+    );
+    check(`${width}px: 横スクロールしない`, overflow <= 0, overflow);
+
+    check(
+      `${width}px: ヘッダーバーが表示領域からはみ出さない`,
+      await page.evaluate(`(() => {
+        const bar = document.querySelector(".auth-portal-bar").getBoundingClientRect();
+        return bar.left >= -1 && bar.right <= document.documentElement.clientWidth + 1;
+      })()`),
+    );
+  }
+
+  await page.clearViewport();
+
+  /* ---- 管理者のときだけロールバッジが出る ---- */
+
+  await page.send('Page.removeScriptToEvaluateOnNewDocument', {
+    identifier: portalStub.result.identifier,
+  });
+
+  const adminStub = await page.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      window.fetch = () => Promise.resolve(new Response(
+        JSON.stringify({ success: true, data: { user: {
+          email: 'architect@example.com',
+          role: 'admin',
+          isAdmin: true,
+          subscriptionStatus: 'exempt',
+          paymentExempt: true,
+        } } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ));
+    `,
+  });
+
+  await page.goto(`${origin}/portal/`, 1500);
+
+  check(
+    '管理者にはロールバッジが出る',
+    await page.evaluate(`
+      document.getElementById("portal-user-badge").hidden === false
+      && document.getElementById("portal-user-badge").textContent === "管理者"
+    `),
+  );
+
+  check(
+    'バッジは見出しの右隣（ヘッダーバーの左ブロック）に入る',
+    await page.evaluate(`
+      document.getElementById("portal-user-badge").closest(".auth-portal-bar__identity") !== null
+    `),
+  );
+
+  check(
+    '決済不要の管理者はその旨が出る',
+    (await page.evaluate('document.getElementById("portal-account-subscription").textContent'))
+      === '決済不要（管理者）',
+  );
+
+  await page.send('Page.removeScriptToEvaluateOnNewDocument', {
+    identifier: adminStub.result.identifier,
+  });
+
+  await page.goto(`${origin}/login/`);
+  await page.evaluate('localStorage.clear()');
+
+  /* ---------------------------------------------------------------- */
   section('その他の画面');
 
   const screens = [

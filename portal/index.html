@@ -33,27 +33,43 @@
       <p class="auth-loading" id="portal-loading">ログイン状態を確認しています…</p>
 
       <div id="portal-content" hidden>
-        <div class="auth-brand">
-          <a class="auth-brand__link" href="../index.html">
-            <span class="auth-brand__name" lang="en">TSAM AI</span>
-          </a>
-          <p class="auth-brand__owner">TSアセットマネジメント合同会社</p>
-        </div>
-
-        <div class="auth-portal-header">
-          <p class="auth-portal-header__user">
-            <span id="portal-user-email"></span>
+        <!--
+          ブランドブロック（TSAM AI／社名）は置かない。
+          ログイン後の作業画面であり、名乗り直すより
+          アプリを選ぶまでの距離を縮めるほうを優先する。
+          社名はフッターに残している。
+        -->
+        <div class="auth-portal-bar">
+          <div class="auth-portal-bar__identity">
+            <h1 class="auth-portal-bar__title">Portal</h1>
             <span id="portal-user-badge" hidden></span>
-          </p>
-          <div class="auth-portal-header__actions">
-            <button class="auth-button auth-button--ghost" id="portal-logout" type="button">ログアウト</button>
+          </div>
+          <div class="auth-portal-bar__account">
+            <span class="auth-portal-bar__email" id="portal-user-email"></span>
+            <button class="auth-button auth-button--ghost auth-portal-bar__logout" id="portal-logout" type="button">ログアウト</button>
           </div>
         </div>
 
-        <h1 class="auth-card__title">Portal</h1>
-        <p class="auth-card__lead">ご利用になるアプリを選択してください。</p>
-
         <p class="auth-message" id="portal-message" tabindex="-1" hidden></p>
+
+        <!--
+          APIキー未設定の警告。
+          キー管理画面が未実装のあいだは表示しない（行き先のない導線を出さない）。
+          表示条件は portal.js の shouldShowApiKeyBanner() にある。
+          詳細は docs/specs/portal-spec-v1.md §5。
+        -->
+        <div class="auth-portal-banner" id="portal-api-key-banner" role="status" hidden>
+          <svg class="auth-portal-banner__icon" viewBox="0 0 24 24" width="20" height="20"
+               fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="8" cy="15" r="4"></circle>
+            <path d="M10.9 12.1 20 3"></path>
+            <path d="M17 6l2.5 2.5"></path>
+            <path d="M14.5 8.5 17 11"></path>
+          </svg>
+          <p class="auth-portal-banner__body">Gemini APIキーが未設定です。</p>
+          <a class="auth-portal-banner__action" id="portal-api-key-link" href="">APIキーを設定する</a>
+        </div>
 
         <ul class="auth-apps" id="portal-apps"></ul>
 
@@ -61,22 +77,16 @@
           ご利用可能なアプリは順次追加されます。
         </p>
 
-        <section class="auth-terms" aria-labelledby="portal-account-title">
-          <h2 class="auth-terms__title" id="portal-account-title">アカウント情報</h2>
-          <dl class="auth-terms__list">
-            <div>
-              <dt>メールアドレス</dt>
-              <dd id="portal-account-email"></dd>
-            </div>
-            <div>
-              <dt>ご契約の状態</dt>
-              <dd id="portal-account-subscription"></dd>
-            </div>
-            <div>
-              <dt>パスワード</dt>
-              <dd><a href="../password/reset/">パスワードを変更する</a></dd>
-            </div>
-          </dl>
+        <section class="auth-account" aria-labelledby="portal-account-title">
+          <h2 class="auth-account__title" id="portal-account-title">アカウント情報</h2>
+          <p class="auth-account__line">
+            <span id="portal-account-email"></span>
+            <span class="auth-account__separator" aria-hidden="true">／</span>
+            <span id="portal-account-subscription"></span>
+          </p>
+          <p class="auth-account__action">
+            <a href="../password/reset/">パスワードを変更する</a>
+          </p>
         </section>
       </div>
 
