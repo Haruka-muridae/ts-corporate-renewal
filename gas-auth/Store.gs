@@ -43,7 +43,10 @@ function getConfigSpreadsheet_() {
 
 /** シート名から、それが属するスプレッドシートを決める。 */
 function spreadsheetForSheet_(sheetName) {
-  if (sheetName === SHEETS.SETTINGS || sheetName === SHEETS.PLANS) {
+  if (sheetName === SHEETS.SETTINGS
+    || sheetName === SHEETS.PLANS
+    || sheetName === SHEETS.CONSENT_ITEMS
+    || sheetName === SHEETS.CONFIRM_SECTIONS) {
     return getConfigSpreadsheet_();
   }
 

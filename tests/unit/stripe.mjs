@@ -77,7 +77,21 @@ try {
     return null;
   });
 
-  const created = gas.createCheckoutSession_({ planCode: 'standard', email: 'buyer@example.com' });
+  /*
+   * 申込みには同意が要る。既定では必須項目をすべて満たした状態で呼ぶ。
+   * 同意そのものの検証は「申込み前の同意」セクションで行う。
+   */
+  const ALL_AGREED = gas.listRequiredConsentIds_();
+
+  function checkout(overrides) {
+    return gas.createCheckoutSession_(Object.assign({
+      planCode: 'standard',
+      agreedItems: ALL_AGREED,
+      tosVersion: gas.getTosVersion_(),
+    }, overrides || {}));
+  }
+
+  const created = checkout({ email: 'buyer@example.com' });
 
   check('Checkout Session を作成できる', created.ok === true);
   check('決済画面のURLが返る', created.data.checkoutUrl.startsWith('https://checkout.stripe.com/'));
@@ -113,17 +127,17 @@ try {
 
   check(
     '無効なプランでは作成しない',
-    gas.createCheckoutSession_({ planCode: 'disabled-plan' }).errorPair[0] === 'PLAN_NOT_FOUND',
+    checkout({ planCode: 'disabled-plan' }).errorPair[0] === 'PLAN_NOT_FOUND',
   );
 
   check(
     '存在しないプランでは作成しない',
-    gas.createCheckoutSession_({ planCode: 'nope' }).errorPair[0] === 'PLAN_NOT_FOUND',
+    checkout({ planCode: 'nope' }).errorPair[0] === 'PLAN_NOT_FOUND',
   );
 
   check(
     'Price ID を直接指定されても無視する（プランコードしか見ない）',
-    gas.createCheckoutSession_({
+    checkout({
       planCode: 'nope',
       priceId: 'price_attacker_controlled',
     }).errorPair[0] === 'PLAN_NOT_FOUND',
@@ -134,7 +148,7 @@ try {
     (() => {
       const before = env.properties.STRIPE_SECRET_KEY;
       delete env.properties.STRIPE_SECRET_KEY;
-      const result = gas.createCheckoutSession_({ planCode: 'standard' });
+      const result = checkout();
       env.properties.STRIPE_SECRET_KEY = before;
       return result.errorPair[0] === 'NOT_CONFIGURED';
     })(),
@@ -145,9 +159,9 @@ try {
     (() => {
       setSetting(env, 'CHECKOUT_HOURLY_LIMIT', '2');
 
-      gas.createCheckoutSession_({ planCode: 'standard' });
-      gas.createCheckoutSession_({ planCode: 'standard' });
-      const third = gas.createCheckoutSession_({ planCode: 'standard' });
+      checkout();
+      checkout();
+      const third = checkout();
 
       setSetting(env, 'CHECKOUT_HOURLY_LIMIT', '60');
       return third.errorPair[0] === 'RATE_LIMITED';

@@ -120,7 +120,9 @@ function ensureDefaultSettings_(sheet) {
     PASSWORD_RESET_URL: 'パスワード再設定画面のURL',
     MAIL_SENDER_NAME: 'メールの送信者名',
     MAIL_ENABLED: 'メール送信を行うか（TRUE/FALSE）',
-    CHECKOUT_HOURLY_LIMIT: 'Checkout Session の1時間あたり作成上限'
+    CHECKOUT_HOURLY_LIMIT: 'Checkout Session の1時間あたり作成上限',
+    TOS_VERSION: '同意を取得した利用規約の版。改訂したら上げる（古い版の同意は無効になる）',
+    CONSENT_WARNING_TEXT: '申込み前に赤枠で表示する警告文'
   };
 
   var keys = Object.keys(DEFAULT_SETTINGS);
@@ -158,6 +160,79 @@ function ensureSamplePlan_(sheet) {
   ]);
 
   return true;
+}
+
+/**
+ * 同意チェック項目の初期データを入れる。
+ *
+ * すでに行がある場合は何もしない。
+ * 文言は運用側で編集される前提なので、上書きすると直した内容が消える。
+ */
+function ensureConsentItems_(sheet) {
+  if (sheet.getLastRow() >= 2) {
+    return 0;
+  }
+
+  var seed = [
+    [
+      'tos',
+      '{terms}および{privacy}に同意します。',
+      'TRUE', 1, 'TRUE'
+    ],
+    [
+      'auto_renew',
+      '月額550円（税込）・1か月ごとの自動更新契約であり、解約しない限り毎月決済されることを確認しました。',
+      'TRUE', 2, 'TRUE'
+    ],
+    [
+      'api_cost',
+      'AI機能の利用に必要なAPI利用料は月額料金に含まれず、各AIプロバイダーへ利用者が直接支払うこと、使用量・課金額は利用者自身が管理することを理解しました。',
+      'TRUE', 3, 'TRUE'
+    ],
+    [
+      'cancel_policy',
+      '解約後は支払済み期間の終了日まで利用でき、日割り・残存期間分の返金は行われないこと（{tokusho}）を確認しました。',
+      'TRUE', 4, 'TRUE'
+    ]
+  ];
+
+  for (var i = 0; i < seed.length; i++) {
+    sheet.appendRow(seed[i]);
+  }
+
+  return seed.length;
+}
+
+/**
+ * 契約条件の確認表の初期データを入れる。
+ *
+ * 特定商取引法が最終確認画面での表示を求める項目を網羅する。
+ * 価格・自動更新・支払時期・契約期間・解約方法・返金条件・API料金。
+ */
+function ensureConfirmSections_(sheet) {
+  if (sheet.getLastRow() >= 2) {
+    return 0;
+  }
+
+  var seed = [
+    ['料金と支払い', '月額料金', '550円（税込）', 'TRUE', 1],
+    ['料金と支払い', '1年間継続の目安', '6,600円（税込）', 'FALSE', 2],
+    ['料金と支払い', '支払方法', 'クレジットカード（Stripe）', 'FALSE', 3],
+    ['料金と支払い', '支払時期', '初回決済日を基準に毎月自動決済', 'FALSE', 4],
+    ['契約期間と自動更新', '契約期間', '1か月', 'FALSE', 5],
+    ['契約期間と自動更新', '自動更新', 'あり（解約まで継続）', 'TRUE', 6],
+    ['API利用料', '月額料金への含有', '含まれない', 'TRUE', 7],
+    ['API利用料', '支払先', '各AIプロバイダーへ直接支払い', 'TRUE', 8],
+    ['解約', '解約方法', '問い合わせ窓口（architect@potenitas.com）への申し出', 'FALSE', 9],
+    ['解約', '解約後の利用', '支払済み期間の終了日まで利用可能', 'FALSE', 10],
+    ['解約', '返金', '日割り・残存期間分の返金なし', 'TRUE', 11]
+  ];
+
+  for (var i = 0; i < seed.length; i++) {
+    sheet.appendRow(seed[i]);
+  }
+
+  return seed.length;
 }
 
 /** シークレットを未設定のときだけ生成する。既存の値は絶対に上書きしない。 */
@@ -204,6 +279,8 @@ function setupAuthSystem() {
   var configBook = ensureSpreadsheet_(authFolder, DRIVE.CONFIG_FILE_NAME);
   var settingsSheet = ensureSheet_(configBook, SHEETS.SETTINGS);
   var plansSheet = ensureSheet_(configBook, SHEETS.PLANS);
+  var consentSheet = ensureSheet_(configBook, SHEETS.CONSENT_ITEMS);
+  var confirmSheet = ensureSheet_(configBook, SHEETS.CONFIRM_SECTIONS);
   removeDefaultSheet_(configBook);
 
   /* ---- 5. ID を保存（これ以降は名前で検索しない） ---- */
@@ -224,6 +301,12 @@ function setupAuthSystem() {
 
   report.push('設定: ' + addedSettings + ' 件の既定値を追加しました。');
   report.push('プラン: ' + (addedPlan ? '見本を1行追加しました（Price ID を入れて enabled=TRUE にしてください）。' : '既存の行を維持しました。'));
+
+  var addedConsent = ensureConsentItems_(consentSheet);
+  var addedConfirm = ensureConfirmSections_(confirmSheet);
+
+  report.push('同意項目: ' + (addedConsent > 0 ? addedConsent + ' 件の初期データを追加しました。' : '既存の行を維持しました。'));
+  report.push('確認表: ' + (addedConfirm > 0 ? addedConfirm + ' 行の初期データを追加しました。' : '既存の行を維持しました。'));
 
   clearSettingsCache_();
 
