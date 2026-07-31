@@ -17,7 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { check, section, finish, fatal } from '../../apps/tests/helpers/assert.mjs';
+import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { createReadyEnvironment, setSetting, REPO_ROOT } from '../helpers/gas-harness.mjs';
 
 const DOC_IDS = ['terms', 'privacy', 'tokusho'];
@@ -48,7 +48,7 @@ function readPublished(docId) {
 
 function readRepoPage(docId) {
   return readFileSync(
-    resolve(REPO_ROOT, 'legal', docId, 'index.html'),
+    resolve(REPO_ROOT, 'public', 'legal', docId, 'index.html'),
     'utf8',
   ).replace(/\r\n/g, '\n');
 }

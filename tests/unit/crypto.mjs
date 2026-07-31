@@ -8,7 +8,7 @@
 
 import { pbkdf2Sync, createHmac } from 'node:crypto';
 
-import { check, section, finish, fatal } from '../../apps/tests/helpers/assert.mjs';
+import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { createGasEnvironment } from '../helpers/gas-harness.mjs';
 
 try {

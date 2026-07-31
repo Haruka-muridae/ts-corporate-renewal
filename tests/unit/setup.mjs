@@ -7,7 +7,7 @@
  * 管理者レコードができると、どれが本物か分からなくなる。
  */
 
-import { check, section, finish, fatal } from '../../apps/tests/helpers/assert.mjs';
+import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { createGasEnvironment } from '../helpers/gas-harness.mjs';
 
 try {

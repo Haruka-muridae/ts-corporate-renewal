@@ -39,6 +39,13 @@ const SUITES = [
   { name: 'legal', file: 'unit/legal.mjs', kind: 'unit' },
   { name: 'setup', file: 'unit/setup.mjs', kind: 'unit' },
   { name: 'frontend', file: 'unit/frontend.mjs', kind: 'unit' },
+  { name: 'event-pricing', file: 'unit/event-pricing.mjs', kind: 'unit' },
+  { name: 'event-mail', file: 'unit/event-mail.mjs', kind: 'unit' },
+  { name: 'event-application', file: 'unit/event-application.mjs', kind: 'unit' },
+  { name: 'event-webhook', file: 'unit/event-webhook.mjs', kind: 'unit' },
+  { name: 'event-result', file: 'unit/event-result.mjs', kind: 'unit' },
+  { name: 'event-admin', file: 'unit/event-admin.mjs', kind: 'unit' },
+  { name: 'event-config', file: 'unit/event-config.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
 

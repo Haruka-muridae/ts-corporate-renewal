@@ -41,15 +41,23 @@ const MIME_BY_EXT = {
 /*
  * サーバーを起動する。
  *
- * rootDir … 配信するディレクトリ（リポジトリのルート）
+ * rootDir … 配信するディレクトリ（サイトの配信ルート = public/）
  * port    … 使用ポート
+ * mounts  … 配信ルートの外を特定のURL接頭辞で足すとき用。
+ *           { '/tests/': 'C:/.../tests' } のように書く。
+ *           テスト用のフィクスチャは public/ に置かない（公開物ではない）ため、
+ *           その分だけここで足す。
  *
  * 戻り値: { origin, close(), notFound }
  *   notFound … 404 になったパスの記録（リンク切れの検出に使う）
  */
-export async function startStaticServer({ rootDir, port }) {
+export async function startStaticServer({ rootDir, port, mounts = {} }) {
   const notFound = [];
   const base = normalize(resolve(rootDir));
+  const mountList = Object.entries(mounts).map(([prefix, dir]) => ({
+    prefix,
+    dir: normalize(resolve(dir)),
+  }));
 
   const server = createServer(async (req, res) => {
     try {
@@ -67,10 +75,15 @@ export async function startStaticServer({ rootDir, port }) {
         path += 'index.html';
       }
 
-      const target = normalize(resolve(base, `.${path}`));
+      /* 足したディレクトリに該当すればそちらから読む。 */
+      const mount = mountList.find((entry) => path.startsWith(entry.prefix));
+      const root = mount ? mount.dir : base;
+      const relative = mount ? path.slice(mount.prefix.length) : path.slice(1);
+
+      const target = normalize(resolve(root, `./${relative}`));
 
       /* 配信ディレクトリの外は返さない。 */
-      if (!target.startsWith(base)) {
+      if (!target.startsWith(root)) {
         res.writeHead(403).end('forbidden');
         return;
       }

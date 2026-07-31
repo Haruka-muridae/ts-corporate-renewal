@@ -23,8 +23,23 @@ import { launchChrome } from './chrome.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/* リポジトリのルート（apps/tests/helpers から3つ上）。 */
-export const REPO_ROOT = resolve(here, '../../..');
+/*
+ * 配信ルート（public/apps/tests/helpers から3つ上 = public/）。
+ * 静的サーバーはここを `/` として配信する。本番の
+ * https://tsam-ai.com/ が public/ を配信するのと同じ対応になる。
+ */
+export const SITE_ROOT = resolve(here, '../../..');
+
+/* リポジトリのルート（public/ のさらに1つ上）。package.json などを読むときに使う。 */
+export const REPO_ROOT = resolve(here, '../../../..');
+
+/*
+ * 配信ルートの外にあるテスト資材を、URL上だけ足す。
+ * フィクスチャは公開物ではないため public/ には置かない。
+ */
+export const TEST_MOUNTS = {
+  '/tests/': resolve(REPO_ROOT, 'tests'),
+};
 
 /*
  * スイートごとの既定ポート。
@@ -56,7 +71,7 @@ export async function withBrowser(fn, { suiteIndex = 0 } = {}) {
   let page = null;
 
   try {
-    server = await startStaticServer({ rootDir: REPO_ROOT, port: ports.http });
+    server = await startStaticServer({ rootDir: SITE_ROOT, port: ports.http, mounts: TEST_MOUNTS });
     page = await launchChrome({ port: ports.cdp });
 
     return await fn({
@@ -92,7 +107,7 @@ export async function withBrowser(fn, { suiteIndex = 0 } = {}) {
 export async function startSuite(suiteIndex = 0) {
   const ports = resolvePorts(suiteIndex);
 
-  const server = await startStaticServer({ rootDir: REPO_ROOT, port: ports.http });
+  const server = await startStaticServer({ rootDir: SITE_ROOT, port: ports.http, mounts: TEST_MOUNTS });
 
   let page;
 

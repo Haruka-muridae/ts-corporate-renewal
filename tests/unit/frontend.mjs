@@ -5,7 +5,7 @@
  * 実際の画面操作は tests/browser/auth-screens.mjs が担当する。
  */
 
-import { check, section, finish, fatal } from '../../apps/tests/helpers/assert.mjs';
+import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 
 /*
  * location と history を差し替えてから読み込む。
@@ -29,10 +29,10 @@ globalThis.history = {
 };
 
 try {
-  const config = await import('../../auth/config.js');
-  const ui = await import('../../auth/ui.js');
-  const session = await import('../../auth/session.js');
-  const { PORTAL_APPS } = await import('../../auth/apps.js');
+  const config = await import('../../public/auth/config.js');
+  const ui = await import('../../public/auth/ui.js');
+  const session = await import('../../public/auth/session.js');
+  const { PORTAL_APPS } = await import('../../public/auth/apps.js');
 
   /* ---------------------------------------------------------------- */
   section('設定');
@@ -269,7 +269,7 @@ try {
   /* ---------------------------------------------------------------- */
   section('KeyStore（APIキーの保管庫）');
 
-  const keystore = await import('../../auth/keystore.js');
+  const keystore = await import('../../public/auth/keystore.js');
   const { KeyStore } = keystore;
 
   check('保存キーは tsam-api-keys', keystore.KEYSTORE_STORAGE_KEY === 'tsam-api-keys');
