@@ -233,3 +233,46 @@
 .confirm__actions + .confirm__note {
   text-align: center;
 }
+
+/* ------------------------------------------------------------------ */
+/* 決済完了・失敗 */
+
+.result-receipt {
+  margin-top: var(--content-space);
+  padding: 24px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-card);
+  background-color: var(--color-off-white);
+  text-align: center;
+}
+
+.result-receipt__label {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.result-receipt__number {
+  margin-top: 8px;
+  color: var(--c-main);
+  font-family: var(--font-num), var(--font-ja);
+  font-size: clamp(1.5rem, 1.1rem + 1.8vw, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.result-receipt__note {
+  margin-top: 12px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+/* 完了ページは枠が続くため、間隔をそろえる。 */
+.result-receipt + .event-outline__list {
+  margin-top: var(--content-space);
+}
+
+.policy-box + .policy-box {
+  margin-top: 24px;
+}
