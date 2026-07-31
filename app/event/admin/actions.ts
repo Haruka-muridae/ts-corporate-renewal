@@ -41,7 +41,27 @@ export async function login(
 
     await saveSession(session);
   } catch (error) {
-    return { error: (error as Error).message };
+    /*
+     * 画面に出すのは、利用者が対処できる文言だけにする。
+     * 設定の不備や通信の失敗は、そのまま出しても利用者には直せず、
+     * 内部の事情（英語の例外文やライブラリの都合）が漏れる。
+     * 詳細はサーバーのログにだけ残す。
+     */
+    const failure = error as Error & { isConfigurationError?: boolean };
+    const isCredentialError =
+      failure.message === "メールアドレスまたはパスワードが正しくありません" ||
+      failure.message === "メールアドレスとパスワードを入力してください";
+
+    if (!isCredentialError) {
+      console.error(`[admin-login] ログイン処理に失敗: ${failure.message}`, failure.cause ?? "");
+
+      return {
+        error:
+          "ログインできませんでした。設定に問題がある可能性があります。管理者へご連絡ください。",
+      };
+    }
+
+    return { error: failure.message };
   }
 
   redirect("/event/admin/");

@@ -45,6 +45,7 @@ const SUITES = [
   { name: 'event-webhook', file: 'unit/event-webhook.mjs', kind: 'unit' },
   { name: 'event-result', file: 'unit/event-result.mjs', kind: 'unit' },
   { name: 'event-admin', file: 'unit/event-admin.mjs', kind: 'unit' },
+  { name: 'event-config', file: 'unit/event-config.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
 
