@@ -227,6 +227,15 @@ class FakeFolder {
   getFilesByName(name) {
     return makeIterator(this.files.filter((file) => file.name === name));
   }
+
+  /* プレビューHTMLの書き出しで使う。 */
+  createFile(name, content, mimeType) {
+    const file = new FakeFile(`file-${randomUUID()}`, name, mimeType);
+    file.content = String(content);
+    file.parent = this;
+    this.files.push(file);
+    return file;
+  }
 }
 
 class FakeFile {
@@ -235,6 +244,20 @@ class FakeFile {
     this.name = name;
     this.mimeType = mimeType;
     this.parent = null;
+    this.content = '';
+  }
+
+  setContent(value) {
+    this.content = String(value);
+    return this;
+  }
+
+  getBlob() {
+    return { getDataAsString: () => this.content };
+  }
+
+  getUrl() {
+    return `https://drive.example/file/${this.id}`;
   }
 
   getId() {
@@ -258,6 +281,23 @@ class FakeFile {
     this.parent = folder;
     return this;
   }
+}
+
+/* ID からフォルダを探す。数が少ないため木をたどるだけで足りる。 */
+function findFolderById(folder, id) {
+  if (folder.id === id) {
+    return folder;
+  }
+
+  for (const child of folder.folders) {
+    const found = findFolderById(child, id);
+
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
 }
 
 function makeIterator(items) {
@@ -375,9 +415,21 @@ export function createGasEnvironment({ properties = {}, now = Date.UTC(2026, 6, 
 
         return file;
       },
+      getFolderById: (id) => {
+        const found = findFolderById(rootFolder, id);
+
+        if (!found) {
+          throw new Error(`No folder: ${id}`);
+        }
+
+        return found;
+      },
     },
 
-    MimeType: { GOOGLE_SHEETS: 'application/vnd.google-apps.spreadsheet' },
+    MimeType: {
+      GOOGLE_SHEETS: 'application/vnd.google-apps.spreadsheet',
+      HTML: 'text/html',
+    },
 
     /* --- Utilities --- */
     Utilities: {

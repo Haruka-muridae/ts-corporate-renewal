@@ -853,6 +853,109 @@ try {
   );
 
   /* ---------------------------------------------------------------- */
+  section('法務ページの表：四辺の罫線が閉じること');
+
+  /*
+   * 罫線は行の重なりを避けるため、隣り合うセルで片側ずつ落としてある。
+   * その「落とす側」を1行ぶん間違えると、表の外周のどこかが開く。
+   * 実際、768px 以上で1行目の td から上罫線が落ち、右上角が欠けていた。
+   *
+   * 見た目の欠けを機械で捉えるため、
+   *   1. 全セルを「同じ高さに並んでいる行」へまとめ直し
+   *   2. 最上段の各セルに上罫線、最下段に下罫線
+   *   3. 各段の左端に左罫線、右端に右罫線
+   *   4. 最上段・最下段の幅の合計が表の幅を覆っているか
+   * を確かめる。4 があるので「一部のセルにしか罫線が無い」状態も落ちる。
+   *
+   * 320px では th と td が積み上がるため段の数が変わる。
+   * 段の作り方を実測に任せることで、どちらの組み方でも同じ判定になる。
+   */
+  const BORDER_PROBE = `(() => {
+    const table = document.querySelector('.auth-legal__table');
+
+    if (!table) {
+      return JSON.stringify({ hasTable: false });
+    }
+
+    const box = table.getBoundingClientRect();
+    const cells = [...table.querySelectorAll('th, td')];
+
+    const drawn = (el, side) => {
+      const style = getComputedStyle(el);
+      return parseFloat(style['border' + side + 'Width']) > 0
+        && style['border' + side + 'Style'] !== 'none';
+    };
+
+    /* 同じ高さに並ぶセルを1段としてまとめる。 */
+    const lines = [];
+
+    for (const cell of cells) {
+      const rect = cell.getBoundingClientRect();
+      const line = lines.find((item) => Math.abs(item.top - rect.top) < 1.5);
+
+      if (line) {
+        line.cells.push({ cell, rect });
+      } else {
+        lines.push({ top: rect.top, cells: [{ cell, rect }] });
+      }
+    }
+
+    lines.sort((a, b) => a.top - b.top);
+    lines.forEach((line) => line.cells.sort((a, b) => a.rect.left - b.rect.left));
+
+    const first = lines[0];
+    const last = lines[lines.length - 1];
+    const span = (line) => line.cells.reduce((sum, item) => sum + item.rect.width, 0);
+
+    return JSON.stringify({
+      hasTable: true,
+      lines: lines.length,
+      topDrawn: first.cells.every((item) => drawn(item.cell, 'Top')),
+      bottomDrawn: last.cells.every((item) => drawn(item.cell, 'Bottom')),
+      leftDrawn: lines.every((line) => drawn(line.cells[0].cell, 'Left')),
+      rightDrawn: lines.every((line) => drawn(line.cells[line.cells.length - 1].cell, 'Right')),
+      topCovered: Math.abs(span(first) - box.width) < 2,
+      bottomCovered: Math.abs(span(last) - box.width) < 2,
+    });
+  })()`;
+
+  const BORDER_WIDTHS = [320, 375, 768, 1024, 1440];
+
+  for (const [path] of legalPages) {
+    for (const width of BORDER_WIDTHS) {
+      await page.setViewport(width, 900);
+      await page.goto(`${origin}${path}`, 700);
+
+      const probe = JSON.parse(await page.evaluate(BORDER_PROBE));
+
+      if (!probe.hasTable) {
+        check(`${path} ${width}px: 表を持たないページ（条単位のため）`, true);
+        continue;
+      }
+
+      check(
+        `${path} ${width}px: 上辺が端から端まで閉じている`,
+        probe.topDrawn && probe.topCovered,
+        JSON.stringify(probe),
+      );
+
+      check(
+        `${path} ${width}px: 下辺が端から端まで閉じている`,
+        probe.bottomDrawn && probe.bottomCovered,
+        JSON.stringify(probe),
+      );
+
+      check(
+        `${path} ${width}px: 左右の辺が全段で閉じている`,
+        probe.leftDrawn && probe.rightDrawn,
+        JSON.stringify(probe),
+      );
+    }
+  }
+
+  await page.clearViewport();
+
+  /* ---------------------------------------------------------------- */
   section('「準備中」表記が残っていないこと');
 
   for (const path of ['/login/', '/pricing/']) {

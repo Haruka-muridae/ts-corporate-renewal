@@ -16,10 +16,10 @@ Google アカウントと Stripe アカウントの操作が必要なため、�
 | # | 作業 | 完了 | 参照 |
 | --- | --- | --- | --- |
 | A-1 | <https://script.google.com/> で新規プロジェクトを作成（例: `TSAM AI Auth`） | ☐ | AUTH_SETUP.md 手順1 |
-| A-2 | `gas-auth/*.gs` の18ファイルを貼り付ける（拡張子を除いた名前で） | ☐ | gas-auth/README.md |
+| A-2 | `gas-auth/*.gs` の21ファイルを貼り付ける（拡張子を除いた名前で） | ☐ | gas-auth/README.md |
 | A-3 | `appsscript.json` を `gas-auth/appsscript.json` の内容で置き換える | ☐ | AUTH_SETUP.md 手順1 |
 | A-4 | `setupAuthSystem()` を実行し、4種類の権限を承認する | ☐ | AUTH_SETUP.md 手順2 |
-| A-5 | Drive の `マイドライブ/TSAM AI/Auth/` に3ファイルができたことを確認 | ☐ | AUTH_SETUP.md 手順2 |
+| A-5 | Drive の `マイドライブ/TSAM AI/Auth/` に4ファイルができたことを確認 | ☐ | AUTH_SETUP.md 手順2 |
 | A-6 | 認証設定シートの `APP_BASE_URL` に `https://tsam-ai.com/` を入力 | ☐ | AUTH_SETUP.md 手順3 |
 | A-7 | `benchmarkPasswordHashing()` を実行し、`PBKDF2_ITERATIONS` を決める | ☐ | AUTH_SETUP.md 手順9 |
 | A-8 | ウェブアプリとしてデプロイ（実行=自分／アクセス=全員） | ☐ | AUTH_SETUP.md 手順4 |
@@ -30,9 +30,16 @@ Google アカウントと Stripe アカウントの操作が必要なため、�
 > **A-2 の注意:** 既存の `gas/`（お気に入り機能）とは **別プロジェクト**にすること。
 > 同じプロジェクトへ入れると `CONFIG` などの名前が衝突し、両方が壊れる。
 
+> **A-5 でできる4ファイル:** `TSAM AI ユーザー管理` / `TSAM AI 認証ログ` /
+> `TSAM AI 認証設定` / `TSAM AI 法務文書`
+>
+> `TSAM AI 法務文書` には制定時点の3文書（利用規約・プライバシーポリシー・特商法表記）が
+> 投入される。以降、`/legal/` の条文はここが正本になる。
+
 > **A-4 で自動生成される Script Properties:**
 > `AUTH_ROOT_FOLDER_ID` / `AUTH_FOLDER_ID` / `AUTH_USER_SPREADSHEET_ID` /
 > `AUTH_LOG_SPREADSHEET_ID` / `AUTH_CONFIG_SPREADSHEET_ID` /
+> `AUTH_LEGAL_SPREADSHEET_ID` /
 > `SESSION_SECRET` / `TOKEN_SECRET` / `PASSWORD_PEPPER` / `STRIPE_WEBHOOK_URL_KEY`
 >
 > 再実行しても既存の値は上書きされない。バックアップを取ること。
@@ -137,14 +144,37 @@ E がすべて成功したあとに実施する。
 
 ---
 
-## G. 公開後も残る判断事項
+## G. 法務ページの公開（条文を直すときだけ）
+
+`/legal/` の3ページはスプレッドシート「TSAM AI 法務文書」から生成される。
+**条文を直す予定が無いあいだ、この節の作業は不要**（ページは既に公開済み）。
+
+| # | 作業 | 完了 | 参照 |
+| --- | --- | --- | --- |
+| G-1 | GitHub で Fine-grained personal access token を作成（対象リポジトリのみ／Contents: Read and write のみ） | ☐ | docs/instructions/2026-07-31-github-token.md |
+| G-2 | Script Properties に `GITHUB_TOKEN` として保存 | ☐ | 同上 §2 |
+| G-3 | 認証設定シートの `GITHUB_REPO` / `GITHUB_BRANCH` を確認 | ☐ | 同上 §3 |
+| G-4 | 条文を「TSAM AI 法務文書」で編集する | ☐ | docs/specs/legal-cms-spec-v1.md §3 |
+| G-5 | `previewLegalDocs()` で見た目を確認する | ☐ | 同上 §5-1 |
+| G-6 | 実質改訂なら `meta` の `version` を手で上げる | ☐ | 同上 §5-3 |
+| G-7 | `publishLegalDocs()` を実行する | ☐ | 同上 §5-2 |
+| G-8 | 版を上げた場合、認証設定シートの `TOS_VERSION` も更新する | ☐ | 同上 §5-5 |
+
+> **`legal/*/index.html` を手で編集しないこと。** 次の公開で上書きされる。
+
+> **G-8 を忘れると、改訂前の版で同意した申込みを受け付け続ける。**
+> `publishLegalDocs()` は版が上がったことを検知して実行ログに警告を出す。
+
+---
+
+## H. 公開後も残る判断事項
 
 コードでは決められないもの。運用開始前に方針を決めること。
 
 | 項目 | 決めること | 参照 |
 | --- | --- | --- |
 | Portal に並べるアプリ | どのアプリを本番として公開するか。`auth/apps.js` は空のまま | auth/apps.js |
-| 利用規約・プライバシーポリシー | 公開URL。確定するまで「準備中」表示のまま | README.md |
+| 法務文書の弁護士確認 | 13項目の指摘への対応。条文の修正は G を経由する | docs/legal-review-notes.md |
 | `past_due` の扱い | 支払い未確認の利用者に使わせるか（既定は使わせない） | AUTH_SETUP.md |
 | Webhook の構成 | 構成A（手軽）か構成B（署名検証あり）か | STRIPE_SETUP.md 手順4 |
 | `PBKDF2_ITERATIONS` | 実測に基づく値。ログイン1回 0.5〜1.5 秒が目安 | SECURITY_NOTES.md 2 |

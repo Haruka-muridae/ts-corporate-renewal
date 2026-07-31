@@ -75,6 +75,29 @@ TSアセットマネジメント合同会社の静的なコーポレートサイ
 静的ホスティングであるがゆえの限界と、パスワードハッシュの強度について
 正直に記載しています。
 
+### 法務ページ（`/legal/`）は生成物です
+
+`legal/terms/index.html` `legal/privacy/index.html` `legal/tokusho/index.html` は、
+スプレッドシート「TSAM AI 法務文書」から生成されます。
+
+> **これらのHTMLを直接編集しないでください。**
+> 次に `publishLegalDocs()` が実行された時点で、編集内容は失われます。
+> 条文を直すときはスプレッドシートを直し、公開操作を行ってください。
+
+各ファイルの冒頭にも同じ趣旨の注記が入っています。
+手編集を含む変更をレビューで見つけた場合は、取り込まずに差し戻してください。
+
+| 目的 | 手段 |
+| --- | --- |
+| 条文を直す | スプレッドシート「TSAM AI 法務文書」を編集 |
+| 見た目を確かめる | GAS エディタで `previewLegalDocs()` |
+| 公開する | GAS エディタで `publishLegalDocs()` |
+
+仕組みと書式規約は [docs/specs/legal-cms-spec-v1.md](./docs/specs/legal-cms-spec-v1.md)、
+トークンの用意は [docs/instructions/2026-07-31-github-token.md](./docs/instructions/2026-07-31-github-token.md) にあります。
+
+`docs/legal-source/*.md` は初期移行の原本（アーカイブ）で、現在の正ではありません。
+
 ### `/apps/` との関係
 
 `/apps/` は **テスト環境** として維持しています。今回の本番認証系とは独立しており、

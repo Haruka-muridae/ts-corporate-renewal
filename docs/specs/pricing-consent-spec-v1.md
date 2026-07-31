@@ -206,11 +206,20 @@ GET {apiUrl}?action=listConsentConfig
 
 ## 6. 法務ページ(/legal/)
 
-| パス | 内容 | 原稿 |
+| パス | 内容 | 初期移行の原本 |
 |------|------|------|
 | `/legal/terms/` | 利用規約（全23条） | `docs/legal-source/legal-terms-v1.0.md` |
 | `/legal/privacy/` | プライバシーポリシー（全16節） | `docs/legal-source/legal-privacy-v1.0.md` |
 | `/legal/tokusho/` | 特定商取引法に基づく表記 | `docs/legal-source/legal-tokusho-v1.0.md` |
+
+> **2026年7月31日以降、この3ページは生成物です。**
+> 条文の正本はスプレッドシート「TSAM AI 法務文書」であり、
+> `legal/*/index.html` を手で編集してはいけません。
+> 生成と公開の仕組みは [legal-cms-spec-v1.md](./legal-cms-spec-v1.md) を参照してください。
+> 上表の md は初期移行の原本（アーカイブ）です。
+>
+> 規約を改訂したときは `TOS_VERSION`（§5）も上げること。
+> `publishLegalDocs()` が版の変化を検知して警告を出します。
 
 - 静的HTML。`auth.css` の共通スタイルに準拠（白基調・読みやすい本文幅・スマホ優先）
 - 各ページ冒頭に「2026年7月30日 制定 ／ Version 1.0」を表示

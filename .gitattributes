@@ -14,3 +14,10 @@ apps/vendor/supabase-auth-js-2.110.8.esm.js -text
 
 apps/vendor/LICENSE-supabase-auth-js.txt text eol=lf
 apps/vendor/NOTICE-supabase-auth-js.md text eol=lf
+
+# 法務ページはスプレッドシートから生成し、GitHub API 経由で LF のまま
+# コミットされる。作業ツリーも LF に固定しておかないと、改行だけが違う
+# 生成物と判定され、変更が無くても毎回コミットが積まれる。
+legal/terms/index.html text eol=lf
+legal/privacy/index.html text eol=lf
+legal/tokusho/index.html text eol=lf

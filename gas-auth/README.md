@@ -33,6 +33,9 @@ Stripe の設定は [../STRIPE_SETUP.md](../STRIPE_SETUP.md)、
 | `Webhook.gs` | Webhook 受信、真正性確認、冪等性、イベント処理 |
 | `Mailer.gs` | メール送信 |
 | `MailTemplates.gs` | メール本文のひな形（文面を直すのはここだけ） |
+| `Consent.gs` | 申込み前の同意項目・確認表、同意のサーバー側検証 |
+| `Legal.gs` | 法務ページの生成と公開（`publishLegalDocs` / `previewLegalDocs`） |
+| `LegalSeed.gs` | 法務文書シートの初期データ（制定時点の3文書。移行用の種） |
 | `Logs.gs` | 認証ログ・管理操作ログ・エラーログ |
 | `Tests.gs` | 実環境でしか測れないこと（速度計測、通し確認） |
 | `appsscript.json` | マニフェスト（スコープ、Webアプリ設定） |
@@ -104,9 +107,16 @@ POST /exec?path=stripe-webhook&k=＜合言葉＞
 | `selfTestAuthFlow()` | 通し確認（作った行は自動削除） | あり |
 | `cleanupExpiredSessions()` | 古いセッション行の削除 | あり |
 | `cleanupExpiredTokens()` | 古いトークン行の削除 | あり |
+| `previewLegalDocs()` | 法務ページを Drive へ書き出す（公開しない） | Drive のみ |
+| `publishLegalDocs()` | 法務ページを生成して GitHub の `main` へコミット | あり／**外部** |
 
 `printAdminSetupLink()` は URL にトークンを含みます。
 **使用後は Apps Script の実行ログを削除してください。**
+
+`publishLegalDocs()` は **リポジトリを書き換える唯一の関数**です。
+セル編集での自動公開（`onEdit` トリガー）は意図的に設けていません。
+書きかけの条文が本番へ出るのを防ぐためです。
+仕組みは [../docs/specs/legal-cms-spec-v1.md](../docs/specs/legal-cms-spec-v1.md) を参照してください。
 
 ---
 
