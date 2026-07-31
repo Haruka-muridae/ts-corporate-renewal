@@ -24,7 +24,12 @@
 <body class="auth-page">
   <a class="skip-link" href="#main-content">本文へスキップ</a>
 
-  <main id="main-content" class="auth-main" tabindex="-1">
+  <!--
+    Portal だけは上端から詰める。
+    他の画面は入力欄が数個の縦センタリングで収まるが、
+    Portal は一覧が伸びるため、中央寄せだと上に大きな空白ができる。
+  -->
+  <main id="main-content" class="auth-main auth-main--top" tabindex="-1">
     <div class="auth-shell auth-shell--wide">
       <!--
         保護対象の内容は、サーバーがセッションを有効と答えるまで出さない。
@@ -79,14 +84,20 @@
 
         <section class="auth-account" aria-labelledby="portal-account-title">
           <h2 class="auth-account__title" id="portal-account-title">アカウント情報</h2>
-          <p class="auth-account__line">
-            <span id="portal-account-email"></span>
-            <span class="auth-account__separator" aria-hidden="true">／</span>
-            <span id="portal-account-subscription"></span>
-          </p>
-          <p class="auth-account__action">
-            <a href="../password/reset/">パスワードを変更する</a>
-          </p>
+          <dl class="auth-account__list">
+            <div>
+              <dt>メールアドレス</dt>
+              <dd id="portal-account-email"></dd>
+            </div>
+            <div>
+              <dt>ご契約の状態</dt>
+              <dd id="portal-account-subscription"></dd>
+            </div>
+            <div>
+              <dt>パスワード</dt>
+              <dd><a href="../password/reset/">パスワードを変更する</a></dd>
+            </div>
+          </dl>
         </section>
       </div>
 

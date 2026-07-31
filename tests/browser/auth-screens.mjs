@@ -877,11 +877,31 @@ try {
   );
 
   check(
-    'メールと契約状態が1行に並ぶ',
+    '項目名と値が3組そろう',
+    (await page.evaluate(`
+      JSON.stringify([...document.querySelectorAll(".auth-account dt")].map((dt) => dt.textContent))
+    `)) === JSON.stringify(['メールアドレス', 'ご契約の状態', 'パスワード']),
+    await page.evaluate(`
+      JSON.stringify([...document.querySelectorAll(".auth-account dt")].map((dt) => dt.textContent))
+    `),
+  );
+
+  check(
+    '項目名と値は縦に並ぶ（横並びにしない）',
+    await page.evaluate(`
+      [...document.querySelectorAll(".auth-account dt")].every((dt) => {
+        const dd = dt.nextElementSibling;
+        return dd.getBoundingClientRect().top > dt.getBoundingClientRect().top + 1;
+      })
+    `),
+  );
+
+  check(
+    'メールアドレスと契約状態も上下に分かれる',
     await page.evaluate(`(() => {
       const email = document.getElementById("portal-account-email").getBoundingClientRect();
       const state = document.getElementById("portal-account-subscription").getBoundingClientRect();
-      return Math.abs(email.top - state.top) < 2 && state.left > email.left;
+      return state.top > email.top + 1;
     })()`),
   );
 
@@ -896,6 +916,17 @@ try {
     await page.evaluate(`
       [...document.querySelectorAll(".auth-account a")].some(
         (a) => a.getAttribute("href") === "../password/reset/")
+    `),
+  );
+
+  check(
+    'カードの枠線と角丸は現行のまま',
+    await page.evaluate(`(() => {
+      const s = getComputedStyle(document.querySelector(".auth-account"));
+      return s.borderStyle === "solid" && s.borderTopWidth === "1px" && s.borderTopLeftRadius === "6px";
+    })()`),
+    await page.evaluate(`
+      getComputedStyle(document.querySelector(".auth-account")).borderTopLeftRadius
     `),
   );
 
@@ -1033,7 +1064,50 @@ try {
         return bar.left >= -1 && bar.right <= document.documentElement.clientWidth + 1;
       })()`),
     );
+
+    /*
+     * 上部余白の再発検知。
+     *
+     * 縦センタリングを継承していると、内容が画面の高さより低いあいだ
+     * ヘッダーバーが画面の1/3ほど下から始まる。
+     * バーの上端がビューポート上端に接していることを、座標で押さえる。
+     */
+    check(
+      `${width}px: ヘッダーバーがビューポート上端に接している`,
+      await page.evaluate(`
+        Math.abs(document.querySelector(".auth-portal-bar").getBoundingClientRect().top) < 1
+      `),
+      await page.evaluate(`
+        document.querySelector(".auth-portal-bar").getBoundingClientRect().top
+      `),
+    );
   }
+
+  await page.clearViewport();
+
+  /*
+   * 内容が画面の高さに満たないときこそ、中央寄せの影響が出る。
+   * アプリを入れずに高い画面で開き、それでも上端から始まることを見る。
+   */
+  await page.setViewport(1024, 1400);
+  await page.goto(`${origin}/portal/`, 1200);
+
+  check(
+    '内容が短くても上端から詰める（縦センタリングを継承しない）',
+    await page.evaluate(`
+      Math.abs(document.querySelector(".auth-portal-bar").getBoundingClientRect().top) < 1
+    `),
+    await page.evaluate(`
+      document.querySelector(".auth-portal-bar").getBoundingClientRect().top
+    `),
+  );
+
+  check(
+    'main の縦揃えが上端になっている',
+    (await page.evaluate(`
+      getComputedStyle(document.getElementById("main-content")).justifyContent
+    `)) === 'flex-start',
+  );
 
   await page.clearViewport();
 
@@ -1105,6 +1179,17 @@ try {
 
     const actual = await page.evaluate('document.querySelector("h1")?.textContent ?? ""');
     check(`${path} の見出しが「${heading}」`, actual === heading, actual);
+
+    /* 上端詰めは Portal だけの扱い。他の画面の縦センタリングは変えない。 */
+    check(
+      `${path} は縦センタリングのまま`,
+      (await page.evaluate(`
+        getComputedStyle(document.getElementById("main-content")).justifyContent
+      `)) === 'center',
+      await page.evaluate(`
+        getComputedStyle(document.getElementById("main-content")).justifyContent
+      `),
+    );
 
     await page.setViewport(320, 900);
     await page.goto(`${origin}${path}`, 800);
