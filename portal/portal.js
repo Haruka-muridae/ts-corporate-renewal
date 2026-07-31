@@ -33,8 +33,55 @@ const accountEmailElement = document.getElementById('portal-account-email');
 const accountSubscriptionElement = document.getElementById('portal-account-subscription');
 const logoutButton = document.getElementById('portal-logout');
 const messageElement = document.getElementById('portal-message');
+const apiKeyBannerElement = document.getElementById('portal-api-key-banner');
+const apiKeyLinkElement = document.getElementById('portal-api-key-link');
 
 const message = createMessageArea(messageElement);
+
+/*
+ * ------------------------------------------------------------------
+ * APIキー未設定バナー（今は出さない）
+ * ------------------------------------------------------------------
+ * キー管理画面が未実装のため、遷移先が無い。
+ * 「未設定です」と言いながら設定できない画面は、利用者を行き止まりへ
+ * 連れて行くだけなので、行き先が決まるまで出さない。
+ *
+ * 有効化の手順は2つだけ:
+ *   1. キー管理画面を作り、そのパスを API_KEY_SETTINGS_PATH に入れる
+ *   2. verifySession の応答に「キー設定済みか」を載せる
+ *      （portal.js 側は user.geminiApiKeyConfigured を見る）
+ *
+ * パスが空のあいだは shouldShowApiKeyBanner() が必ず false を返すため、
+ * フラグの消し忘れで行き先の無いリンクが出ることはない。
+ * 詳細は docs/specs/portal-spec-v1.md §5。
+ * ------------------------------------------------------------------
+ */
+const API_KEY_SETTINGS_PATH = '';
+
+/**
+ * バナーを出すかどうか。
+ *
+ * サーバーが「設定済みか」を答えられない段階では出さない。
+ * 未設定と決めつけて警告すると、設定済みの利用者にも出てしまう。
+ */
+export function shouldShowApiKeyBanner(user) {
+  /* 遷移先が無いうちは、どんな状態でも出さない。 */
+  if (API_KEY_SETTINGS_PATH === '') {
+    return false;
+  }
+
+  /* サーバーが答えていない（undefined）ときも出さない。 */
+  return user?.geminiApiKeyConfigured === false;
+}
+
+function renderApiKeyBanner(user) {
+  if (!shouldShowApiKeyBanner(user)) {
+    return;
+  }
+
+  apiKeyLinkElement.href = `${rootPath()}${API_KEY_SETTINGS_PATH}`;
+  apiKeyBannerElement.hidden = false;
+}
 
 /* 契約状態の表示。内部値をそのまま出さない。 */
 const SUBSCRIPTION_LABELS = Object.freeze({
@@ -57,28 +104,52 @@ function describeSubscription(user) {
   return SUBSCRIPTION_LABELS[String(user.subscriptionStatus ?? '').toLowerCase()] ?? 'ご利用中';
 }
 
-/* アプリのカードを作る。文字列はすべて textContent で入れる。 */
+/*
+ * アイコンに出す文字。
+ *
+ * apps.js に icon が無ければアプリ名の1文字目を使う。
+ * 名前があればアイコンは必ず作れるため、欠けた枠が並ぶことはない。
+ */
+function appIconText(app) {
+  const icon = String(app.icon ?? '').trim();
+
+  return icon !== '' ? icon : String(app.name ?? '').trim().slice(0, 1);
+}
+
+/*
+ * アプリのカードを作る。文字列はすべて textContent で入れる。
+ *
+ * カード全体を1つのリンクにする。名前・説明・アイコンのどこを押しても
+ * 同じ場所へ行くため、「開く」だけが当たり判定という状態を作らない。
+ */
 function buildAppCard(app) {
   const item = document.createElement('li');
   item.className = 'auth-app-card';
-
-  const name = document.createElement('h2');
-  name.className = 'auth-app-card__name';
-  name.textContent = app.name;
-  item.append(name);
-
-  if (app.description) {
-    const description = document.createElement('p');
-    description.className = 'auth-app-card__desc';
-    description.textContent = app.description;
-    item.append(description);
-  }
 
   const link = document.createElement('a');
   link.className = 'auth-app-card__link';
   /* サイトのルートからの相対パスとして解決する。 */
   link.href = `${rootPath()}${app.path}`;
-  link.textContent = `${app.name}を開く`;
+
+  const icon = document.createElement('span');
+  icon.className = 'auth-app-card__icon';
+  icon.textContent = appIconText(app);
+  /* 見出しの文字を絵にしただけなので、読み上げでは繰り返さない。 */
+  icon.setAttribute('aria-hidden', 'true');
+  link.append(icon);
+
+  const name = document.createElement('h2');
+  name.className = 'auth-app-card__name';
+  name.textContent = app.name;
+  link.append(name);
+
+  if (app.description) {
+    const description = document.createElement('p');
+    description.className = 'auth-app-card__desc';
+    description.textContent = app.description;
+    link.append(description);
+  }
+
   item.append(link);
 
   return item;
@@ -109,6 +180,7 @@ function render(user) {
     badgeElement.hidden = false;
   }
 
+  renderApiKeyBanner(user);
   renderApps();
 
   loadingElement.hidden = true;

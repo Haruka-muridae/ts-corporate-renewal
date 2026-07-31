@@ -434,64 +434,195 @@
 
 /* ---------- Portal ---------- */
 
-.auth-portal-header {
+/*
+ * ヘッダーバー。
+ *
+ * ログイン後の作業画面なので、ブランドブロックは置かず、
+ * 画面名・肩書き・アカウント・ログアウトを1本の帯にまとめる。
+ * アプリの一覧を画面の上のほうへ持ち上げるための構成。
+ *
+ * 320px ではメールアドレスとログアウトが下へ折り返す。
+ * flex-wrap に任せているため、幅ごとの分岐を持たない。
+ */
+.auth-portal-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px 16px;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--c-border);
 }
 
-.auth-portal-header__user {
+.auth-portal-bar__identity {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.auth-portal-bar__title {
+  font-family: var(--font-en);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.auth-portal-bar__account {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.auth-portal-bar__email {
+  min-width: 0;
+  overflow: hidden;
   color: var(--c-text-muted);
   font-size: 0.8125rem;
   line-height: 1.6;
-  word-break: break-all;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.auth-portal-header__actions {
+.auth-portal-bar__logout {
   flex: 0 0 auto;
-}
-
-.auth-portal-header__actions .auth-button {
   width: auto;
-  padding: 8px 14px;
+  margin-top: 0;
+  padding: 7px 14px;
   font-size: 0.8125rem;
 }
 
+/*
+ * 未設定などの注意を促す帯。
+ * 色だけに頼らず、鍵の図と本文の両方で意味を伝える。
+ */
+.auth-portal-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--c-accent);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg-sub);
+}
+
+.auth-portal-banner__icon {
+  flex: 0 0 auto;
+  color: var(--color-gold-text);
+}
+
+.auth-portal-banner__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.auth-portal-banner__action {
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+/* スマホ1列 → 2列 → PC3列。 */
 .auth-apps {
   display: grid;
-  gap: 16px;
+  grid-template-columns: 1fr;
+  gap: 12px;
 }
 
 .auth-app-card {
   display: flex;
+}
+
+/*
+ * カード全体をリンクにする。
+ * 角丸はモックに合わせて 12px。フォームのカード（--radius-card: 6px）
+ * より大きく取り、押せる面であることを形でも示す。
+ */
+.auth-app-card__link {
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  padding: 18px;
+  gap: 8px;
+  align-items: center;
+  padding: 20px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background-color: var(--c-bg);
+  color: inherit;
+  text-align: center;
+  text-decoration: none;
+}
+
+.auth-app-card__link:hover {
+  border-color: var(--c-border-strong);
+  background-color: var(--c-bg-sub);
+}
+
+.auth-app-card__icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background-color: var(--c-bg-sub);
+  color: var(--c-main);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.auth-app-card__name {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.auth-app-card__desc {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+/* アカウント情報。作業の邪魔にならないよう、下部の小さな枠に置く。 */
+.auth-account {
+  margin-top: 28px;
+  padding: 16px 18px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-card);
   background-color: var(--c-bg);
 }
 
-.auth-app-card__name {
-  font-size: 1rem;
+.auth-account__title {
+  margin-bottom: 8px;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
-.auth-app-card__desc {
-  margin-top: 8px;
+.auth-account__line {
   color: var(--c-text-muted);
   font-size: 0.8125rem;
   line-height: 1.8;
+  word-break: break-all;
 }
 
-.auth-app-card__link {
-  margin-top: 14px;
+.auth-account__separator {
+  padding: 0 4px;
+  color: var(--c-border-strong);
+}
+
+.auth-account__action {
+  margin-top: 8px;
   font-size: 0.8125rem;
-  font-weight: 700;
 }
 
 .auth-badge {
@@ -531,6 +662,13 @@
 
 /* ---------- 画面幅 ---------- */
 
+/* 大きめのスマホからは2列。320〜375px は1列のまま。 */
+@media (min-width: 480px) {
+  .auth-apps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 768px) {
   .auth-main {
     padding: 48px 24px 56px;
@@ -544,8 +682,10 @@
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   }
 
+  /* PC は3列固定。auto-fit にすると幅次第で4列になり、カードが細くなる。 */
   .auth-apps {
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
   }
 }
 
