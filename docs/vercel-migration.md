@@ -22,17 +22,20 @@ Vercelへ移せる構成に変更した。
 | `/event/legal.html` | `public/event/legal.html` |
 | `/event/apply` 以降 | Next.jsのルート（`app/event/` 配下。これから実装） |
 
-`next.config.ts` の rewrites は配列で返しているため afterFiles として評価される。
-つまり `app/` 配下のルートが常に優先され、どこにも一致しなかったURLだけが
-`public/` の `index.html` に落ちる。Next側にルートを追加すれば、そのパスは自動的に
-静的ファイルより優先される。
+`next.config.ts` の rewrites は `fallback` で返している。`fallback` は
+「Nextのページ・ルートハンドラ・動的ルートをすべて探したあと」に評価される最後の
+受け皿で、どこにも一致しなかったURLだけが `public/` の `index.html` に落ちる。
+
+配列で返す（`afterFiles`）と、ページより後・**ルートハンドラより先**に評価される。
+その場合 `/event/api/...` のルートハンドラが `index.html` への書き換えに飲み込まれて
+404になる。実際にそれで Webhook が届かなかったため `fallback` にしてある。
 
 ## 2. このブランチで変更したこと
 
 * `next.config.ts`
   * `output: "export"` を削除（サーバー機能を使うため）
   * `images.unoptimized` を削除（Vercelでは最適化が使える）
-  * ディレクトリを `index.html` に解決する rewrites を追加
+  * ディレクトリを `index.html` に解決する rewrites を `fallback` に追加
 * 現行の静的サイト一式を `public/` へ移動
   （`index.html` / `css` / `js` / `assets` / `apps` / `auth` / `event` / `legal` /
   `login` / `logout` / `password` / `payment` / `portal` / `pricing` / favicon類）
@@ -47,7 +50,7 @@ Vercelへ移せる構成に変更した。
     静的サーバーに `mounts` オプションを追加
   * `tests/` から `apps/`・`auth/` を参照していた相対パスを `public/` 経由に修正
 
-テストは全件通っている（`npm test`：857 + 943）。
+テストは全件通っている。
 
 ## 3. 残っている作業（このブランチではまだ行っていない）
 
@@ -77,3 +80,26 @@ Vercelへ移せる構成に変更した。
 * `npm run lint` は141件のエラーを報告するが、これは移行前から同じ（`public/apps/` へ
   移動した既存ファイル由来。ベンダーバンドルやビルド済み成果物を含む）。
   CIが実行するのは `npm test` のみで、こちらは通っている
+
+## 5. Stripe Webhook のエンドポイント
+
+`trailingSlash: true` のため、ルートハンドラは**末尾スラッシュ付き**のURLで受ける。
+スラッシュなしへのPOSTは308リダイレクトになり、Stripe はリダイレクトを追わないため
+通知が届かない。
+
+| 用途 | URL |
+| --- | --- |
+| ローカル | `stripe listen --forward-to http://127.0.0.1:3000/event/api/stripe/webhook/` |
+| 本番 | `https://tsam-ai.com/event/api/stripe/webhook/` |
+
+本番のエンドポイントは Stripe ダッシュボードで登録し、そこで発行される
+`whsec_…` を Vercel の `STRIPE_WEBHOOK_SECRET` に設定する。ローカル用（`stripe listen`
+が表示する値）とは**別の値**になる。
+
+受け取るイベントは次の5種類（仕様書5.3）。
+
+* `checkout.session.completed`
+* `checkout.session.async_payment_succeeded`
+* `checkout.session.async_payment_failed`
+* `checkout.session.expired`
+* `charge.refunded`

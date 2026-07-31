@@ -137,3 +137,52 @@ export declare function attachCheckoutSession(
   paymentId: string,
   sessionId: string,
 ): Promise<PaymentRow | null>;
+
+/* ------------------------------------------------------------------ */
+/* Webhook 用 */
+
+export type WebhookEventRow = {
+  id: string;
+  stripe_event_id: string;
+  event_type: string;
+  received_at: string;
+  processed: boolean;
+  result: string | null;
+};
+
+export declare function insertWebhookEvent(
+  config: SupabaseConfig,
+  input: { stripeEventId: string; eventType: string },
+): Promise<{ row: WebhookEventRow | null; duplicate: boolean }>;
+
+export declare function markWebhookProcessed(
+  config: SupabaseConfig,
+  stripeEventId: string,
+  result: string,
+): Promise<WebhookEventRow | null>;
+
+export declare function findPaymentBySessionId(
+  config: SupabaseConfig,
+  sessionId: string,
+): Promise<PaymentRow | null>;
+
+export declare function findPaymentByPaymentIntentId(
+  config: SupabaseConfig,
+  paymentIntentId: string,
+): Promise<PaymentRow | null>;
+
+export declare function updatePayment(
+  config: SupabaseConfig,
+  paymentId: string,
+  patch: Partial<PaymentRow>,
+): Promise<PaymentRow | null>;
+
+export declare function assignReceiptNumber(
+  config: SupabaseConfig,
+  applicationId: string,
+): Promise<string | null>;
+
+export declare function insertEmailLog(
+  config: SupabaseConfig,
+  input: { applicationId: string; mailType: string; status: string },
+): Promise<{ id: string } | null>;

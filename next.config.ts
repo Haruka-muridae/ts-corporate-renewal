@@ -18,25 +18,40 @@ import type { NextConfig } from "next";
  * サーバー側の実行環境が必要なため。
  */
 const nextConfig: NextConfig = {
+  /*
+   * 既存サイトのURLに合わせ、末尾スラッシュ付きを正とする。
+   *
+   * この設定のもとでは、ルートハンドラも末尾スラッシュ付きのURLで受ける。
+   * スラッシュなしへのPOSTは308リダイレクトになり、Stripe はリダイレクトを
+   * 追わないため通知が届かない。Webhookのエンドポイントは必ず
+   * `/event/api/stripe/webhook/` の形で登録すること。
+   */
   trailingSlash: true,
   reactStrictMode: true,
   turbopack: {
     root: process.cwd(),
   },
   /*
-   * 配列で返す rewrites は「ファイルシステムとNextのルートを探したあと」に評価される
-   * （afterFiles）。したがって app/ 配下のルートが常に優先され、
-   * どこにも一致しなかったURLだけがここで public/ の index.html に落ちる。
+   * fallback で返す。fallback は「Nextのページ・ルートハンドラ・動的ルートを
+   * すべて探したあと」に評価される最後の受け皿で、どこにも一致しなかったURLだけが
+   * ここへ来る。
+   *
+   * 配列で返す（afterFiles）にすると、ルートハンドラより先に評価される。
+   * その場合 /event/api/... が index.html への書き換えに飲み込まれて404になる。
    */
   async rewrites() {
-    return [
-      /*
-       * Next.js は public/ 配下のディレクトリを index.html に割り当てないため、
-       * 明示的に書き換える。これがないと `/` や `/apps/` が404になる。
-       */
-      { source: "/", destination: "/index.html" },
-      { source: "/:path*/", destination: "/:path*/index.html" },
-    ];
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [
+        /*
+         * Next.js は public/ 配下のディレクトリを index.html に割り当てないため、
+         * 明示的に書き換える。これがないと `/` や `/apps/` が404になる。
+         */
+        { source: "/", destination: "/index.html" },
+        { source: "/:path*/", destination: "/:path*/index.html" },
+      ],
+    };
   },
 };
 

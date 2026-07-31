@@ -42,6 +42,7 @@ const SUITES = [
   { name: 'event-pricing', file: 'unit/event-pricing.mjs', kind: 'unit' },
   { name: 'event-mail', file: 'unit/event-mail.mjs', kind: 'unit' },
   { name: 'event-application', file: 'unit/event-application.mjs', kind: 'unit' },
+  { name: 'event-webhook', file: 'unit/event-webhook.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
 
