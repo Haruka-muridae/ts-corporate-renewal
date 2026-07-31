@@ -615,7 +615,21 @@ try {
 
   check(
     'HTMLに利用者情報が埋め込まれていない',
-    !portalHtml.includes('@') || !/portal-user-email"[^>]*>[^<]+</.test(portalHtml),
+    !portalHtml.includes('@') || !/portal-account-email"[^>]*>[^<]+</.test(portalHtml),
+  );
+
+  /*
+   * アカウント情報パネルは配信時点でも閉じている。
+   * 中身は空だが、閉じた状態で配られることを HTML そのもので押さえる。
+   */
+  check(
+    '配信されるHTMLの時点でアカウント情報パネルは閉じている',
+    /id="portal-account-panel"[^>]*\shidden/.test(portalHtml),
+  );
+
+  check(
+    '配信されるHTMLの時点で aria-expanded は false',
+    /id="portal-account-toggle"[\s\S]{0,200}?aria-expanded="false"/.test(portalHtml),
   );
 
   check(
@@ -704,12 +718,20 @@ try {
       document.querySelector("h1").textContent.trim() === "Portal"
       && document.querySelector("h1").closest(".auth-portal-bar") !== null
     `),
+    await page.evaluate('document.querySelector("h1").textContent.trim()'),
   );
 
+  /*
+   * メールアドレスはアカウント情報パネルへ移した。
+   * 帯には出さない（要素ごと存在しない）。
+   */
   check(
-    'メールアドレスがヘッダーバーに出る',
-    (await page.evaluate('document.getElementById("portal-user-email").textContent'))
-      === 'member@example.com',
+    'ヘッダーバーにメールアドレスを出さない',
+    await page.evaluate(`
+      document.getElementById("portal-user-email") === null
+      && !document.querySelector(".auth-portal-bar").textContent.includes("member@example.com")
+    `),
+    await page.evaluate('document.querySelector(".auth-portal-bar").textContent.trim()'),
   );
 
   check(
@@ -719,22 +741,34 @@ try {
     `),
   );
 
+  /* 帯の右側はログアウトだけ。押せるものが他に無いことを数で押さえる。 */
+  check(
+    'ヘッダーバーの押せる要素はトグルとログアウトの2つだけ',
+    (await page.evaluate(`
+      document.querySelectorAll(".auth-portal-bar button, .auth-portal-bar a").length
+    `)) === 2,
+    await page.evaluate(`
+      JSON.stringify([...document.querySelectorAll(".auth-portal-bar button, .auth-portal-bar a")]
+        .map((el) => el.id || el.tagName))
+    `),
+  );
+
   check(
     '管理者でなければロールバッジは出ない',
     await page.evaluate('document.getElementById("portal-user-badge").hidden === true'),
   );
 
-  /* 左＝Portal＋バッジ、右＝メール＋ログアウト。実際の座標で確かめる。 */
+  /* 左＝Portal＋逆三角＋バッジ、右＝ログアウト。実際の座標で確かめる。 */
   const barLayout = await page.evaluate(`(() => {
     const bar = document.querySelector(".auth-portal-bar").getBoundingClientRect();
     const title = document.querySelector(".auth-portal-bar__title").getBoundingClientRect();
     const logout = document.getElementById("portal-logout").getBoundingClientRect();
-    const email = document.getElementById("portal-user-email").getBoundingClientRect();
+    const chevron = document.querySelector(".auth-portal-bar__chevron").getBoundingClientRect();
 
     return JSON.stringify({
       titleAtLeft: Math.abs(title.left - bar.left) < 2,
       logoutAtRight: Math.abs(bar.right - logout.right) < 2,
-      emailBeforeLogout: email.right <= logout.left + 1,
+      chevronBeforeLogout: chevron.right <= logout.left + 1,
       sameLine: Math.abs(title.top - logout.top) < 24,
       barHeight: bar.height,
     });
@@ -744,7 +778,7 @@ try {
 
   check('左端が「Portal」', bar.titleAtLeft, barLayout);
   check('右端がログアウト', bar.logoutAtRight, barLayout);
-  check('メールアドレスはログアウトの左', bar.emailBeforeLogout, barLayout);
+  check('逆三角はログアウトの左（左ブロック側）', bar.chevronBeforeLogout, barLayout);
   check('1行に収まる細い帯になっている', bar.sameLine && bar.barHeight < 90, barLayout);
 
   /* ---- APIキー未設定バナー ---- */
@@ -865,15 +899,136 @@ try {
       === 'ご利用可能なアプリは順次追加されます。',
   );
 
-  /* ---- アカウント情報 ---- */
+  /* ---- アカウント情報パネル（ヘッダーバー直下の開閉式） ---- */
+
+  /*
+   * キーを1つ押して離す。button の既定動作（Enter / Space で click）を
+   * 実際のキー入力で確かめるために使う。
+   */
+  const pressKey = async (key, code, keyCode, text) => {
+    await page.send('Input.dispatchKeyEvent', {
+      type: 'keyDown', windowsVirtualKeyCode: keyCode, key, code, text,
+    });
+    await page.send('Input.dispatchKeyEvent', {
+      type: 'keyUp', windowsVirtualKeyCode: keyCode, key, code,
+    });
+    await page.sleep(120);
+  };
 
   check(
-    'アカウント情報が下部の小型カードになっている',
+    '下部のアカウント情報カードは無くなっている',
+    (await page.evaluate('document.querySelectorAll(".auth-account").length')) === 1,
+    await page.evaluate('document.querySelectorAll(".auth-account").length'),
+  );
+
+  check(
+    'パネルはヘッダーバーの直下にある（アプリ一覧より上）',
+    await page.evaluate(`(() => {
+      const barBottom = document.querySelector(".auth-portal-bar").getBoundingClientRect().bottom;
+      const panel = document.getElementById("portal-account-panel");
+      const apps = document.getElementById("portal-apps").getBoundingClientRect();
+      /* 閉じているあいだは高さ0なので、DOM 順で位置を見る。 */
+      return panel.compareDocumentPosition(document.getElementById("portal-apps"))
+        === Node.DOCUMENT_POSITION_FOLLOWING
+        && document.querySelector(".auth-portal-bar")
+             .compareDocumentPosition(panel) === Node.DOCUMENT_POSITION_FOLLOWING
+        && barBottom <= apps.top + 1;
+    })()`),
+  );
+
+  check(
+    '初期状態ではパネルが閉じている',
     await page.evaluate(`
-      document.querySelector(".auth-account") !== null
-      && document.querySelector(".auth-account").getBoundingClientRect().top
-         > document.getElementById("portal-apps-empty").getBoundingClientRect().top
+      document.getElementById("portal-account-panel").hidden === true
+      && document.getElementById("portal-account-panel").getBoundingClientRect().height === 0
     `),
+  );
+
+  check(
+    '初期状態の aria-expanded は false',
+    (await page.evaluate(`
+      document.getElementById("portal-account-toggle").getAttribute("aria-expanded")
+    `)) === 'false',
+  );
+
+  check(
+    'トグルは button 要素',
+    await page.evaluate(`
+      document.getElementById("portal-account-toggle").tagName === "BUTTON"
+      && document.getElementById("portal-account-toggle").getAttribute("type") === "button"
+    `),
+  );
+
+  check(
+    'aria-controls がパネルを指している',
+    (await page.evaluate(`
+      document.getElementById("portal-account-toggle").getAttribute("aria-controls")
+    `)) === 'portal-account-panel',
+  );
+
+  /*
+   * 見出しはボタンの外側に残す。
+   * button の子孫は読み上げ上ひとかたまりに潰れるため、h1 を内側へ入れると
+   * 見出しジャンプでこの画面の主題を掴めなくなる（§3-3）。
+   */
+  check(
+    'h1 がトグルを包んでいる（h1 をボタンの内側に入れない）',
+    await page.evaluate(`
+      document.getElementById("portal-account-toggle").closest("h1") !== null
+      && document.querySelector("h1 button, h1 > button") !== null
+      && document.getElementById("portal-account-toggle").querySelector("h1") === null
+    `),
+  );
+
+  /* ---- 押して開く ---- */
+
+  await page.evaluate('document.getElementById("portal-account-toggle").click()');
+  await page.sleep(120);
+
+  check(
+    'トグルを押すとパネルが開く',
+    await page.evaluate(`
+      document.getElementById("portal-account-panel").hidden === false
+      && document.getElementById("portal-account-panel").getBoundingClientRect().height > 0
+    `),
+  );
+
+  check(
+    '開くと aria-expanded が true になる',
+    (await page.evaluate(`
+      document.getElementById("portal-account-toggle").getAttribute("aria-expanded")
+    `)) === 'true',
+  );
+
+  /*
+   * 回転は 0.15s かけて動く。終わってから測る。
+   * matrix(a, b, c, d, …) の a と b から角度を出し、180度に寄っているかを見る。
+   * 文字列の完全一致で見ると、途中の値を拾って落ちる。
+   */
+  await page.sleep(400);
+
+  const chevronAngle = await page.evaluate(`(() => {
+    const t = getComputedStyle(document.querySelector(".auth-portal-bar__chevron")).transform;
+    const m = t.match(/matrix\\(([^)]+)\\)/);
+    if (!m) return null;
+    const [a, b] = m[1].split(",").map(Number);
+    return Math.round(Math.abs(Math.atan2(b, a) * 180 / Math.PI));
+  })()`);
+
+  check(
+    '開くと逆三角が180度回る',
+    chevronAngle !== null && Math.abs(chevronAngle - 180) <= 2,
+    `${chevronAngle}deg`,
+  );
+
+  check(
+    'パネルが実際にヘッダーバーの下へ出る',
+    await page.evaluate(`(() => {
+      const bar = document.querySelector(".auth-portal-bar").getBoundingClientRect();
+      const panel = document.getElementById("portal-account-panel").getBoundingClientRect();
+      const apps = document.getElementById("portal-apps").getBoundingClientRect();
+      return panel.top >= bar.bottom - 1 && panel.bottom <= apps.top + 1;
+    })()`),
   );
 
   check(
@@ -883,6 +1038,15 @@ try {
     `)) === JSON.stringify(['メールアドレス', 'ご契約の状態', 'パスワード']),
     await page.evaluate(`
       JSON.stringify([...document.querySelectorAll(".auth-account dt")].map((dt) => dt.textContent))
+    `),
+  );
+
+  check(
+    'メールアドレスはパネルの中に出る',
+    (await page.evaluate('document.getElementById("portal-account-email").textContent'))
+      === 'member@example.com'
+    && await page.evaluate(`
+      document.getElementById("portal-account-email").closest("#portal-account-panel") !== null
     `),
   );
 
@@ -928,6 +1092,94 @@ try {
     await page.evaluate(`
       getComputedStyle(document.querySelector(".auth-account")).borderTopLeftRadius
     `),
+  );
+
+  /* ---- もう一度押して閉じる ---- */
+
+  await page.evaluate('document.getElementById("portal-account-toggle").click()');
+  await page.sleep(120);
+
+  check(
+    'もう一度押すと閉じる',
+    await page.evaluate(`
+      document.getElementById("portal-account-panel").hidden === true
+      && document.getElementById("portal-account-toggle").getAttribute("aria-expanded") === "false"
+    `),
+  );
+
+  /* ---- キーボードだけで開閉できる ---- */
+
+  /*
+   * Tab で到達できることを、実際に Tab を押して確かめる。
+   * 先頭はスキップリンクなので、数回押して現れるかを見る。
+   */
+  await page.evaluate('document.activeElement && document.activeElement.blur()');
+
+  const tabOrder = [];
+
+  for (let i = 0; i < 5; i += 1) {
+    await pressKey('Tab', 'Tab', 9);
+    tabOrder.push(await page.evaluate(
+      'document.activeElement.id || document.activeElement.className || document.activeElement.tagName',
+    ));
+
+    if (tabOrder.at(-1) === 'portal-account-toggle') {
+      break;
+    }
+  }
+
+  check(
+    'Tab でトグルへ到達できる',
+    tabOrder.includes('portal-account-toggle'),
+    JSON.stringify(tabOrder),
+  );
+
+  await pressKey('Enter', 'Enter', 13, '\r');
+
+  check(
+    'Enter で開く',
+    await page.evaluate(`
+      document.getElementById("portal-account-panel").hidden === false
+      && document.getElementById("portal-account-toggle").getAttribute("aria-expanded") === "true"
+    `),
+  );
+
+  await pressKey(' ', 'Space', 32, ' ');
+
+  check(
+    'Space で閉じる',
+    await page.evaluate(`
+      document.getElementById("portal-account-panel").hidden === true
+      && document.getElementById("portal-account-toggle").getAttribute("aria-expanded") === "false"
+    `),
+  );
+
+  /* ---- 開閉状態は保存しない ---- */
+
+  await page.evaluate('document.getElementById("portal-account-toggle").click()');
+  await page.sleep(120);
+
+  check(
+    '（前提）再読み込みの直前は開いている',
+    await page.evaluate('document.getElementById("portal-account-panel").hidden === false'),
+  );
+
+  await page.goto(`${origin}/portal/`, 1500);
+
+  check(
+    '再読み込みすると閉じた状態に戻る（開閉状態を保存しない）',
+    await page.evaluate(`
+      document.getElementById("portal-account-panel").hidden === true
+      && document.getElementById("portal-account-toggle").getAttribute("aria-expanded") === "false"
+    `),
+  );
+
+  check(
+    '開閉状態を localStorage へ書いていない',
+    await page.evaluate(`
+      !Object.keys(localStorage).some((k) => /panel|account|expand|open/i.test(k))
+    `),
+    await page.evaluate('JSON.stringify(Object.keys(localStorage))'),
   );
 
   /* ---- ダミーのアプリを入れてカードの体裁を見る ---- */
@@ -1080,6 +1332,42 @@ try {
       await page.evaluate(`
         document.querySelector(".auth-portal-bar").getBoundingClientRect().top
       `),
+    );
+
+    /*
+     * メールアドレスを外したぶん帯には余裕がある。
+     * 折り返さず1行に収まり、トグルとログアウトが重ならないことを見る。
+     */
+    check(
+      `${width}px: ヘッダーバーが1行のまま崩れない`,
+      await page.evaluate(`(() => {
+        const toggle = document.getElementById("portal-account-toggle").getBoundingClientRect();
+        const logout = document.getElementById("portal-logout").getBoundingClientRect();
+        return Math.abs(toggle.top - logout.top) < 24 && toggle.right <= logout.left + 1;
+      })()`),
+      await page.evaluate(`JSON.stringify({
+        toggle: document.getElementById("portal-account-toggle").getBoundingClientRect(),
+        logout: document.getElementById("portal-logout").getBoundingClientRect(),
+      })`),
+    );
+
+    /* 開いた状態でも横へあふれない。 */
+    await page.evaluate('document.getElementById("portal-account-toggle").click()');
+    await page.sleep(120);
+
+    const openOverflow = await page.evaluate(
+      'document.documentElement.scrollWidth - document.documentElement.clientWidth',
+    );
+    check(`${width}px: パネルを開いても横スクロールしない`, openOverflow <= 0, openOverflow);
+
+    check(
+      `${width}px: 開いたパネルが表示領域に収まる`,
+      await page.evaluate(`(() => {
+        const panel = document.getElementById("portal-account-panel").getBoundingClientRect();
+        return panel.height > 0
+          && panel.left >= -1
+          && panel.right <= document.documentElement.clientWidth + 1;
+      })()`),
     );
   }
 

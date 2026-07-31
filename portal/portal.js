@@ -25,12 +25,13 @@ setScreenDepth(1);
 
 const loadingElement = document.getElementById('portal-loading');
 const contentElement = document.getElementById('portal-content');
-const emailElement = document.getElementById('portal-user-email');
 const badgeElement = document.getElementById('portal-user-badge');
 const appsElement = document.getElementById('portal-apps');
 const appsEmptyElement = document.getElementById('portal-apps-empty');
 const accountEmailElement = document.getElementById('portal-account-email');
 const accountSubscriptionElement = document.getElementById('portal-account-subscription');
+const accountToggle = document.getElementById('portal-account-toggle');
+const accountPanel = document.getElementById('portal-account-panel');
 const logoutButton = document.getElementById('portal-logout');
 const messageElement = document.getElementById('portal-message');
 const apiKeyBannerElement = document.getElementById('portal-api-key-banner');
@@ -164,8 +165,32 @@ function renderApps() {
   PORTAL_APPS.forEach((app) => appsElement.append(buildAppCard(app)));
 }
 
+/*
+ * ------------------------------------------------------------------
+ * アカウント情報パネルの開閉
+ * ------------------------------------------------------------------
+ * 状態を持つのは aria-expanded と hidden の2つだけで、
+ * 見た目（逆三角の回転）は CSS が aria-expanded を見て決める。
+ * JS 専用のクラスを別に持たないため、表示と支援技術がずれない。
+ *
+ * 開閉状態は保存しない。読み込むたびに閉じた状態から始める。
+ * アカウント情報は普段見るものではなく、開いたままにしておく理由がない。
+ * ------------------------------------------------------------------
+ */
+function setAccountPanelOpen(open) {
+  accountToggle.setAttribute('aria-expanded', String(open));
+  accountPanel.hidden = !open;
+}
+
+/*
+ * button 要素なので Enter と Space は既定動作で click になる。
+ * keydown を自前で拾うと二重に発火するため、click だけを見る。
+ */
+accountToggle.addEventListener('click', () => {
+  setAccountPanelOpen(accountToggle.getAttribute('aria-expanded') !== 'true');
+});
+
 function render(user) {
-  emailElement.textContent = user.email ?? '';
   accountEmailElement.textContent = user.email ?? '';
   accountSubscriptionElement.textContent = describeSubscription(user);
 

@@ -46,14 +46,52 @@
         -->
         <div class="auth-portal-bar">
           <div class="auth-portal-bar__identity">
-            <h1 class="auth-portal-bar__title">Portal</h1>
+            <!--
+              見出しがボタンを包む形にしている（W3C APG の開閉パネルと同じ）。
+              button の中身は読み上げ上ひとかたまりに潰れるため、h1 を
+              button の内側に入れると見出しとして拾えなくなる。
+              包む向きなら「Portal（見出し）」と「Portal（ボタン・折りたたみ）」の
+              両方が残る。詳細は docs/specs/portal-spec-v1.md §3-3。
+            -->
+            <h1 class="auth-portal-bar__title">
+              <button class="auth-portal-bar__toggle" id="portal-account-toggle" type="button"
+                      aria-expanded="false" aria-controls="portal-account-panel">
+                Portal
+                <svg class="auth-portal-bar__chevron" viewBox="0 0 24 24" width="16" height="16"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                  <path d="m6 9 6 6 6-6"></path>
+                </svg>
+              </button>
+            </h1>
             <span id="portal-user-badge" hidden></span>
           </div>
-          <div class="auth-portal-bar__account">
-            <span class="auth-portal-bar__email" id="portal-user-email"></span>
-            <button class="auth-button auth-button--ghost auth-portal-bar__logout" id="portal-logout" type="button">ログアウト</button>
-          </div>
+          <button class="auth-button auth-button--ghost auth-portal-bar__logout" id="portal-logout" type="button">ログアウト</button>
         </div>
+
+        <!--
+          アカウント情報。ヘッダーバー直下の開閉パネル。
+          初期状態は閉じたまま配信し、portal.js が開閉を切り替える。
+          開閉状態は保存しない（再読み込みで閉に戻る）。
+        -->
+        <section class="auth-account" id="portal-account-panel"
+                 aria-labelledby="portal-account-title" hidden>
+          <h2 class="auth-account__title" id="portal-account-title">アカウント情報</h2>
+          <dl class="auth-account__list">
+            <div>
+              <dt>メールアドレス</dt>
+              <dd id="portal-account-email"></dd>
+            </div>
+            <div>
+              <dt>ご契約の状態</dt>
+              <dd id="portal-account-subscription"></dd>
+            </div>
+            <div>
+              <dt>パスワード</dt>
+              <dd><a href="../password/reset/">パスワードを変更する</a></dd>
+            </div>
+          </dl>
+        </section>
 
         <p class="auth-message" id="portal-message" tabindex="-1" hidden></p>
 
@@ -81,24 +119,6 @@
         <p class="auth-loading" id="portal-apps-empty" hidden>
           ご利用可能なアプリは順次追加されます。
         </p>
-
-        <section class="auth-account" aria-labelledby="portal-account-title">
-          <h2 class="auth-account__title" id="portal-account-title">アカウント情報</h2>
-          <dl class="auth-account__list">
-            <div>
-              <dt>メールアドレス</dt>
-              <dd id="portal-account-email"></dd>
-            </div>
-            <div>
-              <dt>ご契約の状態</dt>
-              <dd id="portal-account-subscription"></dd>
-            </div>
-            <div>
-              <dt>パスワード</dt>
-              <dd><a href="../password/reset/">パスワードを変更する</a></dd>
-            </div>
-          </dl>
-        </section>
       </div>
 
       <noscript>
