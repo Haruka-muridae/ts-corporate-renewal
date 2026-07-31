@@ -1,0 +1,485 @@
+/*
+ * 交流会ページ専用スタイル。
+ * ../css/style.css を読み込んだうえで追加する差分のみを定義する。
+ * 既存クラスは上書きせず、このページ固有のクラスだけを追加する。
+ */
+
+/*
+ * hidden属性の保証。
+ * 作者スタイルは UA の [hidden]{display:none} より優先されるため、
+ * 他ページと同じ方針で hidden を最優先で効かせる。
+ */
+[hidden] {
+  display: none !important;
+}
+
+/* 支援技術にだけ渡すテキスト。table の caption などに使う。 */
+.visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  white-space: nowrap;
+}
+
+/* Breadcrumb（apps ページと同じ表現） */
+.breadcrumb {
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-text-muted);
+}
+
+.breadcrumb__list li + li::before {
+  margin-right: 8px;
+  color: var(--color-border-strong);
+  content: "/";
+}
+
+.breadcrumb__list a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.breadcrumb__list [aria-current="page"] {
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+/* Page hero */
+.event-hero {
+  padding-top: calc(var(--section-space) + var(--header-height));
+  padding-bottom: calc(var(--section-space) - 16px);
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.event-hero__inner {
+  margin-top: 32px;
+  max-width: 720px;
+}
+
+.event-hero__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-gold-text);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.event-hero__label::before {
+  width: 32px;
+  height: 1px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+.event-hero__title {
+  margin-top: 16px;
+  font-size: clamp(1.75rem, 1.2rem + 2.6vw, 2.75rem);
+  line-height: 1.35;
+}
+
+.event-hero__lead {
+  margin-top: 24px;
+  color: var(--c-text-muted);
+}
+
+/*
+ * 受付状態。
+ * data-event-status の値でバッジの配色を切り替える。
+ * 文言の書き換えは script.js が行う。
+ */
+.event-status {
+  display: flex;
+  margin-top: 28px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 0.875rem;
+}
+
+.event-status__badge {
+  padding: 4px 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--color-white);
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.event-status[data-event-status="open"] .event-status__badge {
+  border-color: var(--color-gold);
+  background-color: var(--color-gold);
+  color: var(--color-white);
+}
+
+.event-status[data-event-status="full"] .event-status__badge,
+.event-status[data-event-status="closed"] .event-status__badge {
+  border-color: var(--c-main);
+  background-color: var(--c-main);
+  color: var(--color-white);
+}
+
+.event-status__text {
+  color: var(--c-text-muted);
+}
+
+/* 開催概要 */
+.event-outline__list {
+  margin-top: var(--content-space);
+  border-top: 1px solid var(--c-border);
+}
+
+.event-outline__row {
+  display: grid;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--c-border);
+  gap: 4px;
+}
+
+.event-outline__row dt {
+  color: var(--c-main);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+@media (min-width: 768px) {
+  .event-outline__row {
+    align-items: baseline;
+    gap: 24px;
+    grid-template-columns: 160px 1fr;
+  }
+}
+
+/* 参加費 */
+.price-summary {
+  margin-top: var(--content-space);
+  padding: 24px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-off-white);
+}
+
+.price-summary__formula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  font-weight: 700;
+}
+
+.price-summary__base,
+.price-summary__discounts {
+  color: var(--c-text);
+}
+
+.price-summary__minus,
+.price-summary__equal {
+  color: var(--color-gold-text);
+  font-family: var(--font-num), var(--font-ja);
+}
+
+.price-summary__final {
+  color: var(--c-main);
+  font-size: 1.125rem;
+}
+
+.price-summary__notes {
+  margin-top: 16px;
+  padding-left: 1.25em;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+  list-style: disc;
+}
+
+.price-summary__notes li + li {
+  margin-top: 6px;
+}
+
+.price-tables {
+  display: grid;
+  margin-top: var(--content-space);
+  gap: var(--grid-gap);
+}
+
+@media (min-width: 768px) {
+  .price-tables {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.price-table {
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-white);
+}
+
+.price-table__title {
+  font-size: 1rem;
+}
+
+/*
+ * 表は横幅の狭い画面で折り返しきれないことがあるため、
+ * この枠の中だけを横スクロールさせ、ページ本体は横に伸ばさない。
+ */
+.price-table__scroll {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.discount-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.discount-table th,
+.discount-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--c-border);
+  vertical-align: top;
+}
+
+.discount-table thead th {
+  border-bottom-color: var(--c-border-strong);
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.discount-table tbody th {
+  font-weight: 400;
+  line-height: 1.8;
+}
+
+.discount-table td {
+  color: var(--color-gold-text);
+  font-family: var(--font-num), var(--font-ja);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.discount-table tbody tr:last-child th,
+.discount-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* 計算例 */
+.price-example {
+  margin-top: var(--content-space);
+  padding: 24px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+}
+
+.price-example__title {
+  font-size: 1rem;
+}
+
+.price-example__lead {
+  margin-top: 8px;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+}
+
+.price-breakdown {
+  margin-top: 16px;
+  border-top: 1px solid var(--c-border);
+}
+
+.price-breakdown__row {
+  display: flex;
+  padding: 10px 0;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  border-bottom: 1px solid var(--c-border);
+  font-size: 0.9375rem;
+}
+
+.price-breakdown__row dd {
+  font-family: var(--font-num), var(--font-ja);
+}
+
+.price-breakdown__row--total {
+  border-bottom: none;
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+.price-note {
+  margin-top: var(--content-space);
+}
+
+.price-note__title {
+  font-size: 1rem;
+}
+
+.price-note__list {
+  margin-top: 12px;
+  padding-left: 1.25em;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+  list-style: disc;
+}
+
+.price-note__list li + li {
+  margin-top: 8px;
+}
+
+/* ポリシー・注意事項 */
+.policy-box {
+  margin-top: var(--content-space);
+  padding: 24px;
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--color-gold);
+  border-radius: var(--radius-card);
+  background-color: var(--color-off-white);
+}
+
+.policy-box p + p {
+  margin-top: 12px;
+}
+
+.policy-box__list {
+  padding-left: 1.25em;
+  list-style: disc;
+}
+
+.policy-box__list li + li {
+  margin-top: 10px;
+}
+
+.policy-box__note {
+  margin-top: 16px;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+}
+
+.policy-box a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* お申し込み */
+.apply-cta {
+  padding: 32px 24px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-card);
+  background-color: var(--color-white);
+  text-align: center;
+}
+
+.apply-cta__title {
+  font-size: var(--fs-h3);
+}
+
+.apply-cta__lead {
+  margin: 16px auto 0;
+  max-width: 640px;
+  color: var(--c-text-muted);
+}
+
+.apply-cta__action {
+  margin-top: 24px;
+}
+
+/* 受付前は押せないことを見た目でも示す。 */
+.apply-cta__action .btn[disabled] {
+  border-color: var(--c-border-strong);
+  background-color: var(--c-border);
+  color: var(--c-text-muted);
+  cursor: not-allowed;
+}
+
+.apply-cta__note {
+  margin-top: 12px;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+}
+
+.apply-cta__links {
+  display: flex;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 24px;
+  font-size: 0.875rem;
+}
+
+.apply-cta__links a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* 特定商取引法に基づく表記 */
+.legal-list {
+  margin-top: var(--content-space);
+  border-top: 1px solid var(--c-border);
+}
+
+.legal-list__row {
+  display: grid;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--c-border);
+  gap: 6px;
+}
+
+.legal-list__row dt {
+  color: var(--c-main);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.legal-list__row dd a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.legal-list__row dd p + p,
+.legal-list__row dd ul {
+  margin-top: 8px;
+}
+
+.legal-list__row dd ul {
+  padding-left: 1.25em;
+  list-style: disc;
+}
+
+.legal-list__row dd li + li {
+  margin-top: 6px;
+}
+
+@media (min-width: 768px) {
+  .legal-list__row {
+    gap: 24px;
+    grid-template-columns: 220px 1fr;
+  }
+}
+
+.legal-back {
+  margin-top: var(--content-space);
+  font-size: 0.875rem;
+}
+
+.legal-back a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
