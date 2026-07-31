@@ -1,73 +1,78 @@
-# 交流会申込アプリ データベース適用手順
+# 交流会申込アプリ データベース
 
-実装仕様書8章のスキーマを Supabase に適用する手順。SQLは `supabase/` に置いてある。
+実装仕様書8章のスキーマ。SQLは `supabase/migrations/` に置いてある。
+
+**適用済み**。プロジェクト `tsam-event`（東京リージョン / ref `ixxxlmfhrtommsfiumlz`）に
+Supabase CLI で適用してある。以降のスキーマ変更もマイグレーションで管理する。
 
 | ファイル | 内容 |
 | --- | --- |
-| `supabase/migrations/0001_event_app_init.sql` | 表・型・制約・トリガー・RLSの作成 |
-| `supabase/seed/0001_first_event.sql` | 初回イベント1件の登録 |
+| `supabase/migrations/20260731000000_event_app_init.sql` | 表・型・制約・トリガー・RLSの作成 |
+| `supabase/migrations/20260731000100_seed_first_event.sql` | 初回イベント1件の登録 |
+| `supabase/migrations/20260731000200_grant_service_role.sql` | service_role への権限付与 |
 
-## 1. Supabase側で必要な作業
+## 1. Supabase側の状態
 
-### 1-1. プロジェクトの用意
+### 1-1. プロジェクト
 
-既存の認証システム（`gas-auth/`）とは別に、交流会アプリ用のプロジェクトを新規に作るか、
-同じプロジェクトのまま `public` スキーマに追加するかを決める。**別プロジェクトを推奨**する。
-権限の分離ができ、片方の障害や設定変更がもう片方に及ばないため。
+既存の認証システム（`gas-auth/`）とは別プロジェクトにしてある。権限を分離でき、
+片方の障害や設定変更がもう片方に及ばないため。
 
-### 1-2. SQLの実行
+* 名称: `tsam-event`
+* リージョン: ap-northeast-1（東京）
+* ref: `ixxxlmfhrtommsfiumlz`
 
-Supabaseダッシュボードの **SQL Editor** で、次の順に実行する。
+### 1-2. マイグレーションの適用
 
-1. `supabase/migrations/0001_event_app_init.sql` の全文を貼り付けて実行
-2. `supabase/seed/0001_first_event.sql` の全文を貼り付けて実行
+Supabase CLI で適用する。ダッシュボードのSQL Editorに貼り付ける運用はしない
+（適用履歴が残らず、環境間で食い違うため）。
 
-`0001_event_app_init.sql` は表の作成に `if not exists` を使っているが、型
-（`create type`）とトリガーには付いていない。**同じSQLを2回実行するとエラーになる**。
-やり直すときは、先に次を実行してから貼り直すこと。
+```bash
+export SUPABASE_ACCESS_TOKEN=<個人アクセストークン>
+export SUPABASE_DB_PASSWORD=<データベースのパスワード>
 
-```sql
-drop table if exists public.email_logs, public.webhook_events,
-                     public.payments, public.applications, public.events cascade;
-drop type  if exists public.payment_status, public.application_status, public.age_group;
-drop function if exists public.set_updated_at() cascade;
+supabase link --project-ref ixxxlmfhrtommsfiumlz
+supabase db push          # 未適用のマイグレーションだけが流れる
+supabase migration list   # ローカルとリモートの適用状況を突き合わせる
 ```
 
-seed（`0001_first_event.sql`）は二重登録を避ける書き方にしてあるため、
-何度実行しても行は増えない。
+適用済みのマイグレーションは再実行されない。**すでに適用したファイルは編集しない**こと。
+変更が必要なときは新しいマイグレーションを追加する。
 
-### 1-3. 実行前に決めておく値
+`supabase db diff` はシャドウDBの作成にDockerが必要なため、この環境では使えない。
+適用状況の確認は `supabase migration list` で行う。
 
-`supabase/seed/0001_first_event.sql` の中に、まだ確定していない値が1つある。
+### 1-3. まだ確定していない値
 
-* `apply_start_at`（受付開始日時）… 仮に `2026-08-01 00:00:00+09` を入れてある。
-  確定したら書き換えるか、登録後に `update` する。
+`20260731000100_seed_first_event.sql` の `apply_start_at`（受付開始日時）に
+仮の値 `2026-08-01 00:00:00+09` を入れてある。確定したら、このファイルを編集せず、
+`update` を行う新しいマイグレーションを追加する。
 
-`apply_end_at` は仕様どおり開催当日の開始時刻（2026-08-30 14:30 JST）にしてある。
+`apply_end_at` は仕様どおり開催当日の開始時刻（2026-08-30 14:30 JST）。
 
-### 1-4. キーの取得
+### 1-4. 権限の設計
 
-ダッシュボードの **Project Settings → API** から次を控える。
+マイグレーションで作成した表には既定の権限が付かない。RLS の判定より前に
+テーブル権限の判定があるため、`service_role` からも
+「permission denied for table」になる。`20260731000200_grant_service_role.sql` で
+`service_role` にのみ権限を与えている。
 
-* Project URL
-* `anon` public キー
-* `service_role` secret キー
+`anon` と `authenticated` には与えず、既定で付いていた分は剥がしている。
+RLS（ポリシーなし）と権限の両方で塞いでいるため、anonキーが漏れてもこれらの表には
+触れられない。anon キーでの読み取りが 401 になることを確認済み。
 
-`service_role` キーはRLSを迂回する。**サーバー側でのみ使い、フロントエンドのコード・
-リポジトリ・ログに書かない**（受入条件12）。
+## 2. 環境変数
 
-## 2. Vercelに登録する環境変数
+ローカルは `.env.local`、本番は Vercel の環境変数。どちらも登録済み。
 
-仕様書13章のうち、この段階で必要なのは Supabase の3つ。残りは実装順序3以降で使う。
-
-| 変数名 | 値 | 用途 |
-| --- | --- | --- |
-| `SUPABASE_URL` | Project URL | サーバー側からの接続 |
-| `SUPABASE_ANON_KEY` | anon public キー | 管理画面のログイン（Supabase Auth） |
-| `SUPABASE_SERVICE_ROLE_KEY` | service_role secret キー | 申込の作成・更新・参照（RLSを迂回） |
+| 変数名 | 用途 |
+| --- | --- |
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_ANON_KEY` | 管理画面のログイン（Supabase Auth） |
+| `SUPABASE_SERVICE_ROLE_KEY` | 申込の作成・更新・参照（RLSと権限を通過できる唯一のロール） |
 
 `SUPABASE_SERVICE_ROLE_KEY` には `NEXT_PUBLIC_` を付けない。付けるとブラウザに
-配信されるバンドルへ埋め込まれる。
+配信されるバンドルへ埋め込まれる（受入条件12）。
 
 ## 3. 設計上の要点
 
@@ -91,11 +96,11 @@ JPY は最小通貨単位が円のため、`final_price` をそのまま Stripe 
 
 ### RLSは有効、ポリシーは作らない
 
-全表で RLS を有効にし、ポリシーを1つも作っていない。`service_role` キーは RLS を迂回する
-ため、読み書きは必ずサーバー側の処理を通る。`anon` キーが漏れてもこれらの表は読めない。
+全表で RLS を有効にし、ポリシーを1つも作っていない。`service_role` は RLS を迂回するため、
+読み書きは必ずサーバー側の処理を通る。
 
 管理画面（実装順序7）でログイン中の管理者に直接読ませたくなった場合は、そのときに
-管理者限定のポリシーを追加する。現時点では、管理画面もサーバー側を経由して読む前提。
+管理者限定のポリシーと権限を追加する。現時点では、管理画面もサーバー側を経由して読む前提。
 
 ### 受付番号
 
@@ -118,3 +123,8 @@ Webhook を二重に受け取っても再発行されないことは、`webhook_
 
 定員を設けない運用のため `capacity` は `null` のままにする。列自体は仕様書8章の
 定義に合わせて残してある。受付の締めは主催者が手動で行う。
+
+### is_published は false のまま
+
+初回イベントは `is_published = false` で登録してある。申込フォーム（実装順序3）が
+できて受付を開始する段階で `true` にする。

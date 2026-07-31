@@ -1,6 +1,6 @@
 -- 交流会申込・Stripe決済アプリの初期スキーマ（実装仕様書 8章）
 --
--- 適用方法は docs/event-app-database.md を参照。
+-- 適用は Supabase CLI（supabase db push）で行う。手順は docs/event-app-database.md。
 --
 -- 方針
 --   * 割引ルールはアプリのコード内定数（lib/event/pricing.mjs）で持つ。

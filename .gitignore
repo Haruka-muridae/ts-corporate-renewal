@@ -25,3 +25,4 @@ supabase/.branches/
 # 静的サイトを public/ へ移したため、移動前後のどちらの配置でも無視されるようにする。
 apps/*/picker-key.local.js
 public/apps/*/picker-key.local.js
+.vercel
