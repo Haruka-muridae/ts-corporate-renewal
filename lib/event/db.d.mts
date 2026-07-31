@@ -188,3 +188,22 @@ export declare function insertEmailLog(
   config: SupabaseConfig,
   input: { applicationId: string; mailType: string; status: string },
 ): Promise<{ id: string } | null>;
+
+/* ------------------------------------------------------------------ */
+/* 管理画面用 */
+
+export declare function listApplications(
+  config: SupabaseConfig,
+  options?: { eventId?: string | null },
+): Promise<(ApplicationRow & { payments: PaymentRow[] })[]>;
+
+export declare function findApplicationWithPayment(
+  config: SupabaseConfig,
+  applicationId: string,
+): Promise<(ApplicationRow & { payments: PaymentRow[] }) | null>;
+
+export declare function updateApplicationFields(
+  config: SupabaseConfig,
+  applicationId: string,
+  patch: Record<string, unknown>,
+): Promise<ApplicationRow | null>;

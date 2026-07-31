@@ -13,6 +13,15 @@ export type SupabaseConfig = {
 
 export declare function supabaseConfig(): SupabaseConfig;
 
+export type SupabaseAuthConfig = {
+  url: string;
+  anonKey: string;
+  fetchImpl?: typeof fetch;
+  nowSeconds?: number;
+};
+
+export declare function supabaseAuthConfig(): SupabaseAuthConfig;
+
 export declare function stripeSecretKey(): string;
 
 export declare function baseUrl(): string;
