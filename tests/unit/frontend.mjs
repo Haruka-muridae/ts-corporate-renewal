@@ -266,6 +266,81 @@ try {
     session.readProfile === undefined && session.writeProfile === undefined,
   );
 
+  /* ---------------------------------------------------------------- */
+  section('KeyStore（APIキーの保管庫）');
+
+  const keystore = await import('../../auth/keystore.js');
+  const { KeyStore } = keystore;
+
+  check('保存キーは tsam-api-keys', keystore.KEYSTORE_STORAGE_KEY === 'tsam-api-keys');
+  check('プロバイダー名 gemini を持つ', keystore.PROVIDERS.gemini === 'gemini');
+
+  /* localStorage が無い環境。例外を投げず、保存できなかったと答えること。 */
+  check('保存先が無ければ利用不可と答える', keystore.isKeyStoreAvailable() === false);
+  check('読み出しは null', KeyStore.get('gemini') === null);
+  check('has は false', KeyStore.has('gemini') === false);
+  check('書き込みは false', KeyStore.set('gemini', 'AIzaTEST') === false);
+
+  /* ここから先は localStorage を差し替えて、保存の形そのものを見る。 */
+  const store = new Map();
+
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+  };
+
+  check('差し替え後は利用可能と答える', keystore.isKeyStoreAvailable() === true);
+
+  check('保存できる', KeyStore.set('gemini', 'AIzaTESTKEY') === true);
+  check('保存した値が読める', KeyStore.get('gemini') === 'AIzaTESTKEY');
+  check('has が true になる', KeyStore.has('gemini') === true);
+
+  check(
+    '保存の形は プロバイダー名をキーにした JSON 1件',
+    store.get('tsam-api-keys') === JSON.stringify({ gemini: 'AIzaTESTKEY' }),
+    store.get('tsam-api-keys'),
+  );
+
+  /* 2社目が増えても localStorage のキーは増やさない。 */
+  KeyStore.set('openai', 'sk-TESTKEY');
+
+  check(
+    '2件目も同じ JSON へ入る（保存キーを増やさない）',
+    store.get('tsam-api-keys') === JSON.stringify({ gemini: 'AIzaTESTKEY', openai: 'sk-TESTKEY' })
+    && store.size === 1,
+    JSON.stringify([...store.entries()]),
+  );
+
+  check('片方を消してももう片方は残る', KeyStore.remove('openai') === true && KeyStore.get('gemini') === 'AIzaTESTKEY');
+
+  /* 空文字は受け付けない。消したいときは remove を使う。 */
+  check('空文字での上書きは拒否する', KeyStore.set('gemini', '') === false);
+  check('拒否しても元の値は残っている', KeyStore.get('gemini') === 'AIzaTESTKEY');
+  check('空白だけの値も拒否する', KeyStore.set('gemini', '   ') === false);
+
+  check('前後の空白は落として保存する', KeyStore.set('gemini', '  AIzaTRIMMED  ') === true && KeyStore.get('gemini') === 'AIzaTRIMMED');
+
+  /* 全部消えたら、保存キーごと消す（空の JSON を残さない）。 */
+  KeyStore.remove('gemini');
+
+  check(
+    '最後の1件を消すと保存キーごと消える',
+    store.has('tsam-api-keys') === false,
+    JSON.stringify([...store.entries()]),
+  );
+
+  check('元から無いものを消しても true', KeyStore.remove('gemini') === true);
+
+  /* 手で書き換えられた値でも壊れない。 */
+  for (const broken of ['{', 'null', '"text"', '[1,2]', '']) {
+    store.set('tsam-api-keys', broken);
+    check(`壊れた保存値（${broken || '空文字'}）でも例外を投げず null`, KeyStore.get('gemini') === null);
+  }
+
+  store.delete('tsam-api-keys');
+  delete globalThis.localStorage;
+
   finish();
 } catch (error) {
   fatal(error);
