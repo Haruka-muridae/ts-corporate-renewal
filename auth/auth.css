@@ -453,11 +453,13 @@
  * ヘッダーバー。
  *
  * ログイン後の作業画面なので、ブランドブロックは置かず、
- * 画面名・肩書き・アカウント・ログアウトを1本の帯にまとめる。
+ * 画面名・肩書き・ログアウトを1本の帯にまとめる。
  * アプリの一覧を画面の上のほうへ持ち上げるための構成。
  *
- * 320px ではメールアドレスとログアウトが下へ折り返す。
- * flex-wrap に任せているため、幅ごとの分岐を持たない。
+ * メールアドレスは帯から外し、アカウント情報パネル（.auth-account）へ移した。
+ * 帯に残るのは左＝開閉トグル、右＝ログアウトの2つだけ。
+ *
+ * 折り返しは flex-wrap に任せ、幅ごとの分岐を持たない。
  */
 .auth-portal-bar {
   display: flex;
@@ -486,23 +488,49 @@
   line-height: 1.4;
 }
 
-.auth-portal-bar__account {
+/*
+ * アカウント情報の開閉トグル。
+ *
+ * 見出し（h1）の内側に置く。button の子孫は読み上げ上ひとかたまりに
+ * 潰れるため、逆向きに h1 を button の中へ入れると見出しが消える。
+ *
+ * 帯の中では地の文に見せたいので、枠と背景を落として文字だけにする。
+ * font: inherit で h1 の書体をそのまま受け取る。
+ */
+.auth-portal-bar__toggle {
   display: flex;
-  flex: 1 1 auto;
-  gap: 12px;
+  gap: 6px;
   align-items: center;
-  justify-content: flex-end;
-  min-width: 0;
+  /* 指で押せる高さを確保する。文字だけでは 25px ほどにしかならない。 */
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.auth-portal-bar__email {
-  min-width: 0;
-  overflow: hidden;
+.auth-portal-bar__toggle:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 2px;
+}
+
+/*
+ * 逆三角。開いているあいだは 180 度回して、上向きにする。
+ * 状態は aria-expanded だけが持ち、CSS はそれを見る。
+ * JS が付け外しする専用クラスを作らないため、表示と支援技術がずれない。
+ */
+.auth-portal-bar__chevron {
+  flex: 0 0 auto;
   color: var(--c-text-muted);
-  font-size: 0.8125rem;
-  line-height: 1.6;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  transition: transform 0.15s ease;
+}
+
+.auth-portal-bar__toggle[aria-expanded='true'] .auth-portal-bar__chevron {
+  transform: rotate(180deg);
 }
 
 .auth-portal-bar__logout {
@@ -610,9 +638,14 @@
   line-height: 1.7;
 }
 
-/* アカウント情報。作業の邪魔にならないよう、下部の小さな枠に置く。 */
+/*
+ * アカウント情報。ヘッダーバー直下の開閉パネル。
+ *
+ * 普段は閉じているため、アプリの一覧を押し下げない。
+ * 上の余白は帯の margin-bottom が作るので、ここでは持たない。
+ */
 .auth-account {
-  margin-top: 28px;
+  margin-bottom: 20px;
   padding: 16px 18px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-card);
