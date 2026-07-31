@@ -20,6 +20,10 @@
 参照するときは、セクション番号（§n）で指し示してください。
 行番号は変わるため使いません。
 
+これらの仕様書が対象とするのは **TSAM AI 本体** です。
+同居する別プロジェクト（`labs/`）はスコープ外とします
+（[../repository-structure.md](../repository-structure.md)）。
+
 ---
 
 ## `legal/*/index.html` は生成物です
