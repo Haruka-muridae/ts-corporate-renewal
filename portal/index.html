@@ -124,10 +124,20 @@
           <p class="auth-api-panel__note">
             Gemini APIキーはお使いの端末（ブラウザ）にのみ保存され、当社サーバーには送信されません。
           </p>
+          <!--
+            キーの取得手順。
+            リンクだけでなくURL自体も読める形で出す。
+            リンクを踏まずに、行き先を目で確かめてから移動できるようにするため。
+          -->
           <p class="auth-api-panel__note">
             キーは
             <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
-            で取得できます（新しいタブで開きます）。
+            （<span class="auth-api-panel__url">https://aistudio.google.com/</span>）で取得できます。
+            新しいタブで開きます。
+          </p>
+          <p class="auth-api-panel__note">
+            <strong>Googleアカウントがあれば無料で発行できます。</strong>
+            Google Workspace などの有料契約は必要ありません。
           </p>
 
           <!-- 未保存のとき、または「変更」を押したとき。 -->
@@ -169,6 +179,32 @@
           </div>
 
           <p class="auth-message auth-api-panel__message" id="portal-api-message" tabindex="-1" hidden></p>
+
+          <!--
+            Google Workspace の紹介。キーの取得とは別の話なので、
+            区切り線を入れて分ける。
+
+            置き場所はパネルの末尾にする。手順文の直後に挟むと、
+            キーを入れに来た人の入力欄が下へ押し下げられる。
+
+            紹介リンクである旨・有料である旨・キー取得には不要である旨は、
+            表示から落ちてはならない。文言をここへ直接書いているのは、
+            /apps/ 側の実装（テスト環境）へ本番から依存させないため。
+          -->
+          <aside class="auth-api-panel__promo" aria-labelledby="portal-api-promo-title">
+            <h3 class="auth-api-panel__promo-title" id="portal-api-promo-title">Google Workspace のご案内</h3>
+            <p class="auth-api-panel__promo-body">
+              独自ドメインのメールなど、ビジネス用途でGoogleのサービスをお使いになるなら
+              <a id="portal-workspace-link" href="https://referworkspace.app.goo.gl/2KTq"
+                 target="_blank" rel="noopener noreferrer">Google Workspace</a>
+              がおすすめです。<span class="auth-api-panel__promo-tag">【紹介リンク】</span>
+            </p>
+            <p class="auth-api-panel__promo-note">
+              Google Workspace 紹介プログラムのリンクです。Google Workspace は有料サービスで、
+              Google LLC が提供する外部サイトへ新しいタブで移動します。
+              <strong>Gemini APIキーの取得に Google Workspace は必要ありません。</strong>
+            </p>
+          </aside>
         </section>
 
         <p class="auth-message" id="portal-message" tabindex="-1" hidden></p>
