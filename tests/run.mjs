@@ -35,6 +35,7 @@ const SUITES = [
   { name: 'tokens-sessions', file: 'unit/tokens-sessions.mjs', kind: 'unit' },
   { name: 'login', file: 'unit/login.mjs', kind: 'unit' },
   { name: 'stripe', file: 'unit/stripe.mjs', kind: 'unit' },
+  { name: 'consent', file: 'unit/consent.mjs', kind: 'unit' },
   { name: 'setup', file: 'unit/setup.mjs', kind: 'unit' },
   { name: 'frontend', file: 'unit/frontend.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },

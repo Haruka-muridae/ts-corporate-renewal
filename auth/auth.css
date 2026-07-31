@@ -556,3 +556,268 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- 法務ページ（/legal/） ---------- */
+
+/*
+ * 白基調で読みやすい本文幅にする。
+ * 条文が続くため、カード枠で囲わず地の文として組む。
+ * スマホ優先で、320px でも読める字送りを保つ。
+ */
+.auth-legal {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.auth-legal__meta {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.auth-legal__body {
+  font-size: 0.9375rem;
+  line-height: 2;
+}
+
+.auth-legal__body h2 {
+  margin-top: 40px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--c-border);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+.auth-legal__body h2:first-child {
+  margin-top: 0;
+}
+
+.auth-legal__body h3 {
+  margin-top: 28px;
+  margin-bottom: 8px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.auth-legal__body p {
+  margin-bottom: 16px;
+}
+
+/* 条項の番号付きリスト。ぶら下げて番号を揃える。 */
+.auth-legal__body ol {
+  margin: 0 0 16px;
+  padding-left: 1.8em;
+  list-style: decimal;
+}
+
+.auth-legal__body ul {
+  margin: 0 0 16px;
+  padding-left: 1.8em;
+  list-style: disc;
+}
+
+.auth-legal__body li {
+  margin-bottom: 8px;
+}
+
+.auth-legal__body a {
+  color: var(--c-main);
+}
+
+/*
+ * 特商法の表。320px では横スクロールさせず、
+ * 見出しと内容を積み上げて読ませる。
+ */
+.auth-legal__table {
+  width: 100%;
+  margin-bottom: 24px;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.9;
+}
+
+.auth-legal__table th,
+.auth-legal__table td {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  text-align: left;
+}
+
+.auth-legal__table th {
+  border-bottom: 0;
+  background-color: var(--c-bg-sub);
+  font-weight: 700;
+}
+
+.auth-legal__table tr + tr th {
+  border-top: 0;
+}
+
+.auth-legal__table td {
+  border-top: 0;
+}
+
+@media (min-width: 768px) {
+  .auth-legal__table th,
+  .auth-legal__table td {
+    display: table-cell;
+    width: auto;
+    border-top: 1px solid var(--c-border);
+  }
+
+  .auth-legal__table th {
+    width: 34%;
+    border-bottom: 1px solid var(--c-border);
+    border-right: 0;
+  }
+
+  .auth-legal__table tr + tr th,
+  .auth-legal__table td {
+    border-top: 0;
+  }
+}
+
+/* ---------- 申込み前の同意（/pricing/） ---------- */
+
+.auth-consent {
+  margin-top: 28px;
+  padding: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.auth-consent__title {
+  margin-bottom: 12px;
+  font-size: 1rem;
+}
+
+/*
+ * 申込み前の警告。色だけに頼らず、見出し語と枠線でも伝える。
+ * コントラスト比 4.5:1 以上を確保する。
+ */
+.auth-consent__warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border: 1px solid #a3221f;
+  border-left-width: 4px;
+  border-radius: var(--radius-tag);
+  background-color: #fdf3f2;
+  color: #7a1917;
+  font-size: 0.875rem;
+  line-height: 1.9;
+}
+
+.auth-consent__warning-label {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.auth-consent__warning-label::after {
+  content: '：';
+}
+
+.auth-consent__warning-body {
+  flex: 1 1 200px;
+}
+
+/* 契約条件の確認表。セクションごとに見出しを立てる。 */
+.auth-consent__section {
+  margin-bottom: 20px;
+}
+
+.auth-consent__section-title {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--c-border);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.auth-consent__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.auth-consent__table th,
+.auth-consent__table td {
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--c-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.auth-consent__table th {
+  width: 40%;
+  color: var(--c-text-muted);
+  font-weight: 400;
+}
+
+/* 強調する値。太字と色の両方で示す。 */
+.auth-consent__table td[data-emphasis='true'] {
+  color: #a3221f;
+  font-weight: 700;
+}
+
+/* チェックボックス群。 */
+.auth-consent__items {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--c-border);
+}
+
+.auth-consent__item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  cursor: pointer;
+}
+
+.auth-consent__checkbox {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 3px;
+}
+
+.auth-consent__item a {
+  color: var(--c-main);
+}
+
+.auth-consent__required {
+  margin-left: 4px;
+  color: #a3221f;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.auth-consent__actions {
+  margin-top: 24px;
+}
+
+.auth-consent__selected {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg-sub);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}

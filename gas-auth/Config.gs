@@ -68,7 +68,9 @@ var SHEETS = {
   SYSTEM_ERROR_LOGS: 'system_error_logs',
 
   SETTINGS: 'settings',
-  PLANS: 'plans'
+  PLANS: 'plans',
+  CONSENT_ITEMS: 'consent_items',
+  CONFIRM_SECTIONS: 'confirm_sections'
 };
 
 /** 各シートのヘッダー。列の順序はここが正本。 */
@@ -103,6 +105,12 @@ HEADERS[SHEETS.SETTINGS] = ['key', 'value', 'description'];
 HEADERS[SHEETS.PLANS] = [
   'plan_code', 'plan_name', 'stripe_price_id', 'amount', 'currency',
   'interval', 'features', 'enabled'
+];
+HEADERS[SHEETS.CONSENT_ITEMS] = [
+  'item_id', 'label', 'required', 'sort_order', 'enabled'
+];
+HEADERS[SHEETS.CONFIRM_SECTIONS] = [
+  'section', 'item_label', 'item_value', 'emphasis', 'sort_order'
 ];
 
 /** users シートの列番号（1始まり）。HEADERS と必ず一致させる。 */
@@ -143,6 +151,16 @@ var EVENT_COL = {
 var PLAN_COL = {
   PLAN_CODE: 1, PLAN_NAME: 2, STRIPE_PRICE_ID: 3, AMOUNT: 4,
   CURRENCY: 5, INTERVAL: 6, FEATURES: 7, ENABLED: 8
+};
+
+/** consent_items シートの列（1始まり）。 */
+var CONSENT_COL = {
+  ITEM_ID: 1, LABEL: 2, REQUIRED: 3, SORT_ORDER: 4, ENABLED: 5
+};
+
+/** confirm_sections シートの列（1始まり）。 */
+var CONFIRM_COL = {
+  SECTION: 1, ITEM_LABEL: 2, ITEM_VALUE: 3, EMPHASIS: 4, SORT_ORDER: 5
 };
 
 /** アカウント状態。Stripe の契約状態とは別物。 */
@@ -221,7 +239,17 @@ var DEFAULT_SETTINGS = {
   MAIL_ENABLED: 'TRUE',
 
   /* Checkout の乱用防止（1時間あたりの作成上限）。 */
-  CHECKOUT_HOURLY_LIMIT: '60'
+  CHECKOUT_HOURLY_LIMIT: '60',
+
+  /*
+   * 同意を取得した利用規約の版。
+   * 規約を改訂したらここを上げる。値が変わると、
+   * 古い版で同意した申込みは受け付けなくなる。
+   */
+  TOS_VERSION: '1.0',
+
+  /* 申込み前に赤枠で出す警告文。 */
+  CONSENT_WARNING_TEXT: '本サービスは月額550円（税込）の1か月単位の自動更新契約です。解約されるまで毎月自動的に決済されます。AI機能のAPI利用料は月額料金に含まれず、利用者が各AIプロバイダーへ直接支払います。'
 };
 
 /**
@@ -239,7 +267,7 @@ var PATHS = {
 };
 
 /** Web API から実行を許可する action。ホワイトリスト方式。 */
-var ALLOWED_GET_ACTIONS = ['listPlans', 'publicConfig', 'health'];
+var ALLOWED_GET_ACTIONS = ['listPlans', 'publicConfig', 'health', 'listConsentConfig'];
 var ALLOWED_POST_ACTIONS = [
   'login',
   'logout',

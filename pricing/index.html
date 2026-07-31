@@ -74,13 +74,46 @@
         </dl>
       </section>
 
+      <!--
+        契約条件の確認と同意。
+        プランを選ぶまでは隠しておき、選択後に pricing.js が表示する。
+        中身（警告文・確認表・チェック項目）はすべてサーバーから取得する。
+        文言をここへ直書きしない。
+      -->
+      <section class="auth-consent" id="pricing-consent" aria-labelledby="pricing-consent-title" hidden>
+        <h2 class="auth-consent__title" id="pricing-consent-title">お申し込み内容の確認</h2>
+
+        <p class="auth-consent__selected" id="pricing-consent-selected"></p>
+
+        <p class="auth-consent__warning" id="pricing-consent-warning" hidden>
+          <strong class="auth-consent__warning-label">ご確認ください</strong>
+          <span class="auth-consent__warning-body" id="pricing-consent-warning-body"></span>
+        </p>
+
+        <div id="pricing-consent-sections"></div>
+
+        <form id="pricing-consent-form" novalidate>
+          <div class="auth-consent__items" id="pricing-consent-items"></div>
+
+          <p class="auth-message" id="pricing-consent-message" tabindex="-1" hidden></p>
+
+          <div class="auth-consent__actions">
+            <button class="auth-button" id="pricing-consent-submit" type="submit" disabled>
+              同意して決済へ進む
+            </button>
+            <button class="auth-button auth-button--ghost" id="pricing-consent-back" type="button">
+              プランを選び直す
+            </button>
+          </div>
+        </form>
+      </section>
+
       <div class="auth-links">
         <ul class="auth-links__list">
           <li><a href="../login/">ログイン画面へ戻る</a></li>
-          <!-- TODO: 利用規約ページの公開URL確定後にリンクへ差し替える -->
-          <li class="auth-links__pending">利用規約（準備中）</li>
-          <!-- TODO: プライバシーポリシーページの公開URL確定後にリンクへ差し替える -->
-          <li class="auth-links__pending">プライバシーポリシー（準備中）</li>
+          <li><a href="../legal/terms/">利用規約</a></li>
+          <li><a href="../legal/privacy/">プライバシーポリシー</a></li>
+          <li><a href="../legal/tokusho/">特定商取引法に基づく表記</a></li>
         </ul>
       </div>
 

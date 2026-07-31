@@ -31,7 +31,7 @@
 | 9 | ログインボタン | `type="submit"`。処理中 disabled + 文言変更 + aria-busy + isBusy |
 | 10 | パスワードをお忘れですか | → `/password/reset/`(相対パス) |
 | 11 | 初めてご利用の方 / サービスを申し込む | → `/pricing/`。stripe.com 直リンク禁止 |
-| 12 | カード末尾のリンク群(auth-links) | 利用規約 / プライバシーポリシー。`<footer>` 要素ではなくカード内に置く |
+| 12 | カード末尾のリンク群(auth-links) | 利用規約(`/legal/terms/`) / プライバシーポリシー(`/legal/privacy/`) へのリンク。`<footer>` 要素ではなくカード内に置く |
 
 ### UI規約(本プロジェクトのハウスルール)
 
@@ -71,7 +71,7 @@
 ### 5.1 action ホワイトリスト(Config.gs / Main.gs)
 
 ```
-GET  : listPlans, publicConfig, health
+GET  : listPlans, publicConfig, health, listConsentConfig
 POST : login, logout, verifySession, setupPassword,
        requestPasswordReset, resetPassword,
        createCheckoutSession, checkoutStatus
@@ -304,6 +304,22 @@ REST パス形式を採らないのは GAS の単一エンドポイント制約�
 ---
 
 ## 15. 改訂履歴
+
+### v3.2(2026-07-31)
+
+利用規約同意システムと法務ページ(/legal/)の追加にあわせて改訂する。
+
+| # | 節 | 変更 |
+|---|----|------|
+| 1 | §5.1 | GET ホワイトリストへ `listConsentConfig` を追記 |
+| 2 | §2-12 | 「準備中」の非リンク表示を廃止し、/legal/terms/ /legal/privacy/ へのリンクに差し替え(/pricing/ には /legal/tokusho/ も追加) |
+
+/pricing/ の同意フローの確定仕様は、別ファイル
+[pricing-consent-spec-v1.md](./pricing-consent-spec-v1.md) に定める。
+`createCheckoutSession` は同意なしでは受け付けなくなったため、
+API 契約の差分は同ファイル §4 を参照すること。
+
+---
 
 ### v3.1(2026-07-29)
 

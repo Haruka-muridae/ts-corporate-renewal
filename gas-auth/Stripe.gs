@@ -241,6 +241,17 @@ function createCheckoutSession_(input) {
     return { ok: false, errorPair: ERRORS.PLAN_NOT_FOUND };
   }
 
+  /*
+   * 同意の検証。画面のチェックボックスは外せるため、ここで必ず確かめる。
+   * 必須項目が欠けている、または同意した規約の版が古い場合は決済へ進ませない。
+   */
+  var consent = verifyConsent_(input);
+
+  if (!consent.ok) {
+    logSystemError_('consent', '同意が不足しているため申込みを拒否: ' + consent.reason);
+    return { ok: false, errorPair: ERRORS.INVALID_REQUEST };
+  }
+
   var successUrl = getSuccessUrl_();
   var cancelUrl = getCancelUrl_();
 
@@ -260,6 +271,16 @@ function createCheckoutSession_(input) {
     subscription_data: { metadata: { plan_code: plan.planCode } },
     metadata: { plan_code: plan.planCode }
   };
+
+  /*
+   * 何にいつ同意したかを決済側にも残す。
+   * 後日「同意していない」と言われたときに、こちらのシートだけでなく
+   * Stripe 側の記録でも確認できるようにする。
+   */
+  var consentMeta = buildConsentMetadata_(input);
+  params.metadata.tos_version = consentMeta.tos_version;
+  params.metadata.tos_agreed_at = consentMeta.tos_agreed_at;
+  params.metadata.agreed_items = consentMeta.agreed_items;
 
   /*
    * customer_creation は送らない。

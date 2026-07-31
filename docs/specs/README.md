@@ -11,7 +11,8 @@
 
 | 仕様書 | 対象範囲 | 版 |
 | --- | --- | --- |
-| [login-page-detailed-spec-v3.md](./login-page-detailed-spec-v3.md) | `/login/index.html` ＋ `auth/` 共通層 ＋ `gas-auth/`（ログイン関連部分） | v3 |
+| [login-page-detailed-spec-v3.md](./login-page-detailed-spec-v3.md) | `/login/index.html` ＋ `auth/` 共通層 ＋ `gas-auth/`（ログイン関連部分） | v3.2 |
+| [pricing-consent-spec-v1.md](./pricing-consent-spec-v1.md) | `/pricing/` の同意フロー ＋ `gas-auth/Consent.gs` ＋ `/legal/` 3ページ | v1 |
 
 参照するときは、セクション番号（§n）で指し示してください。
 行番号は変わるため使いません。

@@ -44,6 +44,10 @@ function doGet(e) {
       return ok_(buildPublicConfig_());
     }
 
+    if (action === 'listConsentConfig') {
+      return ok_(buildConsentConfig_());
+    }
+
     return failFrom_(ERRORS.INVALID_ACTION);
   } catch (err) {
     return handleUnexpected_('doGet', err);
@@ -149,7 +153,10 @@ function dispatchPost_(action, body) {
   if (action === 'createCheckoutSession') {
     return respond_(createCheckoutSession_({
       planCode: body.planCode,
-      email: body.email
+      email: body.email,
+      /* 同意の検証に使う。画面のチェックだけには依存しない（Consent.gs 参照）。 */
+      agreedItems: body.agreedItems,
+      tosVersion: body.tosVersion
     }));
   }
 

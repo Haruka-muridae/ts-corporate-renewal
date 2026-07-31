@@ -147,10 +147,18 @@ try {
   );
 
   check(
-    '未公開の規約はリンクにせず「準備中」と明示している',
+    '利用規約が公開ページへリンクしている',
     await page.evaluate(`
-      [...document.querySelectorAll(".auth-links__pending")].some((li) =>
-        li.textContent.includes("利用規約") && li.textContent.includes("準備中"))
+      [...document.querySelectorAll("a")].some((a) =>
+        a.textContent.trim() === "利用規約" && a.getAttribute("href") === "../legal/terms/")
+    `),
+  );
+
+  check(
+    'プライバシーポリシーも公開ページへリンクしている',
+    await page.evaluate(`
+      [...document.querySelectorAll("a")].some((a) =>
+        a.textContent.trim() === "プライバシーポリシー" && a.getAttribute("href") === "../legal/privacy/")
     `),
   );
 
@@ -757,6 +765,370 @@ try {
     'Price ID をHTMLへ埋め込んでいない',
     await page.evaluate('!document.documentElement.innerHTML.includes("price_")'),
   );
+
+  check(
+    '同意項目の文言をHTMLへ直書きしていない（サーバーから取得する）',
+    await page.evaluate('document.getElementById("pricing-consent-items").children.length === 0'),
+  );
+
+  check(
+    '確認表もHTMLへ直書きしていない',
+    await page.evaluate('document.getElementById("pricing-consent-sections").children.length === 0'),
+  );
+
+  check(
+    'プランを選ぶまで同意セクションを出さない',
+    await page.evaluate('document.getElementById("pricing-consent").hidden === true'),
+  );
+
+  /* ---------------------------------------------------------------- */
+  section('法務ページ');
+
+  const legalPages = [
+    ['/legal/terms/', '利用規約', 'TSAM AI 利用規約'],
+    ['/legal/privacy/', 'プライバシーポリシー', 'TSAM AI プライバシーポリシー'],
+    ['/legal/tokusho/', '特定商取引法に基づく表記', '特定商取引法に基づく表記'],
+  ];
+
+  for (const [path, label, heading] of legalPages) {
+    await page.goto(`${origin}${path}`, 900);
+
+    const actual = await page.evaluate('document.querySelector("h1")?.textContent ?? ""');
+    check(`${path} の見出しが「${heading}」`, actual === heading, actual);
+
+    check(
+      `${path} に制定日と版が出る`,
+      await page.evaluate('document.body.textContent.includes("2026年7月30日 制定")')
+      && await page.evaluate('document.body.textContent.includes("Version 1.0")'),
+    );
+
+    /* 法務確認コメントと草案注記は公開ページに出さない。 */
+    check(
+      `${path} に法務確認コメントが残っていない`,
+      await page.evaluate('!document.body.textContent.includes("法務確認コメント")'),
+    );
+
+    check(
+      `${path} に草案の注記が残っていない`,
+      await page.evaluate(`
+        !document.body.textContent.includes("弁護士による確認を受けることを推奨")
+        && !document.body.textContent.includes("DRAFT")
+        && !document.body.textContent.includes("要確認リスト")
+      `),
+    );
+
+    await page.setViewport(320, 900);
+    await page.goto(`${origin}${path}`, 700);
+
+    const overflow = await page.evaluate(
+      'document.documentElement.scrollWidth - document.documentElement.clientWidth',
+    );
+    check(`${path} が320pxで横スクロールしない`, overflow <= 0, overflow);
+    await page.clearViewport();
+
+    /* ラベルだけ使って未使用変数を作らない。 */
+    check(`${path} のタイトルに「${label}」が入る`, (await page.evaluate('document.title')).includes(label));
+  }
+
+  await page.goto(`${origin}/legal/tokusho/`, 900);
+
+  check(
+    '特商法に適格請求書発行事業者登録番号が出る',
+    await page.evaluate('document.body.textContent.includes("T3021003007473")'),
+  );
+
+  check(
+    '特商法に請求書・領収書の扱いが出る',
+    await page.evaluate('document.body.textContent.includes("領収書メール")'),
+  );
+
+  check(
+    '特商法に月額550円が出る',
+    await page.evaluate('document.body.textContent.includes("550円")'),
+  );
+
+  check(
+    '特商法に1年間継続の目安が出る',
+    await page.evaluate('document.body.textContent.includes("6,600円")'),
+  );
+
+  /* ---------------------------------------------------------------- */
+  section('「準備中」表記が残っていないこと');
+
+  for (const path of ['/login/', '/pricing/']) {
+    await page.goto(`${origin}${path}`, 1000);
+
+    check(
+      `${path} に「準備中」が無い`,
+      await page.evaluate('!document.body.textContent.includes("準備中")'),
+    );
+
+    check(
+      `${path} から利用規約へリンクしている`,
+      await page.evaluate(`
+        [...document.querySelectorAll("a")].some((a) => a.getAttribute("href")?.includes("legal/terms/"))
+      `),
+    );
+
+    check(
+      `${path} からプライバシーポリシーへリンクしている`,
+      await page.evaluate(`
+        [...document.querySelectorAll("a")].some((a) => a.getAttribute("href")?.includes("legal/privacy/"))
+      `),
+    );
+  }
+
+  await page.goto(`${origin}/pricing/`, 1000);
+
+  check(
+    '/pricing/ から特定商取引法の表記へリンクしている',
+    await page.evaluate(`
+      [...document.querySelectorAll("a")].some((a) => a.getAttribute("href")?.includes("legal/tokusho/"))
+    `),
+  );
+
+  /* ---------------------------------------------------------------- */
+  section('同意フロー（応答を固定して確認）');
+
+  /*
+   * 本番のエンドポイントへ送らず、listPlans と listConsentConfig の
+   * 応答を差し替えて画面の挙動だけを確かめる。
+   */
+  const consentStub = await page.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      window.__checkoutCalls = [];
+      window.fetch = (url, options) => {
+        const target = String(url);
+        const reply = (data) => Promise.resolve(new Response(
+          JSON.stringify({ success: true, data }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ));
+
+        if (target.includes('action=listPlans')) {
+          return reply({ plans: [{
+            planCode: 'standard', planName: 'スタンダード',
+            amount: '550', currency: 'jpy', interval: 'month',
+            features: ['TSAM AI の各種アプリ'],
+          }] });
+        }
+
+        if (target.includes('action=listConsentConfig')) {
+          return reply({
+            tosVersion: '1.0',
+            warningText: 'これはテスト用の警告文です。',
+            consentItems: [
+              { itemId: 'tos', label: '{terms}および{privacy}に同意します。', required: true, sortOrder: 1 },
+              { itemId: 'auto_renew', label: '自動更新であることを確認しました。', required: true, sortOrder: 2 },
+              { itemId: 'optional_note', label: '任意の項目です（{tokusho}）。', required: false, sortOrder: 3 },
+            ],
+            confirmSections: [
+              { section: '料金と支払い', items: [
+                { label: '月額料金', value: '550円（税込）', emphasis: true },
+                { label: '支払方法', value: 'クレジットカード', emphasis: false },
+              ] },
+              { section: '解約', items: [
+                { label: '返金', value: '返金なし', emphasis: true },
+              ] },
+            ],
+          });
+        }
+
+        /*
+         * createCheckoutSession は記録するだけにする。
+         * 別ページへ遷移させると記録ごと失われるため、
+         * 同じページのハッシュだけを変える URL を返す（再読み込みが起きない）。
+         */
+        window.__checkoutCalls.push(JSON.parse(options.body));
+        return reply({
+          checkoutUrl: location.href.split('#')[0] + '#stubbed-checkout',
+          checkoutSessionId: 'cs_stub',
+        });
+      };
+    `,
+  });
+
+  await page.goto(`${origin}/pricing/`, 1500);
+
+  check(
+    'プランが描画される',
+    (await page.evaluate('document.getElementById("pricing-plans").children.length')) === 1,
+  );
+
+  check(
+    'この時点では同意セクションは隠れている',
+    await page.evaluate('document.getElementById("pricing-consent").hidden === true'),
+  );
+
+  await page.evaluate(`document.querySelector('button[data-plan-code="standard"]').click()`);
+  await page.sleep(300);
+
+  check(
+    'プランを選ぶと同意セクションが出る',
+    await page.evaluate('document.getElementById("pricing-consent").hidden === false'),
+  );
+
+  check(
+    '選択中のプランが表示される',
+    (await page.evaluate('document.getElementById("pricing-consent-selected").textContent')).includes('スタンダード'),
+  );
+
+  check(
+    '警告文がサーバーの値で表示される',
+    (await page.evaluate('document.getElementById("pricing-consent-warning-body").textContent'))
+      === 'これはテスト用の警告文です。',
+  );
+
+  check(
+    '確認表が2セクション描画される',
+    (await page.evaluate('document.getElementById("pricing-consent-sections").children.length')) === 2,
+  );
+
+  check(
+    '強調指定の値に印が付く',
+    await page.evaluate(`
+      document.querySelectorAll('#pricing-consent-sections td[data-emphasis="true"]').length === 2
+    `),
+  );
+
+  check(
+    'チェック項目が3件描画される',
+    (await page.evaluate('document.getElementById("pricing-consent-items").children.length')) === 3,
+  );
+
+  check(
+    '{terms} が利用規約リンクへ展開される',
+    await page.evaluate(`
+      [...document.querySelectorAll('#pricing-consent-items a')].some(
+        (a) => a.textContent === '利用規約' && a.getAttribute('href') === '../legal/terms/')
+    `),
+  );
+
+  check(
+    '{privacy} と {tokusho} も展開される',
+    await page.evaluate(`
+      [...document.querySelectorAll('#pricing-consent-items a')].some((a) => a.getAttribute('href') === '../legal/privacy/')
+      && [...document.querySelectorAll('#pricing-consent-items a')].some((a) => a.getAttribute('href') === '../legal/tokusho/')
+    `),
+  );
+
+  check(
+    '差し込み記法が画面に残らない',
+    await page.evaluate(`!document.getElementById("pricing-consent-items").textContent.includes("{")`),
+  );
+
+  check(
+    '必須項目に（必須）が付く',
+    (await page.evaluate(`
+      document.querySelectorAll('#pricing-consent-items .auth-consent__required').length
+    `)) === 2,
+  );
+
+  check(
+    'チェックボックスに label が結び付いている',
+    await page.evaluate(`
+      [...document.querySelectorAll('#pricing-consent-items input[type=checkbox]')].every(
+        (box) => document.querySelector('label[for="' + box.id + '"]') !== null)
+    `),
+  );
+
+  check(
+    '未チェックではボタンが無効',
+    await page.evaluate('document.getElementById("pricing-consent-submit").disabled === true'),
+  );
+
+  /* 必須を1つだけチェックしても、まだ進めない。 */
+  await page.evaluate(`
+    document.getElementById("consent-tos").click();
+  `);
+  await page.sleep(150);
+
+  check(
+    '必須が一部だけではボタンが無効のまま',
+    await page.evaluate('document.getElementById("pricing-consent-submit").disabled === true'),
+  );
+
+  /* 任意項目をチェックしても、必須が揃わなければ進めない。 */
+  await page.evaluate('document.getElementById("consent-optional_note").click()');
+  await page.sleep(150);
+
+  check(
+    '任意項目では必須の代わりにならない',
+    await page.evaluate('document.getElementById("pricing-consent-submit").disabled === true'),
+  );
+
+  await page.evaluate('document.getElementById("consent-auto_renew").click()');
+  await page.sleep(150);
+
+  check(
+    '必須が全部そろうとボタンが有効になる',
+    await page.evaluate('document.getElementById("pricing-consent-submit").disabled === false'),
+  );
+
+  /* 必須を外すと、また無効に戻る。 */
+  await page.evaluate('document.getElementById("consent-tos").click()');
+  await page.sleep(150);
+
+  check(
+    '必須を外すと無効へ戻る',
+    await page.evaluate('document.getElementById("pricing-consent-submit").disabled === true'),
+  );
+
+  await page.evaluate('document.getElementById("consent-tos").click()');
+  await page.sleep(150);
+
+  /* 送信内容を確かめる。 */
+  await page.evaluate('document.getElementById("pricing-consent-form").requestSubmit()');
+  await page.sleep(500);
+
+  const sent = await page.evaluate('JSON.stringify(window.__checkoutCalls)');
+  const calls = JSON.parse(sent);
+
+  check('申し込みが1回だけ送られる', calls.length === 1, calls.length);
+  check('action が createCheckoutSession', calls[0]?.action === 'createCheckoutSession');
+  check('プランコードを送る', calls[0]?.planCode === 'standard');
+  check('tosVersion を送る', calls[0]?.tosVersion === '1.0');
+
+  check(
+    'チェックした項目だけを送る',
+    JSON.stringify((calls[0]?.agreedItems ?? []).slice().sort())
+      === JSON.stringify(['auto_renew', 'optional_note', 'tos']),
+    JSON.stringify(calls[0]?.agreedItems),
+  );
+
+  check(
+    'Price ID を送らない',
+    !JSON.stringify(calls[0]).includes('price_'),
+  );
+
+  /* プランを選び直すと同意はやり直しになる。 */
+  await page.goto(`${origin}/pricing/`, 1500);
+  await page.evaluate(`document.querySelector('button[data-plan-code="standard"]').click()`);
+  await page.sleep(200);
+  await page.evaluate(`
+    document.getElementById("consent-tos").click();
+    document.getElementById("consent-auto_renew").click();
+  `);
+  await page.sleep(150);
+  await page.evaluate('document.getElementById("pricing-consent-back").click()');
+  await page.sleep(200);
+  await page.evaluate(`document.querySelector('button[data-plan-code="standard"]').click()`);
+  await page.sleep(200);
+
+  check(
+    'プランを選び直すとチェックが外れる',
+    await page.evaluate(`
+      [...document.querySelectorAll('#pricing-consent-items input[type=checkbox]')].every((box) => !box.checked)
+    `),
+  );
+
+  check(
+    '選び直した直後はボタンが無効',
+    await page.evaluate('document.getElementById("pricing-consent-submit").disabled === true'),
+  );
+
+  await page.send('Page.removeScriptToEvaluateOnNewDocument', {
+    identifier: consentStub.result.identifier,
+  });
 
   /* ---------------------------------------------------------------- */
   section('プロジェクトPages配信（サブパス）でも壊れない');

@@ -175,8 +175,25 @@ export function requestPasswordReset(email) {
   return postAction('requestPasswordReset', { email });
 }
 
-export function createCheckoutSession({ planCode, email }) {
-  return postAction('createCheckoutSession', { planCode, email });
+/*
+ * 申込みを開始する。
+ *
+ * agreedItems と tosVersion は必須。
+ * サーバー側でも必須項目の充足と規約版の一致を確認するため、
+ * 画面のチェックを外しても決済へは進めない。
+ */
+export function createCheckoutSession({ planCode, email, agreedItems, tosVersion }) {
+  return postAction('createCheckoutSession', {
+    planCode,
+    email,
+    agreedItems,
+    tosVersion,
+  });
+}
+
+/* 申込み前に出す同意項目と契約条件の確認表。認証不要。 */
+export function listConsentConfig() {
+  return getAction('listConsentConfig');
 }
 
 export function checkoutStatus(checkoutSessionId) {
