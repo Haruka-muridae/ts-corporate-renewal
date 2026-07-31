@@ -30,6 +30,10 @@ Google アカウントと Stripe アカウントの操作が必要なため、�
 > **A-2 の注意:** 既存の `gas/`（お気に入り機能）とは **別プロジェクト**にすること。
 > 同じプロジェクトへ入れると `CONFIG` などの名前が衝突し、両方が壊れる。
 
+> **貼り替えの記録は [docs/gas-deployment-log.md](./docs/gas-deployment-log.md) にある。**
+> Apps Script はリポジトリの外にあり、`gas-auth/*.gs` を push しても本番へは
+> 反映されない。「いつ・どこまで貼り替えたか」はこのログだけが答えられる。
+
 > **A-5 でできる4ファイル:** `TSAM AI ユーザー管理` / `TSAM AI 認証ログ` /
 > `TSAM AI 認証設定` / `TSAM AI 法務文書`
 >
