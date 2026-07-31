@@ -30,12 +30,17 @@ TSアセットマネジメント合同会社の静的なコーポレートサイ
 ├── apps/                     ── アプリポータル（テスト環境。従来どおり）
 ├── gas/                         お気に入り機能のバックエンド
 │
+├── labs/                     ── TSAM AI とは無関係な同居プロジェクト（現時点では空）
+│
 ├── app/ components/ lib/     ── Next.js（現在デプロイしていない）
 ├── docs/
 ├── AGENTS.md
 ├── README.md
 └── SITE_SPEC.md
 ```
+
+`labs/` の扱い（共通資産を参照しない・公開される前提・指示書のスコープ）は
+[docs/repository-structure.md](docs/repository-structure.md)で宣言しています。
 
 `SITE_SPEC.md`は、掲載文章、会社情報、デザイン、レスポンシブ、アクセシビリティ、SEOの実装基準です。
 
