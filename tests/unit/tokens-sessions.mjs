@@ -9,7 +9,7 @@
  *   - 通常ログインと「ログイン状態を保持」で期限が違う
  */
 
-import { check, section, finish, fatal } from '../../apps/tests/helpers/assert.mjs';
+import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { createReadyEnvironment, setSetting, createActiveUser } from '../helpers/gas-harness.mjs';
 
 const HOUR = 60 * 60 * 1000;

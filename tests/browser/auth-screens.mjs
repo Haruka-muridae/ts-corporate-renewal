@@ -25,8 +25,8 @@
  * ------------------------------------------------------------------
  */
 
-import { check, section, finish, fatal } from '../../apps/tests/helpers/assert.mjs';
-import { startSuite } from '../../apps/tests/helpers/browser-harness.mjs';
+import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
+import { startSuite } from '../../public/apps/tests/helpers/browser-harness.mjs';
 
 /* 既存の apps 側テストとポートが衝突しないよう、離れた番号を使う。 */
 const SUITE_INDEX = 20;

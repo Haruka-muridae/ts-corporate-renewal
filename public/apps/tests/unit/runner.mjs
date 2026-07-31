@@ -235,7 +235,7 @@ setTimeout(() => {
    */
   const pkg = JSON.parse(
     await import('node:fs/promises')
-      .then((fs) => fs.readFile(new URL('../../../package.json', import.meta.url), 'utf8')),
+      .then((fs) => fs.readFile(new URL('../../../../package.json', import.meta.url), 'utf8')),
   );
 
   const range = pkg.engines?.node ?? '';

@@ -12,7 +12,7 @@
  * ==================================================================
  */
 
-import { check, section, finish, fatal } from '../../apps/tests/helpers/assert.mjs';
+import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { createReadyEnvironment, setSetting } from '../helpers/gas-harness.mjs';
 
 const SECRET_KEY = 'sk_test_do_not_use_for_real_0000000000';

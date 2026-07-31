@@ -11,7 +11,7 @@
  * あわせて「失敗理由が画面へ漏れないこと」も確かめる。
  */
 
-import { check, section, finish, fatal } from '../../apps/tests/helpers/assert.mjs';
+import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { createReadyEnvironment, setSetting, createActiveUser } from '../helpers/gas-harness.mjs';
 
 const MINUTE = 60 * 1000;
