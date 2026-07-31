@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TSAMビジネス&amp;フレンド交流会 | TSアセットマネジメント合同会社</title>
+  <meta name="description" content="新たな出会いを求めている方のための交流会です。渋谷のカフェ&amp;バーを会場に、肩肘張らない雰囲気で開催します。参加費、割引制度、キャンセルポリシー、お申し込み方法をご確認いただけます。">
+
+  <!-- TODO: 公開URLの確定後に canonical を追加 -->
+  <!-- TODO: 公開URLの確定後に og:url を追加 -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="TSAMビジネス&amp;フレンド交流会 | TSアセットマネジメント合同会社">
+  <meta property="og:description" content="新たな出会いを求めている方のための交流会です。渋谷のカフェ&amp;バーを会場に、肩肘張らない雰囲気で開催します。">
+  <meta property="og:locale" content="ja_JP">
+  <!-- TODO: OGP画像の確定後に og:image を追加 -->
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+  <!-- TODO: 公開URLの確定後に BreadcrumbList / Event の JSON-LD を追加 -->
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <header id="header" class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-logo" href="../index.html" aria-label="TSアセットマネジメント合同会社 トップページ">
+        <span class="site-logo__mark" aria-hidden="true">TS</span>
+        <span class="site-logo__text">
+          <span class="site-logo__name">TSアセットマネジメント合同会社</span>
+          <span class="site-logo__name-en" lang="en">TS ASSET MANAGEMENT LLC</span>
+        </span>
+      </a>
+
+      <button
+        id="menu-toggle"
+        class="menu-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="global-nav"
+        aria-label="メニューを開く"
+      >
+        <span class="menu-toggle__line" aria-hidden="true"></span>
+        <span class="menu-toggle__line" aria-hidden="true"></span>
+        <span class="menu-toggle__line" aria-hidden="true"></span>
+      </button>
+
+      <nav id="global-nav" class="global-nav" aria-label="グローバルナビ">
+        <ul class="global-nav__list">
+          <li><a class="global-nav__link" href="../index.html#about">私たちについて</a></li>
+          <li><a class="global-nav__link" href="../index.html#approach">課題解決の進め方</a></li>
+          <li><a class="global-nav__link" href="../index.html#business">事業領域</a></li>
+          <li><a class="global-nav__link" href="../apps/index.html">AIアプリ</a></li>
+          <li><a class="global-nav__link" href="index.html" aria-current="page">交流会</a></li>
+          <li><a class="global-nav__link" href="../index.html#members">メンバー</a></li>
+          <li><a class="global-nav__link" href="../index.html#company">会社概要</a></li>
+          <li><a class="global-nav__link global-nav__link--contact" href="../index.html#contact">お問い合わせ</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="section event-hero" aria-labelledby="event-title">
+      <div class="container">
+        <nav class="breadcrumb" aria-label="パンくずリスト">
+          <ol class="breadcrumb__list">
+            <li><a href="../index.html">ホーム</a></li>
+            <li aria-current="page">交流会</li>
+          </ol>
+        </nav>
+
+        <div class="event-hero__inner">
+          <p class="event-hero__label" lang="en">Networking Event</p>
+          <h1 id="event-title" class="event-hero__title">TSAMビジネス&amp;フレンド交流会</h1>
+          <p class="event-hero__lead">新たな出会いを求めている方のための交流会です。ビジネスパートナーや仕事のつながりを探している方も、業界を越えた友人づくりをしたい方も歓迎します。渋谷のカフェ&amp;バーを会場に、肩肘張らない雰囲気で開催します。</p>
+
+          <!--
+            受付状態の表示。
+            data-event-status を "preparing"（準備中）/ "open"（受付中）/
+            "full"（申込状況による受付終了）/ "closed"（受付期間の終了）の
+            いずれかに書き換えると、
+            バッジの文言と申込ボタンの状態がまとめて切り替わる（script.js）。
+          -->
+          <p class="event-status" id="event-status" data-event-status="preparing">
+            <span class="event-status__badge" id="event-status-badge">準備中</span>
+            <span class="event-status__text" id="event-status-text">お申し込みの受付開始までお待ちください。</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section event-outline" aria-labelledby="outline-title">
+      <div class="container">
+        <header class="section-heading reveal">
+          <p class="section-label" lang="en">Outline</p>
+          <h2 id="outline-title">開催概要</h2>
+        </header>
+
+        <!--
+          開催日時は、次回以降の変更が1箇所で済むよう、このページ内では
+          下の「開催日時」の dd だけに記載する。
+          他の箇所（申込期間、申込セクション、特商法ページ）では
+          具体的な日付・時刻を繰り返さず、「開催当日の開始時刻」のように参照する。
+        -->
+        <dl class="event-outline__list reveal">
+          <div class="event-outline__row">
+            <dt>イベント名</dt>
+            <dd>TSAMビジネス&amp;フレンド交流会</dd>
+          </div>
+          <div class="event-outline__row">
+            <dt>開催日時</dt>
+            <dd><time datetime="2026-08-30T14:30+09:00">2026年8月30日（日）14:30</time>〜<time datetime="2026-08-30T16:00+09:00">16:00</time></dd>
+          </div>
+          <div class="event-outline__row">
+            <dt>開催場所</dt>
+            <dd>
+              CAFE&amp;BAR ZERA<br>
+              東京都渋谷区道玄坂1丁目17-4 道玄坂ビル4F
+            </dd>
+          </div>
+          <div class="event-outline__row">
+            <dt>申込期間</dt>
+            <dd>受付開始から、開催当日の開始時刻まで</dd>
+          </div>
+          <div class="event-outline__row">
+            <dt>参加費</dt>
+            <dd>通常価格 11,000円（税込）／割引適用後 3,300円〜11,000円（税込）（下記「参加費と割引制度」を参照）</dd>
+          </div>
+          <div class="event-outline__row">
+            <dt>主催</dt>
+            <dd>TSアセットマネジメント合同会社</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section event-price" aria-labelledby="price-title">
+      <div class="container">
+        <header class="section-heading reveal">
+          <p class="section-label" lang="en">Price</p>
+          <h2 id="price-title">参加費と割引制度</h2>
+          <p class="section-heading__lead">通常価格は11,000円（税込）です。お申し込みフォームでご入力いただく業種・職種・立場・年齢区分に応じて割引を自動で計算し、お支払い金額は3,300円〜11,000円（税込）の範囲で決まります。適用後の金額は、決済へお進みいただく前の確認画面でご確認いただけます。</p>
+        </header>
+
+        <div class="price-note reveal">
+          <h3 class="price-note__title">参加費に関するご注意</h3>
+          <ul class="price-note__list">
+            <li>業種・職種・立場・年齢はすべて自己申告です。証明書のご提出は不要です。</li>
+            <li>過去に主催者から出入り禁止・参加をお断りする通知を受けた方は、お申し込みフォームでその旨をご申告いただきます。ご申告いただいた場合の参加費は55,000円（税込）となり、割引は適用されません。</li>
+            <li>お支払いは、クレジットカードまたはPayPayによるオンライン決済のみとなります。当日現金でのお支払いは承っておりません。</li>
+            <li>申込状況により、予告なく受付を終了する場合があります。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section event-policy" aria-labelledby="policy-title">
+      <div class="container">
+        <header class="section-heading reveal">
+          <p class="section-label" lang="en">Policy</p>
+          <h2 id="policy-title">キャンセルポリシー</h2>
+        </header>
+
+        <div class="policy-box reveal">
+          <ul class="policy-box__list">
+            <li><strong>参加者ご都合によるキャンセル・返金は、一切お受けしておりません。</strong>ご欠席、遅刻、途中退出の場合も返金はいたしません。</li>
+            <li>参加権を第三者へお譲りいただくことは可能です。期限はなく、開催前であればいつでも承ります。ご希望の場合は<a href="../index.html#contact">お問い合わせ</a>よりご連絡ください。主催者が申込者情報を書き換え、参加確定メールを譲渡先へ再送いたします。受付番号は変更されません。</li>
+            <li>譲渡にともなうお支払い金額の再計算は行いません。差額の徴収・返金はいたしません。</li>
+            <li>領収書は決済者（譲渡元）宛のまま発行されます。譲渡先名義の領収書は発行いたしません。</li>
+            <li>主催者都合による中止、二重決済、システム不具合の場合に限り、主催者から返金の対応をいたします。</li>
+          </ul>
+          <p class="policy-box__note">お支払い後の取り扱いの詳細は<a href="legal.html">特定商取引法に基づく表記</a>をご確認ください。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section event-privacy" aria-labelledby="privacy-title">
+      <div class="container">
+        <header class="section-heading reveal">
+          <p class="section-label" lang="en">Notice</p>
+          <h2 id="privacy-title">当日の名札について</h2>
+        </header>
+
+        <div class="policy-box reveal">
+          <p>当日は、参加者の皆さまに名札を着用いただきます。名札には、氏名・会社名・業種・職種・立場を記載します。年齢は記載いたしません。</p>
+          <p>お申し込み時に、上記の項目が当日の名札に記載され、他の参加者に表示されることへご同意いただきます。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section event-apply" aria-labelledby="apply-title">
+      <div class="container">
+        <div class="apply-cta reveal">
+          <h2 id="apply-title" class="apply-cta__title">お申し込み</h2>
+          <p class="apply-cta__lead">お申し込みフォームで必要事項をご入力いただくと、割引を適用した金額を確認画面で表示します。金額をご確認のうえ、決済へお進みください。お申し込みは、開催当日の開始時刻まで受け付けます。申込状況により、予告なく受付を終了する場合があります。</p>
+
+          <!--
+            TODO: 申込フォーム（apply/）の実装後に href を差し替える。
+            現時点ではリンク先が存在しないため、リンクではなくボタンとして
+            無効状態で表示している（script.js が data-event-status を見て切り替える）。
+          -->
+          <p class="apply-cta__action">
+            <button class="btn btn--primary" type="button" id="apply-button" disabled>お申し込みへ進む</button>
+          </p>
+          <p class="apply-cta__note" id="apply-note">お申し込みの受付開始までお待ちください。</p>
+
+          <ul class="apply-cta__links">
+            <li><a href="legal.html">特定商取引法に基づく表記</a></li>
+            <li><a href="../index.html#contact">お問い合わせ</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer" class="site-footer">
+    <div class="container">
+      <div class="site-footer__main">
+        <div class="site-footer__info">
+          <p class="site-footer__name">TSアセットマネジメント合同会社</p>
+          <p class="site-footer__name-en" lang="en">TS ASSET MANAGEMENT LLC</p>
+          <address class="site-footer__address">
+            <p>〒249-0002 神奈川県逗子市久木8-8-26</p>
+            <p><a href="mailto:architect@potenitas.com">architect@potenitas.com</a></p>
+          </address>
+        </div>
+
+        <nav class="footer-nav" aria-label="フッターナビ">
+          <ul class="footer-nav__list">
+            <li><a href="../index.html#about">私たちについて</a></li>
+            <li><a href="../index.html#approach">課題解決の進め方</a></li>
+            <li><a href="../index.html#business">事業領域</a></li>
+            <li><a href="../apps/index.html">AIアプリ</a></li>
+            <li><a href="index.html">交流会</a></li>
+            <li><a href="legal.html">特定商取引法に基づく表記</a></li>
+            <li><a href="../index.html#company">会社概要</a></li>
+            <li><a href="../index.html#contact">お問い合わせ</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <div class="site-footer__bottom">
+        <small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small>
+      </div>
+    </div>
+  </footer>
+
+  <button id="pagetop" class="pagetop" type="button" aria-label="ページトップへ戻る" aria-hidden="true" tabindex="-1">
+    <span aria-hidden="true">▲</span>
+  </button>
+
+  <script src="script.js"></script>
+</body>
+</html>
