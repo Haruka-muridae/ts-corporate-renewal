@@ -229,11 +229,40 @@
           <button class="auth-portal-banner__action" id="portal-api-key-action" type="button">APIキーを設定する</button>
         </div>
 
-        <ul class="auth-apps" id="portal-apps"></ul>
+        <!--
+          アプリのページ式グリッド。
+          2列×4行＝8枠で1ページ。ページ数は max(2, ceil(件数/8))。
+          中身は portal.js が描く（空枠は「準備中」）。
 
-        <p class="auth-loading" id="portal-apps-empty" hidden>
-          ご利用可能なアプリは順次追加されます。
-        </p>
+          空状態の案内文は置かない。準備中の枠そのものが
+          「まだ何も入っていない」ことを示す。
+          詳細は docs/specs/apps-grid-spec-v1.md。
+        -->
+        <section class="auth-apps" aria-labelledby="portal-apps-title">
+          <h2 class="auth-visually-hidden" id="portal-apps-title">アプリ</h2>
+
+          <div class="auth-apps__pages" id="portal-apps"></div>
+
+          <nav class="auth-apps__pager" id="portal-apps-pager" aria-label="アプリのページ送り">
+            <button class="auth-apps__arrow" id="portal-apps-prev" type="button" aria-label="前のページ">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="m15 18-6-6 6-6"></path>
+              </svg>
+            </button>
+
+            <div class="auth-apps__dots" id="portal-apps-dots" role="group" aria-label="ページの選択"></div>
+
+            <button class="auth-apps__arrow" id="portal-apps-next" type="button" aria-label="次のページ">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
+            </button>
+          </nav>
+        </section>
       </div>
 
       <noscript>

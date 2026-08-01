@@ -864,20 +864,206 @@ try {
   await page.clearViewport();
   await page.sleep(120);
 
-  /* ---- アプリグリッド ---- */
+  /* ---- アプリグリッド（アプリ0件・2ページ＝16枠） ---- */
 
+  /*
+   * 空状態の案内文は廃止した。準備中の枠そのものが状態を語る。
+   * 文言が復活していないことも見ておく。
+   */
   check(
-    'apps.js が空なので案内文が出る',
+    '空状態の案内文（要素・文言）が無い',
     await page.evaluate(`
-      document.getElementById("portal-apps-empty").hidden === false
-      && document.getElementById("portal-apps").children.length === 0
+      document.getElementById("portal-apps-empty") === null
+      && !document.body.textContent.includes("ご利用可能なアプリは順次追加されます")
     `),
   );
 
   check(
-    '案内文は従来どおり',
-    (await page.evaluate('document.getElementById("portal-apps-empty").textContent.trim()'))
-      === 'ご利用可能なアプリは順次追加されます。',
+    'アプリ0件でも2ページぶんの枠が並ぶ',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page").length === 2
+      && document.querySelectorAll("#portal-apps .auth-app-card").length === 16
+    `),
+    await page.evaluate(`JSON.stringify({
+      pages: document.querySelectorAll("#portal-apps .auth-apps__page").length,
+      slots: document.querySelectorAll("#portal-apps .auth-app-card").length,
+    })`),
+  );
+
+  check(
+    '1ページは8枠（2列×4行）',
+    await page.evaluate(`
+      [...document.querySelectorAll("#portal-apps .auth-apps__page")]
+        .every((page) => page.children.length === 8)
+    `),
+  );
+
+  check(
+    '空枠はすべて「準備中」',
+    await page.evaluate(`
+      [...document.querySelectorAll(".auth-app-card--empty")].length === 16
+      && [...document.querySelectorAll(".auth-app-card__pending")]
+        .every((el) => el.textContent.trim() === "準備中")
+    `),
+  );
+
+  /* 行き先が無いものを押せる形にしない。 */
+  check(
+    '準備中の枠はリンクでもボタンでもない',
+    await page.evaluate(`
+      document.querySelectorAll(".auth-app-card--empty a, .auth-app-card--empty button").length === 0
+    `),
+  );
+
+  check(
+    '準備中の枠は破線で示す（形と語の両方）',
+    await page.evaluate(`
+      getComputedStyle(document.querySelector(".auth-app-card__placeholder")).borderTopStyle === "dashed"
+    `),
+    await page.evaluate('getComputedStyle(document.querySelector(".auth-app-card__placeholder")).borderTopStyle'),
+  );
+
+  /* ---- ページ送り ---- */
+
+  check(
+    '初期表示は1ページ目',
+    await page.evaluate(`(() => {
+      const pages = [...document.querySelectorAll("#portal-apps .auth-apps__page")];
+      return pages[0].hidden === false && pages.slice(1).every((p) => p.hidden === true);
+    })()`),
+  );
+
+  check(
+    'ドットはページ数ぶんの button',
+    await page.evaluate(`(() => {
+      const dots = [...document.querySelectorAll(".auth-apps__dot")];
+      return dots.length === 2
+        && dots.every((d) => d.tagName === "BUTTON" && d.getAttribute("aria-label"));
+    })()`),
+  );
+
+  check(
+    '表示中のドットに aria-current が付く',
+    await page.evaluate(`(() => {
+      const dots = [...document.querySelectorAll(".auth-apps__dot")];
+      return dots[0].getAttribute("aria-current") === "true"
+        && dots.slice(1).every((d) => d.getAttribute("aria-current") === null);
+    })()`),
+  );
+
+  check(
+    '矢印は button で aria-label を持つ',
+    await page.evaluate(`(() => {
+      const prev = document.getElementById("portal-apps-prev");
+      const next = document.getElementById("portal-apps-next");
+      return prev.tagName === "BUTTON" && next.tagName === "BUTTON"
+        && prev.getAttribute("aria-label") === "前のページ"
+        && next.getAttribute("aria-label") === "次のページ";
+    })()`),
+  );
+
+  check(
+    '1ページ目では「前へ」が押せない',
+    await page.evaluate(`
+      document.getElementById("portal-apps-prev").disabled === true
+      && document.getElementById("portal-apps-next").disabled === false
+    `),
+  );
+
+  /* 矢印で送る。 */
+  await page.evaluate('document.getElementById("portal-apps-next").click()');
+  await page.sleep(150);
+
+  check(
+    '「次へ」で2ページ目が出る（aria-current も追従）',
+    await page.evaluate(`(() => {
+      const pages = [...document.querySelectorAll("#portal-apps .auth-apps__page")];
+      const dots = [...document.querySelectorAll(".auth-apps__dot")];
+      return pages[1].hidden === false && pages[0].hidden === true
+        && dots[1].getAttribute("aria-current") === "true"
+        && dots[0].getAttribute("aria-current") === null;
+    })()`),
+  );
+
+  check(
+    '最終ページでは「次へ」が押せない',
+    await page.evaluate(`
+      document.getElementById("portal-apps-next").disabled === true
+      && document.getElementById("portal-apps-prev").disabled === false
+    `),
+  );
+
+  /* ドットで戻る。 */
+  await page.evaluate('document.querySelectorAll(".auth-apps__dot")[0].click()');
+  await page.sleep(150);
+
+  check(
+    'ドットを押すとそのページへ移る',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page")[0].hidden === false
+      && document.querySelectorAll(".auth-apps__dot")[0].getAttribute("aria-current") === "true"
+    `),
+  );
+
+  /* キーボードだけで送れること。実際にキーを送って確かめる。 */
+  await page.evaluate('document.getElementById("portal-apps-next").focus()');
+  await page.send('Input.dispatchKeyEvent', {
+    type: 'keyDown', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter', text: '\r',
+  });
+  await page.send('Input.dispatchKeyEvent', {
+    type: 'keyUp', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter',
+  });
+  await page.sleep(200);
+
+  check(
+    'Enter キーでページを送れる',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page")[1].hidden === false
+    `),
+  );
+
+  await page.evaluate('document.querySelectorAll(".auth-apps__dot")[0].focus()');
+  await page.send('Input.dispatchKeyEvent', {
+    type: 'keyDown', windowsVirtualKeyCode: 32, key: ' ', code: 'Space', text: ' ',
+  });
+  await page.send('Input.dispatchKeyEvent', {
+    type: 'keyUp', windowsVirtualKeyCode: 32, key: ' ', code: 'Space',
+  });
+  await page.sleep(200);
+
+  check(
+    'Space キーでドットを押せる',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page")[0].hidden === false
+    `),
+  );
+
+  /* 表示ページは保存しない。 */
+  await page.evaluate('document.getElementById("portal-apps-next").click()');
+  await page.sleep(150);
+  await page.goto(`${origin}/portal/`, 1500);
+
+  check(
+    '再読み込みすると1ページ目へ戻る（表示ページを保存しない）',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page")[0].hidden === false
+      && document.querySelectorAll(".auth-apps__dot")[0].getAttribute("aria-current") === "true"
+    `),
+  );
+
+  check(
+    '配置データを書き込んでいない（第2便まで読むだけ）',
+    (await page.evaluate('localStorage.getItem("tsam-app-layout")')) === null,
+    await page.evaluate('localStorage.getItem("tsam-app-layout")'),
+  );
+
+  /* バナーとの位置関係は従来どおり（バナーがグリッドより上）。 */
+  check(
+    'APIキーバナーはグリッドより上のまま',
+    await page.evaluate(`
+      document.getElementById("portal-api-key-banner").getBoundingClientRect().bottom
+      <= document.getElementById("portal-apps").getBoundingClientRect().top + 1
+    `),
   );
 
   /* ---- アカウント情報パネル（ヘッダーバー直下の開閉式） ---- */
@@ -1789,63 +1975,58 @@ try {
   /* ---------------------------------------------------------------- */
   section('Portal のレイアウト（続き）');
 
-  /* ---- ダミーのアプリを入れてカードの体裁を見る ---- */
+  /* ---- テストからアプリ定義を注入して体裁を見る ---- */
 
-  await page.evaluate(`(() => {
-    const list = document.getElementById("portal-apps");
-    document.getElementById("portal-apps-empty").hidden = true;
+  /*
+   * 画面が使っているのと同じ描画経路（renderAppsGrid）へ定義を渡す。
+   * DOM を手で組むと、実装が変わっても気づけない。
+   */
+  const INJECT_APPS = `[
+    { id: 'voice', name: '音声録音・MP3変換', icon: '録', href: 'production-app/voice/' },
+    { id: 'knowledge', name: 'ナレッジチャット', href: 'production-app/knowledge/' },
+    { id: 'card', name: '名刺読み取り', href: 'production-app/card/' }
+  ]`;
 
-    for (const app of [
-      { name: '音声録音・MP3変換', desc: '会議の録音をMP3にします。', icon: '録' },
-      { name: 'ナレッジチャット', desc: '社内資料に質問できます。', icon: '' },
-      { name: '名刺読み取り', desc: '名刺を一覧にします。', icon: '' },
-    ]) {
-      const item = document.createElement('li');
-      item.className = 'auth-app-card';
-
-      const link = document.createElement('a');
-      link.className = 'auth-app-card__link';
-      link.href = '../portal/';
-
-      const icon = document.createElement('span');
-      icon.className = 'auth-app-card__icon';
-      icon.textContent = app.icon !== '' ? app.icon : app.name.slice(0, 1);
-      icon.setAttribute('aria-hidden', 'true');
-      link.append(icon);
-
-      const name = document.createElement('h2');
-      name.className = 'auth-app-card__name';
-      name.textContent = app.name;
-      link.append(name);
-
-      const desc = document.createElement('p');
-      desc.className = 'auth-app-card__desc';
-      desc.textContent = app.desc;
-      link.append(desc);
-
-      item.append(link);
-      list.append(item);
-    }
-  })()`);
-
-  await page.sleep(150);
+  await page.evaluate(`
+    import('./portal.js').then((m) => m.renderAppsGrid(${INJECT_APPS}))
+  `);
+  await page.sleep(250);
 
   check(
-    'カードはアイコン・名前・説明の3つを持つ',
+    '注入した3件がカードになる（残りは準備中のまま）',
     await page.evaluate(`
-      [...document.querySelectorAll(".auth-app-card")].every((card) =>
-        card.querySelector(".auth-app-card__icon")
-        && card.querySelector(".auth-app-card__name")
-        && card.querySelector(".auth-app-card__desc"))
+      document.querySelectorAll(".auth-app-card__link").length === 3
+      && document.querySelectorAll(".auth-app-card--empty").length === 13
+    `),
+    await page.evaluate(`JSON.stringify({
+      cards: document.querySelectorAll(".auth-app-card__link").length,
+      empty: document.querySelectorAll(".auth-app-card--empty").length,
+    })`),
+  );
+
+  check(
+    'カードはアイコンと名前を持つ',
+    await page.evaluate(`
+      [...document.querySelectorAll(".auth-app-card__link")].every((link) =>
+        link.querySelector(".auth-app-card__icon")
+        && link.querySelector(".auth-app-card__name"))
     `),
   );
 
   check(
     'カード全体が1つのリンクになっている',
     await page.evaluate(`
-      [...document.querySelectorAll(".auth-app-card")].every((card) =>
+      [...document.querySelectorAll(".auth-app-card:not(.auth-app-card--empty)")].every((card) =>
         card.children.length === 1 && card.firstElementChild.tagName === "A")
     `),
+  );
+
+  check(
+    'href はサイトのルートからの相対パスとして解決される',
+    await page.evaluate(`
+      document.querySelector(".auth-app-card__link").getAttribute("href") === "../production-app/voice/"
+    `),
+    await page.evaluate('document.querySelector(".auth-app-card__link").getAttribute("href")'),
   );
 
   check(
@@ -1868,19 +2049,71 @@ try {
     (await page.evaluate('document.querySelectorAll(".auth-app-card__icon")[1].textContent')) === 'ナ',
   );
 
-  /* ---- 画面幅ごとの列数と横スクロール ---- */
+  /* ---- 9件ならページ数が3になる ---- */
+
+  /*
+   * 8枠を1ページとするので、9件は ceil(9/8) = 2 ページに収まる。
+   * 「3ページになる」ことを確かめるには 17 件が要る。
+   * 依頼の「9件で3ページ」は 8枠×2ページ＝16枠 を超える件数のことなので、
+   * 9件（=2ページ）と 17件（=3ページ）の両方を押さえる。
+   */
+  await page.evaluate(`
+    import('./portal.js').then((m) => m.renderAppsGrid(
+      Array.from({ length: 9 }, (unused, i) => ({ id: 'a' + i, name: 'App ' + i, href: 'x/' }))
+    ))
+  `);
+  await page.sleep(250);
+
+  check(
+    '9件ならページ数は2（ceil(9/8)=2）',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page").length === 2
+      && document.querySelectorAll(".auth-apps__dot").length === 2
+      && document.querySelectorAll(".auth-app-card__link").length === 9
+    `),
+    await page.evaluate(`JSON.stringify({
+      pages: document.querySelectorAll("#portal-apps .auth-apps__page").length,
+      cards: document.querySelectorAll(".auth-app-card__link").length,
+    })`),
+  );
+
+  await page.evaluate(`
+    import('./portal.js').then((m) => m.renderAppsGrid(
+      Array.from({ length: 17 }, (unused, i) => ({ id: 'b' + i, name: 'App ' + i, href: 'x/' }))
+    ))
+  `);
+  await page.sleep(250);
+
+  check(
+    '17件ならページ数が3になる（3ページ目が自動で増える）',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page").length === 3
+      && document.querySelectorAll(".auth-apps__dot").length === 3
+    `),
+    await page.evaluate('document.querySelectorAll("#portal-apps .auth-apps__page").length'),
+  );
+
+  check(
+    'ページを増やしても1ページ目から始まる',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page")[0].hidden === false
+      && document.querySelectorAll(".auth-apps__dot")[0].getAttribute("aria-current") === "true"
+    `),
+  );
+
+  /* ---- 画面幅ごとの体裁（常に2列・中央寄せ） ---- */
 
   const PORTAL_WIDTHS = [
-    [320, 1],
-    [375, 1],
-    [768, 3],
-    [1024, 3],
-    [1440, 3],
+    [320, 2],
+    [375, 2],
+    [768, 2],
+    [1024, 2],
+    [1440, 2],
   ];
 
   /* 同じ高さに並ぶカードの数を数えて、実際の列数を測る。 */
   const COLUMN_PROBE = `(() => {
-    const cards = [...document.querySelectorAll(".auth-app-card")];
+    const cards = [...document.querySelectorAll("#portal-apps .auth-apps__page:not([hidden]) .auth-app-card")];
     const top = Math.min(...cards.map((c) => c.getBoundingClientRect().top));
     return cards.filter((c) => Math.abs(c.getBoundingClientRect().top - top) < 2).length;
   })()`;
@@ -1890,25 +2123,48 @@ try {
     await page.goto(`${origin}/portal/`, 1200);
 
     /* 遷移でカードは消えるため、幅ごとに入れ直す。 */
-    await page.evaluate(`(() => {
-      const list = document.getElementById("portal-apps");
-      for (let i = 0; i < 3; i += 1) {
-        const item = document.createElement('li');
-        item.className = 'auth-app-card';
-        const link = document.createElement('a');
-        link.className = 'auth-app-card__link';
-        link.href = '../portal/';
-        link.textContent = 'テスト用アプリ' + (i + 1);
-        item.append(link);
-        list.append(item);
-      }
-    })()`);
-    await page.sleep(120);
+    await page.evaluate(`
+      import('./portal.js').then((m) => m.renderAppsGrid(
+        Array.from({ length: 3 }, (unused, i) => ({
+          id: 'w' + i, name: 'テスト用アプリ' + (i + 1), href: 'x/',
+        }))
+      ))
+    `);
+    await page.sleep(250);
 
     check(
       `${width}px: アプリが${expected}列に並ぶ`,
       (await page.evaluate(COLUMN_PROBE)) === expected,
       await page.evaluate(COLUMN_PROBE),
+    );
+
+    /*
+     * PCでも幅を広げない。min(360px, 100%) で中央へ置く。
+     * 画面幅で列数や位置が変わると、同じアプリを別の位置で覚えることになる。
+     */
+    check(
+      `${width}px: グリッドが min(360px,100%) で中央に置かれる`,
+      await page.evaluate(`(() => {
+        const grid = document.querySelector(".auth-apps").getBoundingClientRect();
+        const shell = document.querySelector(".auth-shell").getBoundingClientRect();
+        const expectedWidth = Math.min(360, shell.width);
+        const leftGap = grid.left - shell.left;
+        const rightGap = shell.right - grid.right;
+        return Math.abs(grid.width - expectedWidth) <= 1
+          && Math.abs(leftGap - rightGap) <= 1;
+      })()`),
+      await page.evaluate(`JSON.stringify({
+        grid: Math.round(document.querySelector(".auth-apps").getBoundingClientRect().width),
+        shell: Math.round(document.querySelector(".auth-shell").getBoundingClientRect().width),
+      })`),
+    );
+
+    check(
+      `${width}px: ページ送りが表示領域に収まる`,
+      await page.evaluate(`(() => {
+        const pager = document.getElementById("portal-apps-pager").getBoundingClientRect();
+        return pager.left >= -1 && pager.right <= document.documentElement.clientWidth + 1;
+      })()`),
     );
 
     const overflow = await page.evaluate(

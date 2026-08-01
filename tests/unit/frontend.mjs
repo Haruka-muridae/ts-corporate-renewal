@@ -32,7 +32,6 @@ try {
   const config = await import('../../public/auth/config.js');
   const ui = await import('../../public/auth/ui.js');
   const session = await import('../../public/auth/session.js');
-  const { PORTAL_APPS } = await import('../../public/auth/apps.js');
 
   /* ---------------------------------------------------------------- */
   section('設定');
@@ -230,19 +229,44 @@ try {
   check('next が無ければ portal', session.readNextParam() === 'portal');
 
   /* ---------------------------------------------------------------- */
-  section('Portal のアプリ一覧');
+  section('Portal のアプリ一覧（portal/app-registry.js）');
 
-  check('アプリ一覧は配列', Array.isArray(PORTAL_APPS));
+  const { APP_REGISTRY } = await import('../../public/portal/app-registry.js');
+
+  check('アプリ一覧は配列', Array.isArray(APP_REGISTRY));
 
   check(
     'テスト環境（/apps/）を本番一覧へ載せていない',
-    PORTAL_APPS.every((app) => !String(app.path ?? '').includes('apps/')),
+    APP_REGISTRY.every((app) => !String(app.href ?? '').includes('apps/')),
   );
 
   check(
     '登録する場合はサイト内絶対パスにしない',
-    PORTAL_APPS.every((app) => !String(app.path ?? '').startsWith('/')),
+    APP_REGISTRY.every((app) => !String(app.href ?? '').startsWith('/')),
   );
+
+  /* id は配置データ（order）が指す先。空や重複があると並べ替えが壊れる。 */
+  check(
+    'id は空でなく重複しない',
+    APP_REGISTRY.every((app) => typeof app.id === 'string' && app.id.trim() !== '')
+    && new Set(APP_REGISTRY.map((app) => app.id)).size === APP_REGISTRY.length,
+  );
+
+  /*
+   * 移行元（auth/apps.js の PORTAL_APPS）は削除済み。
+   * 復活させると「足しても Portal に出ない定義」が2か所になるため、
+   * 存在しないことを見ておく。
+   */
+  let removedRegistryExists = false;
+
+  try {
+    await import('../../public/auth/apps.js');
+    removedRegistryExists = true;
+  } catch {
+    /* 読み込めないのが正しい。 */
+  }
+
+  check('移行元 auth/apps.js が復活していない', removedRegistryExists === false);
 
   /* ---------------------------------------------------------------- */
   section('セッション保管（保存先が使えない環境）');
@@ -265,6 +289,119 @@ try {
     '表示用の写しを読み書きする関数を公開していない',
     session.readProfile === undefined && session.writeProfile === undefined,
   );
+
+  /* ---------------------------------------------------------------- */
+  section('アプリの配置解決（portal/app-layout.js）');
+
+  const layout = await import('../../public/portal/app-layout.js');
+  const {
+    resolveAppOrder, parseLayout, pageCountFor, paginate,
+  } = layout;
+
+  check('保存キーは tsam-app-layout', layout.LAYOUT_STORAGE_KEY === 'tsam-app-layout');
+  check('1ページは8枠', layout.PAGE_SIZE === 8);
+  check('最低2ページ', layout.MIN_PAGES === 2);
+
+  /* ---- ページ数 ---- */
+
+  check('0件でも2ページ', pageCountFor(0) === 2, pageCountFor(0));
+  check('8件で2ページ', pageCountFor(8) === 2, pageCountFor(8));
+  check('9件で2ページ（ceil(9/8)=2）', pageCountFor(9) === 2, pageCountFor(9));
+  check('17件で3ページ', pageCountFor(17) === 3, pageCountFor(17));
+  check('負数・NaN でも2ページ', pageCountFor(-5) === 2 && pageCountFor(NaN) === 2);
+
+  /* ---- 配置解決 ---- */
+
+  const APPS = [
+    { id: 'a', name: 'A', href: 'app/a/' },
+    { id: 'b', name: 'B', href: 'app/b/' },
+    { id: 'c', name: 'C', href: 'app/c/' },
+  ];
+
+  const ids = (list) => list.map((app) => app.id).join(',');
+
+  /* a: 保存済み order の順で出す。 */
+  check(
+    '保存済み order の順で並ぶ',
+    ids(resolveAppOrder(APPS, { version: 1, order: ['c', 'a', 'b'] })) === 'c,a,b',
+    ids(resolveAppOrder(APPS, { version: 1, order: ['c', 'a', 'b'] })),
+  );
+
+  /* b: order に無い既知アプリは末尾へ。 */
+  check(
+    'order に無い既知アプリは末尾へ足される',
+    ids(resolveAppOrder(APPS, { version: 1, order: ['c'] })) === 'c,a,b',
+    ids(resolveAppOrder(APPS, { version: 1, order: ['c'] })),
+  );
+
+  /* c: 未知 ID は無視する（既定順へは倒さない）。 */
+  check(
+    '未知IDは無視され、既知の並びは保たれる',
+    ids(resolveAppOrder(APPS, { version: 1, order: ['zzz', 'b', 'unknown', 'a'] })) === 'b,a,c',
+    ids(resolveAppOrder(APPS, { version: 1, order: ['zzz', 'b', 'unknown', 'a'] })),
+  );
+
+  check(
+    '同じIDが2回あっても重複させない',
+    ids(resolveAppOrder(APPS, { version: 1, order: ['b', 'b', 'a'] })) === 'b,a,c',
+    ids(resolveAppOrder(APPS, { version: 1, order: ['b', 'b', 'a'] })),
+  );
+
+  /* d: 保存が無ければ既定順。 */
+  check('保存が無ければ定義の順', ids(resolveAppOrder(APPS, null)) === 'a,b,c');
+  check('第2引数を省略しても定義の順', ids(resolveAppOrder(APPS)) === 'a,b,c');
+  check('定義が空なら空', resolveAppOrder([], { version: 1, order: ['a'] }).length === 0);
+  check('定義が配列でなければ空', resolveAppOrder(null).length === 0 && resolveAppOrder(undefined).length === 0);
+  check('id の無い定義は落とす', ids(resolveAppOrder([{ name: 'X' }, ...APPS])) === 'a,b,c');
+
+  /* ---- 保存データの解釈（壊れていても例外を投げない） ---- */
+
+  check('正しい JSON を読める', JSON.stringify(parseLayout('{"version":1,"order":["a"]}')) === JSON.stringify({ version: 1, order: ['a'] }));
+  check('壊れた JSON は null', parseLayout('{') === null);
+  check('null 文字列は null', parseLayout('null') === null);
+  check('配列は null', parseLayout('[1,2]') === null);
+  check('文字列リテラルは null', parseLayout('"text"') === null);
+  check('空文字は null', parseLayout('') === null && parseLayout('   ') === null);
+  check('文字列以外は null', parseLayout(null) === null && parseLayout(undefined) === null && parseLayout(42) === null);
+  check('order が配列でなければ null', parseLayout('{"version":1,"order":"a"}') === null);
+
+  /* 版が違うものは読まない（推測で解釈しない）。 */
+  check('version が違えば null', parseLayout('{"version":2,"order":["a"]}') === null);
+  check('version が無ければ null', parseLayout('{"order":["a"]}') === null);
+  check(
+    'version 不一致は既定順へ倒れる',
+    ids(resolveAppOrder(APPS, parseLayout('{"version":9,"order":["c","b","a"]}'))) === 'a,b,c',
+  );
+
+  check(
+    '壊れた JSON も既定順へ倒れる',
+    ids(resolveAppOrder(APPS, parseLayout('{{{'))) === 'a,b,c',
+  );
+
+  check(
+    'order の中の非文字列・空文字は落とす',
+    JSON.stringify(parseLayout('{"version":1,"order":["a",1,null,"","  ","b"]}').order)
+      === JSON.stringify(['a', 'b']),
+    JSON.stringify(parseLayout('{"version":1,"order":["a",1,null,"","  ","b"]}')?.order),
+  );
+
+  /* ---- ページ分割 ---- */
+
+  const pages = paginate(resolveAppOrder(APPS, null));
+
+  check('0件でも2ページぶんの枠ができる', paginate([]).length === 2);
+  check('各ページは8枠', pages.every((page) => page.length === 8));
+  check('足りない枠は null で埋まる', pages[0][3] === null && pages[1].every((slot) => slot === null));
+  check('先頭3枠にアプリが入る', ids(pages[0].slice(0, 3).filter(Boolean)) === 'a,b,c');
+
+  const nine = Array.from({ length: 9 }, (unused, index) => ({ id: `app-${index}`, name: `App ${index}` }));
+  check('9件なら2ページ目に1件だけ入る', paginate(nine)[1].filter(Boolean).length === 1);
+
+  const seventeen = Array.from({ length: 17 }, (unused, index) => ({ id: `x-${index}`, name: `X ${index}` }));
+  check('17件で3ページになる', paginate(seventeen).length === 3);
+
+  /* 保存先が無い環境でも例外を投げない。 */
+  check('localStorage が無ければ null を返す', layout.readStoredLayout() === null);
 
   /* ---------------------------------------------------------------- */
   section('KeyStore（APIキーの保管庫）');
