@@ -610,10 +610,29 @@
   outline-offset: 2px;
 }
 
-/* スマホ1列 → 2列 → PC3列。 */
+/*
+ * アプリのページ式グリッド。
+ *
+ * ------------------------------------------------------------------
+ * PCでも幅を広げない
+ * ------------------------------------------------------------------
+ * 幅は min(360px, 100%) で固定し、全画面幅で中央へ置く。
+ * PCでもスマホと同じ見た目になり、左右に余白が出る。**これは仕様である。**
+ *
+ * 画面幅ごとに列数を変えると、同じ人が同じアプリを別の位置で覚えることになる。
+ * 並べ替え（第2便）を入れる画面では、位置が幅で変わるほうが害が大きい。
+ * 詳細は docs/specs/apps-grid-spec-v1.md §3。
+ * ------------------------------------------------------------------
+ */
 .auth-apps {
+  width: min(360px, 100%);
+  margin-inline: auto;
+}
+
+/* 2列×4行＝8枠で1ページ。列数は画面幅で変えない。 */
+.auth-apps__page {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -671,6 +690,112 @@
   color: var(--c-text-muted);
   font-size: 0.75rem;
   line-height: 1.7;
+}
+
+/*
+ * 空き枠（準備中）。
+ *
+ * 破線と「準備中」の語の両方で示す。
+ * 形だけに頼ると、枠線の違いが見えない人には空きだと分からない。
+ * リンクにしないため、押せる見た目（背景・カーソル）も与えない。
+ */
+.auth-app-card__placeholder {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 14px;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 12px;
+  background-color: transparent;
+  color: var(--c-text-muted);
+  text-align: center;
+}
+
+.auth-app-card__plus {
+  flex: 0 0 auto;
+}
+
+.auth-app-card__pending {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+/* ---------- ページ送り ---------- */
+
+.auth-apps__pager {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.auth-apps__arrow {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--c-border);
+  border-radius: 50%;
+  background-color: var(--c-bg);
+  color: var(--c-main);
+  cursor: pointer;
+}
+
+.auth-apps__arrow:hover:not(:disabled) {
+  background-color: var(--c-bg-sub);
+  border-color: var(--c-border-strong);
+}
+
+/* 端では押せない。押せないことを見た目でも示す。 */
+.auth-apps__arrow:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.auth-apps__arrow:focus-visible,
+.auth-apps__dot:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 2px;
+}
+
+.auth-apps__dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/*
+ * ドット。
+ * 見た目は小さいが、押せる面は 44px 確保する（透明な余白で稼ぐ）。
+ */
+.auth-apps__dot {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  cursor: pointer;
+}
+
+.auth-apps__dot::before {
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin-inline: auto;
+  border-radius: 50%;
+  background-color: var(--c-border-strong);
+  content: '';
+}
+
+.auth-apps__dot[aria-current='true']::before {
+  background-color: var(--c-main);
 }
 
 /*
@@ -895,12 +1020,10 @@
 
 /* ---------- 画面幅 ---------- */
 
-/* 大きめのスマホからは2列。320〜375px は1列のまま。 */
-@media (min-width: 480px) {
-  .auth-apps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
+/*
+ * アプリのグリッドは画面幅で列数を変えない（常に2列）。
+ * 幅ごとの分岐をここに書かないこと（.auth-apps のコメントを参照）。
+ */
 
 @media (min-width: 768px) {
   .auth-main {
@@ -918,12 +1041,6 @@
 
   .auth-plans {
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  }
-
-  /* PC は3列固定。auto-fit にすると幅次第で4列になり、カードが細くなる。 */
-  .auth-apps {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
   }
 }
 

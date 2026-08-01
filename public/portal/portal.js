@@ -18,7 +18,13 @@
 
 import { setScreenDepth, rootPath } from '../auth/config.js';
 import { guardPage, signOut, goToLogin } from '../auth/session.js';
-import { PORTAL_APPS } from '../auth/apps.js';
+import { APP_REGISTRY } from './app-registry.js';
+import {
+  pageCountFor,
+  paginate,
+  readStoredLayout,
+  resolveAppOrder,
+} from './app-layout.js';
 import { KeyStore, PROVIDERS, isKeyStoreAvailable } from '../auth/keystore.js';
 import { createMessageArea, createSubmitButton, attachPasswordToggle } from '../auth/ui.js';
 
@@ -28,7 +34,9 @@ const loadingElement = document.getElementById('portal-loading');
 const contentElement = document.getElementById('portal-content');
 const badgeElement = document.getElementById('portal-user-badge');
 const appsElement = document.getElementById('portal-apps');
-const appsEmptyElement = document.getElementById('portal-apps-empty');
+const appsDotsElement = document.getElementById('portal-apps-dots');
+const appsPrevButton = document.getElementById('portal-apps-prev');
+const appsNextButton = document.getElementById('portal-apps-next');
 const accountEmailElement = document.getElementById('portal-account-email');
 const accountSubscriptionElement = document.getElementById('portal-account-subscription');
 const accountToggle = document.getElementById('portal-account-toggle');
@@ -116,9 +124,26 @@ function appIconText(app) {
 }
 
 /*
+ * ------------------------------------------------------------------
+ * アプリのページ式グリッド
+ * ------------------------------------------------------------------
+ * 2列×4行＝8枠で1ページ。ページ数は max(2, ceil(件数/8))。
+ * アプリの入らない枠は「準備中」として描く。
+ *
+ * グリップ（移動ハンドル）・並べ替えの保存・「初期配置に戻す」は第2便。
+ * ここでは配置データを **読むだけ** で、1バイトも書かない。
+ * 詳細は docs/specs/apps-grid-spec-v1.md。
+ * ------------------------------------------------------------------
+ */
+
+/* いま表示しているページ。保存しない（再読み込みで1ページ目へ戻る）。 */
+let currentPage = 0;
+let totalPages = 0;
+
+/*
  * アプリのカードを作る。文字列はすべて textContent で入れる。
  *
- * カード全体を1つのリンクにする。名前・説明・アイコンのどこを押しても
+ * カード全体を1つのリンクにする。名前・アイコンのどちらを押しても
  * 同じ場所へ行くため、「開く」だけが当たり判定という状態を作らない。
  */
 function buildAppCard(app) {
@@ -128,7 +153,7 @@ function buildAppCard(app) {
   const link = document.createElement('a');
   link.className = 'auth-app-card__link';
   /* サイトのルートからの相対パスとして解決する。 */
-  link.href = `${rootPath()}${app.path}`;
+  link.href = `${rootPath()}${app.href ?? ''}`;
 
   const icon = document.createElement('span');
   icon.className = 'auth-app-card__icon';
@@ -137,31 +162,148 @@ function buildAppCard(app) {
   icon.setAttribute('aria-hidden', 'true');
   link.append(icon);
 
-  const name = document.createElement('h2');
+  const name = document.createElement('span');
   name.className = 'auth-app-card__name';
-  name.textContent = app.name;
+  name.textContent = app.name ?? '';
   link.append(name);
-
-  if (app.description) {
-    const description = document.createElement('p');
-    description.className = 'auth-app-card__desc';
-    description.textContent = app.description;
-    link.append(description);
-  }
 
   item.append(link);
 
   return item;
 }
 
-function renderApps() {
-  if (PORTAL_APPS.length === 0) {
-    appsEmptyElement.hidden = false;
-    return;
+/*
+ * 空き枠。
+ *
+ * **リンクにしない。** 行き先が無いものを押せる形にすると、
+ * 押しても何も起きないという体験を作る。
+ * 見た目（破線）だけでなく「準備中」の語でも伝える。
+ */
+function buildEmptySlot() {
+  const item = document.createElement('li');
+  item.className = 'auth-app-card auth-app-card--empty';
+
+  const box = document.createElement('div');
+  box.className = 'auth-app-card__placeholder';
+
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('class', 'auth-app-card__plus');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('width', '20');
+  icon.setAttribute('height', '20');
+  icon.setAttribute('fill', 'none');
+  icon.setAttribute('stroke', 'currentColor');
+  icon.setAttribute('stroke-width', '2');
+  icon.setAttribute('stroke-linecap', 'round');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.setAttribute('focusable', 'false');
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M12 5v14M5 12h14');
+  icon.append(path);
+  box.append(icon);
+
+  const label = document.createElement('span');
+  label.className = 'auth-app-card__pending';
+  label.textContent = '準備中';
+  box.append(label);
+
+  item.append(box);
+
+  return item;
+}
+
+function buildPage(slots, pageIndex) {
+  const list = document.createElement('ul');
+  list.className = 'auth-apps__page';
+  list.id = `portal-apps-page-${pageIndex + 1}`;
+  list.setAttribute('aria-label', `${pageIndex + 1}ページ目`);
+
+  slots.forEach((app) => {
+    list.append(app ? buildAppCard(app) : buildEmptySlot());
+  });
+
+  return list;
+}
+
+/* 表示中のページだけを出す。ドットと矢印の状態も合わせる。 */
+function showPage(pageIndex) {
+  const clamped = Math.min(Math.max(pageIndex, 0), Math.max(totalPages - 1, 0));
+  currentPage = clamped;
+
+  [...appsElement.children].forEach((page, index) => {
+    page.hidden = index !== clamped;
+  });
+
+  [...appsDotsElement.children].forEach((dot, index) => {
+    if (index === clamped) {
+      /* 表示中であることを、色だけでなく支援技術へも伝える。 */
+      dot.setAttribute('aria-current', 'true');
+    } else {
+      dot.removeAttribute('aria-current');
+    }
+  });
+
+  /*
+   * 端では矢印を無効にする。
+   * 巻き戻る（最後→最初）動きにすると、いま何ページ目なのかが
+   * 押した結果から読み取れなくなる。
+   */
+  appsPrevButton.disabled = clamped === 0;
+  appsNextButton.disabled = clamped >= totalPages - 1;
+}
+
+function buildDots() {
+  const fragment = document.createDocumentFragment();
+
+  for (let index = 0; index < totalPages; index += 1) {
+    const dot = document.createElement('button');
+    dot.className = 'auth-apps__dot';
+    dot.type = 'button';
+    dot.dataset.page = String(index);
+    dot.setAttribute('aria-label', `${index + 1}ページ目を表示`);
+    dot.setAttribute('aria-controls', `portal-apps-page-${index + 1}`);
+    fragment.append(dot);
   }
 
-  PORTAL_APPS.forEach((app) => appsElement.append(buildAppCard(app)));
+  appsDotsElement.replaceChildren(fragment);
 }
+
+/**
+ * グリッドを描き直す。
+ *
+ * registry を渡せる形にしてあるのは、テストから定義を差し込むため。
+ * 画面からは引数なしで呼ぶ（既定は本物のレジストリと保存済み配置）。
+ */
+export function renderAppsGrid(registry = APP_REGISTRY, { stored } = {}) {
+  const layout = stored === undefined ? readStoredLayout() : stored;
+  const apps = resolveAppOrder(registry, layout);
+
+  totalPages = pageCountFor(apps.length);
+
+  const fragment = document.createDocumentFragment();
+
+  paginate(apps, totalPages).forEach((slots, index) => {
+    fragment.append(buildPage(slots, index));
+  });
+
+  appsElement.replaceChildren(fragment);
+  buildDots();
+
+  /* 描き直したら必ず1ページ目から。表示ページは保存しない。 */
+  showPage(0);
+}
+
+appsDotsElement.addEventListener('click', (event) => {
+  const dot = event.target.closest('.auth-apps__dot');
+
+  if (dot) {
+    showPage(Number(dot.dataset.page));
+  }
+});
+
+appsPrevButton.addEventListener('click', () => showPage(currentPage - 1));
+appsNextButton.addEventListener('click', () => showPage(currentPage + 1));
 
 /*
  * ------------------------------------------------------------------
@@ -459,7 +601,7 @@ function render(user) {
   }
 
   renderApiKeyState();
-  renderApps();
+  renderAppsGrid();
 
   loadingElement.hidden = true;
   contentElement.hidden = false;

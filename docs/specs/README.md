@@ -11,11 +11,12 @@
 
 | 仕様書 | 対象範囲 | 版 |
 | --- | --- | --- |
-| [login-page-detailed-spec-v3.md](./login-page-detailed-spec-v3.md) | `/login/index.html` ＋ `auth/` 共通層 ＋ `gas-auth/`（ログイン関連部分） | v3.2 |
+| [login-page-detailed-spec-v3.md](./login-page-detailed-spec-v3.md) | `/login/index.html` ＋ `public/auth/` 共通層 ＋ `gas-auth/`（ログイン関連部分） | v3.2 |
 | [pricing-consent-spec-v1.md](./pricing-consent-spec-v1.md) | `/pricing/` の同意フロー ＋ `gas-auth/Consent.gs` ＋ `/legal/` 3ページ | v1 |
 | [legal-cms-spec-v1.md](./legal-cms-spec-v1.md) | 法務文書のスプレッドシート管理 ＋ `gas-auth/Legal.gs` ＋ `/legal/` の生成と公開 | v1 |
-| [portal-spec-v1.md](./portal-spec-v1.md) | `/portal/` のレイアウトと表示条件 ＋ `auth/apps.js` | v1.3.1 |
-| [keystore-spec-v1.md](./keystore-spec-v1.md) | 外部AIサービスのAPIキーの保管（`auth/keystore.js`）。端末内のみ・サーバーへ送らない | v1 |
+| [portal-spec-v1.md](./portal-spec-v1.md) | `/portal/` のレイアウトと表示条件 | v1.4 |
+| [keystore-spec-v1.md](./keystore-spec-v1.md) | 外部AIサービスのAPIキーの保管（`public/auth/keystore.js`）。端末内のみ・サーバーへ送らない | v1 |
+| [apps-grid-spec-v1.md](./apps-grid-spec-v1.md) | `/portal/` のアプリグリッド（ページ式）と配置データ ＋ `public/portal/app-registry.js` | v1 |
 
 参照するときは、セクション番号（§n）で指し示してください。
 行番号は変わるため使いません。
