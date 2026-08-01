@@ -3,7 +3,23 @@
 交流会申込アプリを本番公開するときの手順。**上から順に実行する。**
 
 すべての操作は事業者側で行う。各手順に「戻し方」を書いてある。
-途中で止めても、DNSを切り替えるまでは現行サイト（GitHub Pages）が生き続ける。
+
+## 進捗（2026-08-01 時点）
+
+| 手順 | 状態 |
+| --- | --- |
+| 1. main へのマージ | ✅ 完了 |
+| 2. Vercel に本番ドメインを登録 | ✅ 完了 |
+| 3. DNS の切り替え | ✅ 完了 |
+| 4. 切替の確認（Pages無効化・wwwリダイレクト含む） | ✅ 完了 |
+| 5. 本番 Webhook エンドポイントの登録 | ✅ 完了 |
+| 6. 本番キーへの切り替え・領収書メールの有効化 | ⬜ これから |
+| 7. 受付の開始 | ⬜ これから |
+| 8. 本番での動作確認 | ⬜ これから |
+
+**サイトは Vercel から公開済み。交流会の申込導線は閉じたまま**
+（`data-event-status="preparing"` / `APPLY_URL` 未設定 / `is_published=false`）。
+手順7を行うまで申し込みは受け付けられない。
 
 ---
 
@@ -50,7 +66,13 @@
 
 ---
 
-## 1. main へのマージ
+## 1. main へのマージ ✅ 完了（2026-08-01）
+
+> マージコミット `2c228ab`。コンフリクトは想定どおり `auth/keystore.js` の1件のみで、
+> `public/auth/keystore.js` へ移して解消した。あわせて
+> `tests/unit/frontend.mjs` の import パスを `public/` 経由へ直した。
+> `npm run build` と `npm test`（1445件）が通ることを確認済み。
+> **`feat/vercel-migration` ブランチはローカル・リモートとも削除済み。以後の作業は main に一本化する。**
 
 **⚠️ この手順を実行すると、DNSを切り替えるまでの間 `tsam-ai.com` が壊れる。**
 GitHub Pages はリポジトリのルートを配信するが、`feat/vercel-migration` では
@@ -95,12 +117,12 @@ git merge-tree --write-tree origin/main feat/vercel-migration | grep CONFLICT
 
 ---
 
-## 2. Vercel に本番ドメインを登録する
+## 2. Vercel に本番ドメインを登録する ✅ 完了（2026-08-01）
 
 <https://vercel.com/architect-3362s-projects/ts-corporate-renewal/settings/domains>
 
-- [ ] `tsam-ai.com` を追加する
-- [ ] `www.tsam-ai.com` を追加する（`tsam-ai.com` へのリダイレクトを選ぶ）
+- [x] `tsam-ai.com` を追加する
+- [x] `www.tsam-ai.com` を追加する（`tsam-ai.com` へのリダイレクトを選ぶ）
 
 追加すると、Vercel が**設定すべきDNSレコードの値を画面に表示する**。
 次の手順ではその表示値を使う。下の「想定値」と食い違う場合は、
@@ -113,7 +135,7 @@ Vercel の画面上は「Invalid Configuration」と表示されるが、正常�
 
 ---
 
-## 3. DNS の切り替え（Cloudflare）
+## 3. DNS の切り替え（Cloudflare） ✅ 完了（2026-08-01）
 
 DNSは **Cloudflare** で管理されている（ネームサーバー: `alexia.ns.cloudflare.com` /
 `ernest.ns.cloudflare.com`）。
@@ -139,10 +161,10 @@ DNSは **Cloudflare** で管理されている（ネームサーバー: `alexia.
 
 ### 操作
 
-- [ ] **A レコード4件をすべて削除**する（185.199.x.153）
-- [ ] **A レコードを1件追加**する: 名前 `@` / 値 `76.76.21.21`
-- [ ] **`www` の CNAME を編集**し、値を `cname.vercel-dns.com` に変える
-- [ ] 追加・変更した2件とも、**プロキシを「DNS only」（グレーの雲）にする**
+- [x] **A レコード4件をすべて削除**する（185.199.x.153）
+- [x] **A レコードを1件追加**する: 名前 `@` / 値 `76.76.21.21`
+- [x] **`www` の CNAME を編集**し、値を `cname.vercel-dns.com` に変える
+- [x] 追加・変更した2件とも、**プロキシを「DNS only」（グレーの雲）にする**
 
 > **プロキシをオンにしない理由**: Cloudflareのプロキシ（オレンジの雲）を通すと、
 > VercelのTLS証明書の発行と自動更新が失敗することがある。Vercel側で証明書を
@@ -156,27 +178,37 @@ DNSは **Cloudflare** で管理されている（ネームサーバー: `alexia.
 
 ---
 
-## 4. 切替の確認
+## 4. 切替の確認 ✅ 完了（2026-08-01）
 
-- [ ] `https://tsam-ai.com/` が現行のコーポレートサイトとして表示される
-- [ ] `https://tsam-ai.com/apps/` が表示される
-- [ ] `https://tsam-ai.com/legal/tokusho/` が表示される
-- [ ] `https://tsam-ai.com/login/` `https://tsam-ai.com/portal/` が表示される
-- [ ] `https://tsam-ai.com/event/` が交流会の詳細ページとして表示される
-- [ ] `https://tsam-ai.com/event/legal.html` が表示される
-- [ ] `https://tsam-ai.com/event/admin/login/` が表示される
-- [ ] 応答ヘッダーの `Server` が `Vercel` になっている
+- [x] `https://tsam-ai.com/` が現行のコーポレートサイトとして表示される
+- [x] `https://tsam-ai.com/apps/` が表示される
+- [x] `https://tsam-ai.com/legal/tokusho/` が表示される
+- [x] `https://tsam-ai.com/login/` `https://tsam-ai.com/portal/` が表示される
+- [x] `https://tsam-ai.com/event/` が交流会の詳細ページとして表示される
+- [x] `https://tsam-ai.com/event/legal.html` が表示される
+- [x] `https://tsam-ai.com/event/admin/login/` が表示される
+- [x] 応答ヘッダーの `Server` が `Vercel` になっている
       （`curl -sI https://tsam-ai.com/ | findstr /i server`）
+
+> 全21パスで200を確認。TLS証明書の検証も正常（`ssl_verify_result=0`）。
+> 配信は `X-Vercel-Id: hnd1`（東京リージョン）。
+> DNSは 8.8.8.8 と 1.1.1.1 の両方で新しい値に反映済み。
 
 証明書の発行に数分かかることがある。その間は接続エラーになる。
 
-- [ ] **GitHub Pages を無効にする**（切替が安定してから）
+- [x] **GitHub Pages を無効にする**（切替が安定してから）
   <https://github.com/Haruka-muridae/ts-corporate-renewal/settings/pages>
-  Source を **None** にする。
+  Custom domain を削除し、Unpublish した（2026-08-01）。
+  あわせてリポジトリのルートから `CNAME` も削除済み。
+
+- [x] **`www` を apex へのリダイレクトにする**
+  <https://vercel.com/architect-3362s-projects/ts-corporate-renewal/settings/domains>
+  `https://www.tsam-ai.com/` → 308 → `https://tsam-ai.com/` を確認（2026-08-01）。
+  配下のパス（`/event/` など）も追従する。
 
 ---
 
-## 5. 本番 Webhook エンドポイントの登録（Stripe）
+## 5. 本番 Webhook エンドポイントの登録（Stripe） ✅ 完了（2026-08-01）
 
 **▶ 先に画面左上のアカウントが `https://tsam-ai.com/` であることを確認する。**
 アカウントが複数あり、別のアカウントに登録すると通知が届かない。
@@ -184,10 +216,10 @@ DNSは **Cloudflare** で管理されている（ネームサーバー: `alexia.
 <https://dashboard.stripe.com/webhooks>（**本番モード**であることを確認。
 テスト/本番の切替は画面右上）
 
-- [ ] 左上のアカウント名が `https://tsam-ai.com/` である
-- [ ] 画面が**本番モード**である（テストモードの表示が出ていない）
-- [ ] **Add endpoint** を押す
-- [ ] **Endpoint URL** に次を入力する
+- [x] 左上のアカウント名が `https://tsam-ai.com/` である
+- [x] 画面が**本番モード**である（テストモードの表示が出ていない）
+- [x] **Add endpoint** を押す
+- [x] **Endpoint URL** に次を入力する
 
 ```
 https://tsam-ai.com/event/api/stripe/webhook/
@@ -198,7 +230,7 @@ https://tsam-ai.com/event/api/stripe/webhook/
 > リダイレクトを追わないため通知が届かない。決済は成立するのに
 > 「支払済み」にならず、受付番号も参加確定メールも出ない状態になる。
 
-- [ ] **Select events** で次の**5種類だけ**を選ぶ
+- [x] **Select events** で次の**5種類だけ**を選ぶ
 
 ```
 checkout.session.completed
@@ -208,19 +240,40 @@ checkout.session.expired
 charge.refunded
 ```
 
-- [ ] 作成後、**Signing secret**（`whsec_` で始まる値）を表示して控える
+- [x] 作成後、**Signing secret**（`whsec_` で始まる値）を表示して控える
 
 ### 5-1. Vercel へ登録
 
 <https://vercel.com/architect-3362s-projects/ts-corporate-renewal/settings/environment-variables>
 
-- [ ] `STRIPE_WEBHOOK_SECRET` を新規追加し、上で控えた `whsec_…` を貼る
-- [ ] 環境は **Production / Preview / Development** の3つにチェック
-- [ ] **貼り付け時に前後の空白や改行が入らないよう注意**
+- [x] `STRIPE_WEBHOOK_SECRET` を新規追加し、上で控えた `whsec_…` を貼る
+- [x] 環境は **Production / Preview / Development** の3つにチェック
+- [x] **貼り付け時に前後の空白や改行が入らないよう注意**
       （BOMや空白はアプリ側で除去するようにしてあるが、混入させないに越したことはない）
 
 > ローカル開発で使う `stripe listen` の `whsec_…` とは**別の値**。
 > 取り違えると署名検証に失敗し、通知がすべて拒否される。
+
+### 5-2. 署名検証の稼働確認 ✅ 完了（2026-08-01）
+
+環境変数を登録したあと、**必ず再デプロイする**（環境変数は既存のデプロイに
+反映されない）。反映されると、署名の無いPOSTへの応答が
+`500 not configured` から `400 invalid signature` に変わる。
+
+偽の「支払済み」通知を8パターン送り、すべて400で拒否されることを確認済み。
+
+| 送ったもの | 応答 |
+| --- | --- |
+| 署名ヘッダーなし / 空 | 400 |
+| 時刻だけ / 署名だけ | 400 |
+| でたらめな署名 / 長さは正しいが値が違う署名 | 400 |
+| **別のシークレットで正しく署名** | 400 |
+| **古い時刻（リプレイ）** | 400 |
+| GETでのアクセス | 405（POST専用として正しい） |
+
+エンドポイントのURLを知られても、偽の通知で「支払済み」にはできない。
+
+正常系（正しい署名で200）は本番の実決済でのみ確認できる。手順8で確認する。
 
 ---
 
