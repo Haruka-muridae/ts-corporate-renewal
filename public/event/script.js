@@ -21,7 +21,7 @@
       開催日時は index.html の「開催概要」内 1 箇所にのみ書き、
       他の箇所では日付・時刻を繰り返さない（次回開催時の編集を1箇所で済ませるため）。
 */
-const APPLY_URL = null;
+const APPLY_URL = '/event/apply/';
 
 const STATUS_TEXT = {
   preparing: {
