@@ -1,0 +1,156 @@
+/*
+ * 申込フロー（/event/apply/ 以降）専用のテーマ上書き。
+ *
+ * 静的ページ（/event/ と /event/legal.html）のデザイン刷新に合わせて、
+ * クリーム地 × 深緑 × テラコッタ・明朝見出しのトーンへ揃える。
+ *
+ * 読み込みは app/event/apply/layout.tsx のみ。
+ * 管理画面（/event/admin/ 配下）には読み込ませない。業務ツールのため対象外。
+ *
+ * 方針：
+ * - public/css/style.css / public/event/style.css / public/event/apply.css は編集しない。
+ *   このファイルを最後に読み込み、:root のCSS変数を再定義して上書きする。
+ * - マークアップ（TSX）とロジックには一切触れない。
+ * - エラー・警告系の赤（#b3261e / #8c1d18 / #fdf3f2）は視認性維持のため変更しない。
+ *
+ * 各行のコメントは「旧値 → 新値」。戻す場合は右辺を旧値に置き換える。
+ */
+
+:root {
+  /* ---- ベースカラー（public/css/style.css の :root を上書き） ---- */
+
+  /* メイン色。ネイビー → 深緑。変数名は navy のまま（既存CSSの参照を壊さないため）。 */
+  --color-navy: #1d3a2f;        /* #0f2747 → #1d3a2f */
+  --color-navy-dark: #152b23;   /* #091a30 → #152b23 */
+  --color-navy-light: #3d5a4c;  /* #29496f → #3d5a4c（見出し補助・番号・トグル文言に使われる中間色） */
+
+  /* アクセント。ゴールド → テラコッタ。 */
+  --color-gold: #b05a3c;        /* #c99a2e → #b05a3c */
+  --color-gold-dark: #8f4830;   /* #a97816 → #8f4830（フォーカスリング・ホバー） */
+  --color-gold-text: #8f4830;   /* #7f5b14 → #8f4830（薄地に載る文字色。#b05a3c より暗くしてコントラストを確保） */
+  --color-gold-light: #e0c3b4;  /* #e7d29c → #e0c3b4（罫線・タグ枠に使う淡いテラコッタ） */
+
+  /* 地色。 */
+  --color-white: #fffdf8;       /* #ffffff → #fffdf8（カード地・入力欄地・濃色上の文字色） */
+  --color-off-white: #f7f4ec;   /* #f8f7f3 → #f7f4ec（ページ地・ヒーロー地） */
+
+  /* 文字色。 */
+  --color-text: #26332c;        /* #20242a → #26332c */
+  --color-text-muted: #5a655e;  /* #6b7078 → #5a655e */
+
+  /* 罫線。 */
+  --color-border: #e4ddcd;         /* #ddd8cc → #e4ddcd */
+  --color-border-strong: #cfc6b2;  /* #c8c1b1 → #cfc6b2 */
+
+  /*
+   * --c-main / --c-accent / --c-bg などのレガシー別名は
+   * style.css 側で var(--color-*) を参照しているため、上の再定義で自動的に追従する。
+   * ここでの再定義は不要。
+   */
+
+  /*
+   * 見出し用の明朝。--font-ja（本文）は Noto Sans JP のまま変更しない。
+   * body の font-family は var(--font-en), var(--font-ja) なので、
+   * --font-en を明朝／Cormorant に変えると本文の欧文まで明朝になる。
+   * そのため --font-en と --font-num は据え置き、必要な箇所だけ下で指定する。
+   */
+  --font-serif-ja: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;  /* 新規追加 */
+  --font-label-en: "Cormorant Garamond", "Noto Serif JP", serif;                 /* 新規追加 */
+}
+
+/*
+ * ページ地をクリームにする。
+ * style.css の body は background-color: var(--c-bg)（= --color-white = カード地）のため、
+ * 変数の付け替えだけでは「ページ地 = カード地」になり、入力欄やカードが地に埋もれる。
+ * 静的ページと同じ「クリーム地の上に生成りのカード」に揃えるため、ここだけ地色を差し替える。
+ */
+body {
+  background-color: var(--color-off-white);  /* var(--c-bg)（#ffffff相当） → #f7f4ec */
+}
+
+/*
+ * 見出しを明朝に。静的ページの .event-hero__title / .section-heading h2 と同じ字面に揃える。
+ * 変数では表現できないため、見出し要素に限定して指定する。
+ */
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif-ja);  /* 継承（Inter → Noto Sans JP） → Noto Serif JP */
+  letter-spacing: 0.06em;             /* body の 0.02em → 0.06em */
+}
+
+/* セクション見出し（h2）は静的ページに合わせてもう少し字間を開ける。 */
+.section-heading h2,
+.event-hero__title {
+  letter-spacing: 0.08em;
+}
+
+/*
+ * 英字ラベル（Application / Confirm など）を Cormorant Garamond に。
+ * 色は --color-gold-text 経由で自動的にテラコッタへ変わるため、ここでは字面だけ指定する。
+ */
+.event-hero__label,
+.section-label {
+  font-family: var(--font-label-en), var(--font-ja);  /* Inter → Cormorant Garamond */
+  letter-spacing: 0.22em;                             /* 0.16em → 0.22em */
+}
+
+/*
+ * フォーム内の小見出し（fieldset の凡例・確認画面の見出し）も明朝に。
+ * これらは h2/h3 ではなく legend / p のため、上の h1-h3 指定では届かない。
+ */
+.form-group__legend,
+.confirm__heading,
+.apply-cta__title {
+  font-family: var(--font-serif-ja);
+  letter-spacing: 0.06em;
+}
+
+/*
+ * 受付番号。金額・番号は静的ページの .apply-card__price .num と同じく明朝にする。
+ * --font-num（Inter）は他の数値表示でも使うため変数自体は変えず、この箇所だけ指定する。
+ */
+.result-receipt__number {
+  font-family: var(--font-serif-ja);  /* Inter → Noto Serif JP */
+}
+
+/*
+ * ヘッダー。style.css で background-color が rgba(255,255,255,.96) と
+ * border-bottom-color が rgba(201,154,46,.48) の直接指定になっており、
+ * 変数の付け替えでは追従しないため、この2箇所だけ上書きする。
+ */
+.site-header {
+  border-bottom-color: var(--color-border);            /* rgba(201,154,46,.48) → #e4ddcd */
+  background-color: var(--color-off-white);            /* rgba(255,255,255,.96) → #f7f4ec */
+}
+
+.site-header.is-scrolled {
+  border-bottom-color: var(--color-gold);              /* #c99a2e → #b05a3c（変数経由だが明示） */
+  box-shadow: 0 4px 18px rgba(29, 58, 47, 0.08);       /* rgba(15,39,71,.06) → 深緑の影 */
+}
+
+/*
+ * ボタンの影。style.css の .btn はネイビーの影が直接指定されている。
+ */
+.btn {
+  box-shadow: 0 4px 12px rgba(29, 58, 47, 0.08);       /* rgba(15,39,71,.06) → 深緑の影 */
+}
+
+@media (hover: hover) {
+  .btn--primary:hover {
+    box-shadow: 0 6px 16px rgba(29, 58, 47, 0.12);     /* rgba(15,39,71,.1) → 深緑の影 */
+  }
+}
+
+/*
+ * フッター上端の罫線。変数経由でテラコッタになるが、2px は静的ページより太いため細くする。
+ */
+.site-footer {
+  border-top-width: 1px;  /* 2px → 1px */
+}
+
+/*
+ * エラー・警告系（.apply-form__alert / .form-field__error /
+ * .form-field__input[aria-invalid="true"]）は意図的に未変更。
+ * 赤はフォームの視認性に直結するため、テーマの都合で薄めない。
+ */
