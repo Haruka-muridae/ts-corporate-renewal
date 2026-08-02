@@ -1,8 +1,8 @@
 /*
  * 申込フロー（/event/apply/ 以降）専用のテーマ上書き。
  *
- * 静的ページ（/event/ と /event/legal.html）のデザイン刷新に合わせて、
- * クリーム地 × 深緑 × テラコッタ・明朝見出しのトーンへ揃える。
+ * 静的ページ（/event/ と /event/legal.html）のデザインに合わせて、
+ * ネイビー（#0f2747）基調のクール系・明朝見出しのトーンへ揃える。
  *
  * 読み込みは app/event/apply/layout.tsx のみ。
  * 管理画面（/event/admin/ 配下）には読み込ませない。業務ツールのため対象外。
@@ -19,28 +19,28 @@
 :root {
   /* ---- ベースカラー（public/css/style.css の :root を上書き） ---- */
 
-  /* メイン色。ネイビー → 深緑。変数名は navy のまま（既存CSSの参照を壊さないため）。 */
-  --color-navy: #1d3a2f;        /* #0f2747 → #1d3a2f */
-  --color-navy-dark: #152b23;   /* #091a30 → #152b23 */
-  --color-navy-light: #3d5a4c;  /* #29496f → #3d5a4c（見出し補助・番号・トグル文言に使われる中間色） */
+  /* メイン色。深緑 → ネイビー（style.css のオリジナル値に戻す）。 */
+  --color-navy: #0f2747;        /* #1d3a2f（緑） → #0f2747 */
+  --color-navy-dark: #091a30;   /* #152b23（緑） → #091a30 */
+  --color-navy-light: #29496f;  /* #3d5a4c（緑） → #29496f（見出し補助・番号・トグル文言に使われる中間色） */
 
-  /* アクセント。ゴールド → テラコッタ。 */
-  --color-gold: #b05a3c;        /* #c99a2e → #b05a3c */
-  --color-gold-dark: #8f4830;   /* #a97816 → #8f4830（フォーカスリング・ホバー） */
-  --color-gold-text: #8f4830;   /* #7f5b14 → #8f4830（薄地に載る文字色。#b05a3c より暗くしてコントラストを確保） */
-  --color-gold-light: #e0c3b4;  /* #e7d29c → #e0c3b4（罫線・タグ枠に使う淡いテラコッタ） */
+  /* アクセント。テラコッタ → ブルー。 */
+  --color-gold: #3e75ad;        /* #b05a3c（テラコッタ） → #3e75ad */
+  --color-gold-dark: #2f6398;   /* #8f4830（テラコッタ） → #2f6398（フォーカスリング・ホバー） */
+  --color-gold-text: #24517f;   /* #8f4830（テラコッタ） → #24517f（薄地に載る文字色。#3e75ad より暗くしてコントラストを確保） */
+  --color-gold-light: #bcd2e8;  /* #e0c3b4（テラコッタ） → #bcd2e8（罫線・タグ枠に使う淡いブルー） */
 
   /* 地色。 */
-  --color-white: #fffdf8;       /* #ffffff → #fffdf8（カード地・入力欄地・濃色上の文字色） */
-  --color-off-white: #f7f4ec;   /* #f8f7f3 → #f7f4ec（ページ地・ヒーロー地） */
+  --color-white: #fcfdff;       /* #fffdf8（生成り） → #fcfdff（カード地・入力欄地・濃色上の文字色） */
+  --color-off-white: #f4f6fa;   /* #f7f4ec（クリーム） → #f4f6fa（ページ地・ヒーロー地） */
 
   /* 文字色。 */
-  --color-text: #26332c;        /* #20242a → #26332c */
-  --color-text-muted: #5a655e;  /* #6b7078 → #5a655e */
+  --color-text: #232b36;        /* #26332c（緑寄り） → #232b36 */
+  --color-text-muted: #55606e;  /* #5a655e（緑寄り） → #55606e */
 
   /* 罫線。 */
-  --color-border: #e4ddcd;         /* #ddd8cc → #e4ddcd */
-  --color-border-strong: #cfc6b2;  /* #c8c1b1 → #cfc6b2 */
+  --color-border: #dbe2ec;         /* #e4ddcd（クリーム） → #dbe2ec */
+  --color-border-strong: #c0cad9;  /* #cfc6b2（クリーム） → #c0cad9 */
 
   /*
    * --c-main / --c-accent / --c-bg などのレガシー別名は
@@ -62,10 +62,10 @@
  * ページ地をクリームにする。
  * style.css の body は background-color: var(--c-bg)（= --color-white = カード地）のため、
  * 変数の付け替えだけでは「ページ地 = カード地」になり、入力欄やカードが地に埋もれる。
- * 静的ページと同じ「クリーム地の上に生成りのカード」に揃えるため、ここだけ地色を差し替える。
+ * 静的ページと同じ「淡いブルーグレー地の上に白のカード」に揃えるため、ここだけ地色を差し替える。
  */
 body {
-  background-color: var(--color-off-white);  /* var(--c-bg)（#ffffff相当） → #f7f4ec */
+  background-color: var(--color-off-white);  /* var(--c-bg)（#ffffff相当） → #f4f6fa */
 }
 
 /*
@@ -120,25 +120,26 @@ h3 {
  * 変数の付け替えでは追従しないため、この2箇所だけ上書きする。
  */
 .site-header {
-  border-bottom-color: var(--color-border);            /* rgba(201,154,46,.48) → #e4ddcd */
-  background-color: var(--color-off-white);            /* rgba(255,255,255,.96) → #f7f4ec */
+  border-bottom-color: var(--color-border);            /* rgba(201,154,46,.48) → #dbe2ec（静的ページのヘッダー罫線と同じ） */
+  background-color: var(--color-off-white);            /* rgba(255,255,255,.96) → #f4f6fa */
 }
 
 .site-header.is-scrolled {
-  border-bottom-color: var(--color-gold);              /* #c99a2e → #b05a3c（変数経由だが明示） */
-  box-shadow: 0 4px 18px rgba(29, 58, 47, 0.08);       /* rgba(15,39,71,.06) → 深緑の影 */
+  border-bottom-color: var(--color-gold);              /* #c99a2e → #3e75ad（変数経由だが明示） */
+  box-shadow: 0 4px 18px rgba(15, 39, 71, 0.08);       /* ネイビーの影（静的ページと同値） */
 }
 
 /*
  * ボタンの影。style.css の .btn はネイビーの影が直接指定されている。
+ * ネイビー基調に戻したため、色相はオリジナルのまま濃さだけそろえる。
  */
 .btn {
-  box-shadow: 0 4px 12px rgba(29, 58, 47, 0.08);       /* rgba(15,39,71,.06) → 深緑の影 */
+  box-shadow: 0 4px 12px rgba(15, 39, 71, 0.08);       /* rgba(15,39,71,.06) → 同色でわずかに濃く */
 }
 
 @media (hover: hover) {
   .btn--primary:hover {
-    box-shadow: 0 6px 16px rgba(29, 58, 47, 0.12);     /* rgba(15,39,71,.1) → 深緑の影 */
+    box-shadow: 0 6px 16px rgba(15, 39, 71, 0.12);     /* rgba(15,39,71,.1) → 同色でわずかに濃く */
   }
 }
 
