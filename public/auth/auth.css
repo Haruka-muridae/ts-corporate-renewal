@@ -638,6 +638,82 @@
 
 .auth-app-card {
   display: flex;
+  /* グリップを右上へ重ねるための基準。 */
+  position: relative;
+}
+
+/* ---------- 並べ替え ---------- */
+
+/*
+ * グリップ（移動ハンドル）。実アプリの枠にだけ、右上へ常時出す。
+ *
+ * touch-action: none は必須。
+ * これが無いと、指を動かした瞬間にブラウザがスクロールを始め、
+ * pointermove がこちらへ来なくなる。JS の preventDefault だけでは足りない。
+ */
+.auth-app-card__grip {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background-color: transparent;
+  color: var(--c-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+}
+
+.auth-app-card__grip:hover {
+  background-color: var(--c-bg-sub);
+  color: var(--c-main);
+}
+
+.auth-app-card__grip:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 1px;
+}
+
+/*
+ * 掴んでいるあいだの「穴」。
+ * 本体はゴーストが持っていくので、ここは空いた場所として見せる。
+ */
+.auth-app-card--dragging .auth-app-card__link {
+  border-style: dashed;
+  background-color: var(--c-bg-sub);
+  opacity: 0.35;
+}
+
+.auth-app-card--dragging .auth-app-card__grip {
+  visibility: hidden;
+}
+
+/* キーボードで動かしているあいだ、どれを動かしているかを示す。 */
+.auth-app-card--moving .auth-app-card__link {
+  border-color: var(--c-main);
+  box-shadow: 0 0 0 2px var(--c-main);
+}
+
+/*
+ * ポインターに追従する複製。
+ *
+ * pointer-events: none が要る。
+ * これが無いと、指の下にあるのが常にこの複製になり、
+ * 挿入先の枠を拾えなくなる（自分自身の上にしか落とせなくなる）。
+ */
+.auth-app-card--ghost {
+  position: fixed;
+  z-index: 100;
+  opacity: 0.85;
+  pointer-events: none;
+  transform: rotate(1.5deg);
 }
 
 /*
@@ -796,6 +872,82 @@
 
 .auth-apps__dot[aria-current='true']::before {
   background-color: var(--c-main);
+}
+
+/* ---------- 初期配置に戻す ---------- */
+
+.auth-apps__message {
+  margin-top: 14px;
+}
+
+.auth-apps__reset {
+  margin-top: 14px;
+  text-align: center;
+}
+
+/*
+ * 取り消せる操作ではないが、日常的に押すものでもない。
+ * 目立たせず、しかし探さずに見つかる位置へ置く。
+ */
+.auth-apps__reset-button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--c-text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.auth-apps__reset-button:hover {
+  color: var(--c-main);
+}
+
+.auth-apps__reset-button:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 2px;
+}
+
+.auth-apps__confirm {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg-sub);
+  text-align: left;
+}
+
+.auth-apps__confirm-text {
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.auth-apps__confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.auth-apps__confirm-actions .auth-button {
+  width: auto;
+  margin-top: 0;
+  padding: 9px 16px;
+  font-size: 0.8125rem;
+}
+
+/* 取り消せない操作。色だけに頼らず「戻す」という語でも示す。 */
+.auth-apps__danger {
+  border-color: #a3221f;
+  background-color: #a3221f;
+  color: var(--color-white);
+}
+
+.auth-apps__danger:hover:not(:disabled) {
+  border-color: #7a1917;
+  background-color: #7a1917;
 }
 
 /*

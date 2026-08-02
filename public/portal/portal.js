@@ -20,10 +20,14 @@ import { setScreenDepth, rootPath } from '../auth/config.js';
 import { guardPage, signOut, goToLogin } from '../auth/session.js';
 import { APP_REGISTRY } from './app-registry.js';
 import {
+  PAGE_SIZE,
+  clearStoredLayout,
+  moveItem,
   pageCountFor,
   paginate,
   readStoredLayout,
   resolveAppOrder,
+  writeStoredLayout,
 } from './app-layout.js';
 import { KeyStore, PROVIDERS, isKeyStoreAvailable } from '../auth/keystore.js';
 import { createMessageArea, createSubmitButton, attachPasswordToggle } from '../auth/ui.js';
@@ -37,6 +41,12 @@ const appsElement = document.getElementById('portal-apps');
 const appsDotsElement = document.getElementById('portal-apps-dots');
 const appsPrevButton = document.getElementById('portal-apps-prev');
 const appsNextButton = document.getElementById('portal-apps-next');
+const appsLiveElement = document.getElementById('portal-apps-live');
+const appsMessageElement = document.getElementById('portal-apps-message');
+const appsResetButton = document.getElementById('portal-apps-reset');
+const appsResetConfirm = document.getElementById('portal-apps-reset-confirm');
+const appsResetYes = document.getElementById('portal-apps-reset-confirm-yes');
+const appsResetNo = document.getElementById('portal-apps-reset-confirm-no');
 const accountEmailElement = document.getElementById('portal-account-email');
 const accountSubscriptionElement = document.getElementById('portal-account-subscription');
 const accountToggle = document.getElementById('portal-account-toggle');
@@ -140,15 +150,69 @@ function appIconText(app) {
 let currentPage = 0;
 let totalPages = 0;
 
+/* 現在の並び（アプリだけ。空き枠は含まない）。並べ替えはこれを書き換える。 */
+let orderedApps = [];
+
+/* テストから注入された定義を覚えておく（「初期配置に戻す」で使う）。 */
+let activeRegistry = APP_REGISTRY;
+
+/*
+ * ドラッグ中の状態。ドラッグしていないときは null。
+ *
+ *   appId      … 掴んでいるアプリの id
+ *   original   … 掴む前の並び（Esc で戻すため）
+ *   ghost      … ポインターに追従する半透明の複製
+ *   pointerId  … setPointerCapture したポインター
+ *   grip       … 掴んだグリップ（capture の解放先）
+ */
+let dragState = null;
+
+/* キーボードの移動モード。入っていないときは null。 */
+let keyboardMove = null;
+
+function appIds(apps = orderedApps) {
+  return apps.map((app) => app.id);
+}
+
+function indexOfApp(appId) {
+  return orderedApps.findIndex((app) => app.id === appId);
+}
+
+/* 読み上げへ短く伝える。画面では位置が見えるが、キーボード操作では見えない。 */
+function announce(text) {
+  appsLiveElement.textContent = text;
+}
+
+/*
+ * 並べ替えの結果を保存する。
+ *
+ * 保存に失敗しても画面上の並びは戻さない。
+ * せっかく並べたものが操作のたびに消えるほうが困る。
+ * 失敗したことだけを控えめに伝え、操作は続けさせる。
+ */
+function persistOrder() {
+  if (writeStoredLayout(appIds())) {
+    appsMessageElement.hidden = true;
+    return true;
+  }
+
+  appsMessageElement.textContent = '並び順を保存できませんでした。この画面では並びは保たれますが、次に開いたときは元に戻ります。';
+  appsMessageElement.hidden = false;
+  return false;
+}
+
 /*
  * アプリのカードを作る。文字列はすべて textContent で入れる。
  *
- * カード全体を1つのリンクにする。名前・アイコンのどちらを押しても
- * 同じ場所へ行くため、「開く」だけが当たり判定という状態を作らない。
+ * リンクとグリップを兄弟として並べる。
+ * グリップを `a` の内側へ入れられない（対話要素は入れ子にできない）ことと、
+ * **本体からドラッグを始めない**という決めごとの両方に、この形が要る。
  */
-function buildAppCard(app) {
+function buildAppCard(app, index) {
   const item = document.createElement('li');
   item.className = 'auth-app-card';
+  item.dataset.appId = app.id;
+  item.dataset.index = String(index);
 
   const link = document.createElement('a');
   link.className = 'auth-app-card__link';
@@ -169,6 +233,26 @@ function buildAppCard(app) {
 
   item.append(link);
 
+  /*
+   * グリップ。移動の始点はここだけにする。
+   *
+   * アイコン本体から始められるようにすると、開こうとしただけの指の
+   * わずかな動きで移動が始まる。押し間違いの結果が「並びが変わった」
+   * という気づきにくい形で残るため、始点を分けている。
+   */
+  const grip = document.createElement('button');
+  grip.className = 'auth-app-card__grip';
+  grip.type = 'button';
+  grip.dataset.appId = app.id;
+  grip.setAttribute('aria-label', `${app.name ?? ''} を移動`);
+
+  const gripIcon = document.createElement('span');
+  gripIcon.setAttribute('aria-hidden', 'true');
+  gripIcon.textContent = '⠿';
+  grip.append(gripIcon);
+
+  item.append(grip);
+
   return item;
 }
 
@@ -179,9 +263,10 @@ function buildAppCard(app) {
  * 押しても何も起きないという体験を作る。
  * 見た目（破線）だけでなく「準備中」の語でも伝える。
  */
-function buildEmptySlot() {
+function buildEmptySlot(index) {
   const item = document.createElement('li');
   item.className = 'auth-app-card auth-app-card--empty';
+  item.dataset.index = String(index);
 
   const box = document.createElement('div');
   box.className = 'auth-app-card__placeholder';
@@ -219,8 +304,9 @@ function buildPage(slots, pageIndex) {
   list.id = `portal-apps-page-${pageIndex + 1}`;
   list.setAttribute('aria-label', `${pageIndex + 1}ページ目`);
 
-  slots.forEach((app) => {
-    list.append(app ? buildAppCard(app) : buildEmptySlot());
+  slots.forEach((app, slotIndex) => {
+    const globalIndex = pageIndex * PAGE_SIZE + slotIndex;
+    list.append(app ? buildAppCard(app, globalIndex) : buildEmptySlot(globalIndex));
   });
 
   return list;
@@ -269,6 +355,38 @@ function buildDots() {
   appsDotsElement.replaceChildren(fragment);
 }
 
+/*
+ * いまの orderedApps でグリッドを描き直す。
+ *
+ * 表示中のページは保つ。並べ替えのたびに1ページ目へ飛ぶと、
+ * 2ページ目で操作している人が毎回戻されることになる。
+ */
+function paintGrid() {
+  const page = currentPage;
+
+  totalPages = pageCountFor(orderedApps.length);
+
+  const fragment = document.createDocumentFragment();
+
+  paginate(orderedApps, totalPages).forEach((slots, index) => {
+    fragment.append(buildPage(slots, index));
+  });
+
+  appsElement.replaceChildren(fragment);
+  buildDots();
+  showPage(page);
+
+  /* ドラッグ中は、掴んでいるカードの位置に穴を開けたままにする。 */
+  if (dragState) {
+    markDragSource();
+  }
+
+  /* キーボード移動中は、動かしている枠を示し続ける。 */
+  if (keyboardMove) {
+    markKeyboardTarget();
+  }
+}
+
 /**
  * グリッドを描き直す。
  *
@@ -277,21 +395,14 @@ function buildDots() {
  */
 export function renderAppsGrid(registry = APP_REGISTRY, { stored } = {}) {
   const layout = stored === undefined ? readStoredLayout() : stored;
-  const apps = resolveAppOrder(registry, layout);
 
-  totalPages = pageCountFor(apps.length);
-
-  const fragment = document.createDocumentFragment();
-
-  paginate(apps, totalPages).forEach((slots, index) => {
-    fragment.append(buildPage(slots, index));
-  });
-
-  appsElement.replaceChildren(fragment);
-  buildDots();
+  activeRegistry = registry;
+  orderedApps = resolveAppOrder(registry, layout);
 
   /* 描き直したら必ず1ページ目から。表示ページは保存しない。 */
-  showPage(0);
+  currentPage = 0;
+  appsMessageElement.hidden = true;
+  paintGrid();
 }
 
 appsDotsElement.addEventListener('click', (event) => {
@@ -304,6 +415,378 @@ appsDotsElement.addEventListener('click', (event) => {
 
 appsPrevButton.addEventListener('click', () => showPage(currentPage - 1));
 appsNextButton.addEventListener('click', () => showPage(currentPage + 1));
+
+/*
+ * ------------------------------------------------------------------
+ * 並べ替え（第2便）
+ * ------------------------------------------------------------------
+ * 挿入位置の見せ方は「ライブ押しのけ」。
+ * 挿入先が変わるたびに並びを組み替えて描き直すので、まわりのカードが
+ * 実際に寄る／空く。掴んだカードの位置には穴（破線）が開き、
+ * 本体は半透明のゴーストとしてポインターに追従する。
+ *
+ * 別に線を引く方式は採らない。線は「どの隙間か」しか示せないが、
+ * 押しのけなら **落としたあとの並びそのもの** が見える。
+ *
+ * 詳細は docs/specs/apps-grid-spec-v1.md §10。
+ * ------------------------------------------------------------------
+ */
+
+/* 掴んでいるカードに穴を開ける（本体はゴーストが持っている）。 */
+function markDragSource() {
+  appsElement.querySelectorAll('.auth-app-card--dragging')
+    .forEach((card) => card.classList.remove('auth-app-card--dragging'));
+
+  const card = appsElement.querySelector(`.auth-app-card[data-app-id="${dragState.appId}"]`);
+
+  if (card) {
+    card.classList.add('auth-app-card--dragging');
+  }
+}
+
+function markKeyboardTarget() {
+  appsElement.querySelectorAll('.auth-app-card--moving')
+    .forEach((card) => card.classList.remove('auth-app-card--moving'));
+
+  const card = appsElement.querySelector(`.auth-app-card[data-app-id="${keyboardMove.appId}"]`);
+
+  if (card) {
+    card.classList.add('auth-app-card--moving');
+  }
+}
+
+/*
+ * ポインターの下にある枠から、挿入先の位置を求める。
+ *
+ * アプリ数より後ろ（準備中の並び）を指していたら末尾へ丸める。
+ * 丸め込み自体は moveItem() が行うので、ここでは素の値を返す。
+ */
+function targetIndexFromPoint(x, y) {
+  const element = document.elementFromPoint(x, y);
+
+  if (!element) {
+    return null;
+  }
+
+  const card = element.closest('.auth-app-card');
+
+  if (!card || !appsElement.contains(card)) {
+    return null;
+  }
+
+  return Number(card.dataset.index);
+}
+
+/* ドラッグ中にページのドットへ重ねたら、そのページへ送る。 */
+function maybeTurnPage(x, y) {
+  const element = document.elementFromPoint(x, y);
+  const dot = element?.closest('.auth-apps__dot');
+
+  if (!dot) {
+    return false;
+  }
+
+  const page = Number(dot.dataset.page);
+
+  if (page === currentPage) {
+    return false;
+  }
+
+  showPage(page);
+  return true;
+}
+
+function createGhost(card, event) {
+  const rect = card.getBoundingClientRect();
+  const ghost = card.cloneNode(true);
+
+  /* 複製の中の押せるものは、複製である以上いっさい押させない。 */
+  ghost.querySelectorAll('a, button').forEach((el) => el.setAttribute('tabindex', '-1'));
+
+  ghost.classList.add('auth-app-card--ghost');
+  ghost.style.width = `${rect.width}px`;
+  ghost.style.height = `${rect.height}px`;
+  ghost.dataset.offsetX = String(event.clientX - rect.left);
+  ghost.dataset.offsetY = String(event.clientY - rect.top);
+
+  document.body.append(ghost);
+  moveGhost(ghost, event.clientX, event.clientY);
+
+  return ghost;
+}
+
+function moveGhost(ghost, x, y) {
+  ghost.style.left = `${x - Number(ghost.dataset.offsetX)}px`;
+  ghost.style.top = `${y - Number(ghost.dataset.offsetY)}px`;
+}
+
+function endDrag({ save }) {
+  if (!dragState) {
+    return;
+  }
+
+  const { ghost, grip, pointerId, original, appId } = dragState;
+
+  ghost.remove();
+
+  try {
+    grip.releasePointerCapture(pointerId);
+  } catch {
+    /* すでに解放済み。 */
+  }
+
+  dragState = null;
+
+  if (!save) {
+    /* Esc。掴む前の並びへ戻す。保存もしない。 */
+    orderedApps = original;
+  }
+
+  paintGrid();
+
+  appsElement.querySelectorAll('.auth-app-card--dragging')
+    .forEach((card) => card.classList.remove('auth-app-card--dragging'));
+
+  if (save) {
+    persistOrder();
+    announce(`${indexOfApp(appId) + 1}番目へ移動しました。`);
+  } else {
+    announce('移動を取り消しました。');
+  }
+}
+
+function onGripPointerDown(event) {
+  const grip = event.target.closest('.auth-app-card__grip');
+
+  if (!grip || dragState || keyboardMove) {
+    return;
+  }
+
+  /* 主ボタン以外（右クリック等）では始めない。 */
+  if (event.button !== undefined && event.button !== 0) {
+    return;
+  }
+
+  const card = grip.closest('.auth-app-card');
+  const appId = grip.dataset.appId;
+
+  if (!card || indexOfApp(appId) < 0) {
+    return;
+  }
+
+  /*
+   * 既定動作を止める。
+   * タッチではこれとグリップの touch-action: none の両方が要る。
+   * 片方だけだと、指を動かした瞬間に画面がスクロールする。
+   */
+  event.preventDefault();
+
+  try {
+    grip.setPointerCapture(event.pointerId);
+  } catch {
+    /* capture できなくても、document 側の listener で拾える。 */
+  }
+
+  dragState = {
+    appId,
+    original: [...orderedApps],
+    ghost: createGhost(card, event),
+    pointerId: event.pointerId,
+    grip,
+  };
+
+  markDragSource();
+  announce(`${card.querySelector('.auth-app-card__name')?.textContent ?? ''} を移動しています。`);
+}
+
+function onPointerMove(event) {
+  if (!dragState) {
+    return;
+  }
+
+  event.preventDefault();
+  moveGhost(dragState.ghost, event.clientX, event.clientY);
+
+  /* まずページ送り。送った直後は、その位置の枠を次の移動で拾う。 */
+  if (maybeTurnPage(event.clientX, event.clientY)) {
+    return;
+  }
+
+  const target = targetIndexFromPoint(event.clientX, event.clientY);
+  const from = indexOfApp(dragState.appId);
+
+  if (target === null || from < 0) {
+    return;
+  }
+
+  const next = moveItem(orderedApps, from, target);
+
+  /* 並びが変わらないなら描き直さない（毎フレームの再描画を避ける）。 */
+  if (next.every((app, index) => app.id === orderedApps[index].id)) {
+    return;
+  }
+
+  orderedApps = next;
+  paintGrid();
+}
+
+function onPointerUp() {
+  endDrag({ save: true });
+}
+
+appsElement.addEventListener('pointerdown', onGripPointerDown);
+document.addEventListener('pointermove', onPointerMove, { passive: false });
+document.addEventListener('pointerup', onPointerUp);
+document.addEventListener('pointercancel', () => endDrag({ save: false }));
+
+/*
+ * ------------------------------------------------------------------
+ * キーボードでの移動
+ * ------------------------------------------------------------------
+ * グリップは button なので、Enter と Space は既定動作で click になる。
+ * 1回目の click で移動モードへ入り、2回目で確定する。
+ * 矢印で動かし、Esc で取り消す。
+ * ------------------------------------------------------------------
+ */
+
+function startKeyboardMove(grip) {
+  const appId = grip.dataset.appId;
+
+  if (indexOfApp(appId) < 0) {
+    return;
+  }
+
+  keyboardMove = { appId, original: [...orderedApps] };
+  markKeyboardTarget();
+  announce(`${indexOfApp(appId) + 1}番目。矢印キーで移動し、Enterで確定、Escで取消します。`);
+}
+
+/* 移動後もグリップに焦点を残す。描き直しで要素が作り直されるため。 */
+function refocusGrip(appId) {
+  const grip = appsElement.querySelector(`.auth-app-card__grip[data-app-id="${appId}"]`);
+  grip?.focus();
+}
+
+function endKeyboardMove({ save }) {
+  if (!keyboardMove) {
+    return;
+  }
+
+  const { appId, original } = keyboardMove;
+
+  if (!save) {
+    orderedApps = original;
+  }
+
+  keyboardMove = null;
+  paintGrid();
+
+  appsElement.querySelectorAll('.auth-app-card--moving')
+    .forEach((card) => card.classList.remove('auth-app-card--moving'));
+
+  if (save) {
+    persistOrder();
+    announce(`${indexOfApp(appId) + 1}番目に確定しました。`);
+  } else {
+    announce('移動を取り消しました。');
+  }
+
+  refocusGrip(appId);
+}
+
+function moveByKeyboard(step) {
+  const from = indexOfApp(keyboardMove.appId);
+  const to = from + step;
+
+  if (from < 0 || to < 0 || to >= orderedApps.length) {
+    return;
+  }
+
+  orderedApps = moveItem(orderedApps, from, to);
+
+  /* 移動先が別ページなら、そのページへ送る。 */
+  showPage(Math.floor(to / PAGE_SIZE));
+  paintGrid();
+  refocusGrip(keyboardMove.appId);
+  announce(`${to + 1}番目に移動`);
+}
+
+appsElement.addEventListener('click', (event) => {
+  const grip = event.target.closest('.auth-app-card__grip');
+
+  if (!grip) {
+    return;
+  }
+
+  if (keyboardMove) {
+    endKeyboardMove({ save: true });
+    return;
+  }
+
+  startKeyboardMove(grip);
+});
+
+appsElement.addEventListener('keydown', (event) => {
+  if (!keyboardMove || !event.target.closest('.auth-app-card__grip')) {
+    return;
+  }
+
+  /* 2列なので、上下は2つぶん動く。 */
+  const steps = {
+    ArrowLeft: -1, ArrowRight: 1, ArrowUp: -2, ArrowDown: 2,
+  };
+
+  if (Object.hasOwn(steps, event.key)) {
+    event.preventDefault();
+    moveByKeyboard(steps[event.key]);
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    endKeyboardMove({ save: false });
+  }
+});
+
+/* Esc は画面のどこにいても効く（ドラッグ中はポインターに焦点が無い）。 */
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') {
+    return;
+  }
+
+  if (dragState) {
+    event.preventDefault();
+    endDrag({ save: false });
+  }
+});
+
+/*
+ * ------------------------------------------------------------------
+ * 初期配置に戻す
+ * ------------------------------------------------------------------
+ * 保存キーを消すだけ。空の order を書かない。
+ * 消えたあとは「保存が無い」状態＝定義の順（§4-d）へ戻る。
+ * ------------------------------------------------------------------
+ */
+
+appsResetButton.addEventListener('click', () => {
+  appsMessageElement.hidden = true;
+  appsResetConfirm.hidden = false;
+  appsResetYes.focus();
+});
+
+appsResetNo.addEventListener('click', () => {
+  appsResetConfirm.hidden = true;
+  appsResetButton.focus();
+});
+
+appsResetYes.addEventListener('click', () => {
+  clearStoredLayout();
+  renderAppsGrid(activeRegistry, { stored: null });
+  appsResetConfirm.hidden = true;
+  announce('初期配置に戻しました。');
+  appsResetButton.focus();
+});
 
 /*
  * ------------------------------------------------------------------

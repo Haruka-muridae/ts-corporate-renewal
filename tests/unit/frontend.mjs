@@ -402,6 +402,81 @@ try {
 
   /* 保存先が無い環境でも例外を投げない。 */
   check('localStorage が無ければ null を返す', layout.readStoredLayout() === null);
+  check('保存先が無ければ書き込みは false', layout.writeStoredLayout(['a']) === false);
+  check('保存先が無ければ削除も false', layout.clearStoredLayout() === false);
+
+  /* ---- 挿入（押しのけ方式） ---- */
+
+  const { moveItem } = layout;
+  const L = ['a', 'b', 'c', 'd'];
+  const j = (list) => list.join(',');
+
+  check('末尾を先頭へ', j(moveItem(L, 3, 0)) === 'd,a,b,c', j(moveItem(L, 3, 0)));
+  check('先頭を末尾へ', j(moveItem(L, 0, 3)) === 'b,c,d,a', j(moveItem(L, 0, 3)));
+  check('1つ右へ', j(moveItem(L, 1, 2)) === 'a,c,b,d', j(moveItem(L, 1, 2)));
+  check('1つ左へ', j(moveItem(L, 2, 1)) === 'a,c,b,d', j(moveItem(L, 2, 1)));
+
+  /* 入れ替えではなく押しのけ。間の要素が1つずつずれる。 */
+  check('入れ替え（swap）ではない', j(moveItem(L, 0, 2)) === 'b,c,a,d', j(moveItem(L, 0, 2)));
+
+  check('同じ位置なら変わらない', j(moveItem(L, 2, 2)) === 'a,b,c,d');
+  check('範囲外（大きい）は末尾へ丸める', j(moveItem(L, 0, 99)) === 'b,c,d,a', j(moveItem(L, 0, 99)));
+  check('範囲外（負）は先頭へ丸める', j(moveItem(L, 3, -5)) === 'd,a,b,c', j(moveItem(L, 3, -5)));
+  check('to が数値でなければ末尾へ', j(moveItem(L, 0, undefined)) === 'b,c,d,a', j(moveItem(L, 0, undefined)));
+
+  check('from が範囲外なら変わらない', j(moveItem(L, 9, 0)) === 'a,b,c,d');
+  check('from が負でも変わらない', j(moveItem(L, -1, 0)) === 'a,b,c,d');
+  check('空配列でも例外を投げない', moveItem([], 0, 0).length === 0);
+  check('配列でなければ空を返す', moveItem(null, 0, 0).length === 0);
+
+  /* 元の配列を書き換えない。 */
+  const before = ['a', 'b', 'c'];
+  moveItem(before, 0, 2);
+  check('元の配列を書き換えない', j(before) === 'a,b,c');
+
+  /* ---- 保存と削除（localStorage を差し替えて確認） ---- */
+
+  const layoutStore = new Map();
+
+  globalThis.localStorage = {
+    getItem: (k) => (layoutStore.has(k) ? layoutStore.get(k) : null),
+    setItem: (k, v) => { layoutStore.set(k, String(v)); },
+    removeItem: (k) => { layoutStore.delete(k); },
+  };
+
+  check('保存できる', layout.writeStoredLayout(['b', 'a']) === true);
+
+  check(
+    '保存の形は {version:1, order:[…]}',
+    layoutStore.get('tsam-app-layout') === JSON.stringify({ version: 1, order: ['b', 'a'] }),
+    layoutStore.get('tsam-app-layout'),
+  );
+
+  check(
+    '保存したものをそのまま読み戻せる',
+    j(layout.readStoredLayout().order) === 'b,a',
+  );
+
+  check(
+    '空文字や非文字列は保存時に落とす',
+    layout.writeStoredLayout(['a', '', 1, null, '  ', 'b']) === true
+    && layoutStore.get('tsam-app-layout') === JSON.stringify({ version: 1, order: ['a', 'b'] }),
+    layoutStore.get('tsam-app-layout'),
+  );
+
+  check('削除すると保存キーごと消える', layout.clearStoredLayout() === true && layoutStore.has('tsam-app-layout') === false);
+  check('削除後は保存なし扱い', layout.readStoredLayout() === null);
+
+  /* 保存に失敗しても例外を投げない（容量超過の再現）。 */
+  globalThis.localStorage = {
+    getItem: () => null,
+    setItem: () => { throw new Error('QuotaExceededError'); },
+    removeItem: () => {},
+  };
+
+  check('保存に失敗したら false を返す（例外は投げない）', layout.writeStoredLayout(['a']) === false);
+
+  delete globalThis.localStorage;
 
   /* ---------------------------------------------------------------- */
   section('KeyStore（APIキーの保管庫）');

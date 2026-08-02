@@ -180,6 +180,98 @@ export function resolveAppOrder(registry, stored = null) {
 }
 
 /**
+ * 並びの中で1件を別の位置へ移す（押しのけ方式）。
+ *
+ * 元の位置から抜き、目的の位置へ挿し込む。あいだの要素は1つずつずれる。
+ * **入れ替え（swap）ではない。** 2件だけが入れ替わると、
+ * 掴んだものが遠くへ飛んだように見える。
+ *
+ *   moveItem(['a','b','c','d'], 3, 0) → ['d','a','b','c']
+ *
+ * 範囲外の `to` は端へ寄せる。準備中の枠（アプリ数より後ろ）へ落としたときに
+ * 「末尾へ」と解釈されるのは、この丸め込みによる。
+ * `from` が範囲外なら、何もせず複製を返す。
+ *
+ * 元の配列は書き換えない。
+ */
+export function moveItem(list, from, to) {
+  const items = Array.isArray(list) ? [...list] : [];
+  const fromIndex = Number(from);
+
+  if (!Number.isInteger(fromIndex) || fromIndex < 0 || fromIndex >= items.length) {
+    return items;
+  }
+
+  const toRaw = Number(to);
+  const last = items.length - 1;
+  const toIndex = Number.isFinite(toRaw)
+    ? Math.min(Math.max(Math.floor(toRaw), 0), last)
+    : last;
+
+  if (toIndex === fromIndex) {
+    return items;
+  }
+
+  const [moved] = items.splice(fromIndex, 1);
+  items.splice(toIndex, 0, moved);
+
+  return items;
+}
+
+/**
+ * 並びを保存する。保存できたかどうかを返す。
+ *
+ * 第1便では読むだけだったが、第2便で書き込みが要る。
+ * 読み取りと同じくこの層に閉じ、描画側から localStorage を触らせない。
+ *
+ * 保存に失敗しても例外は投げない。画面上の並びは呼び出し側が保つ。
+ */
+export function writeStoredLayout(order) {
+  const storage = getStorage();
+
+  if (!storage) {
+    return false;
+  }
+
+  const ids = (Array.isArray(order) ? order : [])
+    .filter((id) => typeof id === 'string')
+    .map((id) => id.trim())
+    .filter((id) => id !== '');
+
+  try {
+    storage.setItem(
+      LAYOUT_STORAGE_KEY,
+      JSON.stringify({ version: LAYOUT_VERSION, order: ids }),
+    );
+    return true;
+  } catch {
+    /* 容量超過・書き込み禁止。保存できなかったことを返す。 */
+    return false;
+  }
+}
+
+/**
+ * 保存を消す（「初期配置に戻す」）。
+ *
+ * 消したあとは保存が無い状態＝既定順（§4-d）へ戻る。
+ * 空の order を書くのではなく、キーごと消す。
+ */
+export function clearStoredLayout() {
+  const storage = getStorage();
+
+  if (!storage) {
+    return false;
+  }
+
+  try {
+    storage.removeItem(LAYOUT_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 並べる順序をページごとに切り分ける。
  *
  * 足りない枠は null で埋める。呼び出し側は null を「準備中」として描く。
