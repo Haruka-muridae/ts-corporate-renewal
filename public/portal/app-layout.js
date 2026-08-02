@@ -23,12 +23,21 @@ export const LAYOUT_STORAGE_KEY = 'tsam-app-layout';
 
 /*
  * 保存形式の版。
- * 形が変わったときに上げる。読み込み側は一致しなければ既定順へ倒す（§4-d）。
+ *
+ * v1 … order は「表示順」だった（全アプリが並び、順序だけを持つ）
+ * v2 … order は「**お気に入りのID列**」（載っていないアプリはカタログへ）
+ *
+ * 同じ `order` という名前で意味が変わったため版を上げた。
+ * v1 のデータを v2 として読むと、全アプリが勝手にお気に入りへ入る。
+ * 読み込み側は一致しなければ既定（お気に入り空）へ倒す（§4-d）。
  */
-export const LAYOUT_VERSION = 1;
+export const LAYOUT_VERSION = 2;
 
-/* 1ページの枠数。2列×4行。 */
+/* 1ページの枠数。お気に入りは 2列×4行。 */
 export const PAGE_SIZE = 8;
+
+/* カタログ（全アプリ一覧）の1ページの枠数。2列×10行。 */
+export const CATALOG_PAGE_SIZE = 20;
 
 /*
  * 最低ページ数。
@@ -49,6 +58,20 @@ export function pageCountFor(appCount) {
   const safe = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
 
   return Math.max(MIN_PAGES, Math.ceil(safe / PAGE_SIZE));
+}
+
+/**
+ * カタログのページ数。
+ *
+ * お気に入り側と違い、**最低ページ数を持たない**（埋め枠も置かない）。
+ * カタログは「まだ選んでいないアプリの一覧」であって、
+ * 枠を並べて見せるものではない。0件なら一文だけ出す。
+ */
+export function catalogPageCount(appCount) {
+  const count = Number(appCount);
+  const safe = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+
+  return Math.max(1, Math.ceil(safe / CATALOG_PAGE_SIZE));
 }
 
 /**
@@ -125,21 +148,9 @@ export function readStoredLayout() {
   }
 }
 
-/**
- * 定義と保存データから、実際に並べる順序を決める。
- *
- * 規則（§4）:
- *   a. 保存済み order にある ID は、その順で先に出す
- *   b. order に無い既知アプリは、定義の順で末尾へ足す
- *   c. order にある未知 ID（定義に無い）は無視する
- *   d. 保存が無い・読めない・版違いなら、定義の順そのまま
- *
- * 戻り値は定義に入っていたオブジェクトそのもの（複製しない）。
- */
-export function resolveAppOrder(registry, stored = null) {
+/* 定義を id で引ける形にする。id を持たないものは並べようがないので落とす。 */
+function indexRegistry(registry) {
   const apps = Array.isArray(registry) ? registry.filter((app) => app && typeof app === 'object') : [];
-
-  /* id を持たない定義は並べようがないので落とす。 */
   const known = new Map();
 
   apps.forEach((app) => {
@@ -150,33 +161,58 @@ export function resolveAppOrder(registry, stored = null) {
     }
   });
 
-  const defaults = [...known.values()];
+  return known;
+}
+
+/**
+ * 定義と保存データから、**お気に入り**の並びを決める。
+ *
+ * 規則（§4）:
+ *   a. 保存済み order にある ID は、その順で出す
+ *   b. order に無い既知アプリは **お気に入りに入れない**（カタログへ回る）
+ *   c. order にある未知 ID（定義に無い）は無視する
+ *   d. 保存が無い・読めない・版違いなら、**お気に入りは空**
+ *
+ * v1 との違いは b と d。v1 では「載っていないものを末尾へ足す」
+ * 「保存が無ければ全件」だった。v2 では order がお気に入りそのものなので、
+ * 載っていない＝選ばれていない、を意味する。
+ *
+ * 戻り値は定義に入っていたオブジェクトそのもの（複製しない）。
+ */
+export function resolveFavorites(registry, stored = null) {
+  const known = indexRegistry(registry);
 
   if (!stored || !Array.isArray(stored.order)) {
-    return defaults;
+    /* d: 既定はお気に入り空。全アプリはカタログに出る。 */
+    return [];
   }
 
   const placed = new Set();
-  const ordered = [];
+  const favorites = [];
 
   stored.order.forEach((id) => {
-    /* c: 定義に無い ID は無視する。d と違い、ここでは既定順へ倒さない。 */
+    /* c: 定義に無い ID は無視する。重複も最初の1件だけ。 */
     if (!known.has(id) || placed.has(id)) {
       return;
     }
 
     placed.add(id);
-    ordered.push(known.get(id));
+    favorites.push(known.get(id));
   });
 
-  /* b: order に載っていない既知アプリを、定義の順で末尾へ。 */
-  defaults.forEach((app) => {
-    if (!placed.has(app.id)) {
-      ordered.push(app);
-    }
-  });
+  return favorites;
+}
 
-  return ordered;
+/**
+ * お気に入りに入っていないアプリ＝カタログ（全アプリ一覧）。
+ *
+ * 並びは**定義の順**。カタログ側の順序は利用者が決めるものではない。
+ */
+export function resolveCatalog(registry, favorites = []) {
+  const known = indexRegistry(registry);
+  const chosen = new Set((Array.isArray(favorites) ? favorites : []).map((app) => app?.id));
+
+  return [...known.values()].filter((app) => !chosen.has(app.id));
 }
 
 /**

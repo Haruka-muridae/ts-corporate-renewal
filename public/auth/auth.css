@@ -653,16 +653,17 @@
  */
 .auth-app-card__grip {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  /* 「外す」と同じ 44px。左右で的の大きさが違うと押し分けにくい。 */
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0 12px 0 12px;
   background-color: transparent;
   color: var(--c-text-muted);
   font-size: 1rem;
@@ -676,9 +677,38 @@
   color: var(--c-main);
 }
 
-.auth-app-card__grip:focus-visible {
+.auth-app-card__grip:focus-visible,
+.auth-app-card__remove:focus-visible {
   outline: 2px solid var(--c-main);
   outline-offset: 1px;
+}
+
+/*
+ * お気に入りから外す。グリップと対称の左上へ置く。
+ * 押下領域は 44px。見た目の「×」は小さいが、指の的は大きくとる。
+ */
+.auth-app-card__remove {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px 0 12px 0;
+  background-color: transparent;
+  color: var(--c-text-muted);
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.auth-app-card__remove:hover {
+  background-color: var(--c-bg-sub);
+  color: #a3221f;
 }
 
 /*
@@ -741,11 +771,20 @@
   background-color: var(--c-bg-sub);
 }
 
+/*
+ * アイコン。
+ *
+ * 中には「名前の1文字目」と、任意で画像が入る。
+ * 画像が読めたときだけ ...--image-ready が付き、文字が隠れる。
+ * 読めなければ文字が残る＝色付きの角丸に1文字、が代替表示になる。
+ */
 .auth-app-card__icon {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   width: 44px;
   height: 44px;
   border: 1px solid var(--c-border);
@@ -755,6 +794,24 @@
   font-size: 1.125rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.auth-app-card__icon-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* 読み込めるまでは出さない。壊れた画像の枠を見せないため。 */
+  opacity: 0;
+}
+
+.auth-app-card__icon--image-ready .auth-app-card__icon-image {
+  opacity: 1;
+}
+
+.auth-app-card__icon--image-ready .auth-app-card__icon-letter {
+  visibility: hidden;
 }
 
 .auth-app-card__name {
@@ -874,7 +931,83 @@
   background-color: var(--c-main);
 }
 
-/* ---------- 初期配置に戻す ---------- */
+/* ---------- 見出し ---------- */
+
+.auth-apps__heading,
+.auth-catalog__heading {
+  margin-bottom: 12px;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+/* ---------- 全アプリ一覧（カタログ） ---------- */
+
+/*
+ * お気に入りと同じ幅・同じ中央寄せにする。
+ * 上下に並ぶ2つのグリッドで幅が違うと、同じ画面に見えない。
+ */
+.auth-catalog {
+  width: min(360px, 100%);
+  margin-block: 28px 0;
+  margin-inline: auto;
+}
+
+/* 2列。埋め枠は置かないので、行数は件数で決まる。 */
+.auth-catalog__page {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.auth-catalog__empty {
+  padding: 20px 0;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  text-align: center;
+}
+
+/*
+ * カタログのカードは、お気に入りの枠に「お気に入りに追加」を足した形。
+ * 下にボタンが付くぶん、リンク側の下余白を詰める。
+ */
+.auth-app-card--catalog {
+  flex-direction: column;
+}
+
+.auth-app-card--catalog .auth-app-card__link {
+  padding-bottom: 12px;
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-width: 0;
+}
+
+/* 押下領域 44px。文字は小さいが的は大きくとる。 */
+.auth-app-card__add {
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid var(--c-border);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background-color: var(--c-bg-sub);
+  color: var(--c-main);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.auth-app-card__add:hover {
+  background-color: var(--c-border);
+}
+
+.auth-app-card__add:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 2px;
+}
+
+/* ---------- お気に入りを初期状態に戻す ---------- */
 
 .auth-apps__message {
   margin-top: 14px;
