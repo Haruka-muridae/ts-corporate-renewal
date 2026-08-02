@@ -262,6 +262,33 @@
               </svg>
             </button>
           </nav>
+
+          <!--
+            並べ替えの結果を読み上げへ伝える。
+            画面では位置が見えるが、キーボード操作では見えないため。
+          -->
+          <p class="auth-visually-hidden" id="portal-apps-live" role="status" aria-live="polite"></p>
+
+          <p class="auth-message auth-apps__message" id="portal-apps-message" tabindex="-1" hidden></p>
+
+          <!--
+            初期配置に戻す。保存キーを消して既定順へ戻す。
+            取り消せないので確認を1枚挟む。
+          -->
+          <div class="auth-apps__reset">
+            <button class="auth-apps__reset-button" id="portal-apps-reset" type="button">初期配置に戻す</button>
+
+            <div class="auth-apps__confirm" id="portal-apps-reset-confirm" role="group"
+                 aria-labelledby="portal-apps-reset-text" hidden>
+              <p class="auth-apps__confirm-text" id="portal-apps-reset-text">
+                並べ替えた配置を破棄して、既定の並びに戻します。よろしいですか。
+              </p>
+              <div class="auth-apps__confirm-actions">
+                <button class="auth-button auth-apps__danger" id="portal-apps-reset-confirm-yes" type="button">戻す</button>
+                <button class="auth-button auth-button--ghost" id="portal-apps-reset-confirm-no" type="button">やめる</button>
+              </div>
+            </div>
+          </div>
         </section>
       </div>
 
