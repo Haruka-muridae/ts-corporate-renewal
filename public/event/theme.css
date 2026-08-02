@@ -151,6 +151,24 @@ h3 {
 }
 
 /*
+ * フッターのリンク hover。
+ *
+ * style.css は .footer-nav a:hover / .site-footer__address a:hover に
+ * color: var(--color-gold) を当てている。アクセントが #3e75ad になったことで、
+ * 濃紺のフッター地（--color-navy-dark = #091a30）との比が約 3.5:1 まで落ち、
+ * 小さい文字の AA（4.5:1）を満たさなくなる。
+ *
+ * hover は「今どのリンクにいるか」を伝える状態表示なので、読めないままにしない。
+ * 淡いブルー（--color-gold-light = #bcd2e8）に差し替えて約 11:1 を確保する。
+ *
+ * 詳細度は style.css 側の .footer-nav a:hover と同値だが、theme.css を後に
+ * 読み込んでいるため、こちらが後勝ちになる。
+ */
+.site-footer a:hover {
+  color: var(--color-gold-light);  /* var(--color-gold)（#3e75ad、3.5:1） → #bcd2e8（約11:1） */
+}
+
+/*
  * エラー・警告系（.apply-form__alert / .form-field__error /
  * .form-field__input[aria-invalid="true"]）は意図的に未変更。
  * 赤はフォームの視認性に直結するため、テーマの都合で薄めない。
