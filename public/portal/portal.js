@@ -19,6 +19,7 @@
 import { setScreenDepth, rootPath } from '../auth/config.js';
 import { guardPage, signOut, goToLogin } from '../auth/session.js';
 import { APP_REGISTRY } from './app-registry.js';
+import { fetchApps, readCachedApps, writeCachedApps } from './app-source.js';
 import {
   CATALOG_PAGE_SIZE,
   PAGE_SIZE,
@@ -531,6 +532,46 @@ export function renderAppsGrid(registry = APP_REGISTRY, { stored } = {}) {
   appsMessageElement.hidden = true;
   paintGrid();
   paintCatalog();
+}
+
+/*
+ * ------------------------------------------------------------------
+ * アプリ一覧の取り込み（三段構え）
+ * ------------------------------------------------------------------
+ * 表示を止めない。取得を待ってから描くと、通信の分だけ画面が白くなる。
+ *
+ *   1. まず描く   … キャッシュがあればそれ、無ければ組み込みの一覧
+ *   2. あとで直す … 取得できたら差し替え、キャッシュも更新する
+ *   3. だめなら   … 1 のまま残し、控えめに知らせる
+ *
+ * お気に入りの解決規則は変えていない。シートから消えた ID は
+ * 「未知 ID」になり、規則 c で自動的に外れる（§4）。
+ * 消えたアプリを別途片付ける処理は要らない。
+ * ------------------------------------------------------------------
+ */
+async function loadAppRegistry() {
+  const cached = readCachedApps();
+
+  /* 1. 待たずに描く。 */
+  renderAppsGrid(cached.length > 0 ? cached : APP_REGISTRY);
+
+  const result = await fetchApps();
+
+  /* 2. 取れたら差し替える。 */
+  if (result.ok) {
+    writeCachedApps(result.apps);
+    renderAppsGrid(result.apps);
+    return;
+  }
+
+  /*
+   * 3. 取れなかった。知らせるだけで、表示はそのまま残す。
+   * 何が出ているのかが分かるよう、キャッシュか既定かを言い分ける。
+   */
+  appsMessageElement.textContent = cached.length > 0
+    ? 'アプリ一覧を更新できませんでした。前回取得した内容を表示しています。'
+    : 'アプリ一覧を取得できませんでした。既定の一覧を表示しています。';
+  appsMessageElement.hidden = false;
 }
 
 /*
@@ -1365,7 +1406,7 @@ function render(user) {
   }
 
   renderApiKeyState();
-  renderAppsGrid();
+  loadAppRegistry();
 
   loadingElement.hidden = true;
   contentElement.hidden = false;
