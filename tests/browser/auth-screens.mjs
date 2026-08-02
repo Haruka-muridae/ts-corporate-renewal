@@ -901,8 +901,8 @@ try {
   check(
     '空枠はすべて「準備中」',
     await page.evaluate(`
-      [...document.querySelectorAll(".auth-app-card--empty")].length === 16
-      && [...document.querySelectorAll(".auth-app-card__pending")]
+      [...document.querySelectorAll("#portal-apps .auth-app-card--empty")].length === 16
+      && [...document.querySelectorAll("#portal-apps .auth-app-card__pending")]
         .every((el) => el.textContent.trim() === "準備中")
     `),
   );
@@ -911,16 +911,16 @@ try {
   check(
     '準備中の枠はリンクでもボタンでもない',
     await page.evaluate(`
-      document.querySelectorAll(".auth-app-card--empty a, .auth-app-card--empty button").length === 0
+      document.querySelectorAll("#portal-apps .auth-app-card--empty a, #portal-apps .auth-app-card--empty button").length === 0
     `),
   );
 
   check(
     '準備中の枠は破線で示す（形と語の両方）',
     await page.evaluate(`
-      getComputedStyle(document.querySelector(".auth-app-card__placeholder")).borderTopStyle === "dashed"
+      getComputedStyle(document.querySelector("#portal-apps .auth-app-card__placeholder")).borderTopStyle === "dashed"
     `),
-    await page.evaluate('getComputedStyle(document.querySelector(".auth-app-card__placeholder")).borderTopStyle'),
+    await page.evaluate('getComputedStyle(document.querySelector("#portal-apps .auth-app-card__placeholder")).borderTopStyle'),
   );
 
   /* ---- ページ送り ---- */
@@ -936,7 +936,7 @@ try {
   check(
     'ドットはページ数ぶんの button',
     await page.evaluate(`(() => {
-      const dots = [...document.querySelectorAll(".auth-apps__dot")];
+      const dots = [...document.querySelectorAll("#portal-apps-dots .auth-apps__dot")];
       return dots.length === 2
         && dots.every((d) => d.tagName === "BUTTON" && d.getAttribute("aria-label"));
     })()`),
@@ -945,7 +945,7 @@ try {
   check(
     '表示中のドットに aria-current が付く',
     await page.evaluate(`(() => {
-      const dots = [...document.querySelectorAll(".auth-apps__dot")];
+      const dots = [...document.querySelectorAll("#portal-apps-dots .auth-apps__dot")];
       return dots[0].getAttribute("aria-current") === "true"
         && dots.slice(1).every((d) => d.getAttribute("aria-current") === null);
     })()`),
@@ -978,7 +978,7 @@ try {
     '「次へ」で2ページ目が出る（aria-current も追従）',
     await page.evaluate(`(() => {
       const pages = [...document.querySelectorAll("#portal-apps .auth-apps__page")];
-      const dots = [...document.querySelectorAll(".auth-apps__dot")];
+      const dots = [...document.querySelectorAll("#portal-apps-dots .auth-apps__dot")];
       return pages[1].hidden === false && pages[0].hidden === true
         && dots[1].getAttribute("aria-current") === "true"
         && dots[0].getAttribute("aria-current") === null;
@@ -994,14 +994,14 @@ try {
   );
 
   /* ドットで戻る。 */
-  await page.evaluate('document.querySelectorAll(".auth-apps__dot")[0].click()');
+  await page.evaluate('document.querySelectorAll("#portal-apps-dots .auth-apps__dot")[0].click()');
   await page.sleep(150);
 
   check(
     'ドットを押すとそのページへ移る',
     await page.evaluate(`
       document.querySelectorAll("#portal-apps .auth-apps__page")[0].hidden === false
-      && document.querySelectorAll(".auth-apps__dot")[0].getAttribute("aria-current") === "true"
+      && document.querySelectorAll("#portal-apps-dots .auth-apps__dot")[0].getAttribute("aria-current") === "true"
     `),
   );
 
@@ -1022,7 +1022,7 @@ try {
     `),
   );
 
-  await page.evaluate('document.querySelectorAll(".auth-apps__dot")[0].focus()');
+  await page.evaluate('document.querySelectorAll("#portal-apps-dots .auth-apps__dot")[0].focus()');
   await page.send('Input.dispatchKeyEvent', {
     type: 'keyDown', windowsVirtualKeyCode: 32, key: ' ', code: 'Space', text: ' ',
   });
@@ -1047,7 +1047,7 @@ try {
     '再読み込みすると1ページ目へ戻る（表示ページを保存しない）',
     await page.evaluate(`
       document.querySelectorAll("#portal-apps .auth-apps__page")[0].hidden === false
-      && document.querySelectorAll(".auth-apps__dot")[0].getAttribute("aria-current") === "true"
+      && document.querySelectorAll("#portal-apps-dots .auth-apps__dot")[0].getAttribute("aria-current") === "true"
     `),
   );
 
@@ -1988,26 +1988,27 @@ try {
   ]`;
 
   await page.evaluate(`
-    import('./portal.js').then((m) => m.renderAppsGrid(${INJECT_APPS}))
+    import('./portal.js').then((m) => m.renderAppsGrid(${INJECT_APPS},
+      { stored: { version: 2, order: ['voice', 'knowledge', 'card'] } }))
   `);
   await page.sleep(250);
 
   check(
     '注入した3件がカードになる（残りは準備中のまま）',
     await page.evaluate(`
-      document.querySelectorAll(".auth-app-card__link").length === 3
-      && document.querySelectorAll(".auth-app-card--empty").length === 13
+      document.querySelectorAll("#portal-apps .auth-app-card__link").length === 3
+      && document.querySelectorAll("#portal-apps .auth-app-card--empty").length === 13
     `),
     await page.evaluate(`JSON.stringify({
-      cards: document.querySelectorAll(".auth-app-card__link").length,
-      empty: document.querySelectorAll(".auth-app-card--empty").length,
+      cards: document.querySelectorAll("#portal-apps .auth-app-card__link").length,
+      empty: document.querySelectorAll("#portal-apps .auth-app-card--empty").length,
     })`),
   );
 
   check(
     'カードはアイコンと名前を持つ',
     await page.evaluate(`
-      [...document.querySelectorAll(".auth-app-card__link")].every((link) =>
+      [...document.querySelectorAll("#portal-apps .auth-app-card__link")].every((link) =>
         link.querySelector(".auth-app-card__icon")
         && link.querySelector(".auth-app-card__name"))
     `),
@@ -2018,12 +2019,13 @@ try {
    * リンクが1つであること（＝本体のどこを押しても同じ場所へ行く）は変わらない。
    */
   check(
-    'カード本体は1つのリンク、その隣にグリップ',
+    'カード本体は1つのリンク、その両肩に「外す」とグリップ',
     await page.evaluate(`
-      [...document.querySelectorAll(".auth-app-card:not(.auth-app-card--empty)")].every((card) =>
-        card.children.length === 2
+      [...document.querySelectorAll("#portal-apps .auth-app-card:not(.auth-app-card--empty)")].every((card) =>
+        card.children.length === 3
         && card.firstElementChild.tagName === "A"
         && card.querySelectorAll("a").length === 1
+        && card.querySelector(".auth-app-card__remove") !== null
         && card.lastElementChild.classList.contains("auth-app-card__grip"))
     `),
   );
@@ -2031,29 +2033,29 @@ try {
   check(
     'href はサイトのルートからの相対パスとして解決される',
     await page.evaluate(`
-      document.querySelector(".auth-app-card__link").getAttribute("href") === "../production-app/voice/"
+      document.querySelector("#portal-apps .auth-app-card__link").getAttribute("href") === "../production-app/voice/"
     `),
-    await page.evaluate('document.querySelector(".auth-app-card__link").getAttribute("href")'),
+    await page.evaluate('document.querySelector("#portal-apps .auth-app-card__link").getAttribute("href")'),
   );
 
   check(
     'カードの角丸が12px',
     await page.evaluate(`
-      getComputedStyle(document.querySelector(".auth-app-card__link")).borderTopLeftRadius === "12px"
+      getComputedStyle(document.querySelector("#portal-apps .auth-app-card__link")).borderTopLeftRadius === "12px"
     `),
-    await page.evaluate('getComputedStyle(document.querySelector(".auth-app-card__link")).borderTopLeftRadius'),
+    await page.evaluate('getComputedStyle(document.querySelector("#portal-apps .auth-app-card__link")).borderTopLeftRadius'),
   );
 
   check(
     'カードの中身が中央寄せ',
     await page.evaluate(`
-      getComputedStyle(document.querySelector(".auth-app-card__link")).textAlign === "center"
+      getComputedStyle(document.querySelector("#portal-apps .auth-app-card__link")).textAlign === "center"
     `),
   );
 
   check(
     'アイコンが省略されたら名前の1文字目を使う',
-    (await page.evaluate('document.querySelectorAll(".auth-app-card__icon")[1].textContent')) === 'ナ',
+    (await page.evaluate('document.querySelectorAll("#portal-apps .auth-app-card__icon")[1].textContent')) === 'ナ',
   );
 
   /* ---- 9件ならページ数が3になる ---- */
@@ -2066,7 +2068,8 @@ try {
    */
   await page.evaluate(`
     import('./portal.js').then((m) => m.renderAppsGrid(
-      Array.from({ length: 9 }, (unused, i) => ({ id: 'a' + i, name: 'App ' + i, href: 'x/' }))
+      Array.from({ length: 9 }, (unused, i) => ({ id: 'a' + i, name: 'App ' + i, href: 'x/' })),
+      { stored: { version: 2, order: Array.from({ length: 9 }, (u, i) => 'a' + i) } }
     ))
   `);
   await page.sleep(250);
@@ -2075,18 +2078,19 @@ try {
     '9件ならページ数は2（ceil(9/8)=2）',
     await page.evaluate(`
       document.querySelectorAll("#portal-apps .auth-apps__page").length === 2
-      && document.querySelectorAll(".auth-apps__dot").length === 2
-      && document.querySelectorAll(".auth-app-card__link").length === 9
+      && document.querySelectorAll("#portal-apps-dots .auth-apps__dot").length === 2
+      && document.querySelectorAll("#portal-apps .auth-app-card__link").length === 9
     `),
     await page.evaluate(`JSON.stringify({
       pages: document.querySelectorAll("#portal-apps .auth-apps__page").length,
-      cards: document.querySelectorAll(".auth-app-card__link").length,
+      cards: document.querySelectorAll("#portal-apps .auth-app-card__link").length,
     })`),
   );
 
   await page.evaluate(`
     import('./portal.js').then((m) => m.renderAppsGrid(
-      Array.from({ length: 17 }, (unused, i) => ({ id: 'b' + i, name: 'App ' + i, href: 'x/' }))
+      Array.from({ length: 17 }, (unused, i) => ({ id: 'b' + i, name: 'App ' + i, href: 'x/' })),
+      { stored: { version: 2, order: Array.from({ length: 17 }, (u, i) => 'b' + i) } }
     ))
   `);
   await page.sleep(250);
@@ -2095,7 +2099,7 @@ try {
     '17件ならページ数が3になる（3ページ目が自動で増える）',
     await page.evaluate(`
       document.querySelectorAll("#portal-apps .auth-apps__page").length === 3
-      && document.querySelectorAll(".auth-apps__dot").length === 3
+      && document.querySelectorAll("#portal-apps-dots .auth-apps__dot").length === 3
     `),
     await page.evaluate('document.querySelectorAll("#portal-apps .auth-apps__page").length'),
   );
@@ -2104,7 +2108,7 @@ try {
     'ページを増やしても1ページ目から始まる',
     await page.evaluate(`
       document.querySelectorAll("#portal-apps .auth-apps__page")[0].hidden === false
-      && document.querySelectorAll(".auth-apps__dot")[0].getAttribute("aria-current") === "true"
+      && document.querySelectorAll("#portal-apps-dots .auth-apps__dot")[0].getAttribute("aria-current") === "true"
     `),
   );
 
@@ -2119,7 +2123,7 @@ try {
         Array.from({ length: ${count} }, (unused, i) => ({
           id: 'app' + i, name: 'アプリ' + i, href: 'x/',
         })),
-        { stored: null },
+        { stored: { version: 2, order: Array.from({ length: ${count} }, (u, i) => 'app' + i) } },
       ))
     `);
     await page.sleep(250);
@@ -2180,16 +2184,16 @@ try {
   check(
     '実アプリの枠だけにグリップが付く',
     await page.evaluate(`
-      document.querySelectorAll(".auth-app-card__grip").length === 3
+      document.querySelectorAll("#portal-apps .auth-app-card__grip").length === 3
       && document.querySelectorAll(".auth-app-card--empty .auth-app-card__grip").length === 0
     `),
-    await page.evaluate('document.querySelectorAll(".auth-app-card__grip").length'),
+    await page.evaluate('document.querySelectorAll("#portal-apps .auth-app-card__grip").length'),
   );
 
   check(
     '準備中の枠にグリップは無い',
     await page.evaluate(`
-      [...document.querySelectorAll(".auth-app-card--empty")]
+      [...document.querySelectorAll("#portal-apps .auth-app-card--empty")]
         .every((c) => c.querySelector("button") === null)
     `),
   );
@@ -2197,20 +2201,20 @@ try {
   check(
     'グリップは button で aria-label を持つ',
     await page.evaluate(`(() => {
-      const g = document.querySelector(".auth-app-card__grip");
+      const g = document.querySelector("#portal-apps .auth-app-card__grip");
       return g.tagName === "BUTTON" && g.type === "button"
         && g.getAttribute("aria-label") === "アプリ0 を移動";
     })()`),
-    await page.evaluate('document.querySelector(".auth-app-card__grip").getAttribute("aria-label")'),
+    await page.evaluate('document.querySelector("#portal-apps .auth-app-card__grip").getAttribute("aria-label")'),
   );
 
   /* スクロールとの競合を構造的に断つ指定。 */
   check(
     'グリップに touch-action: none が効いている',
     (await page.evaluate(`
-      getComputedStyle(document.querySelector(".auth-app-card__grip")).touchAction
+      getComputedStyle(document.querySelector("#portal-apps .auth-app-card__grip")).touchAction
     `)) === 'none',
-    await page.evaluate('getComputedStyle(document.querySelector(".auth-app-card__grip")).touchAction'),
+    await page.evaluate('getComputedStyle(document.querySelector("#portal-apps .auth-app-card__grip")).touchAction'),
   );
 
   /* ---- グリップ以外からは始まらない ---- */
@@ -2253,7 +2257,7 @@ try {
 
   check(
     '落とした時点で保存される',
-    JSON.stringify(await savedOrder()) === JSON.stringify({ version: 1, order: ['app1', 'app2', 'app0'] }),
+    JSON.stringify(await savedOrder()) === JSON.stringify({ version: 2, order: ['app1', 'app2', 'app0'] }),
     JSON.stringify(await savedOrder()),
   );
 
@@ -2359,7 +2363,7 @@ try {
 
   /* 1ページ目の app0 を掴み、2ページ目のドットへ重ねてページを送る。 */
   const gripFrom = await centerOf('.auth-app-card[data-app-id="app0"] .auth-app-card__grip');
-  const dot2 = await centerOf('.auth-apps__dot:nth-child(2)');
+  const dot2 = await centerOf('#portal-apps-dots .auth-apps__dot:nth-child(2)');
 
   await mouse('mousePressed', gripFrom, { buttons: 1 });
   await page.sleep(60);
@@ -2492,7 +2496,7 @@ try {
 
   check(
     'Enter で確定して保存される',
-    JSON.stringify(await savedOrder()) === JSON.stringify({ version: 1, order: ['app1', 'app0', 'app2'] }),
+    JSON.stringify(await savedOrder()) === JSON.stringify({ version: 2, order: ['app1', 'app0', 'app2'] }),
     JSON.stringify(await savedOrder()),
   );
 
@@ -2515,7 +2519,7 @@ try {
 
   check(
     'Esc で取り消したら保存も変わらない',
-    JSON.stringify(await savedOrder()) === JSON.stringify({ version: 1, order: ['app1', 'app0', 'app2'] }),
+    JSON.stringify(await savedOrder()) === JSON.stringify({ version: 2, order: ['app1', 'app0', 'app2'] }),
     JSON.stringify(await savedOrder()),
   );
 
@@ -2571,9 +2575,424 @@ try {
   );
 
   check(
-    '既定順（定義の順）で描き直される',
-    JSON.stringify(await shownOrder()) === JSON.stringify(['app0', 'app1', 'app2']),
+    'お気に入りが空になる（初期状態）',
+    JSON.stringify(await shownOrder()) === JSON.stringify([]),
     JSON.stringify(await shownOrder()),
+  );
+
+  check(
+    '外れたアプリはカタログへ戻る',
+    (await page.evaluate('document.querySelectorAll("#portal-catalog .auth-app-card").length')) === 3,
+    await page.evaluate('document.querySelectorAll("#portal-catalog .auth-app-card").length'),
+  );
+
+  await page.evaluate('localStorage.removeItem("tsam-app-layout")');
+
+  /* ---------------------------------------------------------------- */
+  section('お気に入りとカタログ（第2.5便）');
+
+  /* 定義だけを渡す。保存が無いので、お気に入りは空・全件カタログになる。 */
+  const injectCatalog = async (count) => {
+    await page.evaluate('localStorage.removeItem("tsam-app-layout")');
+    await page.evaluate(`
+      import('./portal.js').then((m) => m.renderAppsGrid(
+        Array.from({ length: ${count} }, (unused, i) => ({
+          id: 'c' + i, name: 'カタログ' + i, href: 'https://example.com/' + i + '/',
+        })),
+        { stored: null },
+      ))
+    `);
+    await page.sleep(250);
+  };
+
+  const catalogIds = async () => JSON.parse(await page.evaluate(`
+    JSON.stringify([...document.querySelectorAll("#portal-catalog .auth-app-card")]
+      .map((c) => c.dataset.appId))
+  `));
+
+  const favoriteIds = async () => JSON.parse(await page.evaluate(`
+    JSON.stringify([...document.querySelectorAll("#portal-apps .auth-app-card[data-app-id]")]
+      .map((c) => c.dataset.appId))
+  `));
+
+  /* ---- 初期状態 ---- */
+
+  await injectCatalog(3);
+
+  check(
+    '初期状態はお気に入り0件・カタログ3件',
+    JSON.stringify(await favoriteIds()) === JSON.stringify([])
+    && JSON.stringify(await catalogIds()) === JSON.stringify(['c0', 'c1', 'c2']),
+    JSON.stringify({ fav: await favoriteIds(), cat: await catalogIds() }),
+  );
+
+  check(
+    'お気に入りが空でも16枠の「準備中」は並ぶ',
+    (await page.evaluate('document.querySelectorAll("#portal-apps .auth-app-card--empty").length')) === 16,
+  );
+
+  check(
+    'カタログの見出しは「全アプリ一覧」',
+    (await page.evaluate('document.getElementById("portal-catalog-title").textContent.trim()')) === '全アプリ一覧',
+  );
+
+  check(
+    'カタログは2列',
+    await page.evaluate(`(() => {
+      const cards = [...document.querySelectorAll("#portal-catalog .auth-catalog__page:not([hidden]) .auth-app-card")];
+      const top = Math.min(...cards.map((c) => c.getBoundingClientRect().top));
+      return cards.filter((c) => Math.abs(c.getBoundingClientRect().top - top) < 2).length === 2;
+    })()`),
+  );
+
+  check(
+    'カタログには埋め枠（準備中）が無い',
+    (await page.evaluate('document.querySelectorAll("#portal-catalog .auth-app-card--empty").length')) === 0,
+  );
+
+  check(
+    'カタログにグリップは付かない',
+    (await page.evaluate('document.querySelectorAll("#portal-catalog .auth-app-card__grip").length')) === 0,
+  );
+
+  check(
+    'カタログの各枠に「お気に入りに追加」があり、押下領域が44px以上',
+    await page.evaluate(`(() => {
+      const adds = [...document.querySelectorAll("#portal-catalog .auth-app-card__add")];
+      return adds.length === 3
+        && adds.every((b) => b.tagName === "BUTTON" && b.getBoundingClientRect().height >= 44);
+    })()`),
+    await page.evaluate('document.querySelector("#portal-catalog .auth-app-card__add")?.getBoundingClientRect().height'),
+  );
+
+  check(
+    'カタログは1ページなのでページ送りを出さない',
+    await page.evaluate('document.getElementById("portal-catalog-pager").hidden === true'),
+  );
+
+  check(
+    '外部リンクは別タブ・noopener noreferrer',
+    await page.evaluate(`
+      [...document.querySelectorAll("#portal-catalog .auth-app-card__link")].every((a) =>
+        a.target === "_blank" && a.rel.includes("noopener") && a.rel.includes("noreferrer"))
+    `),
+    await page.evaluate('document.querySelector("#portal-catalog .auth-app-card__link").rel'),
+  );
+
+  /* ---- 追加 ---- */
+
+  await page.evaluate('document.querySelector(\'#portal-catalog .auth-app-card__add[data-app-id="c1"]\').click()');
+  await page.sleep(250);
+
+  check(
+    '追加するとお気に入りの末尾へ入る',
+    JSON.stringify(await favoriteIds()) === JSON.stringify(['c1']),
+    JSON.stringify(await favoriteIds()),
+  );
+
+  check(
+    '追加したアプリはカタログから消える',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['c0', 'c2']),
+    JSON.stringify(await catalogIds()),
+  );
+
+  check(
+    '追加した時点で保存される',
+    (await page.evaluate('localStorage.getItem("tsam-app-layout")'))
+      === JSON.stringify({ version: 2, order: ['c1'] }),
+    await page.evaluate('localStorage.getItem("tsam-app-layout")'),
+  );
+
+  await page.evaluate('document.querySelector(\'#portal-catalog .auth-app-card__add[data-app-id="c0"]\').click()');
+  await page.sleep(250);
+
+  check(
+    '2件目も末尾へ足される（途中へ割り込ませない）',
+    JSON.stringify(await favoriteIds()) === JSON.stringify(['c1', 'c0']),
+    JSON.stringify(await favoriteIds()),
+  );
+
+  /* ---- 解除 ---- */
+
+  check(
+    'お気に入りの枠に「外す」があり、押下領域が44px以上',
+    await page.evaluate(`(() => {
+      const b = document.querySelector('#portal-apps .auth-app-card__remove[data-app-id="c1"]');
+      return b.tagName === "BUTTON"
+        && b.getAttribute("aria-label") === "カタログ1 をお気に入りから外す"
+        && b.getBoundingClientRect().height >= 44;
+    })()`),
+    await page.evaluate('document.querySelector("#portal-apps .auth-app-card__remove")?.getAttribute("aria-label")'),
+  );
+
+  check(
+    '「外す」はグリップと対称の位置（左上／右上）にある',
+    await page.evaluate(`(() => {
+      const card = document.querySelector('#portal-apps .auth-app-card[data-app-id="c1"]').getBoundingClientRect();
+      const rm = document.querySelector('#portal-apps .auth-app-card__remove[data-app-id="c1"]').getBoundingClientRect();
+      const gp = document.querySelector('#portal-apps .auth-app-card__grip[data-app-id="c1"]').getBoundingClientRect();
+      return Math.abs(rm.left - card.left) < 6 && Math.abs(gp.right - card.right) < 6
+        && rm.right <= gp.left;
+    })()`),
+  );
+
+  await page.evaluate('document.querySelector(\'#portal-apps .auth-app-card__remove[data-app-id="c1"]\').click()');
+  await page.sleep(250);
+
+  check(
+    '外すとお気に入りから消える（確認は挟まない）',
+    JSON.stringify(await favoriteIds()) === JSON.stringify(['c0']),
+    JSON.stringify(await favoriteIds()),
+  );
+
+  check(
+    '外したアプリはカタログの定義順の位置へ戻る',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['c1', 'c2']),
+    JSON.stringify(await catalogIds()),
+  );
+
+  check(
+    '外した時点で保存される',
+    (await page.evaluate('localStorage.getItem("tsam-app-layout")'))
+      === JSON.stringify({ version: 2, order: ['c0'] }),
+    await page.evaluate('localStorage.getItem("tsam-app-layout")'),
+  );
+
+  /* ---- カタログ0件 ---- */
+
+  await page.evaluate('document.querySelector(\'#portal-catalog .auth-app-card__add[data-app-id="c1"]\').click()');
+  await page.sleep(200);
+  await page.evaluate('document.querySelector(\'#portal-catalog .auth-app-card__add[data-app-id="c2"]\').click()');
+  await page.sleep(250);
+
+  check(
+    '全部お気に入りに入れるとカタログは0件',
+    JSON.stringify(await catalogIds()) === JSON.stringify([]),
+    JSON.stringify(await catalogIds()),
+  );
+
+  check(
+    'カタログ0件のときは一文だけ出す（枠は並べない）',
+    await page.evaluate(`
+      document.getElementById("portal-catalog-empty").hidden === false
+      && document.getElementById("portal-catalog-empty").textContent.includes("すべてのアプリをお気に入りに追加済みです")
+      && document.getElementById("portal-catalog").hidden === true
+    `),
+  );
+
+  /* ---- 複合シナリオ（追加→並べ替え→解除） ---- */
+
+  await injectCatalog(3);
+
+  for (const id of ['c0', 'c1', 'c2']) {
+    await page.evaluate(`document.querySelector('#portal-catalog .auth-app-card__add[data-app-id="${id}"]').click()`);
+    await page.sleep(200);
+  }
+
+  check(
+    '（前提）3件ともお気に入りに入った',
+    JSON.stringify(await favoriteIds()) === JSON.stringify(['c0', 'c1', 'c2']),
+    JSON.stringify(await favoriteIds()),
+  );
+
+  /* キーボードで c0 を2番目へ。 */
+  await page.evaluate('document.querySelector(\'#portal-apps .auth-app-card__grip[data-app-id="c0"]\').focus()');
+  await pressOn('Enter', 'Enter', 13, '\r');
+  await pressOn('ArrowRight', 'ArrowRight', 39);
+  await pressOn('Enter', 'Enter', 13, '\r');
+
+  check(
+    '並べ替えは従来どおり効く',
+    JSON.stringify(await favoriteIds()) === JSON.stringify(['c1', 'c0', 'c2']),
+    JSON.stringify(await favoriteIds()),
+  );
+
+  await page.evaluate('document.querySelector(\'#portal-apps .auth-app-card__remove[data-app-id="c0"]\').click()');
+  await page.sleep(250);
+
+  check(
+    '並べ替えたあとに外しても、残りの並びは保たれる',
+    JSON.stringify(await favoriteIds()) === JSON.stringify(['c1', 'c2'])
+    && (await page.evaluate('localStorage.getItem("tsam-app-layout")'))
+      === JSON.stringify({ version: 2, order: ['c1', 'c2'] }),
+    await page.evaluate('localStorage.getItem("tsam-app-layout")'),
+  );
+
+  check(
+    '外したものはカタログの定義順の位置へ戻る',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['c0']),
+    JSON.stringify(await catalogIds()),
+  );
+
+  /* ---- v1 データのフォールバック ---- */
+
+  await page.evaluate(`
+    localStorage.setItem("tsam-app-layout", JSON.stringify({ version: 1, order: ["c2", "c1", "c0"] }))
+  `);
+  await page.evaluate(`
+    import('./portal.js').then((m) => m.renderAppsGrid(
+      Array.from({ length: 3 }, (unused, i) => ({
+        id: 'c' + i, name: 'カタログ' + i, href: 'https://example.com/' + i + '/',
+      }))
+    ))
+  `);
+  await page.sleep(250);
+
+  check(
+    'v1 の保存はお気に入り空へフォールバックする',
+    JSON.stringify(await favoriteIds()) === JSON.stringify([]),
+    JSON.stringify(await favoriteIds()),
+  );
+
+  check(
+    'そのとき全アプリがカタログに出る',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['c0', 'c1', 'c2']),
+    JSON.stringify(await catalogIds()),
+  );
+
+  /* ---- カタログのページ送り（21件で2ページ） ---- */
+
+  await page.evaluate('localStorage.removeItem("tsam-app-layout")');
+  await page.evaluate(`
+    import('./portal.js').then((m) => m.renderAppsGrid(
+      Array.from({ length: 21 }, (unused, i) => ({
+        id: 'p' + i, name: 'カタログ' + i, href: 'https://example.com/' + i + '/',
+      })),
+      { stored: null },
+    ))
+  `);
+  await page.sleep(300);
+
+  check(
+    '21件ならカタログは2ページ（20件/ページ）',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-catalog .auth-catalog__page").length === 2
+      && document.querySelectorAll("#portal-catalog-dots .auth-apps__dot").length === 2
+    `),
+    await page.evaluate('document.querySelectorAll("#portal-catalog .auth-catalog__page").length'),
+  );
+
+  check(
+    '1ページ目は20件、2ページ目は1件',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-catalog-page-1 .auth-app-card").length === 20
+      && document.querySelectorAll("#portal-catalog-page-2 .auth-app-card").length === 1
+    `),
+  );
+
+  check(
+    'カタログのページ送りが出る（1ページ目から）',
+    await page.evaluate(`
+      document.getElementById("portal-catalog-pager").hidden === false
+      && document.querySelectorAll("#portal-catalog .auth-catalog__page")[0].hidden === false
+      && document.querySelectorAll("#portal-catalog-dots .auth-apps__dot")[0].getAttribute("aria-current") === "true"
+    `),
+  );
+
+  await page.evaluate('document.getElementById("portal-catalog-next").click()');
+  await page.sleep(200);
+
+  check(
+    'カタログのページを送れる（aria-current も追従）',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-catalog .auth-catalog__page")[1].hidden === false
+      && document.querySelectorAll("#portal-catalog-dots .auth-apps__dot")[1].getAttribute("aria-current") === "true"
+      && document.getElementById("portal-catalog-next").disabled === true
+    `),
+  );
+
+  check(
+    'お気に入り側のページ送りは巻き込まれない',
+    await page.evaluate(`
+      document.querySelectorAll("#portal-apps .auth-apps__page")[0].hidden === false
+      && document.querySelectorAll("#portal-apps-dots .auth-apps__dot")[0].getAttribute("aria-current") === "true"
+    `),
+  );
+
+  /* ---- アイコンのフォールバック ---- */
+
+  await page.evaluate('localStorage.removeItem("tsam-app-layout")');
+  await page.evaluate(`
+    import('./portal.js').then((m) => m.renderAppsGrid([
+      { id: 'img-ok', name: '読める', href: 'x/', icon: '../favicon-32x32.png' },
+      { id: 'img-ng', name: '駄目な画像', href: 'x/', icon: 'http://localhost:9/none.svg' },
+      { id: 'text', name: '文字アイコン', href: 'x/', icon: '録' }
+    ], { stored: null }))
+  `);
+  await page.sleep(1200);
+
+  check(
+    '画像アイコンは読み込めたら表示され、文字は隠れる',
+    await page.evaluate(`(() => {
+      const icon = document.querySelector('#portal-catalog .auth-app-card[data-app-id="img-ok"] .auth-app-card__icon');
+      return icon.classList.contains("auth-app-card__icon--image-ready")
+        && icon.querySelector("img") !== null
+        && getComputedStyle(icon.querySelector(".auth-app-card__icon-letter")).visibility === "hidden";
+    })()`),
+    await page.evaluate(`
+      document.querySelector('#portal-catalog .auth-app-card[data-app-id="img-ok"] .auth-app-card__icon').className
+    `),
+  );
+
+  check(
+    '読み込みに失敗したら名前の1文字目へ落ちる',
+    await page.evaluate(`(() => {
+      const icon = document.querySelector('#portal-catalog .auth-app-card[data-app-id="img-ng"] .auth-app-card__icon');
+      const letter = icon.querySelector(".auth-app-card__icon-letter");
+      return icon.querySelector("img") === null
+        && !icon.classList.contains("auth-app-card__icon--image-ready")
+        && letter.textContent === "駄"
+        && getComputedStyle(letter).visibility === "visible";
+    })()`),
+    await page.evaluate(`
+      document.querySelector('#portal-catalog .auth-app-card[data-app-id="img-ng"] .auth-app-card__icon').innerHTML
+    `),
+  );
+
+  check(
+    '代替は色付きの角丸に出る',
+    await page.evaluate(`(() => {
+      const s = getComputedStyle(document.querySelector('#portal-catalog .auth-app-card[data-app-id="img-ng"] .auth-app-card__icon'));
+      return s.borderTopLeftRadius === "12px" && s.backgroundColor !== "rgba(0, 0, 0, 0)";
+    })()`),
+  );
+
+  check(
+    '文字アイコンはそのまま出る（画像を読みに行かない）',
+    await page.evaluate(`(() => {
+      const icon = document.querySelector('#portal-catalog .auth-app-card[data-app-id="text"] .auth-app-card__icon');
+      return icon.querySelector("img") === null
+        && icon.querySelector(".auth-app-card__icon-letter").textContent === "録";
+    })()`),
+  );
+
+  /* ---- 既定のレジストリ（仮データ3件） ---- */
+
+  await page.evaluate('localStorage.removeItem("tsam-app-layout")');
+  await page.goto(`${origin}/portal/`, 1500);
+  await page.sleep(600);
+
+  check(
+    '既定のレジストリの3件がカタログに出る',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['202607No01', '202607No02', '202607No03']),
+    JSON.stringify(await catalogIds()),
+  );
+
+  check(
+    '仮データのアイコンは読み込みに失敗し、頭文字になる',
+    await page.evaluate(`
+      [...document.querySelectorAll("#portal-catalog .auth-app-card__icon")]
+        .every((icon) => !icon.classList.contains("auth-app-card__icon--image-ready")
+          && icon.querySelector(".auth-app-card__icon-letter").textContent !== "")
+    `),
+  );
+
+  check(
+    '仮データの外部リンクは別タブ・noopener noreferrer',
+    await page.evaluate(`
+      [...document.querySelectorAll("#portal-catalog .auth-app-card__link")].every((a) =>
+        a.target === "_blank" && a.rel.includes("noopener") && a.rel.includes("noreferrer"))
+    `),
   );
 
   await page.evaluate('localStorage.removeItem("tsam-app-layout")');
@@ -2604,7 +3023,8 @@ try {
       import('./portal.js').then((m) => m.renderAppsGrid(
         Array.from({ length: 3 }, (unused, i) => ({
           id: 'w' + i, name: 'テスト用アプリ' + (i + 1), href: 'x/',
-        }))
+        })),
+        { stored: { version: 2, order: ['w0', 'w1', 'w2'] } }
       ))
     `);
     await page.sleep(250);

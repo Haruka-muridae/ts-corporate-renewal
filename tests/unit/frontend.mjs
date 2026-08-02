@@ -235,14 +235,56 @@ try {
 
   check('アプリ一覧は配列', Array.isArray(APP_REGISTRY));
 
+  const isExternal = (href) => /^https?:\/\//i.test(String(href ?? ''));
+
+  /*
+   * 「本番サイトのテスト環境（tsam-ai.com/apps/）へは繋がない」が元の意図。
+   * 仮データには localhost の /apps/ を指すものがあるため、
+   * 判定を **本番ドメインだけ** に絞る。開発機のURLは対象外。
+   */
   check(
-    'テスト環境（/apps/）を本番一覧へ載せていない',
-    APP_REGISTRY.every((app) => !String(app.href ?? '').includes('apps/')),
+    '本番サイトのテスト環境（/apps/）へ繋いでいない',
+    APP_REGISTRY.every((app) => {
+      const href = String(app.href ?? '');
+
+      if (!isExternal(href)) {
+        /* サイト内相対。/apps/ を指してはならない。 */
+        return !href.includes('apps/');
+      }
+
+      /* 絶対URL。本番ドメインの /apps/ だけを禁じる。 */
+      return !/^https?:\/\/(www\.)?tsam-ai\.com\/apps\//i.test(href);
+    }),
+    JSON.stringify(APP_REGISTRY.map((app) => app.href)),
   );
 
   check(
-    '登録する場合はサイト内絶対パスにしない',
-    APP_REGISTRY.every((app) => !String(app.href ?? '').startsWith('/')),
+    'サイト内のときはサイト内絶対パスにしない',
+    APP_REGISTRY.every((app) => isExternal(app.href) || !String(app.href ?? '').startsWith('/')),
+  );
+
+  /*
+   * 仮データの見張り。
+   *
+   * localhost を指すエントリは、その端末でしか開けない。
+   * 出荷したまま忘れられないよう、**いま仮であると分かっているものだけ**に
+   * 限定しておく。新しく増やしたらここで落ちるので、意識せざるを得なくなる。
+   * 仮データを外したら、この検査ごと消してよい（§13）。
+   */
+  const PROVISIONAL_IDS = ['202607No01', '202607No02', '202607No03'];
+
+  check(
+    'localhost を指すのは既知の仮データだけ',
+    APP_REGISTRY
+      .filter((app) => /localhost/i.test(String(app.href ?? '')))
+      .every((app) => PROVISIONAL_IDS.includes(app.id)),
+    JSON.stringify(APP_REGISTRY.filter((app) => /localhost/i.test(String(app.href ?? ''))).map((app) => app.id)),
+  );
+
+  check(
+    '外部リンクは https か http の絶対URL',
+    APP_REGISTRY.filter((app) => isExternal(app.href))
+      .every((app) => { try { return new URL(app.href).protocol.startsWith('http'); } catch { return false; } }),
   );
 
   /* id は配置データ（order）が指す先。空や重複があると並べ替えが壊れる。 */
@@ -295,12 +337,21 @@ try {
 
   const layout = await import('../../public/portal/app-layout.js');
   const {
-    resolveAppOrder, parseLayout, pageCountFor, paginate,
+    resolveFavorites, resolveCatalog, parseLayout, pageCountFor, paginate, catalogPageCount,
   } = layout;
 
   check('保存キーは tsam-app-layout', layout.LAYOUT_STORAGE_KEY === 'tsam-app-layout');
-  check('1ページは8枠', layout.PAGE_SIZE === 8);
+  check('保存形式は version 2', layout.LAYOUT_VERSION === 2);
+  check('お気に入りは1ページ8枠', layout.PAGE_SIZE === 8);
   check('最低2ページ', layout.MIN_PAGES === 2);
+  check('カタログは1ページ20枠', layout.CATALOG_PAGE_SIZE === 20);
+
+  /* カタログは埋め枠も最低ページ数も持たない。 */
+  check('カタログ0件でも1ページ', catalogPageCount(0) === 1);
+  check('カタログ20件で1ページ', catalogPageCount(20) === 1);
+  check('カタログ21件で2ページ', catalogPageCount(21) === 2, catalogPageCount(21));
+  check('カタログ40件で2ページ', catalogPageCount(40) === 2);
+  check('カタログ41件で3ページ', catalogPageCount(41) === 3);
 
   /* ---- ページ数 ---- */
 
@@ -320,74 +371,106 @@ try {
 
   const ids = (list) => list.map((app) => app.id).join(',');
 
+  /*
+   * v2 では order は「お気に入りのID列」。
+   * 載っていないアプリはお気に入りに入らず、カタログへ回る。
+   */
+
   /* a: 保存済み order の順で出す。 */
   check(
-    '保存済み order の順で並ぶ',
-    ids(resolveAppOrder(APPS, { version: 1, order: ['c', 'a', 'b'] })) === 'c,a,b',
-    ids(resolveAppOrder(APPS, { version: 1, order: ['c', 'a', 'b'] })),
+    'お気に入りは order の順で並ぶ',
+    ids(resolveFavorites(APPS, { version: 2, order: ['c', 'a'] })) === 'c,a',
+    ids(resolveFavorites(APPS, { version: 2, order: ['c', 'a'] })),
   );
 
-  /* b: order に無い既知アプリは末尾へ。 */
+  /* b: order に無い既知アプリはお気に入りに入らない（v1 からの意味変更）。 */
   check(
-    'order に無い既知アプリは末尾へ足される',
-    ids(resolveAppOrder(APPS, { version: 1, order: ['c'] })) === 'c,a,b',
-    ids(resolveAppOrder(APPS, { version: 1, order: ['c'] })),
+    'order に無い既知アプリはお気に入りに入らない',
+    ids(resolveFavorites(APPS, { version: 2, order: ['c'] })) === 'c',
+    ids(resolveFavorites(APPS, { version: 2, order: ['c'] })),
   );
 
-  /* c: 未知 ID は無視する（既定順へは倒さない）。 */
+  check(
+    'お気に入りに入らなかったアプリはカタログへ回る',
+    ids(resolveCatalog(APPS, resolveFavorites(APPS, { version: 2, order: ['c'] }))) === 'a,b',
+    ids(resolveCatalog(APPS, resolveFavorites(APPS, { version: 2, order: ['c'] }))),
+  );
+
+  /* c: 未知 ID は無視する（既定へは倒さない）。 */
   check(
     '未知IDは無視され、既知の並びは保たれる',
-    ids(resolveAppOrder(APPS, { version: 1, order: ['zzz', 'b', 'unknown', 'a'] })) === 'b,a,c',
-    ids(resolveAppOrder(APPS, { version: 1, order: ['zzz', 'b', 'unknown', 'a'] })),
+    ids(resolveFavorites(APPS, { version: 2, order: ['zzz', 'b', 'unknown', 'a'] })) === 'b,a',
+    ids(resolveFavorites(APPS, { version: 2, order: ['zzz', 'b', 'unknown', 'a'] })),
   );
 
   check(
     '同じIDが2回あっても重複させない',
-    ids(resolveAppOrder(APPS, { version: 1, order: ['b', 'b', 'a'] })) === 'b,a,c',
-    ids(resolveAppOrder(APPS, { version: 1, order: ['b', 'b', 'a'] })),
+    ids(resolveFavorites(APPS, { version: 2, order: ['b', 'b', 'a'] })) === 'b,a',
+    ids(resolveFavorites(APPS, { version: 2, order: ['b', 'b', 'a'] })),
   );
 
-  /* d: 保存が無ければ既定順。 */
-  check('保存が無ければ定義の順', ids(resolveAppOrder(APPS, null)) === 'a,b,c');
-  check('第2引数を省略しても定義の順', ids(resolveAppOrder(APPS)) === 'a,b,c');
-  check('定義が空なら空', resolveAppOrder([], { version: 1, order: ['a'] }).length === 0);
-  check('定義が配列でなければ空', resolveAppOrder(null).length === 0 && resolveAppOrder(undefined).length === 0);
-  check('id の無い定義は落とす', ids(resolveAppOrder([{ name: 'X' }, ...APPS])) === 'a,b,c');
+  /* d: 保存が無ければお気に入りは空。全アプリがカタログに出る。 */
+  check('保存が無ければお気に入りは空', resolveFavorites(APPS, null).length === 0);
+  check('第2引数を省略してもお気に入りは空', resolveFavorites(APPS).length === 0);
+  check('そのときカタログは全件', ids(resolveCatalog(APPS, [])) === 'a,b,c');
+  check('定義が空ならどちらも空', resolveFavorites([], { version: 2, order: ['a'] }).length === 0 && resolveCatalog([], []).length === 0);
+  check('定義が配列でなければ空', resolveFavorites(null).length === 0 && resolveCatalog(null, []).length === 0);
+  check('id の無い定義は落とす', ids(resolveCatalog([{ name: 'X' }, ...APPS], [])) === 'a,b,c');
+  check('全件お気に入りならカタログは0件', resolveCatalog(APPS, APPS).length === 0);
+
+  /* ---- v1 データからの移行 ---- */
+
+  /*
+   * v1 の order は「表示順」で、全アプリが載っていた。
+   * それを v2 として読むと、全アプリが勝手にお気に入りへ入る。
+   * 版が違うものは読まず、お気に入り空から始めさせる。
+   */
+  check('v1 の保存は読まない（null になる）', parseLayout('{"version":1,"order":["c","b","a"]}') === null);
+
+  check(
+    'v1 データはお気に入り空へフォールバックする',
+    resolveFavorites(APPS, parseLayout('{"version":1,"order":["c","b","a"]}')).length === 0,
+  );
+
+  check(
+    'そのとき全アプリがカタログに出る',
+    ids(resolveCatalog(APPS, resolveFavorites(APPS, parseLayout('{"version":1,"order":["c","b","a"]}')))) === 'a,b,c',
+  );
 
   /* ---- 保存データの解釈（壊れていても例外を投げない） ---- */
 
-  check('正しい JSON を読める', JSON.stringify(parseLayout('{"version":1,"order":["a"]}')) === JSON.stringify({ version: 1, order: ['a'] }));
+  check('正しい JSON を読める', JSON.stringify(parseLayout('{"version":2,"order":["a"]}')) === JSON.stringify({ version: 2, order: ['a'] }));
   check('壊れた JSON は null', parseLayout('{') === null);
   check('null 文字列は null', parseLayout('null') === null);
   check('配列は null', parseLayout('[1,2]') === null);
   check('文字列リテラルは null', parseLayout('"text"') === null);
   check('空文字は null', parseLayout('') === null && parseLayout('   ') === null);
   check('文字列以外は null', parseLayout(null) === null && parseLayout(undefined) === null && parseLayout(42) === null);
-  check('order が配列でなければ null', parseLayout('{"version":1,"order":"a"}') === null);
+  check('order が配列でなければ null', parseLayout('{"version":2,"order":"a"}') === null);
 
   /* 版が違うものは読まない（推測で解釈しない）。 */
-  check('version が違えば null', parseLayout('{"version":2,"order":["a"]}') === null);
+  check('version が違えば null', parseLayout('{"version":3,"order":["a"]}') === null);
   check('version が無ければ null', parseLayout('{"order":["a"]}') === null);
   check(
-    'version 不一致は既定順へ倒れる',
-    ids(resolveAppOrder(APPS, parseLayout('{"version":9,"order":["c","b","a"]}'))) === 'a,b,c',
+    'version 不一致はお気に入り空へ倒れる',
+    resolveFavorites(APPS, parseLayout('{"version":9,"order":["c","b","a"]}')).length === 0,
   );
 
   check(
-    '壊れた JSON も既定順へ倒れる',
-    ids(resolveAppOrder(APPS, parseLayout('{{{'))) === 'a,b,c',
+    '壊れた JSON もお気に入り空へ倒れる',
+    resolveFavorites(APPS, parseLayout('{{{')).length === 0,
   );
 
   check(
     'order の中の非文字列・空文字は落とす',
-    JSON.stringify(parseLayout('{"version":1,"order":["a",1,null,"","  ","b"]}').order)
+    JSON.stringify(parseLayout('{"version":2,"order":["a",1,null,"","  ","b"]}').order)
       === JSON.stringify(['a', 'b']),
-    JSON.stringify(parseLayout('{"version":1,"order":["a",1,null,"","  ","b"]}')?.order),
+    JSON.stringify(parseLayout('{"version":2,"order":["a",1,null,"","  ","b"]}')?.order),
   );
 
   /* ---- ページ分割 ---- */
 
-  const pages = paginate(resolveAppOrder(APPS, null));
+  const pages = paginate(APPS);
 
   check('0件でも2ページぶんの枠ができる', paginate([]).length === 2);
   check('各ページは8枠', pages.every((page) => page.length === 8));
@@ -447,8 +530,8 @@ try {
   check('保存できる', layout.writeStoredLayout(['b', 'a']) === true);
 
   check(
-    '保存の形は {version:1, order:[…]}',
-    layoutStore.get('tsam-app-layout') === JSON.stringify({ version: 1, order: ['b', 'a'] }),
+    '保存の形は {version:2, order:[…]}',
+    layoutStore.get('tsam-app-layout') === JSON.stringify({ version: 2, order: ['b', 'a'] }),
     layoutStore.get('tsam-app-layout'),
   );
 
@@ -460,7 +543,7 @@ try {
   check(
     '空文字や非文字列は保存時に落とす',
     layout.writeStoredLayout(['a', '', 1, null, '  ', 'b']) === true
-    && layoutStore.get('tsam-app-layout') === JSON.stringify({ version: 1, order: ['a', 'b'] }),
+    && layoutStore.get('tsam-app-layout') === JSON.stringify({ version: 2, order: ['a', 'b'] }),
     layoutStore.get('tsam-app-layout'),
   );
 
