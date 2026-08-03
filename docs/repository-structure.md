@@ -26,8 +26,9 @@
 | --- | --- | --- |
 | **TSAM AI 本体（静的）** | `public/index.html`<br>`public/css/` `js/` `assets/` `event/` `legal/` `potenitas/`<br>`public/login/` `portal/` `pricing/` `password/` `payment/` `logout/`<br>`public/auth/`（共通JS・CSS） | 本番。仕様書は `docs/specs/` が正 |
 | **TSAM AI 本体（サーバー実行）** | `app/event/`（Next.js） | 交流会申込・決済・Webhook・管理画面 |
+| **本番アプリ領域** | `public/production-app/<アプリID>/`（未作成） | **Portal（`/portal/`）に載せる本番アプリの置き場所。**<br>最初のアプリは `card-ocr`（[specs/meishi-ocr-requirements-v3.md](./specs/meishi-ocr-requirements-v3.md)）<br>レジストリの `href` に `apps/` を含めない・先頭に `/` を付けない（`public/portal/app-registry.js`、自動テストで固定） |
 | **配信しないもの** | `gas-auth/` `tests/` `docs/` `supabase/` `lp-draft/` | `public/` の外にあるため Web からは届かない |
-| **テスト環境** | `public/apps/` | TSAM AI のアプリ実験場。本体と地続きで、`public/auth/` 等を参照してよい |
+| **テスト環境** | `public/apps/` | TSAM AI のアプリ実験場。本体と地続きで、`public/auth/` 等を参照してよい。<br>**本番アプリからここを import しない**（流用はコピー） |
 | **別プロジェクト領域** | `labs/`（未作成） | **TSAM AI とは無関係な同居プロジェクト。**<br>`labs/<プロジェクト名>/` の形で追加する |
 
 `labs/` はまだ存在しない。最初のプロジェクトが入るときに作られる。

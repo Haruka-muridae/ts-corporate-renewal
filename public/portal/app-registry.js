@@ -17,8 +17,19 @@
  * href の2通り
  * ------------------------------------------------------------------
  * サイト内 … **ルートからの相対パス。先頭に '/' を付けないこと。**
- *            '/production-app/…' のようなサイト内絶対パスにすると、
- *            プロジェクトPages配信で404になる。
+ *            portal.js はサイト内のリンクを `rootPath() + href` で組み立てる。
+ *            先頭に '/' があると、その連結結果がスラッシュ2つになる。
+ *
+ *              'production-app/example/'
+ *                → '../production-app/example/'
+ *                → https://tsam-ai.com/production-app/example/
+ *              '/production-app/example/'
+ *                → '..//production-app/example/'
+ *                → https://tsam-ai.com//production-app/example/   ← 別のURL
+ *
+ *            auth/ 配下は screenPath() / rootPath() で相対リンクに
+ *            統一してある。1か所だけ絶対パスを混ぜると、深さの指定
+ *            （setScreenDepth）が効かなくなる。
  * サイト外 … `https://` で始まる絶対URL。別タブで開き、
  *            rel="noopener noreferrer" が自動で付く。
  *

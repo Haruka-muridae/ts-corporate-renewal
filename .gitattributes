@@ -2,22 +2,22 @@
 # core.autocrlf=true の環境でも改行変換で本体が変化しないようにする。
 
 # lamejs 本体はバイナリ相当として扱い、Git による改行変換の対象外にする。
-apps/voice-recorder/vendor/lamejs.iife.js -text
+public/apps/voice-recorder/vendor/lamejs.iife.js -text
 
 # ライセンスと NOTICE は LF に固定する。
-apps/voice-recorder/vendor/LICENSE-lamejs.txt text eol=lf
-apps/voice-recorder/vendor/NOTICE-lamejs.txt text eol=lf
+public/apps/voice-recorder/vendor/LICENSE-lamejs.txt text eol=lf
+public/apps/voice-recorder/vendor/NOTICE-lamejs.txt text eol=lf
 
 # Supabase Auth JS 本体も同様に改行変換の対象外にする。
 # ファイル名にバージョンを含むため、更新時はこの行も直すこと。
-apps/vendor/supabase-auth-js-2.110.8.esm.js -text
+public/apps/vendor/supabase-auth-js-2.110.8.esm.js -text
 
-apps/vendor/LICENSE-supabase-auth-js.txt text eol=lf
-apps/vendor/NOTICE-supabase-auth-js.md text eol=lf
+public/apps/vendor/LICENSE-supabase-auth-js.txt text eol=lf
+public/apps/vendor/NOTICE-supabase-auth-js.md text eol=lf
 
 # 法務ページはスプレッドシートから生成し、GitHub API 経由で LF のまま
 # コミットされる。作業ツリーも LF に固定しておかないと、改行だけが違う
 # 生成物と判定され、変更が無くても毎回コミットが積まれる。
-legal/terms/index.html text eol=lf
-legal/privacy/index.html text eol=lf
-legal/tokusho/index.html text eol=lf
+public/legal/terms/index.html text eol=lf
+public/legal/privacy/index.html text eol=lf
+public/legal/tokusho/index.html text eol=lf
