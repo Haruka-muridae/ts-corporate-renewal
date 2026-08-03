@@ -24,7 +24,7 @@ Google アカウントと Stripe アカウントの操作が必要なため、�
 | A-7 | `benchmarkPasswordHashing()` を実行し、`PBKDF2_ITERATIONS` を決める | ☐ | AUTH_SETUP.md 手順9 |
 | A-8 | ウェブアプリとしてデプロイ（実行=自分／アクセス=全員） | ☐ | AUTH_SETUP.md 手順4 |
 | A-9 | 発行された `/exec` URL を控える | ☐ | AUTH_SETUP.md 手順4 |
-| A-10 | `auth/config.js` の `apiUrl` に `/exec` URL を設定してコミット | ☐ | AUTH_SETUP.md 手順5 |
+| A-10 | `public/auth/config.js` の `apiUrl` に `/exec` URL を設定してコミット | ☐ | AUTH_SETUP.md 手順5 |
 | A-11 | `checkAuthSetup()` を実行し、設定の抜けが無いことを確認 | ☐ | AUTH_SETUP.md 手順8 |
 
 > **A-2 の注意:** 既存の `gas/`（お気に入り機能）とは **別プロジェクト**にすること。
@@ -99,8 +99,8 @@ Google アカウントと Stripe アカウントの操作が必要なため、�
 | # | 作業 | 完了 | 参照 |
 | --- | --- | --- | --- |
 | D-1 | ブランチ `feat/auth-portal-stripe` をレビューし `main` へマージ | ☐ | DEPLOYMENT.md |
-| D-2 | GitHub Pages へ反映されたことを確認（数分） | ☐ | DEPLOYMENT.md |
-| D-3 | Settings → Pages で **Enforce HTTPS** を有効化 | ☐ | SECURITY_NOTES.md 11 |
+| D-2 | Vercel が本番へ反映したことを確認（1〜2分） | ☐ | DEPLOYMENT.md |
+| D-3 | ~~Settings → Pages で Enforce HTTPS~~ **不要**（Vercel が証明書を自動発行し、HTTP は HTTPS へ転送する） | ― | SECURITY_NOTES.md 11 |
 | D-4 | Drive のフォルダとスプレッドシートが「制限付き」共有であることを確認 | ☐ | SECURITY_NOTES.md 10 |
 
 ---
@@ -177,7 +177,7 @@ E がすべて成功したあとに実施する。
 
 | 項目 | 決めること | 参照 |
 | --- | --- | --- |
-| Portal に並べるアプリ | どのアプリを本番として公開するか。`auth/apps.js` は空のまま | auth/apps.js |
+| Portal に並べるアプリ | どのアプリを本番として公開するか。一覧は**スプレッドシート「アプリ一覧」**が正本（2026-08-03 時点は仮データ3件）。取得できないときは `public/portal/app-registry.js` の組み込み分で表示する | docs/specs/apps-grid-spec-v1.md §15 |
 | 法務文書の弁護士確認 | 13項目の指摘への対応。条文の修正は G を経由する | docs/legal-review-notes.md |
 | `past_due` の扱い | 支払い未確認の利用者に使わせるか（既定は使わせない） | AUTH_SETUP.md |
 | Webhook の構成 | 構成A（手軽）か構成B（署名検証あり）か | STRIPE_SETUP.md 手順4 |
