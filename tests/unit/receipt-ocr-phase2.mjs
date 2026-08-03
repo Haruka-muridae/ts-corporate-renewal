@@ -404,8 +404,9 @@ try {
       row.every((value) => value !== undefined && value !== null));
   }
 
-  check('管理IDは日時から作り、形が安定している',
-    /^R\d{14}-[0-9A-Z]{4}$/.test(record.newRecordId(new Date('2026-08-03T01:00:00Z'), () => 0.5)));
+  /* v1.3 §16.1 A列：RCP-YYYYMMDD-ランダム6文字。 */
+  check('管理IDは日付から作り、形が安定している',
+    /^RCP-\d{8}-[0-9A-Z]{6}$/.test(record.newRecordId(new Date('2026-08-03T01:00:00Z'), () => 0.5)));
 
   {
     /* 危険な値が混じっても、書き込みの直前で無害化される。 */

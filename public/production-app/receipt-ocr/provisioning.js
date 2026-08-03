@@ -96,7 +96,8 @@ async function createSpreadsheet(gateway, appFolderId) {
 
   await gateway.moveFile(created.spreadsheetId, appFolderId);
   await gateway.writeAllHeaders(created.spreadsheetId);
-  await gateway.writeSchemaVersion(created.spreadsheetId, SCHEMA_VERSION);
+  /* 新規作成なので、設定の既定値もここで書く（v1.3 §16.6）。 */
+  await gateway.writeSchemaVersion(created.spreadsheetId, SCHEMA_VERSION, { seedDefaults: true });
   await gateway.writeStoreMaster(created.spreadsheetId, INITIAL_STORE_MASTER);
 
   const dataTab = (created.sheets ?? []).find((sheet) => sheet.title === TABS.data);

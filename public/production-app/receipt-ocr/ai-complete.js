@@ -33,16 +33,24 @@ import { generate, textOf } from './gemini-client.js';
  * 増やすときは schema.js と一緒に直すこと。
  */
 export const COMPLETION_FIELDS = Object.freeze([
-  'usedOn',
   'payee',
+  'usedOn',
   'totalAmount',
+  'taxTotal',
+  'tax8Base',
+  'tax8Amount',
+  'tax10Base',
+  'tax10Amount',
+  'paymentMethod',
+  'registrationNumber',
   'receiptNumber',
   'phoneNumber',
-  'registrationNumber',
-  'paymentMethod',
-  'addressee',
-  'note',
+  'accountCandidate',
+  'summary',
 ]);
+
+/* Gemini のタイムアウト（v1.3 §12.3）。 */
+export const TIMEOUT_MS = 30000;
 
 /*
  * Structured Output のスキーマ（§7 12.2〜12.5）。
@@ -74,17 +82,29 @@ export function responseSchema(fields = COMPLETION_FIELDS) {
  */
 export function buildPrompt(ocrText) {
   return [
-    '次の文字列は、日本の領収書・レシートを読み取った結果です。',
-    '各項目について、値と、そう判断した根拠を答えてください。',
+    '以下は日本の領収書をOCRした文字列です。',
     '',
-    '守ること:',
-    '- 根拠（evidence）には、下の文字列に**実際に現れる部分**をそのまま写すこと',
-    '- 読み取れない項目は、値・根拠ともに空文字にすること',
-    '- 推測で補わないこと。書かれていないものは空文字にすること',
+    '事実として読み取れる情報のみを抽出してください。',
+    '不明な項目は空文字を返してください。',
+    '金額を推測で補完しないでください。',
+    '各項目について、根拠となったOCR文字列の該当箇所をevidenceとして返してください。',
+    'evidenceには、下の文字列に実際に現れる部分をそのまま写してください。',
     '',
-    '--- 読み取り結果ここから ---',
+    '抽出項目：',
+    '・支払先',
+    '・利用日',
+    '・合計金額',
+    '・消費税合計と税率別内訳（8％・10％の対象額・税額）',
+    '・支払方法',
+    '・適格請求書登録番号',
+    '・レシートNo.',
+    '・電話番号',
+    '・勘定科目候補',
+    '・摘要',
+    '',
+    '--- OCR文字列ここから ---',
     String(ocrText ?? ''),
-    '--- 読み取り結果ここまで ---',
+    '--- OCR文字列ここまで ---',
   ].join('\n');
 }
 
@@ -125,11 +145,24 @@ export function sanitizeText(value, max = MAX_VALUE_LENGTH) {
  * 応答（JSON文字列）を読み、形の合わない部分を捨てる。
  * 壊れた JSON でも例外を投げず null を返す（呼び出し側がリトライを決める）。
  */
+/*
+ * Markdown のコードフェンスを剥がす（v1.3 §12.3）。
+ *
+ * Structured Output を指定していても、モデルが ```json で包むことがある。
+ * JSON.parse の前に落としておく。
+ */
+export function stripCodeFence(rawText) {
+  const text = String(rawText ?? '').trim();
+  const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+
+  return fenced ? fenced[1].trim() : text;
+}
+
 export function parseResponse(rawText, fields = COMPLETION_FIELDS) {
   let parsed;
 
   try {
-    parsed = JSON.parse(String(rawText ?? ''));
+    parsed = JSON.parse(stripCodeFence(rawText));
   } catch {
     return null;
   }

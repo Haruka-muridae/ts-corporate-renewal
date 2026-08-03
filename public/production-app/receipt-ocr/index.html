@@ -103,9 +103,42 @@
       </dl>
     </div>
 
-    <button type="button" id="ro-save-original" class="auth-button" disabled>
-      原本をドライブに保存する
+    <button type="button" id="ro-start" class="auth-button" disabled>
+      原本を保存して読み取る
     </button>
+  </section>
+
+  <!--
+    保存前確認（仕様書 v2.0 §8）。
+    抽出結果と原本画像を並べ、利用者が直せる状態でシート保存の前に止める。
+    この画面を飛ばして保存する経路を作らないこと。
+  -->
+  <section class="ro-panel" id="ro-review-panel" hidden>
+    <h2 class="ro-panel__title">保存前の確認</h2>
+
+    <p class="ro-review__lead" id="ro-review-lead"></p>
+
+    <div class="ro-review">
+      <div class="ro-review__image">
+        <img id="ro-review-image" class="ro-preview__image" alt="読み取った領収書の原本画像">
+        <p class="ro-note" id="ro-review-confidence"></p>
+      </div>
+
+      <!-- 行は app.js が createElement で組み立てる（innerHTML 不使用）。 -->
+      <div class="ro-review__fields" id="ro-review-fields"></div>
+    </div>
+
+    <p class="ro-message" id="ro-duplicate" role="status" hidden></p>
+
+    <label class="ro-check">
+      <input type="checkbox" id="ro-keep-review">
+      <span>要確認のまま保存する（あとでシート上で直す）</span>
+    </label>
+
+    <div class="ro-actions">
+      <button type="button" id="ro-save" class="auth-button">この内容でシートに保存する</button>
+      <button type="button" id="ro-cancel" class="auth-button auth-button--ghost">やめる</button>
+    </div>
   </section>
 
   <!-- 状態とエラー（§12）。role="status" で読み上げに乗せる。 -->

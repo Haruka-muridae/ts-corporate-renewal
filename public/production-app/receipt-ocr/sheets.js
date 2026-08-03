@@ -20,6 +20,7 @@ import { PROGRESS } from './errors.js';
 import { callGoogle, callGoogleJson } from './google-api.js';
 import {
   DATA_COLUMNS,
+  DEFAULT_SETTINGS,
   REVIEW_FILTER_VIEW_NAME,
   SETTINGS_KEYS,
   SCHEMA_VERSION,
@@ -229,14 +230,55 @@ export async function writeAllHeaders(spreadsheetId, { accessToken, signal } = {
   }
 }
 
-/* 設定タブへスキーマバージョンを記録する（§9.4）。 */
-export function writeSchemaVersion(spreadsheetId, { accessToken, signal, version = SCHEMA_VERSION } = {}) {
-  return writeRange(
-    spreadsheetId,
-    `${TABS.settings}!A2`,
-    [[SETTINGS_KEYS.schemaVersion, version, 'アプリが管理します。手で変更しないでください。']],
-    { accessToken, signal, progress: PROGRESS.NONE },
-  );
+/*
+ * 設定タブを書く（§9.4 / v1.3 §16.6）。
+ *
+ * 1行目はスキーマバージョン。2行目以降が利用者の調整対象。
+ * バージョンだけを更新する場合は seedDefaults を false にする
+ * （利用者が変えた閾値を上書きしないため）。
+ */
+export function writeSchemaVersion(spreadsheetId, {
+  accessToken,
+  signal,
+  version = SCHEMA_VERSION,
+  seedDefaults = false,
+} = {}) {
+  const rows = [
+    [SETTINGS_KEYS.schemaVersion, version, 'アプリが管理します。手で変更しないでください。'],
+  ];
+
+  if (seedDefaults) {
+    rows.push(...DEFAULT_SETTINGS.map((row) => [...row]));
+  }
+
+  return writeRange(spreadsheetId, `${TABS.settings}!A2`, rows, {
+    accessToken,
+    signal,
+    progress: PROGRESS.NONE,
+  });
+}
+
+/*
+ * 設定タブを読む（v1.3 §16.6）。
+ * 設定名 → 値 の対応を返す。読めなければ空を返し、既定値で動く。
+ */
+export async function readSettings(spreadsheetId, { accessToken, signal } = {}) {
+  const range = `${TABS.settings}!A2:B`;
+  const url = new URL(`${GOOGLE_API.sheets}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}`);
+
+  const result = await callGoogle(url.href, { accessToken, signal, progress: PROGRESS.NONE });
+  const rows = Array.isArray(result?.values) ? result.values : [];
+  const out = {};
+
+  for (const row of rows) {
+    const name = String(row?.[0] ?? '').trim();
+
+    if (name !== '') {
+      out[name] = String(row?.[1] ?? '').trim();
+    }
+  }
+
+  return out;
 }
 
 /* 初期店舗マスタを書く。空なら何もしない（§9.1・§0.6-2 が未確定のため）。 */

@@ -27,9 +27,22 @@ import { AppError, GUIDE, PROGRESS, describeError } from './errors.js';
 import { yearMonthPath, timestamp } from './datetime.js';
 import { sha256OfBlob } from './hash.js';
 import { createGateway } from './gateway.js';
-import { NOTICE, PROVISION_STATUS, provision } from './provisioning.js';
+import { NOTICE, PROVISION_STATUS, assertWritable, provision } from './provisioning.js';
 import { ensureMonthFolder, uploadImage } from './drive.js';
 import { currentToken, forgetToken, hasValidToken, requestAccess } from './oauth.js';
+
+import { recognize } from './ocr.js';
+import { extractAll, toValues } from './extract.js';
+import { validateAll } from './validate.js';
+import { levelOf, scoreOf } from './confidence.js';
+import { decideCompletion, SKIP_REASON } from './completion-policy.js';
+import { complete, reconcile } from './ai-complete.js';
+import { applyEdits, buildRecord, buildReviewModel, REVIEW_FIELDS } from './review.js';
+import { DUPLICATE_COLUMN_KEYS, describeDuplicate, evaluateDuplicate, toRows } from './duplicate.js';
+import { readDuplicateColumns } from './sheets.js';
+import { newRecordId, saveRecord } from './record.js';
+import { toDuplicateStatus } from './status.js';
+import { TABS } from './schema.js';
 
 setScreenDepth(SCREEN_DEPTH);
 
@@ -43,7 +56,9 @@ for (const id of [
   'ro-connect', 'ro-key-link', 'ro-capture-panel',
   'ro-file', 'ro-preview', 'ro-preview-image',
   'ro-meta-name', 'ro-meta-hash', 'ro-meta-folder',
-  'ro-save-original', 'ro-message', 'ro-progress',
+  'ro-start', 'ro-message', 'ro-progress',
+  'ro-review-panel', 'ro-review-lead', 'ro-review-image', 'ro-review-confidence',
+  'ro-review-fields', 'ro-duplicate', 'ro-keep-review', 'ro-save', 'ro-cancel',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -123,6 +138,8 @@ function showNotices(notices) {
 let provisionResult = null;
 let selected = null;
 let saving = false;
+/* 保存前確認で人の判断を待っている1件（§8）。 */
+let pending = null;
 
 /* ---------- 第3層：Gemini キー（§4-3） ---------- */
 
@@ -227,8 +244,9 @@ async function onFileSelected() {
   clearMessage();
   revokePreview();
   selected = null;
-  el['ro-save-original'].disabled = true;
+  el['ro-start'].disabled = true;
   el['ro-preview'].hidden = true;
+  el['ro-review-panel'].hidden = true;
 
   if (!file) {
     return;
@@ -256,24 +274,33 @@ async function onFileSelected() {
   el['ro-meta-hash'].textContent = hash ?? '（計算できません）';
   el['ro-meta-folder'].textContent = `原本 / ${year} / ${month}`;
   el['ro-preview'].hidden = false;
-  el['ro-save-original'].disabled = false;
+  el['ro-start'].disabled = false;
 }
 
-/* ---------- 原本の保存（§5-④） ---------- */
+/* ---------- ②〜⑦ 原本保存・OCR・抽出・検証・補完 ---------- */
 
-async function saveOriginal() {
-  /* 多重押下による二重登録を防ぐ（§10 末尾）。 */
+/*
+ * 「原本を保存して読み取る」の一連。
+ *
+ * 順序は §5 の①〜⑦に合わせてある。原本の保存を先に済ませるのは、
+ * あとの工程で失敗しても画像だけは利用者の手元に残すためで、
+ * §12 の「どこまで完了しているか」もこの順序を前提にしている。
+ */
+async function runPipeline() {
   if (saving || !selected || !provisionResult?.writable) {
     return;
   }
 
   saving = true;
-  el['ro-save-original'].disabled = true;
-  showInfo('保存しています…');
+  el['ro-start'].disabled = true;
+  showInfo('原本を保存しています…');
 
   try {
+    assertWritable(provisionResult);
+
     const accessToken = currentToken();
 
+    /* ④ 原本の保存。 */
     const monthFolder = await ensureMonthFolder({
       accessToken,
       originalsFolderId: provisionResult.locations.originalsFolderId,
@@ -296,16 +323,256 @@ async function saveOriginal() {
       parentId: monthFolder.id,
     });
 
-    clearMessage();
-    showInfo('原本を保存しました。読み取りはフェーズ2で追加します。');
+    /* ③ 重複照合（ハッシュ列ほか、判定に要る列だけを取る）。 */
+    showInfo('登録済みか確認しています…');
 
-    el['ro-meta-folder'].textContent = `原本 / ${selected.year} / ${selected.month}（保存済み・${uploaded?.id ? 'ID取得済み' : 'ID不明'}）`;
+    const columns = await readDuplicateColumns(
+      provisionResult.locations.spreadsheetId,
+      DUPLICATE_COLUMN_KEYS,
+      { accessToken, tabTitle: TABS.data },
+    );
+
+    /* ⑤ OCR。 */
+    showInfo('文字を読み取っています…');
+
+    const apiKey = KeyStore.get(PROVIDERS.gemini);
+    const ocrResult = await recognize({
+      blob: selected.file,
+      accessToken,
+      apiKey,
+      displayName: selected.file.name,
+    });
+
+    /* ⑥ ルール抽出・検証・信頼度。 */
+    const extracted = extractAll(ocrResult.text);
+    let values = {
+      ...toValues(extracted),
+      originalUrl: uploaded?.webViewLink ?? '',
+    };
+
+    let validation = validateAll(values, {
+      lines: extracted.lines,
+      tax: extracted.tax,
+    });
+
+    /* ⑦ 必要なときだけ補完する（v1.3 §11）。 */
+    const decision = decideCompletion({
+      extracted,
+      validation,
+      ocrText: ocrResult.text,
+      hasApiKey: Boolean(apiKey),
+    });
+
+    let reconciliation = null;
+    let usedGemini = false;
+
+    if (decision.run) {
+      showInfo('読み取れなかった項目をAIで補っています…');
+
+      const aiValues = await complete({ apiKey, ocrText: ocrResult.text });
+
+      if (aiValues) {
+        reconciliation = reconcile({ ruleValues: values, aiValues, ocrText: ocrResult.text });
+        usedGemini = true;
+
+        /* 突合の結果、採用された値を反映する。 */
+        for (const [key, field] of Object.entries(reconciliation.fields)) {
+          if (field.value !== '' && field.value !== values[key]) {
+            values[key] = field.value;
+          }
+        }
+
+        validation = validateAll(values, { lines: extracted.lines, tax: extracted.tax });
+      }
+    }
+
+    const score = scoreOf({
+      usedOn: extracted.usedOn,
+      totalAmount: extracted.totalAmount,
+      payee: extracted.payee,
+      taxConsistent: validation.amount.taxConsistent,
+      discountSkipped: validation.warnings.includes('値引きあり・検算省略'),
+      agreements: agreementsOf(reconciliation),
+    });
+
+    const level = levelOf(score.score);
+    const duplicate = evaluateDuplicate({ ...values, imageHash: selected.hash }, toRows(columns));
+
+    pending = {
+      values,
+      extracted,
+      validation,
+      reconciliation,
+      usedGemini,
+      confidence: { score: score.score, level },
+      duplicate,
+      ocrText: ocrResult.text,
+      original: { name, id: uploaded?.id ?? '', url: uploaded?.webViewLink ?? '' },
+      skipReason: decision.reason,
+    };
+
+    renderReview();
   } catch (error) {
     showError(error);
   } finally {
     saving = false;
-    el['ro-save-original'].disabled = false;
+    el['ro-start'].disabled = false;
   }
+}
+
+/* 突合で「一致した」項目だけを、信頼度の加点材料へ渡す。 */
+function agreementsOf(reconciliation) {
+  const out = {};
+
+  for (const [key, field] of Object.entries(reconciliation?.fields ?? {})) {
+    out[key] = field.status === 'agreed';
+  }
+
+  return out;
+}
+
+/* ---------- ⑧ 保存前確認（§8） ---------- */
+
+const editors = new Map();
+
+function renderReview() {
+  const model = buildReviewModel({
+    values: pending.values,
+    reconciliation: pending.reconciliation,
+    confidenceLevel: pending.confidence.level,
+  });
+
+  el['ro-review-image'].src = selected.previewUrl;
+
+  el['ro-review-confidence'].textContent =
+    `信頼度 ${pending.confidence.level}（${pending.confidence.score}点）／`
+    + `${pending.usedGemini ? 'AI補完あり' : 'AI補完なし'}`
+    + (pending.skipReason === SKIP_REASON.NO_API_KEY ? '（APIキー未設定のためスキップ）' : '')
+    + (pending.skipReason === SKIP_REASON.OCR_TOO_SHORT ? '（文字が少ないため補完せず）' : '');
+
+  el['ro-review-lead'].textContent = model.highlightCount > 0
+    ? `${model.highlightCount}件の項目は確認が必要です。内容を見て、必要なら直してください。`
+    : '読み取った内容です。保存する前にご確認ください。';
+
+  /* 行を作り直す。innerHTML は使わない（§13）。 */
+  el['ro-review-fields'].replaceChildren();
+  editors.clear();
+
+  for (const row of model.rows) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ro-field-row';
+
+    if (row.highlight) {
+      wrapper.dataset.highlight = 'true';
+    }
+
+    const label = document.createElement('label');
+    label.className = 'ro-field-row__label';
+    label.textContent = row.label + (row.required ? '（必須）' : '');
+    label.htmlFor = `ro-edit-${row.key}`;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ro-field-row__input';
+    input.id = `ro-edit-${row.key}`;
+    input.value = row.value;
+
+    wrapper.append(label, input);
+
+    if (row.aiValue !== '') {
+      const hint = document.createElement('p');
+      hint.className = 'ro-field-row__hint';
+      hint.textContent = `AIの読み取り: ${row.aiValue}（食い違っています）`;
+      wrapper.append(hint);
+    }
+
+    editors.set(row.key, input);
+    el['ro-review-fields'].append(wrapper);
+  }
+
+  const described = describeDuplicate(pending.duplicate);
+
+  el['ro-duplicate'].textContent = described.text;
+  el['ro-duplicate'].hidden = described.text === '';
+  el['ro-duplicate'].dataset.kind = described.canSave ? 'info' : 'error';
+
+  /* 完全一致は保存させない（§10 / DUP-001）。 */
+  el['ro-save'].disabled = !described.canSave;
+  el['ro-keep-review'].checked = model.highlightCount > 0;
+
+  clearMessage();
+  el['ro-review-panel'].hidden = false;
+  el['ro-capture-panel'].hidden = true;
+}
+
+/* ---------- ⑨ シートへ保存 ---------- */
+
+async function saveToSheet() {
+  if (saving || !pending) {
+    return;
+  }
+
+  /* 多重押下による二重登録を防ぐ（§10 末尾）。 */
+  saving = true;
+  el['ro-save'].disabled = true;
+  showInfo('シートに保存しています…');
+
+  try {
+    assertWritable(provisionResult);
+
+    const edits = {};
+
+    for (const [key, input] of editors) {
+      edits[key] = input.value;
+    }
+
+    const applied = applyEdits(pending.values, edits, { fields: REVIEW_FIELDS });
+    const now = timestamp();
+
+    const record = buildRecord({
+      values: applied.values,
+      edited: applied.edited,
+      usedRule: true,
+      usedGemini: pending.usedGemini,
+      validation: pending.validation,
+      reconciliation: pending.reconciliation,
+      confidence: pending.confidence,
+      duplicateStatus: toDuplicateStatus(pending.duplicate.kind),
+      keepReview: el['ro-keep-review'].checked,
+      recordId: newRecordId(),
+      imageHash: selected.hash ?? '',
+      original: pending.original,
+      now,
+    });
+
+    await saveRecord({
+      accessToken: currentToken(),
+      spreadsheetId: provisionResult.locations.spreadsheetId,
+      record,
+      ocrText: pending.ocrText,
+    });
+
+    el['ro-review-panel'].hidden = true;
+    el['ro-capture-panel'].hidden = false;
+    el['ro-file'].value = '';
+    el['ro-preview'].hidden = true;
+    pending = null;
+
+    showInfo(`保存しました（管理ID: ${record.recordId}）。`);
+  } catch (error) {
+    showError(error);
+  } finally {
+    saving = false;
+    el['ro-save'].disabled = false;
+  }
+}
+
+function cancelReview() {
+  pending = null;
+  el['ro-review-panel'].hidden = true;
+  el['ro-capture-panel'].hidden = false;
+  clearMessage();
+  showInfo('保存をやめました。原本画像はドライブに残っています。');
 }
 
 /* ---------- 起動 ---------- */
@@ -342,9 +609,15 @@ async function start() {
     onFileSelected().catch(showError);
   });
 
-  el['ro-save-original'].addEventListener('click', () => {
-    saveOriginal().catch(showError);
+  el['ro-start'].addEventListener('click', () => {
+    runPipeline().catch(showError);
   });
+
+  el['ro-save'].addEventListener('click', () => {
+    saveToSheet().catch(showError);
+  });
+
+  el['ro-cancel'].addEventListener('click', cancelReview);
 
   globalThis.addEventListener('pagehide', () => {
     /* 画面を離れるときにトークンとプレビューを捨てる。 */

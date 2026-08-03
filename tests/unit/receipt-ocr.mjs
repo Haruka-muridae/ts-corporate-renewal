@@ -305,8 +305,9 @@ try {
   check('列キーに重複が無い',
     new Set(schema.DATA_COLUMNS.map((c) => c.key)).size === schema.DATA_COLUMNS.length);
 
-  check('必須3項目が定義されている',
-    schema.DATA_COLUMNS.filter((c) => c.required === true).length === 3);
+  /* v1.3 §13.4 の必須は 支払先 / 利用日 / 合計金額 / 原本画像URL の4つ。 */
+  check('必須項目が4つ定義されている',
+    schema.DATA_COLUMNS.filter((c) => c.required === true).length === 4);
 
   check('A1表記の列文字（0→A / 25→Z / 26→AA）',
     schema.columnLetter(0) === 'A' && schema.columnLetter(25) === 'Z' && schema.columnLetter(26) === 'AA');
@@ -791,11 +792,12 @@ try {
    * 加え忘れると、新しいファイルだけ規約の検査を素通りする。
    */
   const APP_FILES = [
-    'ai-complete.js', 'app.js', 'config.js', 'datetime.js', 'drive.js',
-    'duplicate.js', 'errors.js', 'gateway.js', 'gemini-client.js',
-    'google-api.js', 'hash.js', 'oauth.js', 'ocr.js', 'ocr-drive.js',
-    'ocr-gemini.js', 'provisioning.js', 'record.js', 'schema.js',
-    'sheets.js', 'store.js',
+    'ai-complete.js', 'amount.js', 'app.js', 'completion-policy.js', 'confidence.js',
+    'config.js', 'datetime.js', 'drive.js', 'duplicate.js', 'errors.js',
+    'extract.js', 'gateway.js', 'gemini-client.js', 'google-api.js', 'hash.js',
+    'oauth.js', 'ocr.js', 'ocr-drive.js', 'ocr-gemini.js', 'provisioning.js',
+    'record.js', 'review.js', 'schema.js', 'sheets.js', 'status.js',
+    'store.js', 'validate.js',
   ];
 
   /*
@@ -951,8 +953,8 @@ try {
     check('登録パスが実体と一致する', app?.path === 'production-app/receipt-ocr/');
   }
 
-  check('スキーマ版はドラフト（v1.3 §16.1 との突き合わせが未了）',
-    schema.SCHEMA_VERSION.includes('draft'));
+  /* v1.3 §16.1 と突き合わせて確定済み。draft へ戻さないこと。 */
+  check('スキーマ版は確定版（1.0）', schema.SCHEMA_VERSION === '1.0');
 
   {
     /*

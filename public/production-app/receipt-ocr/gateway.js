@@ -56,8 +56,10 @@ export function createGateway({ accessToken, signal = undefined } = {}) {
         auth,
       ),
 
-    writeSchemaVersion: (spreadsheetId, version) =>
-      sheets.writeSchemaVersion(spreadsheetId, { ...auth, version }),
+    writeSchemaVersion: (spreadsheetId, version, { seedDefaults = false } = {}) =>
+      sheets.writeSchemaVersion(spreadsheetId, { ...auth, version, seedDefaults }),
+
+    readSettings: (spreadsheetId) => sheets.readSettings(spreadsheetId, auth),
 
     writeStoreMaster: (spreadsheetId, rows) => sheets.writeStoreMaster(spreadsheetId, rows, auth),
 
