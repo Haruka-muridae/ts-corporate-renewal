@@ -35,6 +35,15 @@ import {
 
 import { escapeCellText } from './sanitize.js';
 
+import {
+  clearAccessToken,
+  describeDriveAuthError,
+  ensureAccessToken,
+  hasValidAccessToken,
+} from './drive-auth.js';
+
+import { DRIVE_SCOPE, isClientIdConfigured } from './google-config.js';
+
 /* /production-app/card-ocr/poc/ はサイトのルートから3階層下。 */
 setScreenDepth(3);
 
@@ -51,8 +60,16 @@ const uncertainElement = document.getElementById('poc-uncertain');
 const sanitizeBody = document.getElementById('poc-sanitize-body');
 const hostsElement = document.getElementById('poc-hosts');
 
+const googleConfigElement = document.getElementById('poc-google-config');
+const googleStateElement = document.getElementById('poc-google-state');
+const googleMessageElement = document.getElementById('poc-google-message');
+const connectButton = document.getElementById('poc-connect');
+const disconnectButton = document.getElementById('poc-disconnect');
+
 const message = createMessageArea(messageElement);
+const googleMessage = createMessageArea(googleMessageElement);
 const run = createSubmitButton(runButton, { busyLabel: '実行しています…' });
+const connect = createSubmitButton(connectButton, { busyLabel: '連携しています…' });
 
 /*
  * 実際に呼んだホストを記録する。
@@ -169,6 +186,67 @@ function renderKeyState() {
   return true;
 }
 
+/*
+ * Google 連携の表示。
+ *
+ * **トークンそのものは出さない。** 有効かどうかと、
+ * 要求したスコープだけを示す。
+ */
+function renderGoogleState() {
+  const configured = isClientIdConfigured();
+
+  googleConfigElement.textContent = configured
+    ? `クライアントID: 設定済み ／ 要求スコープ: ${DRIVE_SCOPE}`
+    : 'クライアントID: 未設定。google-config.js の GOOGLE_CLIENT_ID を差し替えてください（OAUTH-001）。';
+
+  connectButton.disabled = !configured;
+
+  const connected = hasValidAccessToken();
+
+  googleStateElement.textContent = connected
+    ? '連携済み。トークンはメモリにのみ保持しています（タブを閉じると消えます）。'
+    : '連携していません。';
+
+  disconnectButton.hidden = !connected;
+}
+
+connectButton.addEventListener('click', async () => {
+  if (connect.isBusy()) {
+    return;
+  }
+
+  googleMessage.clear();
+  connect.start();
+
+  try {
+    /*
+     * ボタン押下から直接呼ぶ。あいだに await を挟むと、
+     * ブラウザが「利用者操作に由来しない」と見なしてポップアップを塞ぐ。
+     */
+    await ensureAccessToken();
+
+    googleMessage.show('連携しました。ドライブへのアクセスが許可されています。', 'success');
+  } catch (error) {
+    const described = describeDriveAuthError(error);
+    googleMessage.show(`${described.text}（${described.errorCode}）`, 'error');
+    googleMessage.focus();
+  } finally {
+    connect.stop();
+    renderGoogleState();
+  }
+});
+
+disconnectButton.addEventListener('click', () => {
+  /*
+   * 手元のトークンを捨てるだけ。Google 側の許可は取り消されない。
+   * 完全に切るには利用者が Google アカウントの設定から外す必要がある
+   * （要件定義書 FR-24 の「連携解除方法のマニュアル記載」）。
+   */
+  clearAccessToken();
+  googleMessage.show('この画面の連携を解除しました。Google 側の許可は残っています。', 'info');
+  renderGoogleState();
+});
+
 runButton.addEventListener('click', async () => {
   if (run.isBusy()) {
     return;
@@ -232,6 +310,7 @@ async function start() {
   contentElement.hidden = false;
 
   renderKeyState();
+  renderGoogleState();
   renderSanitize();
   renderHosts();
 }

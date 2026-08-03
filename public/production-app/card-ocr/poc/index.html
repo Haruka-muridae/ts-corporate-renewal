@@ -40,9 +40,9 @@
       <h1 class="auth-title">名刺OCR フェーズ0 検証</h1>
 
       <p class="poc-lead">
-        <a href="../../../../docs/specs/card-ocr-phase0-plan.md">フェーズ0計画</a> §5 のうち、
-        ローカルで確かめられる項目（2〜7）を実行します。
-        Google の認可を必要とする項目（8以降）はこのページでは扱いません。
+        フェーズ0計画（<code>docs/specs/card-ocr-phase0-plan.md</code>）§5 のうち、
+        0-2（Vercel SSO とポップアップの相性）、1〜7、および 8（OAuth 同意フロー）を
+        このページで実行します。Drive OCR と保存構造（9〜11）は未実装です。
       </p>
 
       <!-- 読み込み中。guardPage() の結果が出るまで本文を出さない。 -->
@@ -62,8 +62,25 @@
           </p>
         </section>
 
+        <section class="poc-section" aria-labelledby="poc-google-title">
+          <h2 class="poc-section__title" id="poc-google-title">2. Google 連携（OAuth トークンモデル）</h2>
+          <p class="poc-section__note">
+            計画 §5 の 0-2（Vercel SSO とポップアップの相性）と 8（同意フロー）を確かめます。
+            要求するスコープは <code>drive.file</code> の1つだけで、
+            <strong>ドライブ全体を読む権限は要求しません。</strong>
+            取得したトークンはメモリにだけ置き、画面にも保存領域にも出しません。
+          </p>
+          <p class="poc-result" id="poc-google-config">—</p>
+          <p class="poc-actions">
+            <button class="auth-button" id="poc-connect" type="button">Googleと連携する</button>
+            <button class="auth-button auth-button--ghost" id="poc-disconnect" type="button" hidden>連携を解除する</button>
+          </p>
+          <p class="auth-message poc-message" id="poc-google-message" tabindex="-1" hidden></p>
+          <p class="poc-result" id="poc-google-state">連携していません。</p>
+        </section>
+
         <section class="poc-section" aria-labelledby="poc-gemini-title">
-          <h2 class="poc-section__title" id="poc-gemini-title">2. Gemini API の疎通と分類</h2>
+          <h2 class="poc-section__title" id="poc-gemini-title">3. Gemini API の疎通と分類</h2>
           <p class="poc-section__note">
             架空の名刺テキストを送ります。<strong>実在の個人情報は送りません。</strong>
             同じ内容で行順を入れ替えた2件を送り、行順崩れへの耐性（計画 §5-5）を見ます。
@@ -97,7 +114,7 @@
         </section>
 
         <section class="poc-section" aria-labelledby="poc-sanitize-title">
-          <h2 class="poc-section__title" id="poc-sanitize-title">3. 数式インジェクション対策</h2>
+          <h2 class="poc-section__title" id="poc-sanitize-title">4. 数式インジェクション対策</h2>
           <p class="poc-section__note">
             スプレッドシートへ入れる前の保護（要件定義書 FR-18）。通信は発生しません。
           </p>
@@ -111,7 +128,7 @@
         </section>
 
         <section class="poc-section" aria-labelledby="poc-scope-title">
-          <h2 class="poc-section__title" id="poc-scope-title">4. 外部通信先</h2>
+          <h2 class="poc-section__title" id="poc-scope-title">5. 外部通信先</h2>
           <p class="poc-section__note">
             このページが実際に呼んだ通信先を記録します。要件定義書 §12 の3系統以外へ
             出ていないことを目視で確認できます。

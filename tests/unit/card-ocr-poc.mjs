@@ -279,13 +279,262 @@ try {
   }
 
   /* ---------------------------------------------------------------- */
+  section('Google 連携の設定（google-config.js）');
+
+  const gconfig = await import('../../public/production-app/card-ocr/poc/google-config.js');
+
+  check(
+    '要求スコープは drive.file の1つだけ',
+    gconfig.DRIVE_SCOPE === 'https://www.googleapis.com/auth/drive.file',
+    gconfig.DRIVE_SCOPE,
+  );
+  check(
+    'GIS の読み込み先は承認済みのURLのみ',
+    gconfig.GIS_SCRIPT_URL === 'https://accounts.google.com/gsi/client',
+    gconfig.GIS_SCRIPT_URL,
+  );
+  check(
+    'クライアントIDは未設定（プレースホルダのまま）',
+    gconfig.GOOGLE_CLIENT_ID === gconfig.CLIENT_ID_PLACEHOLDER,
+  );
+  check('未設定を未設定と判定する', gconfig.isClientIdConfigured() === false);
+  check('空文字も未設定', gconfig.isClientIdConfigured('') === false);
+  check('空白だけも未設定', gconfig.isClientIdConfigured('   ') === false);
+  check('文字列以外も未設定', gconfig.isClientIdConfigured(null) === false);
+  check(
+    '実際のIDは設定済みと判定する',
+    gconfig.isClientIdConfigured('123-abc.apps.googleusercontent.com') === true,
+  );
+
+  /* ---------------------------------------------------------------- */
+  section('Google 連携（drive-auth.js。GIS はスタブする）');
+
+  const auth = await import('../../public/production-app/card-ocr/poc/drive-auth.js');
+  const loader = await import('../../public/production-app/card-ocr/poc/gis-loader.js');
+
+  const TEST_CLIENT_ID = '000000-test.apps.googleusercontent.com';
+  const TEST_TOKEN = 'ya29.TEST_ACCESS_TOKEN_not_real';
+
+  /*
+   * GIS のスタブ。globalThis.google を置くと isGisLoaded() が真になり、
+   * loadGisScript() は即座に解決する。**実スクリプトは読み込まれない。**
+   */
+  function stubGis(behavior) {
+    const calls = [];
+
+    globalThis.google = {
+      accounts: {
+        oauth2: {
+          initTokenClient(options) {
+            calls.push(options);
+            return {
+              requestAccessToken(requestOptions) {
+                calls.push({ requestOptions });
+                behavior(options, requestOptions);
+              },
+            };
+          },
+          hasGrantedAllScopes(response, scope) {
+            const granted = typeof response?.scope === 'string' ? response.scope.split(/\s+/) : [];
+            return granted.includes(scope);
+          },
+        },
+      },
+    };
+
+    return calls;
+  }
+
+  function clearGis() {
+    delete globalThis.google;
+    loader.resetGisLoader();
+  }
+
+  check('スタブ前は GIS 未読込と判定する', loader.isGisLoaded() === false);
+
+  {
+    /* クライアントID未設定なら、GIS を読み込まずに落ちる。 */
+    clearGis();
+    let caught = null;
+
+    try {
+      await auth.ensureAccessToken();
+    } catch (error) { caught = error; }
+
+    check('未設定なら CLIENT_ID_MISSING', caught?.code === auth.DriveAuthErrorCode.CLIENT_ID_MISSING);
+    check(
+      '未設定のときは GIS を読み込まない（外部通信を出さない）',
+      globalThis.google === undefined,
+    );
+    check(
+      '未設定の画面表示は OAUTH-001',
+      auth.describeDriveAuthError(caught).errorCode === 'OAUTH-001',
+    );
+  }
+
+  {
+    /* 正常系。 */
+    const calls = stubGis((options) => {
+      options.callback({
+        access_token: TEST_TOKEN,
+        scope: gconfig.DRIVE_SCOPE,
+        expires_in: 3600,
+      });
+    });
+
+    const token = await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID });
+
+    check('トークンを取得できる', token === TEST_TOKEN);
+    check('取得後は有効なトークンを持つ', auth.hasValidAccessToken() === true);
+
+    const init = calls[0];
+
+    check('クライアントIDを渡している', init.client_id === TEST_CLIENT_ID);
+    check(
+      '要求スコープは drive.file の1つだけ',
+      init.scope === gconfig.DRIVE_SCOPE,
+      init.scope,
+    );
+    check(
+      'ドライブ全体を読むスコープを要求していない',
+      !/auth\/drive(\s|$)/.test(init.scope) && !init.scope.includes('drive.readonly'),
+    );
+
+    /* 2回目はキャッシュを使い、ポップアップを開き直さない。 */
+    const before = calls.length;
+    const again = await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID });
+
+    check('2回目はキャッシュを返す', again === TEST_TOKEN);
+    check('2回目はトークンクライアントを作り直さない', calls.length === before);
+
+    auth.clearAccessToken();
+    check('解除するとトークンを持たない', auth.hasValidAccessToken() === false);
+    check('解除後は取り出せない', auth.getCachedAccessToken() === null);
+  }
+
+  {
+    /* スコープを外されたまま同意された場合は弾く。 */
+    stubGis((options) => {
+      options.callback({ access_token: TEST_TOKEN, scope: '', expires_in: 3600 });
+    });
+
+    let caught = null;
+
+    try {
+      await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID });
+    } catch (error) { caught = error; }
+
+    check('スコープ未付与は SCOPE_NOT_GRANTED', caught?.code === auth.DriveAuthErrorCode.SCOPE_NOT_GRANTED);
+    check('スコープ未付与ならトークンを保持しない', auth.hasValidAccessToken() === false);
+  }
+
+  {
+    /* トークンが空で返ってきた場合。 */
+    stubGis((options) => {
+      options.callback({ access_token: '', scope: gconfig.DRIVE_SCOPE, expires_in: 3600 });
+    });
+
+    let caught = null;
+
+    try {
+      await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID });
+    } catch (error) { caught = error; }
+
+    check('空トークンは UNKNOWN', caught?.code === auth.DriveAuthErrorCode.UNKNOWN);
+    check('空トークンを保持しない', auth.hasValidAccessToken() === false);
+  }
+
+  {
+    /* 同意画面で拒否・閉じられた場合。 */
+    const cases = [
+      ['popup_closed', auth.DriveAuthErrorCode.POPUP_CLOSED],
+      ['popup_failed_to_open', auth.DriveAuthErrorCode.POPUP_BLOCKED],
+      ['access_denied', auth.DriveAuthErrorCode.ACCESS_DENIED],
+      ['something_else', auth.DriveAuthErrorCode.UNKNOWN],
+    ];
+
+    for (const [reason, expected] of cases) {
+      stubGis((options) => { options.error_callback({ type: reason }); });
+
+      let caught = null;
+
+      try {
+        await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID });
+      } catch (error) { caught = error; }
+
+      check(`${reason} → ${expected}`, caught?.code === expected, caught?.code);
+      check(`${reason} の画面表示が用意されている`, auth.describeDriveAuthError(caught).errorCode === 'OAUTH-001');
+    }
+  }
+
+  {
+    /* forceConsent のときは prompt=consent を渡し、キャッシュを使わない。 */
+    let requested = null;
+
+    stubGis((options, requestOptions) => {
+      requested = requestOptions;
+      options.callback({ access_token: TEST_TOKEN, scope: gconfig.DRIVE_SCOPE, expires_in: 3600 });
+    });
+
+    await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID });
+    check('通常は prompt を指定しない', requested?.prompt === undefined);
+
+    requested = null;
+    await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID, forceConsent: true });
+    check('forceConsent では prompt=consent', requested?.prompt === 'consent');
+
+    auth.clearAccessToken();
+  }
+
+  {
+    /* GIS が読み込めても oauth2 が無い場合。 */
+    globalThis.google = { accounts: {} };
+    let caught = null;
+
+    try {
+      await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID });
+    } catch (error) { caught = error; }
+
+    check('oauth2 が無ければ GIS_LOAD_FAILED', caught?.code === auth.DriveAuthErrorCode.GIS_LOAD_FAILED);
+  }
+
+  {
+    /* 例外にトークンを含めない。 */
+    stubGis((options) => { options.error_callback({ type: 'access_denied' }); });
+
+    let caught = null;
+
+    try {
+      await auth.ensureAccessToken({ clientId: TEST_CLIENT_ID });
+    } catch (error) { caught = error; }
+
+    check('例外メッセージにトークンが含まれない', !String(caught?.message ?? '').includes(TEST_TOKEN));
+    check('例外メッセージにクライアントIDが含まれない', !String(caught?.message ?? '').includes(TEST_CLIENT_ID));
+  }
+
+  check(
+    'hasDriveScope は文字列判定にも落ちる',
+    (() => {
+      clearGis();
+      return auth.hasDriveScope({ scope: gconfig.DRIVE_SCOPE }) === true
+        && auth.hasDriveScope({ scope: '' }) === false
+        && auth.hasDriveScope(null) === false;
+    })(),
+  );
+
+  clearGis();
+
+  /* ---------------------------------------------------------------- */
   section('ページ本体のソース検査（守るべき制約）');
 
   const pocSource = await readFile(new URL('poc.js', POC_DIR), 'utf8');
   const htmlSource = await readFile(new URL('index.html', POC_DIR), 'utf8');
   const sources = [pocSource, await readFile(new URL('gemini.js', POC_DIR), 'utf8'),
     await readFile(new URL('prompt.js', POC_DIR), 'utf8'),
-    await readFile(new URL('sanitize.js', POC_DIR), 'utf8')];
+    await readFile(new URL('sanitize.js', POC_DIR), 'utf8'),
+    await readFile(new URL('google-config.js', POC_DIR), 'utf8'),
+    await readFile(new URL('gis-loader.js', POC_DIR), 'utf8'),
+    await readFile(new URL('drive-auth.js', POC_DIR), 'utf8')];
 
   check(
     'guardPage() を通している',
@@ -333,11 +582,29 @@ try {
     htmlSource.includes('検証用のページです') && htmlSource.includes('撤去'),
   );
 
-  /* 許可された外部ホスト以外がソースに現れないこと。 */
+  check(
+    'クライアントIDの定義は google-config.js の1箇所だけ',
+    sources.filter((source) => /GOOGLE_CLIENT_ID\s*=/.test(source)).length === 1,
+  );
+  check(
+    'トークンを Storage へ書いていない',
+    !sources.some((source) => /(local|session)Storage\s*[.[]/.test(source)),
+  );
+
+  /*
+   * 許可された外部ホスト以外がソースに現れないこと。
+   *
+   * accounts.google.com は docs/external-dependency-approvals.md で
+   * 承認済みの GIS 配信元。
+   * tsam-ai.com は当社自身のオリジンで、外部通信先ではない
+   * （google-config.js が生成元として登録する値をコメントで示している）。
+   */
   const allowedHosts = [
     'generativelanguage.googleapis.com',
     'www.googleapis.com',
     'sheets.googleapis.com',
+    'accounts.google.com',
+    'tsam-ai.com',
   ];
 
   for (const source of sources) {
