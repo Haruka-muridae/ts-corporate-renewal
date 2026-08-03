@@ -46,6 +46,7 @@ const SUITES = [
   { name: 'event-result', file: 'unit/event-result.mjs', kind: 'unit' },
   { name: 'event-admin', file: 'unit/event-admin.mjs', kind: 'unit' },
   { name: 'event-config', file: 'unit/event-config.mjs', kind: 'unit' },
+  { name: 'card-ocr-poc', file: 'unit/card-ocr-poc.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
 

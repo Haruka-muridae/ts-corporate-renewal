@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>名刺OCR フェーズ0 検証ページ | TSAM AI</title>
+  <meta name="description" content="名刺OCRアプリのフェーズ0検証用ページです。">
+
+  <!-- 検証用ページ。検索結果に出さない。 -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light">
+
+  <link rel="icon" href="../../../favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../../../favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../apple-touch-icon.png">
+
+  <link rel="stylesheet" href="../../../css/style.css">
+  <link rel="stylesheet" href="../../../auth/auth.css">
+  <link rel="stylesheet" href="./poc.css">
+</head>
+<body class="auth-page">
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <main id="main-content" class="auth-main" tabindex="-1">
+    <div class="auth-shell auth-shell--medium">
+
+      <!--
+        撤去を忘れないための表示。
+        docs/specs/card-ocr-phase0-plan.md §3-3 の「撤去を忘れないための仕掛け」。
+        撤去予定日は、本番へ置くと決めた時点で入れること。
+      -->
+      <p class="poc-banner" role="status">
+        <strong>これは検証用のページです。</strong>
+        フェーズ0の確認が終わったら撤去します。利用者向けの機能ではありません。
+        <span class="poc-banner__removal" id="poc-removal">撤去予定日: 未定（本番へ置く前に記入する）</span>
+      </p>
+
+      <h1 class="auth-title">名刺OCR フェーズ0 検証</h1>
+
+      <p class="poc-lead">
+        <a href="../../../../docs/specs/card-ocr-phase0-plan.md">フェーズ0計画</a> §5 のうち、
+        ローカルで確かめられる項目（2〜7）を実行します。
+        Google の認可を必要とする項目（8以降）はこのページでは扱いません。
+      </p>
+
+      <!-- 読み込み中。guardPage() の結果が出るまで本文を出さない。 -->
+      <p class="auth-loading" id="poc-loading">確認しています…</p>
+
+      <div id="poc-content" hidden>
+
+        <section class="poc-section" aria-labelledby="poc-key-title">
+          <h2 class="poc-section__title" id="poc-key-title">1. KeyStore からのキー取得</h2>
+          <p class="poc-section__note">
+            キーは Portal で保存したものを読むだけです。このページでは登録・変更をしません
+            （要件定義書 FR-23）。
+          </p>
+          <p class="poc-result" id="poc-key-result">—</p>
+          <p class="poc-actions" id="poc-key-actions" hidden>
+            <a class="auth-button auth-button--ghost" href="../../../portal/">Portal でキーを設定する</a>
+          </p>
+        </section>
+
+        <section class="poc-section" aria-labelledby="poc-gemini-title">
+          <h2 class="poc-section__title" id="poc-gemini-title">2. Gemini API の疎通と分類</h2>
+          <p class="poc-section__note">
+            架空の名刺テキストを送ります。<strong>実在の個人情報は送りません。</strong>
+            同じ内容で行順を入れ替えた2件を送り、行順崩れへの耐性（計画 §5-5）を見ます。
+          </p>
+          <p class="poc-actions">
+            <button class="auth-button" id="poc-run" type="button">検証を実行する</button>
+          </p>
+          <p class="auth-message poc-message" id="poc-message" tabindex="-1" hidden></p>
+
+          <div id="poc-gemini-result" hidden>
+            <h3 class="poc-subtitle">原稿どおりの行順</h3>
+            <table class="poc-table">
+              <caption class="poc-table__caption">主要5項目の分類結果</caption>
+              <thead>
+                <tr><th scope="col">項目</th><th scope="col">期待値</th><th scope="col">結果</th><th scope="col">判定</th></tr>
+              </thead>
+              <tbody id="poc-ordered-body"></tbody>
+            </table>
+
+            <h3 class="poc-subtitle">行順を入れ替えたもの</h3>
+            <table class="poc-table">
+              <caption class="poc-table__caption">主要5項目の分類結果</caption>
+              <thead>
+                <tr><th scope="col">項目</th><th scope="col">期待値</th><th scope="col">結果</th><th scope="col">判定</th></tr>
+              </thead>
+              <tbody id="poc-shuffled-body"></tbody>
+            </table>
+
+            <p class="poc-result" id="poc-uncertain">—</p>
+          </div>
+        </section>
+
+        <section class="poc-section" aria-labelledby="poc-sanitize-title">
+          <h2 class="poc-section__title" id="poc-sanitize-title">3. 数式インジェクション対策</h2>
+          <p class="poc-section__note">
+            スプレッドシートへ入れる前の保護（要件定義書 FR-18）。通信は発生しません。
+          </p>
+          <table class="poc-table">
+            <caption class="poc-table__caption">入力値と保護後の値</caption>
+            <thead>
+              <tr><th scope="col">入力</th><th scope="col">保護後</th><th scope="col">判定</th></tr>
+            </thead>
+            <tbody id="poc-sanitize-body"></tbody>
+          </table>
+        </section>
+
+        <section class="poc-section" aria-labelledby="poc-scope-title">
+          <h2 class="poc-section__title" id="poc-scope-title">4. 外部通信先</h2>
+          <p class="poc-section__note">
+            このページが実際に呼んだ通信先を記録します。要件定義書 §12 の3系統以外へ
+            出ていないことを目視で確認できます。
+          </p>
+          <ul class="poc-list" id="poc-hosts"><li>まだ通信していません。</li></ul>
+        </section>
+
+      </div>
+
+      <p class="poc-footer">
+        <a href="../../../portal/">Portal へ戻る</a>
+      </p>
+    </div>
+  </main>
+
+  <script type="module" src="./poc.js"></script>
+</body>
+</html>
