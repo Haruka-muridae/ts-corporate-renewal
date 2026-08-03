@@ -562,6 +562,184 @@ try {
   delete globalThis.localStorage;
 
   /* ---------------------------------------------------------------- */
+  section('アプリ一覧の取得（portal/app-source.js）');
+
+  const source = await import('../../public/portal/app-source.js');
+  const { parseCsv, rowsToApps, fetchApps } = source;
+
+  check('キャッシュキーは tsam-app-registry-cache', source.CACHE_STORAGE_KEY === 'tsam-app-registry-cache');
+
+  check(
+    'CSV出力のURLはシートIDと gid を含む',
+    /^https:\/\/docs\.google\.com\/spreadsheets\/d\/[^/]+\/gviz\/tq\?tqx=out:csv&gid=0$/.test(source.sheetCsvUrl()),
+    source.sheetCsvUrl(),
+  );
+
+  /* ---- CSV 解析 ---- */
+
+  check(
+    '素直な CSV を行と列へ分ける',
+    JSON.stringify(parseCsv('a,b,c\n1,2,3')) === JSON.stringify([['a', 'b', 'c'], ['1', '2', '3']]),
+    JSON.stringify(parseCsv('a,b,c\n1,2,3')),
+  );
+
+  /* 引用符の中のカンマは区切りではない。split(',') では崩れるところ。 */
+  check(
+    '引用符の中のカンマは区切りにしない',
+    JSON.stringify(parseCsv('"a,b",c')) === JSON.stringify([['a,b', 'c']]),
+    JSON.stringify(parseCsv('"a,b",c')),
+  );
+
+  check(
+    '引用符の中の改行はセルの一部として扱う',
+    JSON.stringify(parseCsv('"1行目\n2行目",x')) === JSON.stringify([['1行目\n2行目', 'x']]),
+    JSON.stringify(parseCsv('"1行目\n2行目",x')),
+  );
+
+  check(
+    '"" は引用符そのもの',
+    JSON.stringify(parseCsv('"He said ""hi""",y')) === JSON.stringify([['He said "hi"', 'y']]),
+    JSON.stringify(parseCsv('"He said ""hi""",y')),
+  );
+
+  check('CRLF でも1行として数える', parseCsv('a,b\r\nc,d').length === 2);
+  check('CR だけでも1行として数える', parseCsv('a,b\rc,d').length === 2);
+  check('末尾の改行で空行を作らない', parseCsv('a,b\n').length === 1);
+  check('空文字なら0行', parseCsv('').length === 0 && parseCsv(null).length === 0);
+  check('空行は落とす', parseCsv('a,b\n\n,\nc,d').length === 2, JSON.stringify(parseCsv('a,b\n\n,\nc,d')));
+
+  /* ---- 行 → アプリ定義 ---- */
+
+  const CSV_OK = [
+    'アプリID,アプリ名,アプリURL,アイコンURL',
+    'A1,音声録音,https://example.com/voice/,https://example.com/v.svg',
+    'A2,"領収書, 収支",https://example.com/receipt/,',
+  ].join('\n');
+
+  const okApps = rowsToApps(parseCsv(CSV_OK));
+
+  check('ヘッダー行を読み飛ばす', okApps.length === 2, JSON.stringify(okApps));
+  check('4列が id/name/href/icon に入る',
+    JSON.stringify(okApps[0]) === JSON.stringify({
+      id: 'A1', name: '音声録音', href: 'https://example.com/voice/', icon: 'https://example.com/v.svg',
+    }),
+    JSON.stringify(okApps[0]));
+  check('引用符付きの名前も取れる', okApps[1].name === '領収書, 収支');
+  check('アイコンが空でも行は残る（icon は空文字）', okApps[1].icon === '');
+
+  /* ヘッダーが無いシートでも1行目を落とさない。 */
+  check(
+    'ヘッダーが無ければ1行目もデータとして読む',
+    rowsToApps(parseCsv('A1,名前,https://example.com/,')).length === 1,
+  );
+
+  /* 不正行はその行だけ捨て、全体は失敗させない。 */
+  const CSV_DIRTY = [
+    'アプリID,アプリ名,アプリURL,アイコンURL',
+    ',名無し,https://example.com/a/,',
+    'B1,,https://example.com/b/,',
+    'B2,名前,javascript:alert(1),',
+    'B3,名前,ftp://example.com/,',
+    'B4,名前,,',
+    'B5,ちゃんとした,https://example.com/ok/,',
+    'B5,重複ID,https://example.com/dup/,',
+  ].join('\n');
+
+  const dirty = rowsToApps(parseCsv(CSV_DIRTY));
+
+  check('ID が空の行は落とす', !dirty.some((app) => app.name === '名無し'));
+  check('名前が空の行は落とす', !dirty.some((app) => app.id === 'B1'));
+  check('javascript: の行は落とす', !dirty.some((app) => app.id === 'B2'));
+  check('http(s) 以外のURLの行は落とす', !dirty.some((app) => app.id === 'B3'));
+  check('URL が空の行は落とす', !dirty.some((app) => app.id === 'B4'));
+  check('重複IDは先に出たほうを採る',
+    dirty.filter((app) => app.id === 'B5').length === 1 && dirty.find((app) => app.id === 'B5').name === 'ちゃんとした');
+  check('壊れた行があっても正しい行は残る', dirty.length === 1, JSON.stringify(dirty));
+
+  /* アイコンだけ不正なら、行は残して icon を空にする。 */
+  check(
+    'アイコンURLが不正でも行は落とさない',
+    (() => {
+      const apps = rowsToApps(parseCsv('C1,名前,https://example.com/,javascript:alert(1)'));
+      return apps.length === 1 && apps[0].icon === '';
+    })(),
+  );
+
+  /* ---- 取得（fetch はスタブ。実ネットワークへは出ない） ---- */
+
+  const stubFetch = (body, { ok = true, status = 200 } = {}) => async () => ({
+    ok, status, text: async () => body,
+  });
+
+  const okResult = await fetchApps({ fetchImpl: stubFetch(CSV_OK) });
+  check('取得できたら ok=true とアプリ配列', okResult.ok === true && okResult.apps.length === 2);
+
+  const httpFail = await fetchApps({ fetchImpl: stubFetch('', { ok: false, status: 401 }) });
+  check('401 は失敗として扱う', httpFail.ok === false && httpFail.reason === 'HTTP_401', httpFail.reason);
+
+  /* 共有設定が未了だと Google はログイン画面のHTMLを返す。 */
+  const htmlFail = await fetchApps({ fetchImpl: stubFetch('<!DOCTYPE html><body>Sign in</body>') });
+  check('HTMLが返ってきたら失敗として扱う', htmlFail.ok === false, JSON.stringify(htmlFail));
+
+  const emptyFail = await fetchApps({ fetchImpl: stubFetch('アプリID,アプリ名,アプリURL,アイコンURL') });
+  check('0件は失敗として扱う（空の一覧を出さない）', emptyFail.ok === false && emptyFail.reason === 'EMPTY');
+
+  const throwFail = await fetchApps({ fetchImpl: async () => { throw new Error('offline'); } });
+  check('通信が失敗しても例外を投げない', throwFail.ok === false && throwFail.reason === 'NETWORK');
+
+  check('fetch が無い環境でも例外を投げない',
+    (await fetchApps({ fetchImpl: null })).reason === 'NO_FETCH'
+    || (await fetchApps({ fetchImpl: undefined, url: 'x' })).ok === false);
+
+  /* ---- キャッシュ ---- */
+
+  const cacheStore = new Map();
+
+  globalThis.localStorage = {
+    getItem: (k) => (cacheStore.has(k) ? cacheStore.get(k) : null),
+    setItem: (k, v) => { cacheStore.set(k, String(v)); },
+    removeItem: (k) => { cacheStore.delete(k); },
+  };
+
+  check('保存前は空配列', source.readCachedApps().length === 0);
+  check('保存できる', source.writeCachedApps(okApps) === true);
+  check('保存したものを読み戻せる', source.readCachedApps().length === 2);
+
+  check(
+    'キャッシュには version と fetchedAt が入る',
+    (() => {
+      const saved = JSON.parse(cacheStore.get('tsam-app-registry-cache'));
+      return saved.version === 1 && typeof saved.fetchedAt === 'string' && Array.isArray(saved.apps);
+    })(),
+    cacheStore.get('tsam-app-registry-cache'),
+  );
+
+  /* 読み戻した値も取得直後と同じ検査を通す。 */
+  cacheStore.set('tsam-app-registry-cache', JSON.stringify({
+    version: 1,
+    fetchedAt: 'x',
+    apps: [{ id: 'D1', name: '悪いURL', href: 'javascript:alert(1)' }, { id: 'D2', name: '良い', href: 'https://example.com/' }],
+  }));
+
+  check(
+    'キャッシュの中の不正な行も落とす',
+    source.readCachedApps().length === 1 && source.readCachedApps()[0].id === 'D2',
+    JSON.stringify(source.readCachedApps()),
+  );
+
+  cacheStore.set('tsam-app-registry-cache', JSON.stringify({ version: 99, apps: [] }));
+  check('版が違うキャッシュは無視する', source.readCachedApps().length === 0);
+
+  cacheStore.set('tsam-app-registry-cache', '{{{');
+  check('壊れたキャッシュでも例外を投げない', source.readCachedApps().length === 0);
+
+  cacheStore.clear();
+  delete globalThis.localStorage;
+
+  check('保存先が無ければ書き込みは false', source.writeCachedApps(okApps) === false);
+  check('保存先が無ければ読み出しは空', source.readCachedApps().length === 0);
+
+  /* ---------------------------------------------------------------- */
   section('KeyStore（APIキーの保管庫）');
 
   const keystore = await import('../../public/auth/keystore.js');

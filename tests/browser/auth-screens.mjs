@@ -2997,6 +2997,244 @@ try {
 
   await page.evaluate('localStorage.removeItem("tsam-app-layout")');
 
+  /* ---------------------------------------------------------------- */
+  section('スプレッドシートからのアプリ一覧（第3便）');
+
+  /*
+   * 実シートへは通信しない。
+   * portalStub の window.fetch をさらに包み、CSV出力のURLだけを
+   * こちらで差し替える。verifySession は内側のスタブがそのまま返す。
+   */
+  /*
+   * 返す内容は localStorage 経由で渡す。
+   * この差し替えは新しい文書ごとに実行されるため、window に置くと
+   * 画面を開き直すたびに初期値へ戻ってしまう。
+   */
+  const sheetStub = await page.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      const innerFetch = window.fetch;
+
+      window.fetch = (url, options) => {
+        if (String(url).includes('docs.google.com/spreadsheets')) {
+          let plan = null;
+
+          try {
+            plan = JSON.parse(localStorage.getItem('__test_sheet') ?? 'null');
+          } catch {
+            plan = null;
+          }
+
+          if (!plan || plan.csv === null) {
+            return Promise.reject(new Error('blocked in test'));
+          }
+
+          return Promise.resolve(new Response(plan.csv, {
+            status: plan.status ?? 200,
+            headers: { 'Content-Type': 'text/csv' },
+          }));
+        }
+
+        return innerFetch(url, options);
+      };
+    `,
+  });
+
+  const SHEET_CSV = [
+    'アプリID,アプリ名,アプリURL,アイコンURL',
+    'S1,シートのアプリ1,https://example.com/s1/,',
+    'S2,"シートの, アプリ2",https://example.com/s2/,',
+  ].join('\n');
+
+  const setSheet = async (csv, status = 200) => {
+    await page.evaluate(
+      `localStorage.setItem('__test_sheet', ${JSON.stringify(JSON.stringify({ csv, status }))})`,
+    );
+  };
+
+  const openPortal = async () => {
+    await page.goto(`${origin}/portal/`, 1500);
+    await page.sleep(500);
+  };
+
+  /* ---- 取得成功 → 描画の差し替えとキャッシュ ---- */
+
+  await page.evaluate(`
+    localStorage.removeItem("tsam-app-layout");
+    localStorage.removeItem("tsam-app-registry-cache");
+  `);
+  await openPortal();
+  await setSheet(SHEET_CSV);
+  await openPortal();
+
+  check(
+    'シートから取れたらその一覧を表示する',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['S1', 'S2']),
+    JSON.stringify(await catalogIds()),
+  );
+
+  check(
+    '引用符付きの名前もそのまま出る',
+    (await page.evaluate(`
+      document.querySelector('#portal-catalog .auth-app-card[data-app-id="S2"] .auth-app-card__name').textContent
+    `)) === 'シートの, アプリ2',
+  );
+
+  check(
+    '取得できたらキャッシュへ控える',
+    await page.evaluate(`(() => {
+      const raw = localStorage.getItem("tsam-app-registry-cache");
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      return saved.version === 1 && saved.apps.length === 2
+        && typeof saved.fetchedAt === "string";
+    })()`),
+    await page.evaluate('localStorage.getItem("tsam-app-registry-cache")'),
+  );
+
+  check(
+    '取得できたときは警告を出さない',
+    await page.evaluate('document.getElementById("portal-apps-message").hidden === true'),
+  );
+
+  /* ---- 取得失敗 → キャッシュで描く ---- */
+
+  await setSheet(null);
+  await openPortal();
+
+  check(
+    '取得に失敗してもキャッシュがあればその一覧を出す',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['S1', 'S2']),
+    JSON.stringify(await catalogIds()),
+  );
+
+  check(
+    'キャッシュで描いたときは「更新できませんでした」と伝える',
+    await page.evaluate(`
+      document.getElementById("portal-apps-message").hidden === false
+      && document.getElementById("portal-apps-message").textContent.includes("前回取得した内容")
+    `),
+    await page.evaluate('document.getElementById("portal-apps-message").textContent'),
+  );
+
+  /* ---- 取得失敗＋キャッシュ無し → 組み込みの一覧で描く ---- */
+
+  await page.evaluate('localStorage.removeItem("tsam-app-registry-cache")');
+  await openPortal();
+
+  check(
+    'キャッシュも無ければ組み込みの仮データ3件で描く',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['202607No01', '202607No02', '202607No03']),
+    JSON.stringify(await catalogIds()),
+  );
+
+  check(
+    'そのときは「既定の一覧を表示しています」と伝える',
+    await page.evaluate(`
+      document.getElementById("portal-apps-message").hidden === false
+      && document.getElementById("portal-apps-message").textContent.includes("既定の一覧")
+    `),
+    await page.evaluate('document.getElementById("portal-apps-message").textContent'),
+  );
+
+  /* 401（共有設定が未了）でも同じ扱いになる。 */
+  await setSheet('<!DOCTYPE html><body>Sign in</body>', 401);
+  await openPortal();
+
+  check(
+    '401（共有設定が未了）でも画面は組み込みの一覧で開く',
+    JSON.stringify(await catalogIds()) === JSON.stringify(['202607No01', '202607No02', '202607No03'])
+    && await page.evaluate('document.getElementById("portal-apps-message").hidden === false'),
+    JSON.stringify(await catalogIds()),
+  );
+
+  /* ---- シートから消えたIDはお気に入りから外れる ---- */
+
+  await setSheet(SHEET_CSV);
+  await openPortal();
+  await page.evaluate('document.querySelector(\'#portal-catalog .auth-app-card__add[data-app-id="S1"]\').click()');
+  await page.sleep(200);
+  await page.evaluate('document.querySelector(\'#portal-catalog .auth-app-card__add[data-app-id="S2"]\').click()');
+  await page.sleep(250);
+
+  check(
+    '（前提）S1・S2 をお気に入りに入れた',
+    JSON.stringify(await favoriteIds()) === JSON.stringify(['S1', 'S2']),
+    JSON.stringify(await favoriteIds()),
+  );
+
+  /* シートから S1 を消す。 */
+  await setSheet([
+    'アプリID,アプリ名,アプリURL,アイコンURL',
+    'S2,"シートの, アプリ2",https://example.com/s2/,',
+  ].join('\n'));
+  await openPortal();
+
+  check(
+    'シートから消えたIDはお気に入りから自動的に外れる',
+    JSON.stringify(await favoriteIds()) === JSON.stringify(['S2']),
+    JSON.stringify(await favoriteIds()),
+  );
+
+  check(
+    '残ったアプリのお気に入りは保たれる（保存は書き換えない）',
+    (await page.evaluate('localStorage.getItem("tsam-app-layout")'))
+      === JSON.stringify({ version: 2, order: ['S1', 'S2'] }),
+    await page.evaluate('localStorage.getItem("tsam-app-layout")'),
+  );
+
+  /* ---- シートの値を innerHTML へ流していない ---- */
+
+  await setSheet([
+    'アプリID,アプリ名,アプリURL,アイコンURL',
+    'X1,<img src=x onerror=alert(1)>,https://example.com/x/,',
+    'X2,普通,javascript:alert(1),',
+  ].join('\n'));
+  await page.evaluate(`
+    localStorage.removeItem("tsam-app-layout");
+    localStorage.removeItem("tsam-app-registry-cache");
+  `);
+  await openPortal();
+
+  check(
+    'タグを含む名前は文字として出る（要素にならない）',
+    await page.evaluate(`(() => {
+      const card = document.querySelector('#portal-catalog .auth-app-card[data-app-id="X1"]');
+      const name = card.querySelector(".auth-app-card__name");
+      return name.textContent === "<img src=x onerror=alert(1)>"
+        && name.querySelector("img") === null
+        && document.querySelectorAll("#portal-catalog img").length === 0;
+    })()`),
+    await page.evaluate(`
+      document.querySelector('#portal-catalog .auth-app-card[data-app-id="X1"] .auth-app-card__name')?.innerHTML
+    `),
+  );
+
+  check(
+    'javascript: のURLの行は取り込まない',
+    (await page.evaluate('document.querySelectorAll(\'#portal-catalog .auth-app-card[data-app-id="X2"]\').length')) === 0,
+  );
+
+  check(
+    'リンクの href に javascript: が入らない',
+    await page.evaluate(`
+      [...document.querySelectorAll("#portal-catalog .auth-app-card__link")]
+        .every((a) => /^https?:/i.test(a.getAttribute("href")))
+    `),
+  );
+
+  /* ---- 後始末 ---- */
+
+  await page.send('Page.removeScriptToEvaluateOnNewDocument', {
+    identifier: sheetStub.result.identifier,
+  });
+  await page.evaluate(`
+    localStorage.removeItem("tsam-app-layout");
+    localStorage.removeItem("tsam-app-registry-cache");
+    localStorage.removeItem("__test_sheet");
+  `);
+  await page.goto(`${origin}/portal/`, 1500);
+  await page.sleep(400);
+
   /* ---- 画面幅ごとの体裁（常に2列・中央寄せ） ---- */
 
   const PORTAL_WIDTHS = [
