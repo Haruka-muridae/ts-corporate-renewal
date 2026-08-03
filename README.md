@@ -10,36 +10,46 @@ TSアセットマネジメント合同会社の静的なコーポレートサイ
 
 ```text
 .
-├── index.html                コーポレートサイト
-├── css/style.css
-├── js/main.js
-├── assets/images/
+├── public/                   ── 配信ルート（Vercel はここを静的に配る）
+│   ├── index.html               コーポレートサイト
+│   ├── css/ js/ assets/         コーポレートサイトの資産
+│   ├── login/                ── 本番認証系（TSAM AI）
+│   ├── pricing/                 料金プラン選択
+│   ├── portal/                  Portal（要ログイン。アプリのグリッド）
+│   ├── password/setup/          パスワード初期設定
+│   ├── password/reset/          パスワード再設定
+│   ├── payment/success/         決済完了
+│   ├── payment/cancel/          決済キャンセル
+│   ├── logout/                  ログアウト
+│   ├── auth/                    上記の共通JS・CSS
+│   ├── legal/                   法務文書（生成物）
+│   ├── event/                   交流会の告知ページ（静的部分）
+│   ├── potenitas/               Potenitas ページ
+│   └── apps/                 ── アプリポータル（テスト環境。従来どおり）
 │
-├── login/                    ── 本番認証系（TSAM AI）
-├── pricing/                     料金プラン選択
-├── portal/                      Portal（要ログイン）
-├── password/setup/              パスワード初期設定
-├── password/reset/              パスワード再設定
-├── payment/success/             決済完了
-├── payment/cancel/              決済キャンセル
-├── logout/                      ログアウト
-├── auth/                        上記の共通JS・CSS
+├── app/event/                ── 交流会申込アプリ（Next.js。サーバー実行）
+│                                申込・決済・Stripe Webhook・管理画面
+├── components/ lib/ types/      Next.js の共通部品
+├── lp-draft/                    リニューアル版LP（退避。未配信）
+│
 ├── gas-auth/                    認証バックエンド（Apps Script。配信しない）
-├── tests/                       本番認証系の自動テスト
+├── supabase/migrations/         交流会アプリのDBスキーマ
+├── tests/                       本番認証系・交流会・Portal の自動テスト
+├── .github/workflows/test.yml   CI（テスト実行のみ。デプロイには関与しない）
 │
-├── apps/                     ── アプリポータル（テスト環境。従来どおり）
-├── gas/                         お気に入り機能のバックエンド
-│
-├── labs/                     ── TSAM AI とは無関係な同居プロジェクト（現時点では空）
-│
-├── app/ components/ lib/     ── Next.js（現在デプロイしていない）
 ├── docs/
 ├── AGENTS.md
 ├── README.md
 └── SITE_SPEC.md
 ```
 
-`labs/` の扱い（共通資産を参照しない・公開される前提・指示書のスコープ）は
+**`public/` の外にあるものは配信されません。**
+`tests/` `docs/` `gas-auth/` は URL を叩いても届きません
+（リポジトリは公開されているため、GitHub 上では読めます）。
+
+`labs/`（TSAM AI とは無関係な同居プロジェクト）はまだ存在しません。
+
+`labs/` の扱い（共通資産を参照しない・公開の前提・指示書のスコープ）は
 [docs/repository-structure.md](docs/repository-structure.md)で宣言しています。
 
 `SITE_SPEC.md`は、掲載文章、会社情報、デザイン、レスポンシブ、アクセシビリティ、SEOの実装基準です。
@@ -114,10 +124,10 @@ TSアセットマネジメント合同会社の静的なコーポレートサイ
 | 認証 | Supabase（未接続）＋ダミー | Apps Script + スプレッドシート |
 | セッションキー | `tsam-ai-session` | `tsam-auth-session` |
 | Apps Script | `gas/` | `gas-auth/` |
-| 共通JS | `apps/shared/` | `auth/` |
-| テスト | `apps/tests/` | `tests/` |
+| 共通JS | `public/apps/shared/` | `public/auth/` |
+| テスト | `public/apps/tests/` | `tests/` |
 
-> `apps/AUTH_SETUP.md` は `/apps/` の Google ログイン用です。
+> `public/apps/AUTH_SETUP.md` は `/apps/` の Google ログイン用です。
 > 本番認証系の手順はルートの [AUTH_SETUP.md](./AUTH_SETUP.md) を参照してください。
 
 ## 実装済みセクション
@@ -194,9 +204,15 @@ Chrome DevToolsのLighthouseで次を確認します。
 - SEO: 95以上
 - コンソールエラー・警告がないこと
 
-## GitHub Pages
+## 公開
 
-GitHub Pagesでそのまま公開できる、ルート相対ではないファイル参照とビルド不要の構成です。公開前にリポジトリのPages設定と公開URLを確認してください。
+**Vercel が配信します**（2026-08-01 に GitHub Pages から移行）。
+
+- `main` への push → 本番（<https://tsam-ai.com/>）
+- それ以外への push → プレビューURL（Vercel SSO で保護）
+
+静的ページはビルド不要で、ファイル参照はルート相対にしていません。
+手順と設定の所在は [DEPLOYMENT.md](DEPLOYMENT.md) を参照してください。
 
 ## 未確定事項
 
