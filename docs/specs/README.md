@@ -26,6 +26,24 @@
 
 ---
 
+## 現在の有効な要件定義書
+
+要件定義書は、**まだ実装が存在しない機能について「何を作るか」を決めた文書**です。
+実装済みの挙動を規定する上の仕様書とは、位置づけが異なります。
+
+| 要件定義書 | 対象範囲 | 版 |
+| --- | --- | --- |
+| [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`auth/apps.js` / `public/portal/`） | v3.0 |
+
+要件定義書も**実装の正**です。上の仕様書と同じく、コードと食い違う場合は
+コードのほうが間違っているとみなします。
+
+実装が進み、挙動が固まった範囲については、要件定義書とは別に仕様書を起こして
+上の表へ移すか、要件定義書自体を仕様書として扱うかを、そのときに決めます。
+**両方に同じことを書いて二重管理しないでください。**
+
+---
+
 ## `legal/*/index.html` は生成物です
 
 `legal/terms/index.html` `legal/privacy/index.html` `legal/tokusho/index.html` を
