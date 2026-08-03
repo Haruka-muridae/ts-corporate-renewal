@@ -98,7 +98,7 @@ try {
   );
 
   check(
-    '先頭スラッシュのパスを作らない（プロジェクトPages配信で壊れるため）',
+    '先頭スラッシュのパスを作らない（rootPath との連結がスラッシュ2つになるため）',
     Object.keys(config.SCREENS).every((name) => !config.screenPath(name).startsWith('/')),
   );
 
