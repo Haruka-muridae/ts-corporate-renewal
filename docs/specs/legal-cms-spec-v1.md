@@ -185,7 +185,7 @@ Script Property: `AUTH_LEGAL_SPREADSHEET_ID`
 ## §4 生成されるHTML
 
 テンプレートは既存の `/legal/` の見た目をそのまま踏襲する。
-スタイルは `auth/auth.css` を共有し、`Legal.gs` はCSSを持たない。
+スタイルは `public/auth/auth.css` を共有し、`Legal.gs` はCSSを持たない。
 
 - `<h1 class="auth-card__title">` … `meta.title`
 - `<p class="auth-legal__meta">` … `subtitle` と制定・改定・版

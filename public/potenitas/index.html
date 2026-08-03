@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#166534">
+  <title>POTENITAS | 可能性を、仕組みにする。</title>
+  <meta name="description" content="POTENITAS（ポテニタス）は、認知心理学・教育と、業務効率化・AI・ITを軸にしたブランドです。TSアセットマネジメント合同会社（TSAM）が提供しています。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --green:#166534;
+      --green-dark:#14532d;
+      --sky:#38bdf8;
+      --sky-text:#0284c7;
+      --bg:#ffffff;
+      --surface:#f1f3f5;
+      --border:#e2e8f0;
+      --border-strong:#cbd5e1;
+      --text:#1e293b;
+      --muted:#64748b;
+      --font-en:"Inter","Helvetica Neue",Arial,sans-serif;
+      --font-ja:"Noto Sans JP","Hiragino Sans",Meiryo,system-ui,sans-serif;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      min-height:100dvh;
+      display:flex;
+      flex-direction:column;
+      font-family:var(--font-ja);
+      font-size:16px;
+      line-height:1.8;
+      color:var(--text);
+      background:var(--bg);
+      -webkit-font-smoothing:antialiased;
+    }
+    a{color:inherit;text-decoration:none;}
+    :focus-visible{outline:2px solid var(--sky);outline-offset:3px;border-radius:6px;}
+
+    /* 右上メニュー（ハンバーガー） */
+    .menu{
+      position:fixed;
+      top:16px;
+      right:16px;
+      z-index:100;
+    }
+    .menu-btn{
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:5px;
+      width:44px;
+      height:44px;
+      padding:0 11px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--bg);
+      cursor:pointer;
+      transition:border-color .15s ease, background-color .15s ease;
+    }
+    .menu-btn:hover{border-color:var(--border-strong);background:var(--surface);}
+    .menu-btn .bar{
+      height:2px;
+      border-radius:2px;
+      background:var(--text);
+      transition:transform .2s ease, opacity .2s ease;
+    }
+    .menu.is-open .menu-btn .bar:nth-child(1){transform:translateY(7px) rotate(45deg);}
+    .menu.is-open .menu-btn .bar:nth-child(2){opacity:0;}
+    .menu.is-open .menu-btn .bar:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
+    .menu-panel{
+      position:absolute;
+      top:52px;
+      right:0;
+      min-width:180px;
+      padding:8px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--bg);
+      box-shadow:0 8px 24px rgba(30,41,59,.10);
+      display:none;
+    }
+    .menu.is-open .menu-panel{display:block;}
+    .menu-panel a{
+      display:block;
+      padding:10px 14px;
+      border-radius:8px;
+      font-size:14px;
+      letter-spacing:.04em;
+      text-align:left;
+    }
+    .menu-panel a:hover{background:var(--surface);}
+    @media (prefers-reduced-motion: no-preference){
+      .menu.is-open .menu-panel{animation:menuIn .18s ease-out;}
+      @keyframes menuIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+    }
+
+    main{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:0;
+      padding:48px 24px 80px;
+      text-align:center;
+    }
+
+    /* ロゴ：文字の区切りで2分割（POTEN＝深緑／ITAS＝空色） */
+    .wordmark{
+      font-family:var(--font-en);
+      font-size:clamp(44px, 11vw, 84px);
+      font-weight:800;
+      line-height:1.1;
+      letter-spacing:.01em;
+      user-select:none;
+    }
+    .wordmark .p1{color:var(--green);}
+    .wordmark .p2{color:var(--sky);}
+
+    .company{
+      margin-top:8px;
+      font-size:12px;
+      letter-spacing:.08em;
+      color:var(--muted);
+    }
+
+    .tagline{
+      margin-top:36px;
+      font-size:clamp(17px, 4.2vw, 21px);
+      font-weight:500;
+      letter-spacing:.08em;
+    }
+
+    /* 相談窓口（検索窓型） */
+    .ask-wrap{
+      position:relative;
+      width:min(100%, 520px);
+      margin-top:36px;
+      z-index:60;
+    }
+    .ask{
+      display:flex;
+      align-items:center;
+      width:100%;
+      padding:15px 20px 15px 48px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--surface);
+      color:var(--muted);
+      font-size:14px;
+      text-align:left;
+      transition:border-color .15s ease, background-color .15s ease;
+    }
+    .ask:hover{border-color:var(--border-strong);background:#eceef1;}
+    .ask span{opacity:.75;}
+    .ask-icon-btn{
+      position:absolute;
+      left:6px;
+      top:50%;
+      transform:translateY(-50%);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:36px;
+      height:36px;
+      border:none;
+      border-radius:8px;
+      background:none;
+      color:var(--muted);
+      cursor:pointer;
+      z-index:2;
+      transition:background-color .15s ease, color .15s ease;
+    }
+    .ask-icon-btn:hover{background:#e2e5e9;color:var(--text);}
+    .ask-icon{
+      width:16px;
+      height:16px;
+      opacity:.85;
+    }
+    .ask .cycle{
+      transition:opacity .3s ease;
+    }
+    .ask .cycle.is-fading{opacity:0;}
+    .suggest{
+      position:absolute;
+      top:calc(100% + 8px);
+      left:0;
+      right:0;
+      padding:8px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--bg);
+      box-shadow:0 8px 24px rgba(30,41,59,.10);
+      text-align:left;
+      z-index:50;
+    }
+    .suggest[hidden]{display:none;}
+    .suggest a{
+      display:block;
+      padding:10px 14px;
+      border-radius:8px;
+      font-size:14px;
+      letter-spacing:.02em;
+      color:var(--text);
+    }
+    .suggest a:hover{background:var(--surface);}
+    @media (prefers-reduced-motion: no-preference){
+      .suggest:not([hidden]){animation:menuIn .18s ease-out;}
+    }
+
+    /* 専門領域：人＝深緑、IT・AI＝空色 */
+    .fields{
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:center;
+      gap:12px 32px;
+      margin-top:44px;
+      font-size:clamp(16px, 4.4vw, 19px);
+      font-weight:700;
+      letter-spacing:.04em;
+    }
+    .fields .f-human{color:var(--green);}
+    .fields .f-ai{color:var(--sky-text);}
+
+    footer{
+      border-top:1px solid var(--border);
+      padding:16px 24px 20px;
+      font-size:12px;
+      color:var(--muted);
+      text-align:center;
+    }
+    footer .note{letter-spacing:.02em;}
+    .ext:hover{color:var(--text);text-decoration:underline;text-underline-offset:4px;}
+
+    @media (prefers-reduced-motion: no-preference){
+      .rise{animation:rise .5s ease-out both;}
+      .rise-late{animation:rise .5s ease-out .12s both;}
+      @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+    }
+  </style>
+</head>
+<body>
+
+  <div class="menu" id="menu">
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="menuPanel" aria-label="メニューを開く">
+      <span class="bar"></span>
+      <span class="bar"></span>
+      <span class="bar"></span>
+    </button>
+    <nav class="menu-panel" id="menuPanel" aria-label="メニュー">
+      <a href="#">サービス</a>
+      <a href="#">主催者について</a>
+      <a href="https://tsam-ai.com/" target="_blank" rel="noopener">運営会社</a>
+      <a href="mailto:architect@potenitas.com?subject=%E3%81%94%E7%9B%B8%E8%AB%87%EF%BC%88POTENITAS%EF%BC%89">お問い合わせ</a>
+    </nav>
+  </div>
+
+  <main>
+    <h1 class="wordmark rise"><span class="p1">POTEN</span><span class="p2">ITAS</span></h1>
+    <p class="company rise"><a class="ext" href="https://tsam-ai.com/" target="_blank" rel="noopener">TSアセットマネジメント合同会社</a></p>
+
+    <p class="tagline rise">可能性を、仕組みにする。</p>
+
+    <div class="ask-wrap rise-late" id="askWrap">
+      <button class="ask-icon-btn" id="askIconBtn" type="button" aria-expanded="false" aria-controls="askSuggest" aria-label="相談テーマの一覧を表示">
+        <svg class="ask-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+        </svg>
+      </button>
+      <a class="ask" id="askLink" href="mailto:architect@potenitas.com?subject=%E3%81%94%E7%9B%B8%E8%AB%87%EF%BC%88POTENITAS%EF%BC%89">
+        <span class="cycle" id="askCycle" aria-hidden="true">コスパ最強のアプリを使ってみよう</span>
+      </a>
+      <nav class="suggest" id="askSuggest" aria-label="相談テーマ一覧" hidden></nav>
+    </div>
+
+    <p class="fields rise-late">
+      <span class="f-human">認知心理学・教育</span>
+      <span class="f-ai">業務効率化・AI・IT</span>
+    </p>
+  </main>
+
+  <footer>
+    <p class="note">※上記ブランドは<a class="ext" href="https://tsam-ai.com/" target="_blank" rel="noopener">TSAM</a>の提供でお送りしています。</p>
+  </footer>
+
+  <script>
+    (function(){
+      const menu = document.getElementById("menu");
+      const btn = document.getElementById("menuBtn");
+      if(!menu || !btn) return;
+
+      function setOpen(open){
+        menu.classList.toggle("is-open", open);
+        btn.setAttribute("aria-expanded", String(open));
+        btn.setAttribute("aria-label", open ? "メニューを閉じる" : "メニューを開く");
+      }
+      btn.addEventListener("click", function(){
+        setOpen(!menu.classList.contains("is-open"));
+      });
+      document.addEventListener("click", function(e){
+        if(menu.classList.contains("is-open") && !menu.contains(e.target)) setOpen(false);
+      });
+      document.addEventListener("keydown", function(e){
+        if(e.key === "Escape" && menu.classList.contains("is-open")){
+          setOpen(false);
+          btn.focus();
+        }
+      });
+    })();
+
+    (function(){
+      const MAIL_BASE = "mailto:architect@potenitas.com?subject=";
+      function mailHref(text){
+        return MAIL_BASE + encodeURIComponent("ご相談（POTENITAS）：" + text);
+      }
+      // href が指定された文言はそのURLへ、未指定はご相談メールへ
+      const messages = [
+        { text: "コスパ最強のアプリを使ってみよう", href: "https://tsam-ai.com/login/index.html" },
+        { text: "交流会で一歩を踏み出そう",         href: "https://tsam-ai.com/event/index.html" },
+        { text: "AIスキルを身につけよう" },
+        { text: "AI人材を育成しよう" },
+        { text: "AI責任者を外注しよう" },
+        { text: "AI時代のキャリアを考えよう" }
+      ];
+      function hrefOf(m){ return m.href || mailHref(m.text); }
+
+      // 文言のサイクル表示（表示中の文言に合わせて窓のリンク先も切り替え）
+      const el = document.getElementById("askCycle");
+      const askLink = document.getElementById("askLink");
+      function applyMessage(m){
+        el.textContent = m.text;
+        if(askLink){
+          askLink.href = hrefOf(m);
+          askLink.setAttribute("aria-label", m.href ? m.text : "メールで相談する：" + m.text);
+        }
+      }
+      if(el){
+        let i = 0;
+        applyMessage(messages[0]);
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        setInterval(function(){
+          i = (i + 1) % messages.length;
+          if(reduceMotion){
+            applyMessage(messages[i]);
+          }else{
+            el.classList.add("is-fading");
+            setTimeout(function(){
+              applyMessage(messages[i]);
+              el.classList.remove("is-fading");
+            }, 300);
+          }
+        }, 5000);
+      }
+
+      // 虫めがね：相談テーマの一覧を開閉
+      const wrap = document.getElementById("askWrap");
+      const iconBtn = document.getElementById("askIconBtn");
+      const panel = document.getElementById("askSuggest");
+      if(wrap && iconBtn && panel){
+        messages.forEach(function(m){
+          const a = document.createElement("a");
+          a.href = hrefOf(m);
+          a.textContent = m.text;
+          panel.appendChild(a);
+        });
+        function setOpen(open){
+          panel.hidden = !open;
+          iconBtn.setAttribute("aria-expanded", String(open));
+          iconBtn.setAttribute("aria-label", open ? "相談テーマの一覧を閉じる" : "相談テーマの一覧を表示");
+        }
+        iconBtn.addEventListener("click", function(){
+          setOpen(panel.hidden);
+        });
+        document.addEventListener("click", function(e){
+          if(!panel.hidden && !wrap.contains(e.target)) setOpen(false);
+        });
+        document.addEventListener("keydown", function(e){
+          if(e.key === "Escape" && !panel.hidden){
+            setOpen(false);
+            iconBtn.focus();
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

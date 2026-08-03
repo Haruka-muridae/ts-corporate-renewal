@@ -1,6 +1,6 @@
 # KeyStore 仕様書 v1
 
-対象範囲: `auth/keystore.js` ＋ これを使うすべての画面・アプリ
+対象範囲: `public/auth/keystore.js` ＋ これを使うすべての画面・アプリ
 
 制定: 2026年7月31日
 
@@ -12,7 +12,7 @@ KeyStore は、**利用者本人が発行した外部AIサービスのAPIキー*
 その端末のなかだけで預かるための共通資産である。
 
 Portal（`/portal/`）が最初の利用者だが、Portal 専用ではない。
-今後 `apps/` 配下のアプリがキーを使うときも、ここを経由する。
+今後 `public/apps/` 配下のアプリがキーを使うときも、ここを経由する。
 
 認証（当社が発行するセッショントークン）は扱わない。
 そちらは [login-page-detailed-spec-v3.md](./login-page-detailed-spec-v3.md) §7 に従う。
@@ -34,7 +34,7 @@ Portal（`/portal/`）が最初の利用者だが、Portal 専用ではない。
 
 したがって、次のコードを書いてはならない。
 
-- キーを `auth/api.js` のリクエストへ載せる
+- キーを `public/auth/api.js` のリクエストへ載せる
 - キーを `console.log` / `console.error` へ出す
 - キーを URL のクエリ文字列へ載せる（ヘッダーを使う。§5）
 - キーを画面へ平文で表示する（伏せ字にする。§5）
@@ -47,7 +47,7 @@ Portal（`/portal/`）が最初の利用者だが、Portal 専用ではない。
 
 画面やアプリが `localStorage.getItem('tsam-api-keys')` を直接書くと、
 「どこかで GAS へ送っていないか」を確かめる範囲がファイル全体へ広がる。
-入口が1つなら、この仕様書と `auth/keystore.js` を読むだけで確かめられる。
+入口が1つなら、この仕様書と `public/auth/keystore.js` を読むだけで確かめられる。
 
 ---
 
@@ -126,7 +126,7 @@ KeyStore.has(provider)          // boolean
 **KeyStore の仕事ではない。** これらは Gemini という個別サービスの都合である。
 
 KeyStore は「名前をつけて文字列を預かる」ことだけを行う。
-現在それらは `portal/portal.js` にある
+現在それらは `public/portal/portal.js` にある
 （`looksLikeGeminiApiKey()` / `testGeminiApiKey()`）。
 2つ目の利用者が同じ判定を必要としたときに、共通の置き場所へ移す（§6-2）。
 
@@ -143,7 +143,7 @@ AIza•••••••••••••••••••••••••�
 12文字以下の値は全部伏せる。
 「先頭4＋末尾4」を機械的に当てると、8文字なら全部見えてしまう。
 
-入力欄は `type="password"` とし、表示切替（`auth/ui.js` の
+入力欄は `type="password"` とし、表示切替（`public/auth/ui.js` の
 `attachPasswordToggle`）を添える。ログイン画面のパスワード欄と同じ部品を使う。
 
 **保存済みの値を入力欄へ書き戻さない。**
@@ -181,7 +181,7 @@ JSON をファイルとして書き出し、別の端末で読み込ませる形
 
 - `PROVIDERS` に名前を1つ足す
 - 保存の形は変えない（同じ JSON に2件目が入る。§3-1）
-- `auth/keystore.js` は変更不要
+- `public/auth/keystore.js` は変更不要
 
 このとき、形式チェックと疎通テストが2社ぶん必要になる。
 そこで初めて、プロバイダー固有の処理の共通の置き場所を作る（§4-2）。
@@ -210,7 +210,7 @@ JSON をファイルとして書き出し、別の端末で読み込ませる形
 
 ### §8-1 ログアウトで消さない
 
-`auth/session.js` の `signOut()` / `clearSessionToken()` は、
+`public/auth/session.js` の `signOut()` / `clearSessionToken()` は、
 `tsam-api-keys` を掃除の対象に**含めない**。
 
 セッショントークンは当社が発行した認証情報なので、ログアウトで捨てる。
