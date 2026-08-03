@@ -89,6 +89,36 @@ export async function callGoogle(url, {
   }
 }
 
+/*
+ * 本文をテキストとして受け取る呼び出し。
+ * Drive の export（text/plain）だけがこれを使う。
+ */
+export async function callGoogleText(url, { accessToken, progress, signal } = {}) {
+  if (typeof accessToken !== 'string' || accessToken === '') {
+    throw new AppError('OAUTH-001', { progress, detail: 'no_token' });
+  }
+
+  let response;
+
+  try {
+    response = await globalThis.fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+    });
+  } catch {
+    throw new AppError('SHEET-001', { progress, detail: 'network' });
+  }
+
+  if (!response.ok) {
+    throw new AppError(mapGoogleError(response.status, ''), {
+      progress,
+      detail: `http_${response.status}`,
+    });
+  }
+
+  return response.text();
+}
+
 /* JSON を送る呼び出し。 */
 export function callGoogleJson(url, { body, ...options } = {}) {
   return callGoogle(url, {

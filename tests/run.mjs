@@ -47,6 +47,7 @@ const SUITES = [
   { name: 'event-admin', file: 'unit/event-admin.mjs', kind: 'unit' },
   { name: 'event-config', file: 'unit/event-config.mjs', kind: 'unit' },
   { name: 'receipt-ocr', file: 'unit/receipt-ocr.mjs', kind: 'unit' },
+  { name: 'receipt-ocr-phase2', file: 'unit/receipt-ocr-phase2.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
 

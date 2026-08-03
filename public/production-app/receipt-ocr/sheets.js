@@ -109,6 +109,45 @@ export async function readColumn(spreadsheetId, tabTitle, columnKey, {
   return Array.isArray(result?.values?.[0]) ? result.values[0] : [];
 }
 
+/*
+ * 重複判定に要る列だけをまとめて取る（§10）。
+ *
+ * batchGet を使い、列ごとに範囲を指定する。
+ * OCR原文や但し書きは取らない。判定に要らないものを端末へ運ばない。
+ */
+export async function readDuplicateColumns(spreadsheetId, columnKeys, {
+  accessToken,
+  columns = DATA_COLUMNS,
+  tabTitle = TABS.data,
+  signal,
+} = {}) {
+  const targets = columnKeys
+    .map((key) => ({ key, index: columnIndex(columns, key) }))
+    .filter((target) => target.index >= 0);
+
+  if (targets.length === 0) {
+    return {};
+  }
+
+  const url = new URL(`${GOOGLE_API.sheets}/${encodeURIComponent(spreadsheetId)}/values:batchGet`);
+  url.searchParams.set('majorDimension', 'COLUMNS');
+
+  for (const target of targets) {
+    const letter = columnLetter(target.index);
+    url.searchParams.append('ranges', `${tabTitle}!${letter}2:${letter}`);
+  }
+
+  const result = await callGoogle(url.href, { accessToken, signal, progress: PROGRESS.NONE });
+  const ranges = Array.isArray(result?.valueRanges) ? result.valueRanges : [];
+  const out = {};
+
+  targets.forEach((target, i) => {
+    out[target.key] = Array.isArray(ranges[i]?.values?.[0]) ? ranges[i].values[0] : [];
+  });
+
+  return out;
+}
+
 /* ---------- 書き込み ---------- */
 
 function valuesUpdateUrl(spreadsheetId, range) {
