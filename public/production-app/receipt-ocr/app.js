@@ -141,10 +141,17 @@ function checkGeminiKey() {
     return true;
   }
 
-  /* KEY-001 相当。止めずに案内だけ出す。 */
+  /*
+   * KEY-001 相当。案A（既定）ではキーが無くても動くので、止めずに案内だけ出す。
+   *
+   * 誘導先は Portal のキー設定画面。**戻り先は付けない。**
+   * Portal 側にこのアプリへ戻す仕組みは無く、next を付けると
+   * 「戻ってくるはず」と読める導線になってしまう。
+   * 利用者はキーを保存したあと、Portal のアプリ一覧から入り直す。
+   */
   setState(el['ro-state-key'], '未設定（AI補完なしで動作します）', 'warn');
   el['ro-key-link'].hidden = false;
-  el['ro-key-link'].href = `${screenPath('portal')}?next=receipt-ocr`;
+  el['ro-key-link'].href = screenPath('portal');
 
   return false;
 }

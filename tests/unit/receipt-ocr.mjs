@@ -20,7 +20,7 @@
  * ------------------------------------------------------------------
  */
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -786,10 +786,16 @@ try {
      ================================================================ */
   section('規約（§13 / PORTAL_APPS / import の禁止）');
 
+  /*
+   * アプリ側の全ファイル。フェーズを足したらここへ加えること。
+   * 加え忘れると、新しいファイルだけ規約の検査を素通りする。
+   */
   const APP_FILES = [
-    'app.js', 'config.js', 'datetime.js', 'drive.js', 'errors.js',
-    'gateway.js', 'google-api.js', 'hash.js', 'oauth.js',
-    'provisioning.js', 'schema.js', 'sheets.js', 'store.js',
+    'ai-complete.js', 'app.js', 'config.js', 'datetime.js', 'drive.js',
+    'duplicate.js', 'errors.js', 'gateway.js', 'gemini-client.js',
+    'google-api.js', 'hash.js', 'oauth.js', 'ocr.js', 'ocr-drive.js',
+    'ocr-gemini.js', 'provisioning.js', 'record.js', 'schema.js',
+    'sheets.js', 'store.js',
   ];
 
   /*
@@ -947,6 +953,21 @@ try {
 
   check('スキーマ版はドラフト（v1.3 §16.1 との突き合わせが未了）',
     schema.SCHEMA_VERSION.includes('draft'));
+
+  {
+    /*
+     * ファイルの一覧に取りこぼしが無いこと。
+     * ここが漏れると、新しいファイルだけ上の検査を素通りする。
+     */
+    const onDisk = readdirSync(appDir)
+      .filter((name) => name.endsWith('.js'))
+      .sort();
+
+    const listed = [...APP_FILES].sort();
+
+    check(`検査対象が実ファイルと一致する（漏れ: ${onDisk.filter((n) => !listed.includes(n)).join(', ') || 'なし'}）`,
+      JSON.stringify(onDisk) === JSON.stringify(listed));
+  }
 
   storage.clear();
   delete globalThis.localStorage;
