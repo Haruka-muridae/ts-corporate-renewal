@@ -44,17 +44,16 @@
 
 export const PORTAL_APPS = Object.freeze([
   /*
-   * TODO: 本番として公開するアプリが決まり次第、コメントを外して書き換える。
-   *
    * path は **サイトのルートからの相対パス**。先頭に '/' を付けないこと。
    * '/production-app/example/' のようなサイト内絶対パスにすると、
    * プロジェクトPages（https://user.github.io/リポジトリ名/…）配信で
    * 404 になる。この配信形態でも壊れないことを自動テストで確認している。
    */
-  // {
-  //   id: 'example-app',
-  //   name: 'サンプルアプリ',
-  //   description: '本番公開するアプリのみ登録してください。',
-  //   path: 'production-app/example/',
-  // },
+  {
+    id: 'receipt-ocr',
+    name: '領収書スキャナ',
+    description: '領収書の画像から必要な項目を読み取り、あなたのGoogleドライブに保存します。',
+    path: 'production-app/receipt-ocr/',
+    icon: '領',
+  },
 ]);

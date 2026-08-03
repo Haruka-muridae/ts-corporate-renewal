@@ -16,6 +16,7 @@
 | [legal-cms-spec-v1.md](./legal-cms-spec-v1.md) | 法務文書のスプレッドシート管理 ＋ `gas-auth/Legal.gs` ＋ `/legal/` の生成と公開 | v1 |
 | [portal-spec-v1.md](./portal-spec-v1.md) | `/portal/` のレイアウトと表示条件 ＋ `auth/apps.js` | v1.3.1 |
 | [keystore-spec-v1.md](./keystore-spec-v1.md) | 外部AIサービスのAPIキーの保管（`auth/keystore.js`）。端末内のみ・サーバーへ送らない | v1 |
+| [receipt-ocr-v2.md](./receipt-ocr-v2.md) | 領収書スキャナ（`production-app/receipt-ocr/`）。利用者のドライブに保存し、当社サーバーを通さない | v2.0（ドラフト） |
 
 参照するときは、セクション番号（§n）で指し示してください。
 行番号は変わるため使いません。
