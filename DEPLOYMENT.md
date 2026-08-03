@@ -1,134 +1,130 @@
 # デプロイ手順
 
-TSAM AI コーポレートサイト、本番認証システム、交流会申込アプリの公開手順。
+TSAM AI コーポレートサイトと、本番認証システムの公開手順。
 
 ---
 
 ## 現在の公開構成
 
 ```text
-GitHub リポジトリ（main ブランチ）
+GitHub リポジトリ
         │
-        ▼  Vercel（Next.js。push で自動ビルド・自動デプロイ）
-https://tsam-ai.com/
+        ├─ main への push        ──▶ Vercel ──▶ https://tsam-ai.com/（本番）
+        └─ それ以外への push     ──▶ Vercel ──▶ プレビューURL（Vercel SSO で保護）
 ```
 
-**2026年8月1日に GitHub Pages から Vercel へ切り替えました**
-（実施記録: [docs/production-cutover.md](docs/production-cutover.md)）。
-GitHub Pages は無効化済みで、リポジトリのルートに `CNAME` はありません。
-`www.tsam-ai.com` は Vercel の設定で apex へ308リダイレクトします。
+**2026-08-01 に GitHub Pages から Vercel へ移行しました。**
+GitHub Pages は無効化済みで、`CNAME` も削除されています。
+切替の全手順と実施記録は [docs/production-cutover.md](docs/production-cutover.md)、
+移行の設計判断は [docs/vercel-migration.md](docs/vercel-migration.md) にあります。
 
-切替の理由は、交流会申込アプリが Stripe の Webhook 受信と Checkout Session の作成に
-サーバー側の実行環境を必要とするためです。静的配信では動きません。
+### 静的とサーバー実行の2本立て
 
-### 配信されるもの
+| URL | 配信元 | 実行 |
+| --- | --- | --- |
+| `/` | `public/index.html` | 静的 |
+| `/css/` `/js/` `/assets/` | `public/` 配下 | 静的 |
+| `/apps/` | `public/apps/`（**テスト環境**） | 静的 |
+| `/login/` `/pricing/` `/portal/` `/logout/` | `public/` 配下 | 静的 |
+| `/password/setup/` `/password/reset/` | 同上 | 静的 |
+| `/payment/success/` `/payment/cancel/` | 同上 | 静的 |
+| `/legal/` `/event/` `/potenitas/` | 同上 | 静的 |
+| `/auth/` | `public/auth/`（共通JS・CSS） | 静的 |
+| `/event/apply/` 以降 | `app/event/`（Next.js App Router） | **サーバー実行** |
+| `/event/api/stripe/webhook/` | `app/event/api/` | **サーバー実行** |
 
-`public/` 配下はビルドされず、そのままのパスで配信されます。
+**静的ファイルの配信ルートは `public/` です。** リポジトリのルートではありません。
+`public/` の外にあるものは配信されません。
 
-| パス | 実体 |
-| --- | --- |
-| `/` | コーポレートサイト（`public/index.html`） |
-| `/css/` `/js/` `/assets/` | コーポレートサイトの資産 |
-| `/apps/` | **テスト環境**（`public/apps/`） |
-| `/login/` `/pricing/` `/portal/` `/logout/` | 本番認証系（`public/login/` など） |
-| `/password/setup/` `/password/reset/` | 同上 |
-| `/payment/success/` `/payment/cancel/` | 同上 |
-| `/auth/` | 本番認証系の共通JS・CSS |
-| `/legal/` | 法務ページ（生成物。直接編集しない） |
-| `/event/` `/event/legal.html` | 交流会の詳細ページ（静的のまま） |
-| `/potenitas/` | Potenitas LP |
-| `/event/apply/` `/event/admin/` `/event/api/` | **Next.js のルート**（`app/event/`） |
+`next.config.ts` の `rewrites().fallback` が、ディレクトリへのアクセスを
+`index.html` へ解決します。`basePath` は使っていません
+（理由は [docs/vercel-migration.md](docs/vercel-migration.md) §1）。
 
 ### 配信されないもの
 
 | パス | 理由 |
 | --- | --- |
-| `/gas-auth/` | Apps Script のソース。手動でコピーする（下記） |
-| `/tests/` | テストコード |
-| `/app/` `/lib/` `/supabase/` | ソース。ビルドされた結果が `/event/...` として配信される |
-| `/lp-draft/` `/components/` `/content/` `/types/` `/potenitas-lp/` | 未公開のLP用 |
-| `/docs/` | 設計ドキュメント |
+| `gas-auth/` | Apps Script のソース。手動でコピーする（下記） |
+| `tests/` | 本番認証系・交流会・Portal のテストコード |
+| `docs/` | 設計ドキュメント |
+| `supabase/` | マイグレーション |
+| `lp-draft/` | 退避したリニューアル版LP |
 
-> GitHub Pages の時代と違い、`public/` の外にあるファイルは
-> **公開URLからは読めません**（`/docs/...` は404）。
-> 一方、`public/apps/tests/` のように `public/` の中にあるものは、
-> テストコードであっても **URLを直接叩けば読めます。**
-> どちらにせよリポジトリ自体は GitHub にあります。
-> **秘密情報を入れないこと**（Script Properties と Vercel の環境変数に置く運用です）。
+いずれも `public/` の外にあるため、URL を叩いても届きません。
+**Pages 時代と違い、`tests/` や `docs/` は Web からは読めなくなりました。**
+ただしリポジトリは公開されているため、GitHub 上では誰でも読めます。
+**秘密情報を入れないこと**（Script Properties に置く運用にしています）。
 
 ---
 
-## Next.js について（重要）
+## テストの自動実行（CI）
 
-**Next.js が配信の本体です。** `public/` の静的ファイルは Next.js が配信し、
-`app/event/` 配下のページ・サーバーアクション・ルートハンドラが動的な部分を担います。
+`.github/workflows/test.yml` が push と Pull Request で `npm test` を走らせます。
 
-構成上、次の2点は変更する前に [next.config.ts](next.config.ts) 冒頭のコメントと
-[docs/vercel-migration.md](docs/vercel-migration.md) を読んでください。
-どちらも実際に事故を起こした結果、こうしてあります。
-
-- **`basePath` を使わない。** `basePath: "/event"` は `public/` 配下の静的ファイルにも
-  効くため、ルート（`/`）が404になります。
-- **rewrites は `fallback` で返す。** `afterFiles` にするとルートハンドラより先に
-  評価され、`/event/api/...` が `index.html` への書き換えに飲まれて404になります。
-
-`.github/workflows/nextjs.yml.disabled` は GitHub Pages 時代の名残です。
-**有効化しないでください。** Pages への公開を再開させるもので、現在の構成とは両立しません。
+**CI はデプロイに関与しません。** 配信は Vercel の Git 連携が行い、
+CI が落ちてもデプロイは止まりません。公開を止めたい場合は、
+GitHub のブランチ保護でこのワークフローを必須チェックに指定してください。
 
 ---
 
-## デプロイ
+## Next.js について
 
-特別な操作はありません。`main` へマージすれば、Vercel が自動でビルドして
-1〜2分で反映されます。**マージはそのまま本番公開です。**
+Next.js（`app/` `components/` `lib/`）は **Vercel 上で動いています。**
 
-Pull Request を作るとプレビューURLが発行されます。本番へ入れる前の確認に使えます。
+| 対象 | 状態 |
+| --- | --- |
+| `app/event/` | 交流会申込アプリ。**稼働中**（Stripe 決済・Webhook・管理画面） |
+| `lp-draft/` | リニューアル版LP。現行サイトと URL が衝突するため退避。未配信 |
+| `.github/workflows/nextjs.yml.disabled` | Pages 時代の残骸。無効のまま |
 
-> **環境変数を変えたときは再デプロイが必要です。**
-> 既存のデプロイには反映されません（Deployments → 最新のデプロイ → Redeploy）。
+`next.config.ts` から `output: "export"` は外してあります
+（Webhook 受信と Checkout Session 作成にサーバー実行が要るため）。
+経緯は [docs/vercel-migration.md](docs/vercel-migration.md)。
+
+---
+
+## 静的サイト側のデプロイ
+
+特別な操作はありません。`main` へマージすれば数分で反映されます。
 
 ### 公開前の確認
 
 ```bash
-npm run build            # ビルドが通ること
-npm run typecheck        # 型エラーが無いこと
 npm run lint             # 追加分に警告が無いこと
-npm test                 # /apps/ 分と、本番認証系・交流会アプリの両方
+npm run typecheck        # 型エラーが無いこと
+npm test                 # 既存 /apps/ 分と本番認証系の両方
 ```
-
-`npm run lint` は `public/apps/` 配下の既存ファイル（ベンダーバンドルやビルド済み成果物を
-含む）由来のエラーを多数報告します。移行前からの状態で、CI が実行するのは `npm test` だけです。
-**自分が触った範囲に新しい警告を足さないこと**を基準にしてください。
 
 `npm test` は Chrome を起動します。
 見つからない場合は環境変数 `CHROME_PATH` を設定してください。
 
 ### ローカルでの確認
 
+静的ページだけを見るなら、配信ルート（`public/`）を直接開きます。
+
+```bash
+py -m http.server 8000 --directory public
+```
+
+<http://localhost:8000/login/> を開きます。
+
+Next.js のルート（`/event/apply/` 以降）も見るなら、こちらを使います。
+
 ```bash
 npm run dev
 ```
 
-<http://localhost:3000/login/> や <http://localhost:3000/event/apply/> を開きます。
-
-- 本番と同じく、`public/` の静的ファイルと Next.js のルートが同居した状態になります。
 - `file://` では ES モジュールが読めません。必ず HTTP サーバー経由で開いてください。
 - API を呼ぶ操作は、`public/auth/config.js` の `apiUrl` が設定済みでないと
   「この機能は現在ご利用いただけません。」で止まります（想定どおりの挙動です）。
-- 交流会アプリは `.env.local` の環境変数が必要です（下記）。
-  Stripe の Webhook をローカルで受けるには次を使います。
 
-```bash
-stripe listen --forward-to http://127.0.0.1:3000/event/api/stripe/webhook/
-```
+### HTTPS
 
-### HTTPS・ドメイン
+Vercel がドメインへ証明書を自動発行し、HTTP は HTTPS へ転送します。
+**リポジトリ側で設定する項目はありません**（`CNAME` は削除済み）。
 
-証明書は Vercel が発行・更新します。リポジトリ側の設定はありません。
-
-DNS は Cloudflare で管理しています。`tsam-ai.com` の A レコード（`76.76.21.21`）と
-`www` の CNAME（`cname.vercel-dns.com`）は、いずれも **プロキシを「DNS only」**に
-してあります。オレンジの雲を通すと Vercel の証明書の発行・更新が失敗することがあります。
+DNS は Cloudflare で管理しています（A レコード4件 ＋ `www` の CNAME）。
+切替の記録は [docs/production-cutover.md](docs/production-cutover.md)。
 
 ---
 
@@ -139,7 +135,7 @@ DNS は Cloudflare で管理しています。`tsam-ai.com` の A レコード�
 [AUTH_SETUP.md](./AUTH_SETUP.md) の手順1〜5を参照してください。要点のみ:
 
 1. スタンドアロンの Apps Script プロジェクトを作る
-   （`/apps/` が使っているものとは **別プロジェクト**）
+   （既存の `gas/` とは **別プロジェクト**）
 2. `gas-auth/*.gs` を貼り付ける（拡張子を除いた名前で）
 3. `appsscript.json` を差し替える
 4. `setupAuthSystem()` を実行して権限を承認する
@@ -162,8 +158,7 @@ DNS は Cloudflare で管理しています。`tsam-ai.com` の A レコード�
 新規に作ると `/exec` URL が変わり、以下の更新が必要になります。
 
 - `public/auth/config.js` の `apiUrl`
-- Stripe の Webhook エンドポイントURL（本番認証系のもの。
-  交流会アプリの Webhook は Vercel 側で受けるため無関係です）
+- Stripe の Webhook エンドポイントURL
 
 ### clasp を使う場合
 
@@ -178,26 +173,24 @@ clasp deploy --deploymentId <既存のデプロイID> --description "v2"
 ## リリース手順（推奨）
 
 1. 作業ブランチで実装する
-2. `npm run build` と `npm test` が全件成功することを確認する
-3. Pull Request を作り、**Vercel のプレビューURLで確認する**
-4. Apps Script を変更した場合は更新し、既存デプロイを新バージョンへ更新する
-5. `checkAuthSetup()` で設定を点検する
-6. ステージング相当の確認
+2. `npm test` が全件成功することを確認する
+3. Apps Script を更新し、既存デプロイを新バージョンへ更新する
+4. `checkAuthSetup()` で設定を点検する
+5. ステージング相当の確認
    - Stripe をテストモードのままにして、通し確認を行う
    - 管理者アカウントでログイン・ログアウトを確認する
-7. `main` へマージする（force push しない）。マージした時点で本番へ出ます
-8. 1〜2分後、本番URLで確認する
-   - `/` が表示される
-   - `/login/` が表示され、`/portal/` が未ログインで `/login/` へ戻る
+6. `main` へマージする（force push しない）
+7. 数分後、本番URLで確認する
+   - `/login/` が表示される
+   - `/portal/` が未ログインで `/login/` へ戻る
    - `/apps/` が従来どおり動く（回帰確認）
-   - `/event/` と `/event/apply/` が表示される
-9. Stripe をライブモードへ切り替える（[STRIPE_SETUP.md](./STRIPE_SETUP.md) 手順6）
+8. Stripe をライブモードへ切り替える（[STRIPE_SETUP.md](./STRIPE_SETUP.md) 手順6）
 
 ---
 
 ## ロールバック
 
-### サイト（Vercel）
+### 静的サイト
 
 **急ぐときは Vercel の Deployments 画面から、直前の正常な本番デプロイを
 本番へ昇格させます。**リポジトリを触らずに戻せます。
@@ -238,28 +231,16 @@ URL は変わらないため、フロント側の変更は不要です。
 | ファイル | 設定するもの |
 | --- | --- |
 | `public/auth/config.js` | Apps Script Web アプリの `/exec` URL |
-| `.env.example` | 退避中のリニューアル版LP用（`lp-draft/`）。交流会アプリは使いません |
+| `public/portal/app-source.js` | アプリ一覧のスプレッドシートID |
+| `.env.example` | ローカル開発用の雛形 |
 
-公開ドメインはリポジトリではなく Vercel 側の設定です（`CNAME` は削除済み）。
+公開ドメインは **Vercel 側**で登録します。`CNAME` ファイルはもうありません。
 
 ### Vercel（環境変数）
 
-交流会申込アプリが使います。**Production / Preview / Development の3環境すべてに
-登録し、変更したら再デプロイします。** ローカルは `.env.local` に同じものを置きます。
-
-| 変数名 | 用途 |
-| --- | --- |
-| `STRIPE_SECRET_KEY` | Checkout Session の作成（本番は `sk_live_…`） |
-| `STRIPE_WEBHOOK_SECRET` | Webhook の署名検証。**`stripe listen` が出すローカル用とは別の値** |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | 決済画面（本番は `pk_live_…`） |
-| `SUPABASE_URL` | Supabase プロジェクト（`tsam-event`）のURL |
-| `SUPABASE_ANON_KEY` | 管理画面のログイン（Supabase Auth） |
-| `SUPABASE_SERVICE_ROLE_KEY` | 申込の読み書き。**`NEXT_PUBLIC_` を付けない**（付けるとブラウザへ配信される） |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GMAIL_REFRESH_TOKEN` / `MAIL_FROM` | 参加確定メールの送信（[docs/gmail-setup.md](docs/gmail-setup.md)） |
-| `NEXT_PUBLIC_BASE_URL` | 決済後の戻り先の土台（本番: `https://tsam-ai.com/event`） |
-
-値の前後に空白や改行、BOM を混ぜないこと。アプリ側で除去していますが
-（[lib/event/config.mjs](lib/event/config.mjs)）、混入させないに越したことはありません。
+Stripe / Supabase / Gmail の値は **Vercel の環境変数にだけ**置きます。
+リポジトリにもフロントエンドのコードにも書きません。
+一覧は [docs/vercel-migration.md](docs/vercel-migration.md) §3。
 
 ### Apps Script（Script Properties）
 
@@ -271,10 +252,15 @@ URL は変わらないため、フロント側の変更は不要です。
 
 ---
 
-## 同居している3つの系の分離
+## 既存 `/apps/` への影響
 
-Vercel への移行でファイルの位置は `public/` 配下へ動きましたが、
-**それぞれが独立している点は変わりません。** 片方の都合でもう片方を変えないでください。
+**今回の変更は `/apps/` 配下のファイルを1つも変更していません。**
+
+- `/apps/` は従来どおりテスト環境として動作します
+- 既存の Google ログイン、お気に入り、音声レコーダー等はそのままです
+- 既存のテスト（`npm run test:apps`）が全件成功することを確認しています
+
+本番認証系と `/apps/` は、次の点で完全に分かれています。
 
 | | `/apps/`（テスト環境） | 本番認証系 | 交流会申込アプリ |
 | --- | --- | --- | --- |

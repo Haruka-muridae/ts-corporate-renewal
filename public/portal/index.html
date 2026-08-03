@@ -229,11 +229,106 @@
           <button class="auth-portal-banner__action" id="portal-api-key-action" type="button">APIキーを設定する</button>
         </div>
 
-        <ul class="auth-apps" id="portal-apps"></ul>
+        <!--
+          アプリのページ式グリッド。
+          2列×4行＝8枠で1ページ。ページ数は max(2, ceil(件数/8))。
+          中身は portal.js が描く（空枠は「準備中」）。
 
-        <p class="auth-loading" id="portal-apps-empty" hidden>
-          ご利用可能なアプリは順次追加されます。
-        </p>
+          空状態の案内文は置かない。準備中の枠そのものが
+          「まだ何も入っていない」ことを示す。
+          詳細は docs/specs/apps-grid-spec-v1.md。
+        -->
+        <section class="auth-apps" aria-labelledby="portal-apps-title">
+          <h2 class="auth-apps__heading" id="portal-apps-title">お気に入り</h2>
+
+          <div class="auth-apps__pages" id="portal-apps"></div>
+
+          <nav class="auth-apps__pager" id="portal-apps-pager" aria-label="アプリのページ送り">
+            <button class="auth-apps__arrow" id="portal-apps-prev" type="button" aria-label="前のページ">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="m15 18-6-6 6-6"></path>
+              </svg>
+            </button>
+
+            <div class="auth-apps__dots" id="portal-apps-dots" role="group" aria-label="ページの選択"></div>
+
+            <button class="auth-apps__arrow" id="portal-apps-next" type="button" aria-label="次のページ">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
+            </button>
+          </nav>
+
+          <!--
+            並べ替えの結果を読み上げへ伝える。
+            画面では位置が見えるが、キーボード操作では見えないため。
+          -->
+          <p class="auth-visually-hidden" id="portal-apps-live" role="status" aria-live="polite"></p>
+
+          <p class="auth-message auth-apps__message" id="portal-apps-message" tabindex="-1" hidden></p>
+
+          <!--
+            お気に入りを初期状態に戻す。保存キーを消して、お気に入りを空にする。
+            取り消せないので確認を1枚挟む。
+          -->
+          <div class="auth-apps__reset">
+            <button class="auth-apps__reset-button" id="portal-apps-reset" type="button">お気に入りを初期状態に戻す</button>
+
+            <div class="auth-apps__confirm" id="portal-apps-reset-confirm" role="group"
+                 aria-labelledby="portal-apps-reset-text" hidden>
+              <p class="auth-apps__confirm-text" id="portal-apps-reset-text">
+                お気に入りをすべて外して、初期状態（空）に戻します。よろしいですか。
+              </p>
+              <div class="auth-apps__confirm-actions">
+                <button class="auth-button auth-apps__danger" id="portal-apps-reset-confirm-yes" type="button">戻す</button>
+                <button class="auth-button auth-button--ghost" id="portal-apps-reset-confirm-no" type="button">やめる</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!--
+          全アプリ一覧（カタログ）。
+          お気に入りに入っていないアプリだけを出す。
+          「お気に入りに追加」を押すと、上のお気に入りの末尾へ移る。
+
+          埋め枠（準備中）は置かない。カタログは「まだ選んでいないものの
+          一覧」であって、枠を並べて見せるものではない。
+          詳細は docs/specs/apps-grid-spec-v1.md §12。
+        -->
+        <section class="auth-catalog" aria-labelledby="portal-catalog-title">
+          <h2 class="auth-catalog__heading" id="portal-catalog-title">全アプリ一覧</h2>
+
+          <div class="auth-catalog__pages" id="portal-catalog"></div>
+
+          <p class="auth-catalog__empty" id="portal-catalog-empty" hidden>
+            すべてのアプリをお気に入りに追加済みです。
+          </p>
+
+          <nav class="auth-apps__pager" id="portal-catalog-pager" aria-label="全アプリ一覧のページ送り" hidden>
+            <button class="auth-apps__arrow" id="portal-catalog-prev" type="button" aria-label="前のページ">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="m15 18-6-6 6-6"></path>
+              </svg>
+            </button>
+
+            <div class="auth-apps__dots" id="portal-catalog-dots" role="group" aria-label="ページの選択"></div>
+
+            <button class="auth-apps__arrow" id="portal-catalog-next" type="button" aria-label="次のページ">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
+            </button>
+          </nav>
+        </section>
       </div>
 
       <noscript>

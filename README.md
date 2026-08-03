@@ -2,57 +2,54 @@
 
 ## プロジェクト概要
 
-TSアセットマネジメント合同会社のコーポレートサイトです。サイト本体はHTML、CSS、Vanilla JavaScriptのみで構成し、ビルド処理や外部ライブラリを使用していません。PC、タブレット、スマートフォンに対応しています。
+TSアセットマネジメント合同会社の静的なコーポレートサイトです。HTML、CSS、Vanilla JavaScriptのみで構成し、ビルド処理や外部ライブラリを使用していません。PC、タブレット、スマートフォンに対応しています。
 
-同じリポジトリで、TSAM AI サービスの本番用ログイン・Portal・決済連携と、交流会の申込・決済アプリも配信しています。
-
-**配信は Vercel（Next.js）です。** 2026年8月1日に GitHub Pages から切り替えました
-（[docs/production-cutover.md](docs/production-cutover.md)）。`public/`配下は従来どおり
-ビルドせずそのまま配信され、`/event/apply/`以降だけがNext.jsのルートです。
-詳細は[DEPLOYMENT.md](./DEPLOYMENT.md)を参照してください。
+同じリポジトリで、TSAM AI サービスの本番用ログイン・Portal・決済連携も配信しています。
 
 ## ファイル構成
 
 ```text
 .
-├── public/                   ── そのまま配信される（ビルドしない）
+├── public/                   ── 配信ルート（Vercel はここを静的に配る）
 │   ├── index.html               コーポレートサイト
 │   ├── css/ js/ assets/         コーポレートサイトの資産
-│   ├── login/                   ── 本番認証系（TSAM AI）
-│   ├── pricing/                    料金プラン選択
-│   ├── portal/                     Portal（要ログイン）
-│   ├── password/setup/             パスワード初期設定
-│   ├── password/reset/             パスワード再設定
-│   ├── payment/success/            決済完了
-│   ├── payment/cancel/             決済キャンセル
-│   ├── logout/                     ログアウト
-│   ├── auth/                       上記の共通JS・CSS
-│   ├── legal/                   法務ページ（生成物。直接編集しない）
-│   ├── event/                   交流会の詳細ページ（静的のまま）
-│   ├── apps/                    アプリポータル（テスト環境。従来どおり）
-│   └── potenitas/               Potenitas LP
+│   ├── login/                ── 本番認証系（TSAM AI）
+│   ├── pricing/                 料金プラン選択
+│   ├── portal/                  Portal（要ログイン。アプリのグリッド）
+│   ├── password/setup/          パスワード初期設定
+│   ├── password/reset/          パスワード再設定
+│   ├── payment/success/         決済完了
+│   ├── payment/cancel/          決済キャンセル
+│   ├── logout/                  ログアウト
+│   ├── auth/                    上記の共通JS・CSS
+│   ├── legal/                   法務文書（生成物）
+│   ├── event/                   交流会の告知ページ（静的部分）
+│   ├── potenitas/               Potenitas ページ
+│   └── apps/                 ── アプリポータル（テスト環境。従来どおり）
 │
-├── app/event/                ── 交流会申込アプリ（Next.js）
-│   ├── apply/                   申込フォーム・確認・完了
-│   ├── admin/                   管理画面（要ログイン）
-│   └── api/stripe/webhook/      Stripe Webhook の受け口
-├── lib/event/                   同アプリのロジック（.mjs ＋ 型定義 .d.mts）
-├── supabase/migrations/         同アプリのDBスキーマ
+├── app/event/                ── 交流会申込アプリ（Next.js。サーバー実行）
+│                                申込・決済・Stripe Webhook・管理画面
+├── components/ lib/ types/      Next.js の共通部品
+├── lp-draft/                    リニューアル版LP（退避。未配信）
 │
-├── gas-auth/                 ── 認証バックエンド（Apps Script。配信しない）
-├── tests/                       本番認証系と交流会アプリの自動テスト
-│
-├── lp-draft/                 ── リニューアル版LP（未公開・退避中）
-├── components/ content/ types/  上記LPが参照する。稼働中のアプリは使わない
-├── potenitas-lp/                別系統のPotenitas LP（配信していない）
+├── gas-auth/                    認証バックエンド（Apps Script。配信しない）
+├── supabase/migrations/         交流会アプリのDBスキーマ
+├── tests/                       本番認証系・交流会・Portal の自動テスト
+├── .github/workflows/test.yml   CI（テスト実行のみ。デプロイには関与しない）
 │
 ├── docs/
-├── AGENTS.md / CLAUDE.md
+├── AGENTS.md
 ├── README.md
 └── SITE_SPEC.md
 ```
 
-`labs/`（TSAM AI とは無関係な同居プロジェクト用。現時点では未作成）の扱いは
+**`public/` の外にあるものは配信されません。**
+`tests/` `docs/` `gas-auth/` は URL を叩いても届きません
+（リポジトリは公開されているため、GitHub 上では読めます）。
+
+`labs/`（TSAM AI とは無関係な同居プロジェクト）はまだ存在しません。
+
+`labs/` の扱い（共通資産を参照しない・公開の前提・指示書のスコープ）は
 [docs/repository-structure.md](docs/repository-structure.md)で宣言しています。
 
 `SITE_SPEC.md`は、掲載文章、会社情報、デザイン、レスポンシブ、アクセシビリティ、SEOの実装基準です。
@@ -95,8 +92,7 @@ TSアセットマネジメント合同会社のコーポレートサイトです
 
 ### 法務ページ（`/legal/`）は生成物です
 
-`public/legal/terms/index.html` `public/legal/privacy/index.html`
-`public/legal/tokusho/index.html` は、
+`legal/terms/index.html` `legal/privacy/index.html` `legal/tokusho/index.html` は、
 スプレッドシート「TSAM AI 法務文書」から生成されます。
 
 > **これらのHTMLを直接編集しないでください。**
@@ -187,23 +183,15 @@ Next.jsのルートです。2026年8月1日に本番受付を開始しました�
 
 ## ローカルでの確認方法
 
-本番と同じ構成（`public/`の静的ファイルとNext.jsのルートが同居した状態）で確認するには、
-プロジェクトのルートで開発サーバーを起動します。
+VS CodeのLive Serverを利用する場合は、`index.html`を開いて「Open with Live Server」を実行します。Live Serverがない環境では、プロジェクトのルートで次のような静的ファイルサーバーを起動できます。
 
 ```powershell
-npm run dev
+python -m http.server 8000
 ```
 
-その後、`http://localhost:3000/`へアクセスします。本番認証系は
-`http://localhost:3000/login/`、交流会の申込は`http://localhost:3000/event/apply/`です。
+その後、`http://localhost:8000/`へアクセスします。
 
-静的ページだけを見る場合は、`public/`を配信する静的ファイルサーバーでも確認できます。
-この場合、`/event/apply/`以降のNext.jsのルートは動きません。
-
-```powershell
-python -m http.server 8000 --directory public
-```
-
+本番認証系は `http://localhost:8000/login/` です。
 ESモジュールを使うため、`file://` では開けません。必ずHTTPサーバー経由で開いてください。
 
 ## テスト
@@ -241,13 +229,15 @@ Chrome DevToolsのLighthouseで次を確認します。
 - SEO: 95以上
 - コンソールエラー・警告がないこと
 
-## デプロイ
+## 公開
 
-`main`へマージすると、Vercelが自動でデプロイします。**マージはそのまま本番公開です。**
-GitHub Pagesは無効化済みで、リポジトリのルートに`CNAME`はありません。
+**Vercel が配信します**（2026-08-01 に GitHub Pages から移行）。
 
-公開前の確認、Apps Scriptの更新、ロールバック、環境変数の一覧は
-[DEPLOYMENT.md](./DEPLOYMENT.md)にあります。
+- `main` への push → 本番（<https://tsam-ai.com/>）
+- それ以外への push → プレビューURL（Vercel SSO で保護）
+
+静的ページはビルド不要で、ファイル参照はルート相対にしていません。
+手順と設定の所在は [DEPLOYMENT.md](DEPLOYMENT.md) を参照してください。
 
 ## 未確定事項
 
@@ -257,3 +247,7 @@ GitHub Pagesは無効化済みで、リポジトリのルートに`CNAME`はあ�
 
 公開URLは`https://tsam-ai.com/`で確定しました。`public/index.html`には
 canonicalと`og:url`のTODOコメントが残っているため、確定した値へ差し替える作業が残っています。
+favicon は設定済みです。
+
+利用規約・プライバシーポリシーは、ログイン画面と料金プラン画面から
+`/legal/` へリンク済みです（「準備中」ではありません）。
