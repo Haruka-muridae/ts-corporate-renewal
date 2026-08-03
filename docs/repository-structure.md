@@ -1,6 +1,6 @@
 # リポジトリ構成
 
-制定: 2026年7月31日 / 更新: 2026年8月2日（Vercel移行に追従）
+制定: 2026年7月31日 / 更新: 2026年8月3日（Vercel移行に追従、本番アプリ領域を追加）
 
 このリポジトリには、**TSAM AI と無関係な別プロジェクトが同居する。**
 独立したドメインのコストを当面かけないための判断であり、
@@ -28,7 +28,8 @@
 | --- | --- | --- |
 | **TSAM AI 本体（静的）** | `public/index.html`（コーポレートサイト）<br>`public/` 配下の `css/` `js/` `assets/` `event/`<br>`login/` `portal/` `pricing/` `password/` `payment/` `logout/` `legal/`<br>`auth/`（共通JS・CSS）<br>`gas-auth/`（Apps Script。配信しない）<br>`docs/` `tests/`（配信しない） | 本番。仕様書は `docs/specs/` が正 |
 | **TSAM AI 本体（Next.js）** | `app/event/`（交流会申込アプリ）<br>`lib/event/` `supabase/` | 本番。仕様は `docs/` の `event-*` と [vercel-migration.md](./vercel-migration.md) |
-| **テスト環境** | `public/apps/` | TSAM AI のアプリ実験場。本体と地続きで、`public/auth/` 等を参照してよい |
+| **本番アプリ領域** | `public/production-app/<アプリID>/` | **Portal（`/portal/`）に載せる本番アプリの置き場所。**<br>現時点では未作成。最初のアプリは `card-ocr`（[specs/meishi-ocr-requirements-v3.md](./specs/meishi-ocr-requirements-v3.md)）<br>`PORTAL_APPS` の `path` に `apps/` を含めない・先頭に `/` を付けない（`auth/apps.js`、自動テストで固定） |
+| **テスト環境** | `public/apps/` | TSAM AI のアプリ実験場。本体と地続きで、`public/auth/` 等を参照してよい。<br>**本番アプリからここを import しない**（流用はコピー） |
 | **別プロジェクト領域** | `labs/` | **TSAM AI とは無関係な同居プロジェクト。**<br>現時点では空（未作成）。`labs/<プロジェクト名>/` の形で追加する |
 | （参考）未公開のLP | `lp-draft/` `components/` `content/` `types/` `potenitas-lp/` | 配信していない。稼働中のアプリは参照しない |
 

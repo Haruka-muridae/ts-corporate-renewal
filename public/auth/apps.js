@@ -13,7 +13,7 @@
  *     description: '会議の録音を、その場でMP3に変換して保存します。',
  *     // サイトのルートからの相対パス。先頭に '/' を付けない
  *     // （プロジェクトPages配信で壊れるため）。
- *     path: 'app/voice-recorder/',
+ *     path: 'production-app/voice-recorder/',
  *     // 任意。カードのアイコンに出す1〜2文字（絵文字も可）。
  *     // 省略するとアプリ名の1文字目を使う。
  *     icon: '録',
@@ -47,9 +47,19 @@ export const PORTAL_APPS = Object.freeze([
    * TODO: 本番として公開するアプリが決まり次第、コメントを外して書き換える。
    *
    * path は **サイトのルートからの相対パス**。先頭に '/' を付けないこと。
-   * '/production-app/example/' のようなサイト内絶対パスにすると、
-   * プロジェクトPages（https://user.github.io/リポジトリ名/…）配信で
-   * 404 になる。この配信形態でも壊れないことを自動テストで確認している。
+   *
+   * カードのリンクは portal.js が `rootPath() + path` で組み立てる。
+   * 先頭に '/' があると、その連結結果がスラッシュ2つになる。
+   *
+   *   'production-app/example/'   → '../production-app/example/'
+   *                               → https://tsam-ai.com/production-app/example/
+   *   '/production-app/example/'  → '..//production-app/example/'
+   *                               → https://tsam-ai.com//production-app/example/  ← 別のURL
+   *
+   * また auth/ 配下は screenPath() / rootPath() で相対リンクに統一してある。
+   * 1か所だけ絶対パスを混ぜると、深さの指定（setScreenDepth）が効かなくなる。
+   * 先頭スラッシュを作らないことは自動テストで確認している
+   * （tests/unit/frontend.mjs「Portal のアプリ一覧」「画面パスの解決」）。
    */
   // {
   //   id: 'example-app',
