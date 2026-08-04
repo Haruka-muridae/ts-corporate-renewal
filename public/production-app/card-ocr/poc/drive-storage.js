@@ -1,10 +1,13 @@
 /*
  * 保存構造の解決（要件定義書 §FR-07、8.1 ステージ0）。
  *
+ * **検証ページ専用の名前を使う**（下の ★ を参照）。
+ * 本番アプリと同じ名前にすると、同じクライアントIDのため取り合いになる。
+ *
  *   マイドライブ
  *   └─ TSAM AI
- *      └─ 名刺データ
- *         ├─ 名刺管理（Googleスプレッドシート）
+ *      └─ 名刺データ（フェーズ0検証）
+ *         ├─ 名刺管理（フェーズ0検証）（Googleスプレッドシート）
  *         └─ images
  *
  * ==================================================================
@@ -53,11 +56,34 @@ import {
   searchFiles,
 } from './drive-api.js';
 
-/* 要件定義書 §FR-07 の構成。 */
+/*
+ * ==================================================================
+ * ★ 保存先の名前を本番アプリと分けている（2026-08-04）
+ * ==================================================================
+ * もとは §FR-07 のとおり `TSAM AI/名刺データ/` ＋ `名刺管理` だったが、
+ * **本番アプリと同じ名前・同じクライアントIDだったため、本番が
+ * この検証ページの作った台帳を拾ってしまった。**
+ *
+ * `drive.file` の可視範囲はクライアントIDごとに決まる。オリジンが
+ * 違っても、同じクライアントIDなら同じファイルが見える。
+ * 検証ページと本番アプリは同じIDを使っているので、名前が同じなら
+ * 必ずぶつかる。
+ *
+ * 実際に本番の初回起動で、この検証ページが作った `名刺管理`
+ * （既定のタブ1つだけ）が見つかり、本番側がタブを補修した。
+ *
+ * この検証ページはフェーズ2の測定まで残す（計画 §3-3）。
+ * それまで衝突しないよう、**アプリフォルダ・台帳・キャッシュキー・
+ * 一時ドキュメントの接頭辞をすべて検証用の名前にする。**
+ *
+ * ルートの `TSAM AI` だけは共有してよい。ここは本番も検証も
+ * 「作って中に置く」だけで、中身を取り違える余地がない。
+ * ==================================================================
+ */
 export const ROOT_FOLDER_NAME = 'TSAM AI';
-export const APP_FOLDER_NAME = '名刺データ';
+export const APP_FOLDER_NAME = '名刺データ（フェーズ0検証）';
 export const IMAGE_FOLDER_NAME = 'images';
-export const SPREADSHEET_NAME = '名刺管理';
+export const SPREADSHEET_NAME = '名刺管理（フェーズ0検証）';
 
 /* 要件定義書 §12 が許す3系統のうちの1つ。 */
 const SHEETS_ENDPOINT = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -67,11 +93,16 @@ const SHEETS_ENDPOINT = 'https://sheets.googleapis.com/v4/spreadsheets';
  *
  * **ここに入るのはIDだけ。** 名刺データもトークンも入れない
  * （要件定義書 §FR-21）。
+ *
+ * **本番アプリとは別のキーにする。** 同じオリジンに配信されるので、
+ * 同じキー名だと localStorage を取り合うことになる。名前が違えば
+ * verifyCachedId が弾いて自己修復はするが、毎回キャッシュが無駄になり、
+ * 原因も分かりにくい。
  */
 export const STORAGE_KEYS = Object.freeze({
-  appFolder: 'tsam-card-ocr-app-folder-id',
-  imageFolder: 'tsam-card-ocr-image-folder-id',
-  spreadsheet: 'tsam-card-ocr-spreadsheet-id',
+  appFolder: 'tsam-card-ocr-poc-app-folder-id',
+  imageFolder: 'tsam-card-ocr-poc-image-folder-id',
+  spreadsheet: 'tsam-card-ocr-poc-spreadsheet-id',
 });
 
 /* 保存領域が使えない環境（プライベートモード等）でも壊れない。 */
@@ -298,7 +329,7 @@ export async function resolveSpreadsheet(parentFolderId, { token, fetchImpl }) {
  * 画面でこの値を見て確かめる。
  */
 export async function ensureStorage({ token, fetchImpl }) {
-  const root = await resolveFolder(ROOT_FOLDER_NAME, null, 'tsam-card-ocr-root-folder-id', {
+  const root = await resolveFolder(ROOT_FOLDER_NAME, null, 'tsam-card-ocr-poc-root-folder-id', {
     token,
     fetchImpl,
   });
@@ -331,7 +362,7 @@ export async function ensureStorage({ token, fetchImpl }) {
 
 /* 検証をやり直すためにキャッシュだけ捨てる。Drive 上の実体は消さない。 */
 export function clearStorageCache() {
-  dropCache('tsam-card-ocr-root-folder-id');
+  dropCache('tsam-card-ocr-poc-root-folder-id');
 
   for (const key of Object.values(STORAGE_KEYS)) {
     dropCache(key);

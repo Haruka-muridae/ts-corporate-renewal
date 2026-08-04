@@ -766,9 +766,35 @@ try {
 
   const storage = await import('../../public/production-app/card-ocr/poc/drive-storage.js');
 
-  check('フォルダ名は要件定義書 FR-07 のとおり', storage.ROOT_FOLDER_NAME === 'TSAM AI');
-  check('アプリフォルダ名は 名刺データ', storage.APP_FOLDER_NAME === '名刺データ');
-  check('台帳名は 名刺管理', storage.SPREADSHEET_NAME === '名刺管理');
+  check('ルートは要件定義書 FR-07 のとおり', storage.ROOT_FOLDER_NAME === 'TSAM AI');
+
+  /*
+   * ==================================================================
+   * **本番アプリと同じ名前を使わない**（2026-08-04）
+   * ==================================================================
+   * drive.file の可視範囲はクライアントIDごとに決まる。検証ページと
+   * 本番アプリは同じIDを使っているので、名前が同じだと本番が
+   * この検証ページの作った台帳を拾う。実際に起きた。
+   *
+   * 検証ページはフェーズ2の測定まで残すため、それまで衝突しない
+   * ことをここで固定する。
+   * ==================================================================
+   */
+  check(
+    '**アプリフォルダ名が本番と違う**',
+    storage.APP_FOLDER_NAME !== '名刺データ' && storage.APP_FOLDER_NAME.includes('検証'),
+    storage.APP_FOLDER_NAME,
+  );
+  check(
+    '**台帳名が本番と違う**',
+    storage.SPREADSHEET_NAME !== '名刺管理' && storage.SPREADSHEET_NAME.includes('検証'),
+    storage.SPREADSHEET_NAME,
+  );
+  check(
+    '**キャッシュキーが本番と違う（同じオリジンで取り合わない）**',
+    Object.values(storage.STORAGE_KEYS).every((key) => key.startsWith('tsam-card-ocr-poc-')),
+    Object.values(storage.STORAGE_KEYS).join(','),
+  );
   check(
     'card-scanner のフォルダ名を使っていない',
     storage.APP_FOLDER_NAME !== '名刺スキャナ',
@@ -957,7 +983,7 @@ try {
     check('401 は投げ返す', caught?.code === driveApi.DriveErrorCode.UNAUTHORIZED);
     check(
       '**401 でキャッシュを捨てない**',
-      globalThis.localStorage.getItem('tsam-card-ocr-root-folder-id') === rootId,
+      globalThis.localStorage.getItem('tsam-card-ocr-poc-root-folder-id') === rootId,
     );
 
     /* 認可が戻れば、そのまま同じIDで解決できる。 */
