@@ -41,7 +41,7 @@
 
 | 要件定義書 | 対象範囲 | 版 |
 | --- | --- | --- |
-| [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.1 |
+| [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.2 |
 
 要件定義書も**実装の正**です。上の仕様書と同じく、コードと食い違う場合は
 コードのほうが間違っているとみなします。
@@ -49,6 +49,14 @@
 実装が進み、挙動が固まった範囲については、要件定義書とは別に仕様書を起こして
 上の表へ移すか、要件定義書自体を仕様書として扱うかを、そのときに決めます。
 **両方に同じことを書いて二重管理しないでください。**
+
+### 付随する計画書
+
+| 文書 | 内容 |
+| --- | --- |
+| [card-ocr-phase0-plan.md](./card-ocr-phase0-plan.md) | 名刺OCRアプリのフェーズ0（方式検証PoC）の実行計画。テスト環境 `card-scanner` の監査結果、検証項目の仕分け、事業者側の作業手順 |
+
+計画書は要件定義書の**下位**です。食い違う場合は要件定義書が正。
 
 ---
 

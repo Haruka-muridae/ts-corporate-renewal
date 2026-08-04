@@ -1,0 +1,177 @@
+/*
+ * 検証ページ固有のスタイル。
+ *
+ * 見た目の土台は auth/auth.css を再利用する（要件定義書 FR-01）。
+ * ここには、この検証ページにしか要らないものだけを置く。
+ * 接頭辞は poc-。
+ */
+
+.poc-banner {
+  margin: 0 0 1.5rem;
+  padding: 0.875rem 1rem;
+  border: 2px solid #b45309;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #7c2d12;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.poc-banner__removal {
+  display: block;
+  margin-top: 0.375rem;
+  font-weight: 700;
+}
+
+.poc-lead {
+  margin: 0 0 2rem;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+.poc-section {
+  margin: 0 0 2.5rem;
+}
+
+.poc-section__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.0625rem;
+}
+
+.poc-section__note {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.8;
+  color: #475569;
+}
+
+.poc-subtitle {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.poc-result {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.poc-actions {
+  margin: 0 0 1rem;
+}
+
+.poc-message {
+  margin: 1rem 0;
+}
+
+/*
+ * 表は横に長くなりうる。狭い画面では表だけを横スクロールさせ、
+ * ページ本体には横スクロールを出さない。
+ */
+.poc-table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.poc-table__caption {
+  text-align: left;
+  padding-bottom: 0.5rem;
+  color: #475569;
+  font-size: 0.8125rem;
+}
+
+.poc-table th,
+.poc-table td {
+  border: 1px solid #cbd5e1;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.poc-table th {
+  background: #f1f5f9;
+  font-weight: 700;
+}
+
+.poc-ok { color: #15803d; font-weight: 700; }
+.poc-ng { color: #b91c1c; font-weight: 700; }
+
+.poc-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+.poc-list__ok { color: #15803d; }
+.poc-list__ng { color: #b91c1c; font-weight: 700; }
+
+/*
+ * エラーの原因の要約。
+ *
+ * サーバーが返した理由をそのまま出す欄。長い英文が入るので、
+ * 等幅にして折り返す。**ここを潰すと切り分けができなくなる。**
+ */
+.poc-detail {
+  margin: 0.5rem 0 1rem;
+  padding: 0.75rem;
+  border-left: 4px solid #b45309;
+  border-radius: 4px;
+  background: #fffbeb;
+  color: #7c2d12;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/*
+ * 測定モードの警告。
+ * 結果がメモリにしかないことを見落とすと、測り直しになる。
+ */
+.poc-warn {
+  margin: 0 0 1.25rem;
+  padding: 0.875rem 1rem;
+  border-left: 4px solid #b91c1c;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: #7f1d1d;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+/*
+ * OCR の結果本文。
+ * 名刺の中身が入るため、画面から溢れさせず折り返す。
+ */
+.poc-ocr-text {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem;
+  max-height: 20rem;
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.poc-footer {
+  margin: 2.5rem 0 0;
+  font-size: 0.9375rem;
+}
+
+/* 320px でも表以外が横に溢れないようにする。 */
+@media (max-width: 480px) {
+  .poc-table th,
+  .poc-table td {
+    padding: 0.4375rem 0.5rem;
+  }
+}
