@@ -52,6 +52,7 @@ const SUITES = [
   { name: 'receipt-ocr-phase3', file: 'unit/receipt-ocr-phase3.mjs', kind: 'unit' },
   { name: 'receipt-ocr-review', file: 'unit/receipt-ocr-review.mjs', kind: 'unit' },
   { name: 'card-ocr-poc', file: 'unit/card-ocr-poc.mjs', kind: 'unit' },
+  { name: 'card-ocr', file: 'unit/card-ocr.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
 
