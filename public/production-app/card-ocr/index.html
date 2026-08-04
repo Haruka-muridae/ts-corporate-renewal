@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>名刺OCR｜TSAM AI</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy（フェーズ0 の残項目15）
+  ==================================================================
+  next.config.ts の headers() ではなく meta で宣言する。
+  next.config.ts は public/ 全体の配信に効くため、このアプリのために
+  触ると本体サイトを巻き込む。領収書OCRが meta 方式で成立している。
+
+  script-src に accounts.google.com が入っているのは Google Identity
+  Services のためで、これは認可そのものの提供元である。
+  **ここへ他のホストを足さないこと。**
+
+  connect-src は要件定義書 §12 の3系統に、TSAM AI 認証系（Apps Script）を
+  加えたもの。script.googleusercontent.com は Apps Script が
+  リダイレクト先に使うため必要。
+
+  img-src の blob: は、選んだ画像をプレビューするため（フェーズ2で使う）。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../css/style.css">
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <!--
+      guardPage() が利用者を返すまで中身を出さない。
+      hidden を外すのは app.js だけ。
+    -->
+    <p id="co-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="co-content" hidden>
+
+      <header class="co-header">
+        <h1 class="co-title">名刺OCR</h1>
+        <p class="co-lead">
+          名刺の画像から項目を読み取り、<strong>あなた自身のGoogleドライブ</strong>に保存します。
+        </p>
+      </header>
+
+      <!--
+        利用上の明示事項（要件定義書 §5.3）。
+        §10.1 は「初回利用時」としているが、初回かどうかは保存構造を
+        作ったかどうかで判定する予定で、その実装は次のPR。
+        それまでは SC-00 で常時表示する（案内を出しすぎる側に倒す）。
+      -->
+      <section class="co-panel co-panel--notice" aria-labelledby="co-notice-title">
+        <h2 id="co-notice-title" class="co-panel-title">ご利用の前に</h2>
+        <ul class="co-notice-list">
+          <li>名刺データと画像は<strong>あなたのGoogleドライブにのみ</strong>保存されます。当社は受信も保管も閲覧もしません。</li>
+          <li>バックアップ・整理・削除・共有設定・容量の管理は、あなた自身で行ってください。当社は復旧の義務を負いません。</li>
+          <li>Gemini APIの利用費（有料キーの場合）は、あなたに課金されます。</li>
+          <li><strong>無料枠のキーでは、送信したテキストがGoogleのプロダクト改善に使われる場合があります。</strong>名刺は第三者の個人情報のため、業務でお使いの場合は有料区分のキーをおすすめします。</li>
+          <li>名刺情報（第三者の個人情報）の取り扱いに関する法令の遵守は、データを保有するあなたの責任で行ってください。</li>
+          <li>保存フォルダやスプレッドシートを削除・移動された場合、次回起動時に新しい保存先を作ります。過去データとの連続性は保証しません。</li>
+        </ul>
+      </section>
+
+      <!-- 前提の一覧（SC-00）。誘導とは別に、3つとも状態を見せる。 -->
+      <section class="co-panel" aria-labelledby="co-status-title">
+        <h2 id="co-status-title" class="co-panel-title">準備の状況</h2>
+        <dl id="co-status" class="co-status"></dl>
+      </section>
+
+      <!--
+        誘導。**該当するものだけを1つ出す**（要件定義書 §10.1）。
+        中身は app.js が textContent で組み立てる（innerHTML を使わない）。
+      -->
+      <section id="co-guidance" class="co-panel co-panel--guidance" aria-live="polite" hidden>
+        <h2 id="co-guidance-title" class="co-panel-title"></h2>
+        <p id="co-guidance-text" class="co-guidance-text"></p>
+
+        <div class="co-actions">
+          <a id="co-login-link" class="auth-button" href="../../login/" hidden>ログインする</a>
+          <a id="co-portal-link" class="auth-button" href="../../portal/" hidden>ポータルでキーを設定する</a>
+          <button id="co-connect" type="button" class="auth-button" hidden>Googleと連携する</button>
+        </div>
+      </section>
+
+      <!-- 準備が整ったときだけ出す。中身はフェーズ2で作る。 -->
+      <section id="co-ready" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">準備ができました</h2>
+        <p class="co-guidance-text">
+          名刺の読み取りは次の段階で実装します。現在は前提の確認までを行います。
+        </p>
+        <button id="co-disconnect" type="button" class="auth-button auth-button--ghost">連携を解除する</button>
+      </section>
+
+      <p id="co-message" class="auth-message" role="status" aria-live="polite" tabindex="-1" hidden></p>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+
+</body>
+</html>
