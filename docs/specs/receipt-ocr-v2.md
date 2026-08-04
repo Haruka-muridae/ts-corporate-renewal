@@ -80,8 +80,14 @@ v1.3の1〜2章の目的（領収書画像から必須項目を自動抽出し�
 * 名称（仮）：領収書スキャナ
 * アプリID：`receipt-ocr`
 * 配置：`public/production-app/receipt-ocr/`（Portalと同一オリジン＝KeyStore参照の必須条件）
-* PORTAL_APPSの登録パスに`apps/`を含めない（自動テストが禁止している）
+* Portalへの掲載は`APP_REGISTRY`（`public/portal/app-registry.js`）へ1件追加する。項目は`id` / `name` / `href` / `icon`の4つ。**`href`に`apps/`を含めない・先頭に`/`を付けない**（自動テストが禁止している）
+* `id`は配置データ（`tsam-app-layout`の`order`）が指す先であり、**あとから変えない**（[apps-grid-spec-v1.md](./apps-grid-spec-v1.md) §4-c）。本アプリはアプリIDと同じ`receipt-ocr`とする
 * テスト環境`/apps/`のコードをimportしない。流用するロジックは本番側へ複製する
+
+> **2026年8月4日の追記**: Portalのアプリ定義が`public/auth/apps.js`（`PORTAL_APPS`、キー名`path`）から
+> `public/portal/app-registry.js`（`APP_REGISTRY`、キー名`href`）へ移設されたため、本書の名称を追随させた。
+> **制約の中身（`apps/`を含めない・先頭に`/`を付けない）は変えていない。**
+> 前身のv1.3にも旧名称のままの記述が残るが、そちらは歴史的記録として手を入れない。
 
 ---
 

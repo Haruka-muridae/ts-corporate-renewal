@@ -7,75 +7,79 @@ TSAM AI コーポレートサイトと、本番認証システムの公開手順
 ## 現在の公開構成
 
 ```text
-GitHub リポジトリ（main ブランチのルート）
+GitHub リポジトリ
         │
-        ▼  GitHub Pages（Deploy from a branch）
-https://tsam-ai.com/
+        ├─ main への push        ──▶ Vercel ──▶ https://tsam-ai.com/（本番）
+        └─ それ以外への push     ──▶ Vercel ──▶ プレビューURL（Vercel SSO で保護）
 ```
 
-**リポジトリのルートがそのまま配信されます。**
-ビルドは行われません。`index.html` や `login/index.html` が
-そのままの位置で公開されます。
+**2026-08-01 に GitHub Pages から Vercel へ移行しました。**
+GitHub Pages は無効化済みで、`CNAME` も削除されています。
+切替の全手順と実施記録は [docs/production-cutover.md](docs/production-cutover.md)、
+移行の設計判断は [docs/vercel-migration.md](docs/vercel-migration.md) にあります。
 
-### 配信されるもの
+### 静的とサーバー実行の2本立て
 
-| パス | 内容 |
-| --- | --- |
-| `/` | コーポレートサイト（`index.html`） |
-| `/css/` `/js/` `/assets/` | コーポレートサイトの資産 |
-| `/apps/` | **テスト環境**（既存。今回は変更していません） |
-| `/login/` `/pricing/` `/portal/` `/logout/` | 本番認証系（今回追加） |
-| `/password/setup/` `/password/reset/` | 同上 |
-| `/payment/success/` `/payment/cancel/` | 同上 |
-| `/auth/` | 本番認証系の共通JS・CSS |
+| URL | 配信元 | 実行 |
+| --- | --- | --- |
+| `/` | `public/index.html` | 静的 |
+| `/css/` `/js/` `/assets/` | `public/` 配下 | 静的 |
+| `/apps/` | `public/apps/`（**テスト環境**） | 静的 |
+| `/login/` `/pricing/` `/portal/` `/logout/` | `public/` 配下 | 静的 |
+| `/password/setup/` `/password/reset/` | 同上 | 静的 |
+| `/payment/success/` `/payment/cancel/` | 同上 | 静的 |
+| `/legal/` `/event/` `/potenitas/` | 同上 | 静的 |
+| `/auth/` | `public/auth/`（共通JS・CSS） | 静的 |
+| `/event/apply/` 以降 | `app/event/`（Next.js App Router） | **サーバー実行** |
+| `/event/api/stripe/webhook/` | `app/event/api/` | **サーバー実行** |
+
+**静的ファイルの配信ルートは `public/` です。** リポジトリのルートではありません。
+`public/` の外にあるものは配信されません。
+
+`next.config.ts` の `rewrites().fallback` が、ディレクトリへのアクセスを
+`index.html` へ解決します。`basePath` は使っていません
+（理由は [docs/vercel-migration.md](docs/vercel-migration.md) §1）。
 
 ### 配信されないもの
 
 | パス | 理由 |
 | --- | --- |
-| `/gas-auth/` | Apps Script のソース。手動でコピーする（下記） |
-| `/gas/` | 同上（お気に入り機能用） |
-| `/tests/` `/apps/tests/` | テストコード |
-| `/app/` `/components/` `/lib/` `/content/` | Next.js のソース（現在ビルドされていない） |
-| `/docs/` | 設計ドキュメント |
+| `gas-auth/` | Apps Script のソース。手動でコピーする（下記） |
+| `tests/` | 本番認証系・交流会・Portal のテストコード |
+| `docs/` | 設計ドキュメント |
+| `supabase/` | マイグレーション |
+| `lp-draft/` | 退避したリニューアル版LP |
 
-> `.gs` ファイルや `tests/` がリポジトリに含まれるため、
-> URL を直接叩けば内容は読めます。
-> **秘密情報を入れないこと**（Script Properties に置く運用にしています）。
+いずれも `public/` の外にあるため、URL を叩いても届きません。
+**Pages 時代と違い、`tests/` や `docs/` は Web からは読めなくなりました。**
+ただしリポジトリは公開されているため、GitHub 上では誰でも読めます。
+**秘密情報を入れないこと**（Script Properties に置く運用にしています）。
 
 ---
 
-## Next.js について（重要）
+## テストの自動実行（CI）
 
-このリポジトリには Next.js（`app/` `components/` `lib/`）が同居していますが、
-**現在デプロイされていません。**
+`.github/workflows/test.yml` が push と Pull Request で `npm test` を走らせます。
 
-- `.github/workflows/nextjs.yml.disabled` … 無効化されたワークフロー
-- 経緯: `67a800b ci: deploy Next.js site to GitHub Pages` → `e78ac36 revert: disable Potenitas Pages workflow`
+**CI はデプロイに関与しません。** 配信は Vercel の Git 連携が行い、
+CI が落ちてもデプロイは止まりません。公開を止めたい場合は、
+GitHub のブランチ保護でこのワークフローを必須チェックに指定してください。
 
-### ワークフローを再度有効化する場合の注意
+---
 
-`next.config.ts` は `output: "export"` で、ビルド結果は `out/` に出ます。
-このワークフローは `out/` だけを Pages へアップロードします。
+## Next.js について
 
-**そのまま有効化すると、以下がすべて 404 になります。**
+Next.js（`app/` `components/` `lib/`）は **Vercel 上で動いています。**
 
-- `/apps/`（テスト環境）
-- `/login/` `/pricing/` `/portal/` など（本番認証系）
-- ルートの `index.html`（コーポレートサイト）
+| 対象 | 状態 |
+| --- | --- |
+| `app/event/` | 交流会申込アプリ。**稼働中**（Stripe 決済・Webhook・管理画面） |
+| `lp-draft/` | リニューアル版LP。現行サイトと URL が衝突するため退避。未配信 |
+| `.github/workflows/nextjs.yml.disabled` | Pages 時代の残骸。無効のまま |
 
-`out/` に含まれるのは `app/` 配下から生成されたページと `public/` の中身だけだからです。
-
-有効化するなら、いずれかの対応が必要です。
-
-1. ビルド後に `apps/` `auth/` `login/` `pricing/` `portal/` `logout/`
-   `password/` `payment/` を `out/` へコピーする手順をワークフローへ足す
-2. これらのディレクトリを `public/` 配下へ移す
-   （その場合、各HTMLの相対パスと `auth/config.js` の `setScreenDepth()` を見直す）
-3. Next.js を別プロジェクト・別ドメインで配信する
-
-**現状のまま（ワークフロー無効）が最も安全です。**
-本書は現状の構成を前提にしています。
+`next.config.ts` から `output: "export"` は外してあります
+（Webhook 受信と Checkout Session 作成にサーバー実行が要るため）。
+経緯は [docs/vercel-migration.md](docs/vercel-migration.md)。
 
 ---
 
@@ -96,20 +100,31 @@ npm test                 # 既存 /apps/ 分と本番認証系の両方
 
 ### ローカルでの確認
 
+静的ページだけを見るなら、配信ルート（`public/`）を直接開きます。
+
 ```bash
-py -m http.server 8000
+py -m http.server 8000 --directory public
 ```
 
 <http://localhost:8000/login/> を開きます。
 
+Next.js のルート（`/event/apply/` 以降）も見るなら、こちらを使います。
+
+```bash
+npm run dev
+```
+
 - `file://` では ES モジュールが読めません。必ず HTTP サーバー経由で開いてください。
-- API を呼ぶ操作は、`auth/config.js` の `apiUrl` が設定済みでないと
+- API を呼ぶ操作は、`public/auth/config.js` の `apiUrl` が設定済みでないと
   「この機能は現在ご利用いただけません。」で止まります（想定どおりの挙動です）。
 
 ### HTTPS
 
-リポジトリの Settings → Pages で **「Enforce HTTPS」を有効**にしてください。
-`CNAME` に `tsam-ai.com` が入っています。
+Vercel がドメインへ証明書を自動発行し、HTTP は HTTPS へ転送します。
+**リポジトリ側で設定する項目はありません**（`CNAME` は削除済み）。
+
+DNS は Cloudflare で管理しています（A レコード4件 ＋ `www` の CNAME）。
+切替の記録は [docs/production-cutover.md](docs/production-cutover.md)。
 
 ---
 
@@ -127,7 +142,7 @@ py -m http.server 8000
 5. 「デプロイ」→「新しいデプロイ」→ ウェブアプリ
    - 実行するユーザー: **自分**
    - アクセスできるユーザー: **全員**
-6. `/exec` URL を `auth/config.js` の `apiUrl` へ貼る
+6. `/exec` URL を `public/auth/config.js` の `apiUrl` へ貼る
 
 ### 更新するとき
 
@@ -142,7 +157,7 @@ py -m http.server 8000
 **「新しいデプロイ」ではなく「デプロイを管理」から既存を編集してください。**
 新規に作ると `/exec` URL が変わり、以下の更新が必要になります。
 
-- `auth/config.js` の `apiUrl`
+- `public/auth/config.js` の `apiUrl`
 - Stripe の Webhook エンドポイントURL
 
 ### clasp を使う場合
@@ -177,13 +192,20 @@ clasp deploy --deploymentId <既存のデプロイID> --description "v2"
 
 ### 静的サイト
 
-`main` を1つ前のコミットへ戻す（revert コミットを作る）。
+**急ぐときは Vercel の Deployments 画面から、直前の正常な本番デプロイを
+本番へ昇格させます。**リポジトリを触らずに戻せます。
+
+コード側を直すときは、`main` を1つ前のコミットへ戻します（revert コミットを作る）。
 **force push は行わないでください。**
 
 ```bash
 git revert <コミットハッシュ>
 git push origin main
 ```
+
+> デプロイを戻しても、**Supabase のデータと環境変数は戻りません。**
+> スキーマを変えるマイグレーションを適用したあとにコードだけ戻すと、
+> 食い違ったまま動くことになります。
 
 ### Apps Script
 
@@ -208,9 +230,17 @@ URL は変わらないため、フロント側の変更は不要です。
 
 | ファイル | 設定するもの |
 | --- | --- |
-| `auth/config.js` | Apps Script Web アプリの `/exec` URL |
-| `CNAME` | 公開ドメイン（`tsam-ai.com`） |
-| `.env.example` | Next.js 用（現在未使用） |
+| `public/auth/config.js` | Apps Script Web アプリの `/exec` URL |
+| `public/portal/app-source.js` | アプリ一覧のスプレッドシートID |
+| `.env.example` | ローカル開発用の雛形 |
+
+公開ドメインは **Vercel 側**で登録します。`CNAME` ファイルはもうありません。
+
+### Vercel（環境変数）
+
+Stripe / Supabase / Gmail の値は **Vercel の環境変数にだけ**置きます。
+リポジトリにもフロントエンドのコードにも書きません。
+一覧は [docs/vercel-migration.md](docs/vercel-migration.md) §3。
 
 ### Apps Script（Script Properties）
 
@@ -232,13 +262,13 @@ URL は変わらないため、フロント側の変更は不要です。
 
 本番認証系と `/apps/` は、次の点で完全に分かれています。
 
-| | `/apps/`（テスト環境） | 本番認証系 |
-| --- | --- | --- |
-| 認証 | Supabase（未接続）＋ダミー | Apps Script + スプレッドシート |
-| セッションキー | `tsam-ai-session` | `tsam-auth-session` |
-| Apps Script | `gas/`（お気に入り用） | `gas-auth/`（認証用） |
-| 共通JS | `apps/shared/` | `auth/` |
-| テスト | `apps/tests/` | `tests/` |
+| | `/apps/`（テスト環境） | 本番認証系 | 交流会申込アプリ |
+| --- | --- | --- | --- |
+| 認証 | Supabase（未接続）＋ダミー | Apps Script + スプレッドシート | Supabase Auth（管理画面のみ） |
+| セッションキー | `tsam-ai-session` | `tsam-auth-session` | Cookie `tsam-event-admin` |
+| バックエンド | Apps Script（このリポジトリには無い） | `gas-auth/` | Next.js サーバー（`app/event/`） |
+| 共通JS | `public/apps/shared/` | `public/auth/` | `lib/event/` |
+| テスト | `public/apps/tests/` | `tests/` | `tests/`（`event-*`） |
 
 セッションの保存キーが違うため、片方にログインしても
 もう片方には影響しません。
@@ -251,10 +281,16 @@ URL は変わらないため、フロント側の変更は不要です。
 
 | 確認先 | 見るもの |
 | --- | --- |
-| `TSAM AI 認証ログ` → `system_error_logs` | Webhook の失敗、メール送信の失敗 |
+| Vercel → Deployments | ビルドの失敗（失敗したデプロイは本番へ出ません） |
+| Vercel → Logs（Functions） | サーバーアクション・Webhook の実行時エラー |
+| Stripe ダッシュボード → Webhook | 配信の失敗。決済は成立するのに「支払済み」にならない場合はここ |
+| Supabase → `webhook_events` | 処理できなかったイベント |
+| `TSAM AI 認証ログ` → `system_error_logs` | 本番認証系の Webhook の失敗、メール送信の失敗 |
 | `TSAM AI ユーザー管理` → `stripe_events` | `processing_status` が `failed` の行 |
-| Stripe ダッシュボード → Webhook | 配信の失敗 |
 | Apps Script → 実行数 | エラー率の上昇 |
 
 Apps Script の実行が失敗した場合、
 プロジェクト所有者宛にGoogleから通知メールが届きます。
+
+症状からの切り分け表は
+[docs/production-cutover.md](docs/production-cutover.md) の末尾にあります。

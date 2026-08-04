@@ -57,7 +57,7 @@
 
 ## 4. クライアント側バリデーション
 
-- 未入力・形式不正の文言は `auth/ui.js` の MESSAGES(フロント管理)
+- 未入力・形式不正の文言は `public/auth/ui.js` の MESSAGES(フロント管理)
 - 送信前に trim。メール小文字化はサーバー側正規化と一致
 - サーバー由来エラーの文言をフロントで作り直さない(`error.userMessage` をそのまま表示)。**理由: フロントで理由を推測・追記するとアカウント列挙耐性が崩れるため**
 
@@ -65,7 +65,7 @@
 
 ## 5. API 契約(実装確定値)
 
-通信は `auth/api.js` のみを窓口とする。fetch 直呼び禁止。
+通信は `public/auth/api.js` のみを窓口とする。fetch 直呼び禁止。
 `Content-Type: text/plain;charset=utf-8`。**理由: application/json はプリフライト(OPTIONS)を発生させるが、GAS Web アプリは OPTIONS に応答できないため、単純リクエストに収める必要がある**
 
 ### 5.1 action ホワイトリスト(Config.gs / Main.gs)
@@ -78,7 +78,7 @@ POST : login, logout, verifySession, setupPassword,
 別経路: POST /exec?path=stripe-webhook&k=<合言葉>
 ```
 
-REST パス形式を採らないのは GAS の単一エンドポイント制約による。将来別基盤へ移行する場合の変換点は `auth/api.js` に限定する(画面コードは影響を受けない構造を維持)。
+REST パス形式を採らないのは GAS の単一エンドポイント制約による。将来別基盤へ移行する場合の変換点は `public/auth/api.js` に限定する(画面コードは影響を受けない構造を維持)。
 
 ### 5.2 login リクエスト
 
@@ -330,7 +330,7 @@ v3 と実装の突き合わせ検証で判明した4件の不一致について�
 | 1 | §2-4 | メールアドレス入力の `autocomplete` を `email` → `username` へ | **仕様を実装に合わせた**。ログインフォームでは `username` が WHATWG の推奨で、`current-password` と対にすることでパスワードマネージャが正しく認識する。`email` は登録フォーム向けの用法 |
 | 2 | §2-9 | メッセージ領域を #8 へ繰り上げ、位置を「remember とログインボタンの間」と明記(表の並びも実装順へ修正) | **仕様を実装に合わせた**。送信前にエラーが読み上げられ、ボタンまでのフォーカス移動が短くなる |
 | 3 | §2-12 | 「フッター」→「カード末尾のリンク群(auth-links)」へ | **仕様を実装に合わせた**。`<footer>` 要素には社名とコピーライトのみを置く |
-| 4 | §5.3 / §7 | 記述は変更なし | **実装を仕様に合わせた**。`auth/session.js` の `writeProfile` / `readProfile` を削除し、`tsam-auth-profile` キーへの書き込み・参照を全廃した。仕様の「保存するのはトークン文字列のみ」が実装でも成立する状態になった |
+| 4 | §5.3 / §7 | 記述は変更なし | **実装を仕様に合わせた**。`public/auth/session.js` の `writeProfile` / `readProfile` を削除し、`tsam-auth-profile` キーへの書き込み・参照を全廃した。仕様の「保存するのはトークン文字列のみ」が実装でも成立する状態になった |
 
 4 について: 削除前の実装は `{ email, role }` を保存していたが読み出し箇所が無く、認可判断にも使っていなかったため、挙動の変化はない。将来「あるなら使えばよい」と誤用される余地を断つために削除した。既存利用者の端末に残る `tsam-auth-profile` は、ログアウト時(`signOut` → `clearSessionToken`)に削除される。
 

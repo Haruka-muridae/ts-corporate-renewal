@@ -9,8 +9,12 @@ TSAM AI の本番認証システム（`gas-auth/` と `/login/` ほか）につ�
 
 ## 1. 静的ホスティングの限界（最重要）
 
-このサイトは GitHub Pages 上の静的ファイルとして配信される。
-**サーバー側でリクエストを止める仕組みが無い。**
+このサイトの**大部分は Vercel 上の静的ファイル**として配信される（`public/` 配下）。
+静的ファイルについては、**サーバー側でリクエストを止める仕組みが無い。**
+
+例外は `app/event/` 配下（交流会申込アプリ）で、こちらは Next.js の
+サーバー実行がある。以下の「限界」は静的ファイル側の話であり、
+`app/event/` の API ルートには当てはまらない。
 
 ### 守れるもの
 
@@ -210,8 +214,12 @@ Google の提供する UUID v4 が予測可能である前提は置いていな�
 - 利用者入力を DOM へ流す経路を作っていない。
 
 CSP（Content-Security-Policy）は **未導入**。
-GitHub Pages ではレスポンスヘッダーを制御できないため。
-`<meta http-equiv>` での指定は今回の範囲では入れていない。
+
+Pages 時代はヘッダーを制御できないことが理由だった。
+**Vercel 移行（2026-08-01）でその制約は無くなっている**
+（`next.config.ts` の `headers()` などで指定できる）。
+導入していないのは、まだ着手していないためであって、できないからではない。
+`<meta http-equiv>` での指定も入れていない。
 
 ---
 
@@ -317,13 +325,13 @@ Apps Script のロックはスクリプト単位のため、
 | トークン用シークレット | Script Properties | × | × |
 | パスワード pepper | Script Properties | × | × |
 | Stripe Price ID | `plans` シート | × | ○ |
-| Apps Script Web アプリURL | `auth/config.js` | ○ | ― |
+| Apps Script Web アプリURL | `public/auth/config.js` | ○ | ― |
 
 `Config.gs` の `SECRET_KEYS` により、
 秘密情報キーは設定シート経由では読み出せないようにしている
 （誤って設定シートに書いても、コードは参照しない）。
 
-`auth/config.js` の `apiUrl` は公開エンドポイントであり秘密ではない。
+`public/auth/config.js` の `apiUrl` は公開エンドポイントであり秘密ではない。
 このリポジトリには実URLを入れていない（空のままコミットしている）。
 
 ### Drive とスプレッドシートの共有設定
@@ -337,11 +345,11 @@ Apps Script のロックはスクリプト単位のため、
 
 ## 11. HTTPS
 
-GitHub Pages はカスタムドメインでも HTTPS を提供する。
-リポジトリ設定の **「Enforce HTTPS」を有効にすること**。
+Vercel がドメインへ証明書を自動発行し、HTTP は HTTPS へ転送する。
+リポジトリ側で有効化する設定は無い（`CNAME` は削除済み）。
 
 Apps Script の Web アプリは常に HTTPS。
-`auth/config.js` の `isApiConfigured()` は `https://script.google.com/...` 以外を
+`public/auth/config.js` の `isApiConfigured()` は `https://script.google.com/...` 以外を
 設定済みと判定しないため、誤って HTTP のURLを入れても通信しない。
 
 ---
@@ -353,7 +361,7 @@ Apps Script の Web アプリは常に HTTPS。
 | 項目 | 状況 |
 | --- | --- |
 | 二段階認証（TOTP） | 未実装。`/apps/` 側には Supabase 前提の実装があるが、本番系には入れていない |
-| CSP（Content-Security-Policy） | 未導入。GitHub Pages でヘッダーを制御できないため |
+| CSP（Content-Security-Policy） | 未導入。Vercel 移行でヘッダーは制御できるようになったが、まだ着手していない（§9） |
 | IP単位のレート制限 | 不可能（Apps Script が送信元IPを取得できない） |
 | セッションの端末一覧・個別失効UI | 未実装。`sessions` シートを直接編集すれば失効できる |
 | 管理画面 | 未実装。利用者の停止・再開はスプレッドシートを直接編集する |
@@ -377,7 +385,7 @@ Apps Script の Web アプリは常に HTTPS。
 - `PBKDF2_ITERATIONS` を変えたら `benchmarkPasswordHashing()` で所要時間を確認する
 - Apps Script を再デプロイしたら、`/exec` URL が変わっていないか確認する
   （「デプロイを管理」→ 既存デプロイの編集なら URL は変わらない。
-  「新しいデプロイ」を作ると別URLになり、`auth/config.js` と Stripe の
+  「新しいデプロイ」を作ると別URLになり、`public/auth/config.js` と Stripe の
   Webhook URL の更新が必要になる）
 
 ### 事故が起きたら

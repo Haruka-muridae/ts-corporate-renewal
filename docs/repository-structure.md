@@ -12,8 +12,10 @@
 
 ## 前提
 
-- GitHub Pages が**リポジトリのルート**を配信している（`CNAME` = `tsam-ai.com`）
+- **Vercel** が配信している（2026-08-01 に GitHub Pages から移行。`CNAME` は削除済み）
+- 静的ファイルの配信ルートは **`public/`**。リポジトリのルートではない
 - **`main` へマージしたものは、そのまま本番として公開される。** 別途の公開操作は無い
+- `main` 以外への push はプレビューへ出る（Vercel SSO で保護され、ログインしないと見えない）
 - したがって `main` へ入れる判断は、置き場所がどこであっても公開の判断と同じ重さを持つ
 
 ---
@@ -22,10 +24,12 @@
 
 | 領域 | 場所 | 位置づけ |
 | --- | --- | --- |
-| **TSAM AI 本体** | `/`（コーポレートサイト）<br>`css/` `js/` `assets/` `event/`<br>`login/` `portal/` `pricing/` `password/` `payment/` `logout/` `legal/`<br>`auth/`（共通JS・CSS） `gas-auth/`（Apps Script。配信しない）<br>`docs/` `tests/` | 本番。仕様書は `docs/specs/` が正 |
-| **テスト環境** | `apps/` | TSAM AI のアプリ実験場。本体と地続きで、`auth/` 等を参照してよい |
-| **別プロジェクト領域** | `labs/` | **TSAM AI とは無関係な同居プロジェクト。**<br>現時点では空（未作成）。`labs/<プロジェクト名>/` の形で追加する |
-| （参考）Next.js | `app/` `components/` `lib/` `types/` `public/` `potenitas-lp/` | 現在デプロイしていない |
+| **TSAM AI 本体（静的）** | `public/index.html`<br>`public/css/` `js/` `assets/` `event/` `legal/` `potenitas/`<br>`public/login/` `portal/` `pricing/` `password/` `payment/` `logout/`<br>`public/auth/`（共通JS・CSS） | 本番。仕様書は `docs/specs/` が正 |
+| **TSAM AI 本体（サーバー実行）** | `app/event/`（Next.js） | 交流会申込・決済・Webhook・管理画面 |
+| **本番アプリ領域** | `public/production-app/<アプリID>/`（未作成） | **Portal（`/portal/`）に載せる本番アプリの置き場所。**<br>最初のアプリは `card-ocr`（[specs/meishi-ocr-requirements-v3.md](./specs/meishi-ocr-requirements-v3.md)）<br>レジストリの `href` に `apps/` を含めない・先頭に `/` を付けない（`public/portal/app-registry.js`、自動テストで固定） |
+| **配信しないもの** | `gas-auth/` `tests/` `docs/` `supabase/` `lp-draft/` | `public/` の外にあるため Web からは届かない |
+| **テスト環境** | `public/apps/` | TSAM AI のアプリ実験場。本体と地続きで、`public/auth/` 等を参照してよい。<br>**本番アプリからここを import しない**（流用はコピー） |
+| **別プロジェクト領域** | `labs/`（未作成） | **TSAM AI とは無関係な同居プロジェクト。**<br>`labs/<プロジェクト名>/` の形で追加する |
 
 `labs/` はまだ存在しない。最初のプロジェクトが入るときに作られる。
 
@@ -35,7 +39,7 @@
 
 ### 2-1. TSAM AI の共通資産を参照・変更しない
 
-`auth/` `css/` `js/` `assets/` `gas-auth/` `docs/specs/` などを、
+`public/auth/` `public/css/` `public/js/` `public/assets/` `gas-auth/` `docs/specs/` などを、
 `labs/` 配下から**読まないし、書き換えない。**
 
 同居は経費の都合であって、設計の都合ではない。
@@ -50,16 +54,24 @@
 作業ブランチを切り、**`main` へマージする前に確認を取る。**
 `main` は本番配信物であり、置き場所によって基準を変えない。
 
-### 2-3. `main` へ入れたものは公開される
+### 2-3. `main` へ入れたものは公開されうる
 
-`main` へマージした内容は `https://tsam-ai.com/labs/<プロジェクト名>/` で
-**誰でも見られる状態になる。**
+置き場所で決まる。
 
-これは仕様であって不具合ではない。ルートを配信している以上、
-`labs/` だけを配信対象から外すことはできない。
+| 置き場所 | 公開 |
+| --- | --- |
+| `public/labs/<プロジェクト名>/` | **`https://tsam-ai.com/labs/<プロジェクト名>/` で誰でも見られる** |
+| `labs/<プロジェクト名>/`（`public/` の外） | Web からは届かない。ただし**リポジトリは公開**されており、GitHub 上では誰でも読める |
 
-**非公開のまま育てたいものは、`main` へマージせずブランチに留める。**
+Vercel は `public/` を静的ルートとして配る。Pages 時代と違い、
+リポジトリのルート全体が配信されるわけではない。
+
+**どちらに置いても「関係者しか読めない」状態にはならない。**
+非公開のまま育てたいものは、`main` へマージせずブランチに留める。
 秘密情報（鍵・トークン・個人情報）を置かないことは、本体と同じく必須。
+
+Web で公開したいかどうかで置き場所を決め、決めた側を
+`labs/<プロジェクト名>/README.md` に書き残すこと。
 
 ---
 

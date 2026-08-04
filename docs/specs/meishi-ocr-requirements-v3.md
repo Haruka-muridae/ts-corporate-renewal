@@ -8,10 +8,15 @@
 | 文書種別 | 要件定義書 |
 | バージョン | 3.0 |
 | 作成日 | 2026年8月2日 |
-| 改訂日 | 2026年8月2日 |
+| 改訂日 | 2026年8月3日 |
 | 開発方式 | tsam-ai.com 配信の静的フロントエンドのみ(サーバーコードなし) |
 | 対象フェーズ | フェーズ0(方式検証PoC)およびMVP開発 |
 | 想定利用環境 | TSAM AI 利用ユーザー、スマートフォン、PCブラウザ |
+
+> **2026年8月3日の改訂**: Portal のアプリ定義が `public/auth/apps.js`(`PORTAL_APPS`、キー名 `path`)から
+> `public/portal/app-registry.js`(`APP_REGISTRY`、キー名 `href`)へ移設されたため、本書内の名称を追随させた。
+> **制約の中身(登録先に `apps/` を含めない・先頭に `/` を付けない)は変えていない。**
+> 該当箇所は §6 前提条件1 と §20。以降、`docs/specs/meishi-ocr-requirements-v3.md` を要件定義書の唯一の正とする。
 
 ### 1.1 v2.0からの主な変更点(v3.0)
 
@@ -147,7 +152,7 @@ TSAM AI のアカウントを保有する利用者。**社内限定ではなく�
 
 ## 6. 前提条件
 
-1. フロントエンドは ts-corporate-renewal リポジトリの **`public/production-app/card-ocr/`** に配置し、`https://tsam-ai.com/production-app/card-ocr/` として配信する(アプリID: `card-ocr`)。**Portal と同一オリジンであることが KeyStore 参照の必須条件である。** なお PORTAL_APPS への登録パスに `apps/` を含めてはならない(自動テスト `tests/unit/frontend.mjs` が禁止している)。
+1. フロントエンドは ts-corporate-renewal リポジトリの **`public/production-app/card-ocr/`** に配置し、`https://tsam-ai.com/production-app/card-ocr/` として配信する(アプリID: `card-ocr`)。**Portal と同一オリジンであることが KeyStore 参照の必須条件である。** なお `APP_REGISTRY`(`public/portal/app-registry.js`)へ登録する `href` に `apps/` を含めてはならず、先頭に `/` を付けてもならない(自動テスト `tests/unit/frontend.mjs` が禁止している)。
 2. アプリ認証は TSAM AI 本番認証系(`tsam-auth-session`)を使用する。
 3. Google Cloud プロジェクトを用意し、OAuthクライアントID(Webアプリケーション種別)を発行、承認済みJavaScript生成元に `https://tsam-ai.com` を登録し、**Google Drive API と Google Sheets API** を有効化する。
 4. OAuth同意画面はユーザータイプ「外部」・公開ステータス「本番」とする(TSAM AI 利用者は当社Workspace外の一般Googleアカウントであるため)。要求スコープは `https://www.googleapis.com/auth/drive.file` のみとし、テストユーザー数上限・未確認アプリ警告が発生しない状態で公開する。必要な審査・確認手続きはフェーズ0で洗い出す。
@@ -423,7 +428,7 @@ v2.0と同一とする(Google Identity Services トークンモデル、drive.fi
 システムは、TSAM AI Portal に本アプリのアイコンを掲載すること。
 
 1. `https://tsam-ai.com/login/` からログインした利用者が、Portal(`/portal/`)のアプリ一覧に本アプリのアイコンを視認でき、タップ/クリックで本アプリへ遷移できること。
-2. アイコン・アプリ名・簡潔な説明文(1行)を Portal の既存のアプリ掲載様式に合わせて追加する(`public/portal/` の改修)。
+2. `APP_REGISTRY`(`public/portal/app-registry.js`)へ1件追加する。項目は `id` / `name` / `href` / `icon` の4つで、Portal 側のコードは変更しない。`id` は配置データ(`tsam-app-layout` の `order`)が指す先であり、**あとから変えない**([apps-grid-spec-v1.md](./apps-grid-spec-v1.md) §4-c)。<br>※ 2026-08-03 追記: Portal のアプリグリッド刷新でカードから一言説明が外れ、レジストリに `description` は無い。当初あった「簡潔な説明文(1行)」の要求はこれに合わせて取り下げる。
 3. Geminiキー未設定の利用者が本アプリへ遷移した場合の誘導(SC-00)と、Portal 側のキー設定パネルとの間で導線が循環しないよう、戻り先を明示する。
 4. Portal 改修は ts-corporate-renewal リポジトリの規約(AGENTS.md、docs/specs/)に従い、本アプリと同一PRまたは連続するPRで行う。
 
@@ -760,7 +765,7 @@ v1.1の項目(低品質画像、容量超過、非対応形式、数式風文字
 | 項目 | 仮設定・確定時期 |
 | ----------------- | --------------------- |
 | アプリ正式名称 / アプリID | 名刺OCR(表示名は仮)/ **`card-ocr` で確定** |
-| 配置パス(tsam-ai.com配下) | **確定: `public/production-app/card-ocr/`**(公開URL `https://tsam-ai.com/production-app/card-ocr/`)。リポジトリ調査に基づく(apps/ を含むパスは自動テストが禁止、2階層は共通ガイドの前提)。あわせて `public/auth/apps.js` 内のプレースホルダ表記不一致(`app/` と `production-app/`)の修正を行う |
+| 配置パス(tsam-ai.com配下) | **確定: `public/production-app/card-ocr/`**(公開URL `https://tsam-ai.com/production-app/card-ocr/`)。リポジトリ調査に基づく(`apps/` を含む `href` は自動テストが禁止、2階層は共通ガイドの前提)。Portal への登録は `APP_REGISTRY`(`public/portal/app-registry.js`)の `href` に `production-app/card-ocr/` を追加する形で行う |
 | 対象プラン | **確定: 全プランに開放**。将来の限定に備え、プラン判定を後付けできる構成とする(5.1) |
 | Portal アイコン・説明文 | デザイン確定時 |
 | 保存フォルダ名 / スプレッドシート名 | TSAM AI / 名刺データ / 名刺管理(仮) |

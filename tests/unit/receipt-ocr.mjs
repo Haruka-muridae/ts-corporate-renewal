@@ -65,7 +65,7 @@ try {
   const datetime = await import('../../public/production-app/receipt-ocr/datetime.js');
   const provisioning = await import('../../public/production-app/receipt-ocr/provisioning.js');
   const config = await import('../../public/production-app/receipt-ocr/config.js');
-  const { PORTAL_APPS } = await import('../../public/auth/apps.js');
+  const { APP_REGISTRY } = await import('../../public/portal/app-registry.js');
 
   const { PROVISION_STATUS, NOTICE, provision, assertWritable } = provisioning;
   const DATA_HEADERS = schema.headersOf(schema.DATA_COLUMNS);
@@ -785,7 +785,7 @@ try {
   /* ================================================================
      規約の静的確認
      ================================================================ */
-  section('規約（§13 / PORTAL_APPS / import の禁止）');
+  section('規約（§13 / APP_REGISTRY / import の禁止）');
 
   /*
    * アプリ側の全ファイル。フェーズを足したらここへ加えること。
@@ -955,12 +955,22 @@ try {
     [...sources.values()].every((src) => !/permissions/i.test(src)));
 
   {
-    const app = PORTAL_APPS.find((entry) => entry.id === 'receipt-ocr');
+    /*
+     * Portal への掲載（apps-grid-spec-v1.md）。
+     * 登録先は public/portal/app-registry.js の APP_REGISTRY。
+     * 旧 public/auth/apps.js（PORTAL_APPS / キー名 path）は廃止済み。
+     */
+    const app = APP_REGISTRY.find((entry) => entry.id === 'receipt-ocr');
 
-    check('PORTAL_APPS に登録されている', Boolean(app));
-    check('登録パスに apps/ を含まない', !String(app?.path ?? '').includes('apps/'));
-    check('登録パスは先頭が / でない', !String(app?.path ?? '').startsWith('/'));
-    check('登録パスが実体と一致する', app?.path === 'production-app/receipt-ocr/');
+    check('APP_REGISTRY に登録されている', Boolean(app));
+    check('href に apps/ を含まない', !String(app?.href ?? '').includes('apps/'));
+    check('href は先頭が / でない', !String(app?.href ?? '').startsWith('/'));
+    check('href が実体と一致する', app?.href === 'production-app/receipt-ocr/');
+    check('名前とアイコンがある',
+      String(app?.name ?? '') !== '' && String(app?.icon ?? '') !== '');
+
+    /* id は配置データが指す先。変えると利用者の並べ替えが失われる（§4-c）。 */
+    check('id はアプリIDと同じ', app?.id === 'receipt-ocr');
   }
 
   /* v1.3 §16.1 と突き合わせて確定済み。draft へ戻さないこと。 */
