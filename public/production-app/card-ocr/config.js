@@ -99,6 +99,57 @@ export function isClientIdConfigured(clientId = GOOGLE_CLIENT_ID) {
  */
 export const DRIVE_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 export const DRIVE_UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/drive/v3/files';
+export const SHEETS_ENDPOINT = 'https://sheets.googleapis.com/v4/spreadsheets';
+
+/* ================================================================
+ * 保存構造（要件定義書 §FR-07）
+ * ================================================================
+ *
+ *   マイドライブ
+ *   └─ TSAM AI
+ *      └─ 名刺データ
+ *         ├─ 名刺管理（Googleスプレッドシート）
+ *         └─ images
+ *
+ * ルートの `TSAM AI` は他アプリ（領収書OCR）と共用する名前だが、
+ * **フォルダの実体は共用しない。** drive.file はクライアントIDごとに
+ * 見える範囲が分かれるため、それぞれのアプリが自分の `TSAM AI` を
+ * 作る。利用者のドライブ上で同名フォルダが2つ並ぶことがあるが、
+ * これは権限モデルの帰結であって不具合ではない。
+ */
+export const ROOT_FOLDER_NAME = 'TSAM AI';
+export const APP_FOLDER_NAME = '名刺データ';
+export const IMAGE_FOLDER_NAME = 'images';
+export const SPREADSHEET_NAME = '名刺管理';
+
+/* 台帳のタブ名（要件定義書 §11.2・§11.3）。 */
+export const TABS = Object.freeze({
+  data: '名刺データ',
+  history: '変更履歴',
+});
+
+/*
+ * 台帳に記録するアプリの版（§11.2 の app_version）。
+ *
+ * **列の構成を変えたら上げること。** 行を見たときに、どの構成で
+ * 書かれたのかが分かるようにするための値である。
+ */
+export const APP_VERSION = 'card-ocr-1.0';
+
+/* ================================================================
+ * キャッシュの保存キー（localStorage）
+ * ================================================================
+ *
+ * **入るのは保存先のIDだけ。** 名刺データもトークンもキーも入れない
+ * （要件定義書 §FR-21）。localStorage はキャッシュであって正本ではなく、
+ * 消えても検索で復旧する。
+ */
+export const STORAGE_KEYS = Object.freeze({
+  rootFolder: 'tsam-card-ocr-root-folder-id',
+  appFolder: 'tsam-card-ocr-app-folder-id',
+  imageFolder: 'tsam-card-ocr-image-folder-id',
+  spreadsheet: 'tsam-card-ocr-spreadsheet-id',
+});
 
 /* ================================================================
  * MIME タイプ

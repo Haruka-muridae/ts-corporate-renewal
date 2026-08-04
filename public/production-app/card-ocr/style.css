@@ -89,6 +89,22 @@
   color: #8a5a00;
 }
 
+.co-status-value[data-ok='pending'] {
+  color: #4a5568;
+  font-weight: 400;
+}
+
+/* 保存先の案内。作り直しなど、見落とされると困るものが入る。 */
+#co-storage-notices {
+  margin-top: 0.875rem;
+  color: #7a4b00;
+}
+
+#co-storage-notices li[data-notice='SCHEMA_ALTERED'],
+#co-storage-notices li[data-notice='RECREATED'] {
+  font-weight: 700;
+}
+
 .co-guidance-text {
   margin: 0 0 1rem;
   line-height: 1.8;

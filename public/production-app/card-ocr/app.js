@@ -27,6 +27,7 @@ import {
   clearAccessToken,
   describeDriveAuthError,
   ensureAccessToken,
+  getCachedAccessToken,
   hasValidAccessToken,
 } from './drive-auth.js';
 
@@ -38,6 +39,10 @@ import {
   evaluatePrerequisites,
 } from './prerequisites.js';
 
+import { describeDriveError } from './drive-api.js';
+import { StorageNotice, ensureStorage } from './drive-storage.js';
+import { spreadsheetUrl } from './sheets.js';
+
 /* /production-app/card-ocr/ はサイトのルートから2階層下。 */
 setScreenDepth(2);
 
@@ -48,6 +53,8 @@ for (const id of [
   'co-guidance', 'co-guidance-title', 'co-guidance-text',
   'co-login-link', 'co-portal-link', 'co-connect',
   'co-ready', 'co-disconnect', 'co-message',
+  'co-storage', 'co-storage-state', 'co-storage-notices',
+  'co-sheet-link', 'co-capture',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -56,6 +63,10 @@ for (const id of [
 let signedIn = false;
 /* 連携の処理中。ポップアップを二重に開かせない。 */
 let connecting = false;
+/* 保存構造の用意の結果。null は「まだ確認していない」。 */
+let storage = null;
+/* 用意の処理中。連続で押されても1回にする。 */
+let provisioning = false;
 
 /* ---------- 表示の道具（innerHTML を使わない） ---------- */
 
@@ -123,6 +134,9 @@ function render() {
     return state;
   }
 
+  /* 連携が切れたら保存構造の表示も畳む。古い結果を残さない。 */
+  storage = null;
+  el['co-storage'].hidden = true;
   el['co-ready'].hidden = true;
   el['co-guidance'].hidden = false;
   el['co-guidance-title'].textContent = described.title;
@@ -152,6 +166,85 @@ function render() {
   return state;
 }
 
+/* ---------- 保存構造の用意（§8.1 ステージ0） ---------- */
+
+/*
+ * 案内の文言。**「作った」と「作り直した」を区別する。**
+ * 作り直しは過去データが戻らないので、黙って進めてはいけない
+ * （要件定義書 §5.3 の最後の項）。
+ */
+const NOTICE_TEXT = Object.freeze({
+  [StorageNotice.CREATED]: '保存先を作成しました（マイドライブ／TSAM AI／名刺データ）。',
+  [StorageNotice.RECREATED]: '保存先が見つからなかったため、新しく作り直しました。過去のデータは引き継がれません。',
+  [StorageNotice.TABS_REPAIRED]: '不足していたシートのタブを作り直しました。',
+  [StorageNotice.SCHEMA_UPGRADED]: 'シートに新しい列を追加しました。',
+  [StorageNotice.SCHEMA_ALTERED]: 'シートの見出しが変更されているため、書き込みを停止しました。見出しを元に戻すか、シートの名前を変えて作り直してください。',
+});
+
+function renderNotices(notices) {
+  const target = el['co-storage-notices'];
+  target.replaceChildren();
+
+  for (const notice of notices) {
+    const text = NOTICE_TEXT[notice];
+
+    if (!text) {
+      continue;
+    }
+
+    const item = document.createElement('li');
+    item.textContent = text;
+    item.dataset.notice = notice;
+    target.append(item);
+  }
+
+  target.hidden = target.childElementCount === 0;
+}
+
+async function prepareStorage() {
+  if (provisioning) {
+    return;
+  }
+
+  provisioning = true;
+  el['co-storage'].hidden = false;
+  el['co-storage-state'].textContent = '確認しています…';
+  el['co-storage-state'].dataset.ok = 'pending';
+  el['co-sheet-link'].hidden = true;
+  renderNotices([]);
+
+  try {
+    storage = await ensureStorage({ token: getCachedAccessToken() });
+
+    renderNotices(storage.notices);
+
+    if (!storage.writable) {
+      el['co-storage-state'].textContent = '書き込みを停止しています';
+      el['co-storage-state'].dataset.ok = 'no';
+      el['co-capture'].hidden = true;
+      return;
+    }
+
+    el['co-storage-state'].textContent = storage.steps.spreadsheet === 'created'
+      ? '作成しました'
+      : '確認しました';
+    el['co-storage-state'].dataset.ok = 'yes';
+
+    el['co-sheet-link'].href = spreadsheetUrl(storage.spreadsheetId);
+    el['co-sheet-link'].hidden = false;
+    el['co-capture'].hidden = false;
+  } catch (error) {
+    storage = null;
+    el['co-storage-state'].textContent = '確認できませんでした';
+    el['co-storage-state'].dataset.ok = 'no';
+
+    const described = describeDriveError(error);
+    showMessage(`${described.text}（${described.errorCode}）`, 'error');
+  } finally {
+    provisioning = false;
+  }
+}
+
 /* ---------- Google 連携 ---------- */
 
 async function connect() {
@@ -176,7 +269,15 @@ async function connect() {
   } finally {
     connecting = false;
     el['co-connect'].disabled = false;
-    render();
+  }
+
+  /*
+   * 連携できたら、続けて保存構造を用意する（§8.1 ステージ0）。
+   * **render() のあとに呼ぶ。** 準備の状況を先に更新してから、
+   * 時間のかかる通信へ入る。
+   */
+  if (render() === Prerequisite.READY) {
+    await prepareStorage();
   }
 }
 
@@ -206,7 +307,14 @@ async function start() {
   el['co-loading'].hidden = true;
   el['co-content'].hidden = false;
 
-  render();
+  /*
+   * 起動時点で連携が生きていることは無い（トークンはメモリのみで、
+   * 読み込み直後は空）。それでも READY を見てから呼ぶのは、
+   * **連携済みかどうかの判断を1か所に寄せるため**である。
+   */
+  if (render() === Prerequisite.READY) {
+    await prepareStorage();
+  }
 }
 
 el['co-connect'].addEventListener('click', () => { void connect(); });

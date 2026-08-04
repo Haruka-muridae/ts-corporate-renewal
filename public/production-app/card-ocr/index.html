@@ -101,13 +101,31 @@
         </div>
       </section>
 
-      <!-- 準備が整ったときだけ出す。中身はフェーズ2で作る。 -->
+      <!-- 準備が整ったときだけ出す。 -->
       <section id="co-ready" class="co-panel" aria-live="polite" hidden>
-        <h2 class="co-panel-title">準備ができました</h2>
-        <p class="co-guidance-text">
-          名刺の読み取りは次の段階で実装します。現在は前提の確認までを行います。
-        </p>
+        <h2 class="co-panel-title">Googleドライブと連携しました</h2>
         <button id="co-disconnect" type="button" class="auth-button auth-button--ghost">連携を解除する</button>
+      </section>
+
+      <!-- 保存先の用意（§8.1 ステージ0）。連携後にだけ出す。 -->
+      <section id="co-storage" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">保存先</h2>
+
+        <dl class="co-status">
+          <dt class="co-status-label">マイドライブ／TSAM AI／名刺データ</dt>
+          <dd id="co-storage-state" class="co-status-value" data-ok="pending">確認しています…</dd>
+        </dl>
+
+        <ul id="co-storage-notices" class="co-notice-list" hidden></ul>
+
+        <div class="co-actions">
+          <a id="co-sheet-link" class="auth-button auth-button--ghost"
+             href="#" target="_blank" rel="noopener noreferrer" hidden>名刺管理シートを開く</a>
+        </div>
+
+        <p id="co-capture" class="co-guidance-text" hidden>
+          名刺の読み取りは次の段階で実装します。現在は保存先の用意までを行います。
+        </p>
       </section>
 
       <p id="co-message" class="auth-message" role="status" aria-live="polite" tabindex="-1" hidden></p>
