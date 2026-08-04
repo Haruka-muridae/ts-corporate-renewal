@@ -569,26 +569,59 @@ const PAYMENT_METHODS = Object.freeze([
 ]);
 
 /*
+ * 支払方法の選択欄（手書き領収証）。
+ *
+ * 市販の領収証用紙には「現金・小切手・手形」のような選択肢が
+ * **あらかじめ印刷**されており、発行者はどれかを丸で囲む。
+ * OCR は丸を読まないので、印刷された選択肢が全部テキストになる。
+ *
+ * この行を根拠にすると、カード払いの領収証でも「現金」と判定される。
+ * どれが選ばれたかは分からないので、根拠として使わない。
+ */
+const PAYMENT_OPTION_LIST = /(現金|小切手|手形|振込|振替|カード)[\s　]*[・･／/、,][\s　]*(現金|小切手|手形|振込|振替|カード)/;
+
+/*
  * §10.10。
  *
- * 「クレジット支払」等の金額行は支払方法の判定に使うが、
- * 合計金額の根拠には使わない（§10.4。現金併用時のズレ防止）。
- * 合計側での除外は extractTotalAmount の TOTAL_EXCLUDE が担っている。
+ * ------------------------------------------------------------------
+ * 先に見つかったものを採らない
+ * ------------------------------------------------------------------
+ * 当初は PAYMENT_METHODS の並び順に照合し、最初に当たったものを
+ * 確定していた。現金が先頭にあるため、クレジットの記載がある
+ * 領収証でも現金と判定されうる。並び順は優先順位ではない。
+ *
+ * §10.4 が「候補が複数残った場合はルールで確定しない」としているのと
+ * 同じ考え方で、複数当たったら確定せずに補完と要確認へ回す。
+ * ------------------------------------------------------------------
  */
 export function extractPaymentMethod(lines) {
   const result = empty();
-  const text = lines.join('\n');
+
+  /* 選択欄の行は根拠に使わない。どれが丸で囲まれたか読めないため。 */
+  const usable = lines.filter((line) => !PAYMENT_OPTION_LIST.test(line));
+  const hits = [];
 
   for (const method of PAYMENT_METHODS) {
-    if (method.pattern.test(text)) {
-      result.value = method.label;
-      result.evidence = lines.find((line) => method.pattern.test(line)) ?? '';
-      result.confirmed = true;
-      result.candidates = 1;
-      return result;
+    const line = usable.find((item) => method.pattern.test(item));
+
+    if (line) {
+      hits.push({ label: method.label, line });
     }
   }
 
+  result.candidates = hits.length;
+
+  if (hits.length === 1) {
+    result.value = hits[0].label;
+    result.evidence = hits[0].line;
+    result.confirmed = true;
+  }
+
+  /*
+   * 複数当たった場合は値を入れない。
+   * 「現金で一部、残りをカード」も実在するため、
+   * どちらか一方を機械が選ぶのは誤りである。
+   */
   return result;
 }
 
@@ -676,6 +709,78 @@ function hasAddresseeMark(line) {
   return ADDRESSEE_MARK.test(line.trim());
 }
 
+/* 金額の欄。「¥2,761」のように金額しか無い行と、金額ラベルの付いた行。 */
+const MONEY_LABEL = /(合計|小計|総計|現計|請求|支払|預|釣|税|金額|単価|数量|点数|残高|ポイント|お買上)/;
+
+function hasMoneyInLine(line) {
+  if (!/\d/.test(line)) {
+    return false;
+  }
+
+  /* 金額しか書かれていない行。数字・通貨記号・区切りを除くと何も残らない。 */
+  const withoutMoney = line.replace(/[¥￥,.\s　円0-9-]/g, '');
+
+  if (withoutMoney === '') {
+    return true;
+  }
+
+  return MONEY_LABEL.test(line) && findAmounts(line).length > 0;
+}
+
+/* 電話番号の欄。 */
+function hasPhoneInLine(line) {
+  return PHONE_LABEL.test(line) || /(?<!\d)0\d{1,4}[-(]\d{1,4}/.test(line);
+}
+
+/*
+ * ==================================================================
+ * 支払先として採ってよい行か（§10.3）
+ * ==================================================================
+ * 当初は「これは店名ではない」を見つけるたびに除外を継ぎ足していた。
+ * 手書き領収証は欄が崩れて1行へ潰れるため、その形では
+ * 新しい崩れ方が出るたびに抜け道ができる。実機で
+ * 「様 様 2027 年 7 月 29 日 729」と「¥2,761」の両方を採ってしまった。
+ *
+ * そこで、採用してよい条件のほうを定義する。
+ *
+ *   法人格が読める行  … 採る（ただし宛名は除く）
+ *   読めない行        … 下の「他の欄の中身」を含まないものだけ採る
+ *
+ * 他の欄の中身 = 金額 / 日付 / 宛名マーカー / 電話番号 / 住所 / 用紙の題字
+ *
+ * 迷ったら採らない側へ倒す。採らなくても補完と要確認で拾えるが、
+ * 誤った店名で確定すると §15.1 の「誤った値を高信頼で提示 0件」に反する。
+ * ==================================================================
+ */
+export function isPayeeCandidate(line) {
+  const text = String(line ?? '').trim();
+
+  if (text.length < 2 || text.length > 60) {
+    return false;
+  }
+
+  /*
+   * 宛名だけは法人格による例外を認めない。
+   * 宛名はたいてい法人名で書かれるため（「株式会社◯◯ 御中」）、
+   * ここで例外を認めると支払先の欄に自社名が入る。
+   */
+  if (hasAddresseeMark(text)) {
+    return false;
+  }
+
+  /* 法人格が読めるなら、他の欄が同居していても店名とみなす。 */
+  if (COMPANY_MARK.test(text)) {
+    return true;
+  }
+
+  /* 法人格が読めない行は、他の欄の中身を含まないことを求める。 */
+  return !hasMoneyInLine(text)
+    && !hasDateInLine(text)
+    && !hasPhoneInLine(text)
+    && !ADDRESS_MARK.test(text)
+    && !isTitleLine(text);
+}
+
 /*
  * §10.3。優先順位は
  *   1. 店舗マスタに登録された名称
@@ -721,49 +826,7 @@ export function extractPayee(lines, { storeMaster = [], phoneDigits = null } = {
   /* 2〜3. 先頭付近の法人名・店舗名。 */
   const head = lines.slice(0, 8);
 
-  /*
-   * 店名として採ってよい行か。
-   *
-   * 除外は「法人格が無い場合に限る」形にしてある。
-   * 「株式会社◯◯ 2026年8月1日」のように、正しい店名の行に
-   * 日付が同居することがあるため、法人格が読めているほうを優先する。
-   */
-  const looksLikePayee = (line) => {
-    const hasCompanyMark = COMPANY_MARK.test(line);
-
-    /* 宛名。法人格があっても除外する（上の注記を読むこと）。 */
-    if (hasAddresseeMark(line)) {
-      return false;
-    }
-
-    /* 用紙の題字（領収証・レシート等）。 */
-    if (isTitleLine(line) && !hasCompanyMark) {
-      return false;
-    }
-
-    /*
-     * 日付を含む行。行全体が日付でなくても外す。
-     * 手書き領収証では複数の欄が1行へ潰れることがあり、
-     * 迷ったら外す側へ倒す（外れても補完と要確認で拾える）。
-     */
-    if (hasDateInLine(line) && !hasCompanyMark) {
-      return false;
-    }
-
-    /* 電話番号の行。 */
-    if (PHONE_LABEL.test(line) || /(?<!\d)0\d{1,4}[-(]\d{1,4}/.test(line)) {
-      return false;
-    }
-
-    /* 住所の行。 */
-    if (ADDRESS_MARK.test(line) && !hasCompanyMark) {
-      return false;
-    }
-
-    return line.length >= 2 && line.length <= 60;
-  };
-
-  const withCompany = head.find((line) => COMPANY_MARK.test(line) && looksLikePayee(line));
+  const withCompany = head.find((line) => COMPANY_MARK.test(line) && isPayeeCandidate(line));
 
   if (withCompany) {
     result.value = withCompany;
@@ -773,7 +836,7 @@ export function extractPayee(lines, { storeMaster = [], phoneDigits = null } = {
     return result;
   }
 
-  const first = head.find(looksLikePayee);
+  const first = head.find(isPayeeCandidate);
 
   if (first) {
     /*

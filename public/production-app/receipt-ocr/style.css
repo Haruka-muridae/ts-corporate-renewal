@@ -296,3 +296,31 @@
   color: #7a5200;
   line-height: 1.7;
 }
+
+/* AIの読み取りを採用する導線。押しても入力欄へ入るだけで、保存はしない。 */
+.ro-adopt-all {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+  margin: 0 0 1rem;
+}
+
+.ro-adopt-all .ro-note {
+  margin: 0;
+}
+
+.ro-adopt {
+  margin-left: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid #d9a441;
+  border-radius: 0.25rem;
+  background: #fff;
+  color: #7a5200;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.ro-adopt:hover {
+  background: #fff8e6;
+}

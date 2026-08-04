@@ -406,6 +406,120 @@ try {
     review.applyEdits({ payee: 'A' }, {}).edited === false);
 
   /* ---------------------------------------------------------------- */
+  section('v2.0 §8 AIの読み取りを採用する導線');
+
+  const conflicted = {
+    fields: {
+      totalAmount: { status: ai.RECONCILE.CONFLICT, aiValue: '1200', needsReview: true },
+      payee: { status: ai.RECONCILE.CONFLICT, aiValue: 'AIの店名', needsReview: true },
+      usedOn: { status: ai.RECONCILE.AGREED, aiValue: '', needsReview: false },
+    },
+    needsReview: true,
+  };
+
+  {
+    const aiValues = review.conflictedAiValues(conflicted);
+
+    check('食い違った項目だけを挙げる',
+      Object.keys(aiValues).sort().join(',') === 'payee,totalAmount');
+    check('一致した項目は挙げない', aiValues.usedOn === undefined);
+    check('AI の値を返す', aiValues.totalAmount === '1200');
+  }
+
+  check('食い違いが無ければ空', Object.keys(review.conflictedAiValues(null)).length === 0);
+
+  {
+    /* ★AI の値を採用した場合は MANUAL にしない（HYBRID にあたる）。 */
+    const result = review.applyEdits(
+      { totalAmount: '2000', payee: 'ルールの店名' },
+      { totalAmount: '1200' },
+      { reconciliation: conflicted },
+    );
+
+    check('★採用は打ち直しと区別する', result.adopted.includes('totalAmount'));
+    check('★採用だけなら edited は false', result.edited === false);
+    check('採用したことは分かる', result.adoptedFromAi === true);
+    check('値は入れ替わる', result.values.totalAmount === '1200');
+  }
+
+  {
+    /* 手で打ち直した場合は MANUAL。 */
+    const result = review.applyEdits(
+      { totalAmount: '2000' },
+      { totalAmount: '3000' },
+      { reconciliation: conflicted },
+    );
+
+    check('★打ち直しは manual に入る', result.manual.includes('totalAmount'));
+    check('★打ち直しなら edited は true', result.edited === true);
+    check('採用ではない', result.adoptedFromAi === false);
+  }
+
+  {
+    /* 採用したあとに打ち直したら MANUAL。値で判定するため履歴は要らない。 */
+    const result = review.applyEdits(
+      { totalAmount: '2000' },
+      { totalAmount: '1250' },
+      { reconciliation: conflicted },
+    );
+
+    check('★採用後に打ち直せば MANUAL に倒れる', result.edited === true);
+  }
+
+  {
+    /* 一括採用。 */
+    const result = review.applyEdits(
+      { totalAmount: '2000', payee: 'ルールの店名' },
+      { totalAmount: '1200', payee: 'AIの店名' },
+      { reconciliation: conflicted },
+    );
+
+    check('まとめて採用しても打ち直し扱いにしない', result.edited === false);
+    check('両方が入れ替わる',
+      result.values.totalAmount === '1200' && result.values.payee === 'AIの店名');
+  }
+
+  {
+    /* 採用と打ち直しが混ざったら MANUAL（人が値を作っているため）。 */
+    const result = review.applyEdits(
+      { totalAmount: '2000', payee: 'ルールの店名' },
+      { totalAmount: '1200', payee: '手で直した店名' },
+      { reconciliation: conflicted },
+    );
+
+    check('★混ざれば MANUAL', result.edited === true);
+    check('採用した項目も記録は残る', result.adopted.includes('totalAmount'));
+  }
+
+  {
+    /* 採用の結果、extractionMethod は HYBRID になる。 */
+    const applied = review.applyEdits(
+      { totalAmount: '2000' },
+      { totalAmount: '1200' },
+      { reconciliation: conflicted },
+    );
+
+    const built = review.buildRecord({
+      values: applied.values,
+      edited: applied.edited,
+      usedRule: true,
+      usedGemini: applied.adoptedFromAi,
+      validation: { ok: true, warnings: [] },
+      duplicateStatus: DUPLICATE_STATUS.NONE,
+    });
+
+    check('★AI採用は HYBRID として記録する',
+      built.extractionMethod === EXTRACTION_METHOD.HYBRID);
+    check('★MANUAL にはしない', built.extractionMethod !== EXTRACTION_METHOD.MANUAL);
+  }
+
+  check('★打ち直しなら HYBRID ではなく MANUAL',
+    review.buildRecord({
+      values: {}, edited: true, usedRule: true, usedGemini: true,
+      validation: { ok: true, warnings: [] }, duplicateStatus: DUPLICATE_STATUS.NONE,
+    }).extractionMethod === EXTRACTION_METHOD.MANUAL);
+
+  /* ---------------------------------------------------------------- */
   section('§15 ステータス3軸（processingStatus を持たない）');
 
   check('reviewStatus は3値',

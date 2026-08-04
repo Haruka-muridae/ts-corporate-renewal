@@ -370,6 +370,48 @@ try {
   check('該当なしなら null',
     extract.extractPaymentMethod(toLines(['ありがとうございました'])).value === null);
 
+  /*
+   * ★実機で出た誤判定（2026-08-04）。
+   * 並び順で先に当たったものを採っていたため、複数の記載があると
+   * 常に先頭（現金）が勝っていた。並び順は優先順位ではない。
+   */
+  {
+    const result = extract.extractPaymentMethod(toLines([
+      '現金 ¥1,000',
+      'クレジット ¥2,000',
+    ].join('\n')));
+
+    check('★複数当たったら確定しない', result.confirmed === false);
+    check('★どちらか一方を機械が選ばない', result.value === null);
+    check('候補数を数えている', result.candidates === 2);
+  }
+
+  {
+    /*
+     * ★市販の領収証用紙は選択肢が印刷済みで、発行者が丸で囲む。
+     * OCR は丸を読まないため、印刷された選択肢を根拠にしてはならない。
+     */
+    const result = extract.extractPaymentMethod(toLines([
+      '領収証',
+      '現金・小切手・手形',
+    ].join('\n')));
+
+    check('★印刷された選択欄を根拠にしない', result.value === null);
+    check('確定もしない', result.confirmed === false);
+  }
+
+  check('★選択欄があっても、別行に記載があればそちらを採る',
+    extract.extractPaymentMethod(toLines([
+      '現金・小切手・手形',
+      'クレジットカード VISA',
+    ].join('\n'))).value === 'クレジットカード');
+
+  check('スラッシュ区切りの選択欄も根拠にしない',
+    extract.extractPaymentMethod(toLines(['現金／カード'])).value === null);
+
+  check('単独の記載は従来どおり確定する',
+    extract.extractPaymentMethod(toLines(['お支払方法 クレジットカード'])).confirmed === true);
+
   /* ---------------------------------------------------------------- */
   section('§10.3 支払先（電話番号・住所の行を採用しない）');
 
@@ -507,6 +549,52 @@ try {
 
   check('法人格があれば混在行でも採る（外しすぎない）',
     extract.extractPayee(toLines('株式会社サンプル商事 2027 年 7 月 29 日')).confirmed === true);
+
+  /* ---------------------------------------------------------------- */
+  section('§10.3 採用条件（除外の継ぎ足しではなく採用側で定義）');
+
+  /* ★実機で採用してしまった金額だけの行（2026-08-04）。 */
+  for (const money of ['¥2,761', '2,761', '￥2,761', '2761円', '¥ 2,761']) {
+    check(`★金額だけの行（${money}）を店名にしない`,
+      extract.isPayeeCandidate(money) === false);
+  }
+
+  check('★金額ラベルの付いた行も店名にしない',
+    extract.isPayeeCandidate('合計 ¥2,761') === false
+    && extract.isPayeeCandidate('小計 1,000') === false
+    && extract.isPayeeCandidate('消費税 100') === false);
+
+  {
+    const result = extract.extractPayee(toLines([
+      '領収証',
+      '¥2,761',
+      'まるまるマート',
+    ].join('\n')));
+
+    check('★金額の行を飛ばして店名へ届く', result.value === 'まるまるマート');
+  }
+
+  check('採用条件は他の欄の中身を含まない行だけを通す',
+    extract.isPayeeCandidate('まるまるマート') === true);
+
+  check('法人格が読めれば他の欄が同居しても通す',
+    extract.isPayeeCandidate('株式会社サンプル商事 ¥2,761') === true
+    && extract.isPayeeCandidate('株式会社サンプル商事 2027 年 7 月 29 日') === true);
+
+  check('★法人格があっても宛名は通さない',
+    extract.isPayeeCandidate('株式会社クライアント 御中') === false);
+
+  check('短すぎる行・長すぎる行は通さない',
+    extract.isPayeeCandidate('あ') === false
+    && extract.isPayeeCandidate('あ'.repeat(61)) === false);
+
+  check('住所・電話・題字も通さない',
+    extract.isPayeeCandidate('東京都千代田区大手町1-1-1') === false
+    && extract.isPayeeCandidate('TEL 03-1234-5678') === false
+    && extract.isPayeeCandidate('領取 証') === false);
+
+  check('店名に数字が入っていても通す（金額と混同しない）',
+    extract.isPayeeCandidate('カフェ24') === true);
 
   {
     /* 法人格が読めている行は、日付や題字が同居していても採ってよい。 */

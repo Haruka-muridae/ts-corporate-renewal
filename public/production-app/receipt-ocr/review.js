@@ -129,15 +129,46 @@ export function buildReviewModel({
 }
 
 /*
+ * 突合で食い違い、AI 側の値が示されている項目。
+ * 確認画面の「この値を使う」ボタンは、ここに挙がった項目にだけ出る。
+ */
+export function conflictedAiValues(reconciliation, { fields = REVIEW_FIELDS } = {}) {
+  const out = {};
+
+  for (const key of fields) {
+    const field = reconciliation?.fields?.[key];
+
+    if (field?.status === RECONCILE.CONFLICT && text(field.aiValue) !== '') {
+      out[key] = text(field.aiValue);
+    }
+  }
+
+  return out;
+}
+
+/*
  * 利用者が直した値を反映する（§8）。
  *
  * **利用者が修正した値は抽出値より優先する。**
- * 1つでも直っていれば extractionMethod は MANUAL になる（v1.3 §18.1-4）。
  * 前後の空白だけの違いは修正とみなさない（誤って MANUAL にしないため）。
+ *
+ * ------------------------------------------------------------------
+ * 「AIの読み取りを採用した」と「人が打ち直した」を分ける
+ * ------------------------------------------------------------------
+ * 画面の「この値を使う」で AI の値を入れた場合、人が新しい値を
+ * 作ったわけではない。ルールと AI の両方を使った結果なので HYBRID にあたる。
+ * 打ち直しだけを MANUAL とする（v1.3 §18.1-4 の「人手修正の識別」）。
+ *
+ * 判定はボタンの押下履歴ではなく、**入っている値が AI の値と同じか**で行う。
+ * 押したあとに手で打ち直しても、正しく MANUAL に倒れる。
+ * ------------------------------------------------------------------
  */
-export function applyEdits(values, edits, { fields = REVIEW_FIELDS } = {}) {
+export function applyEdits(values, edits, { fields = REVIEW_FIELDS, reconciliation = null } = {}) {
   const next = { ...values };
+  const aiValues = conflictedAiValues(reconciliation, { fields });
   const changed = [];
+  const adopted = [];
+  const manual = [];
 
   for (const key of fields) {
     if (!Object.hasOwn(edits ?? {}, key)) {
@@ -153,9 +184,23 @@ export function applyEdits(values, edits, { fields = REVIEW_FIELDS } = {}) {
 
     next[key] = after;
     changed.push(key);
+
+    if (Object.hasOwn(aiValues, key) && aiValues[key].trim() === after) {
+      adopted.push(key);
+    } else {
+      manual.push(key);
+    }
   }
 
-  return { values: next, changed, edited: changed.length > 0 };
+  return {
+    values: next,
+    changed,
+    adopted,
+    manual,
+    /* MANUAL にするのは打ち直しがあったときだけ。 */
+    edited: manual.length > 0,
+    adoptedFromAi: adopted.length > 0,
+  };
 }
 
 /*

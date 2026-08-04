@@ -37,7 +37,9 @@ import { validateAll } from './validate.js';
 import { levelOf, scoreOf } from './confidence.js';
 import { decideCompletion, SKIP_REASON } from './completion-policy.js';
 import { complete, reconcile } from './ai-complete.js';
-import { applyEdits, buildRecord, buildReviewModel, REVIEW_FIELDS } from './review.js';
+import {
+  applyEdits, buildRecord, buildReviewModel, conflictedAiValues, REVIEW_FIELDS,
+} from './review.js';
 import { DUPLICATE_COLUMN_KEYS, describeDuplicate, evaluateDuplicate, toRows } from './duplicate.js';
 import { readDuplicateColumns } from './sheets.js';
 import { newRecordId, saveRecord } from './record.js';
@@ -59,6 +61,7 @@ for (const id of [
   'ro-start', 'ro-message', 'ro-progress',
   'ro-review-panel', 'ro-review-lead', 'ro-review-image', 'ro-review-confidence',
   'ro-review-warnings', 'ro-review-fields', 'ro-duplicate',
+  'ro-adopt-all-row', 'ro-adopt-all', 'ro-adopt-all-note',
   'ro-keep-review', 'ro-save', 'ro-cancel',
 ]) {
   el[id] = document.getElementById(id);
@@ -497,7 +500,24 @@ function renderReview() {
     if (row.aiValue !== '') {
       const hint = document.createElement('p');
       hint.className = 'ro-field-row__hint';
-      hint.textContent = `AIの読み取り: ${row.aiValue}（食い違っています）`;
+
+      const label = document.createElement('span');
+      label.textContent = `AIの読み取り: ${row.aiValue}（食い違っています）`;
+
+      /*
+       * 押しても入力欄へ入れるだけ。確定はしない。
+       * 保存は下の保存ボタンを押したときだけ行う（§8）。
+       */
+      const adopt = document.createElement('button');
+      adopt.type = 'button';
+      adopt.className = 'ro-adopt';
+      adopt.textContent = 'この値を使う';
+      adopt.addEventListener('click', () => {
+        input.value = row.aiValue;
+        input.focus();
+      });
+
+      hint.append(label, adopt);
       wrapper.append(hint);
     }
 
@@ -512,6 +532,15 @@ function renderReview() {
     editors.set(row.key, input);
     el['ro-review-fields'].append(wrapper);
   }
+
+  /* 食い違った項目をまとめて入れ替える導線（入力欄へ入れるだけ）。 */
+  const aiValues = conflictedAiValues(pending.reconciliation);
+  const conflictCount = Object.keys(aiValues).length;
+
+  el['ro-adopt-all-row'].hidden = conflictCount === 0;
+  el['ro-adopt-all-note'].textContent = conflictCount > 0
+    ? `${conflictCount}件が食い違っています。押しても入力欄へ入るだけで、保存はされません。`
+    : '';
 
   const described = describeDuplicate(pending.duplicate);
 
@@ -549,14 +578,18 @@ async function saveToSheet() {
       edits[key] = input.value;
     }
 
-    const applied = applyEdits(pending.values, edits, { fields: REVIEW_FIELDS });
+    const applied = applyEdits(pending.values, edits, {
+      fields: REVIEW_FIELDS,
+      reconciliation: pending.reconciliation,
+    });
     const now = timestamp();
 
     const record = buildRecord({
       values: applied.values,
+      /* MANUAL になるのは打ち直しのときだけ。AI の値の採用は HYBRID。 */
       edited: applied.edited,
       usedRule: true,
-      usedGemini: pending.usedGemini,
+      usedGemini: pending.usedGemini || applied.adoptedFromAi,
       validation: pending.validation,
       reconciliation: pending.reconciliation,
       confidence: pending.confidence,
@@ -641,6 +674,30 @@ async function start() {
   });
 
   el['ro-cancel'].addEventListener('click', cancelReview);
+
+  /*
+   * 食い違った項目をまとめて AI の読み取りに入れ替える。
+   * 入力欄へ入れるだけで、保存はしない。入れたあと手で直してもよい。
+   */
+  el['ro-adopt-all'].addEventListener('click', () => {
+    if (!pending) {
+      return;
+    }
+
+    const aiValues = conflictedAiValues(pending.reconciliation);
+    let filled = 0;
+
+    for (const [key, value] of Object.entries(aiValues)) {
+      const input = editors.get(key);
+
+      if (input) {
+        input.value = value;
+        filled += 1;
+      }
+    }
+
+    showInfo(`${filled}件をAIの読み取りに置き換えました。内容を確かめてから保存してください。`);
+  });
 
   globalThis.addEventListener('pagehide', () => {
     /* 画面を離れるときにトークンとプレビューを捨てる。 */

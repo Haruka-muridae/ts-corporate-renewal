@@ -124,6 +124,17 @@
     -->
     <ul class="ro-warnings" id="ro-review-warnings" hidden></ul>
 
+    <!--
+      突合で食い違った項目をまとめて AI の読み取りに入れ替える。
+      入力欄へ入れるだけで、保存は下の保存ボタンを押したときのみ。
+    -->
+    <p class="ro-adopt-all" id="ro-adopt-all-row" hidden>
+      <button type="button" id="ro-adopt-all" class="auth-button auth-button--ghost auth-button--small">
+        AIの読み取りをすべて採用
+      </button>
+      <span class="ro-note" id="ro-adopt-all-note"></span>
+    </p>
+
     <div class="ro-review">
       <div class="ro-review__image">
         <img id="ro-review-image" class="ro-preview__image" alt="読み取った領収書の原本画像">
