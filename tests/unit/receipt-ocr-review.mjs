@@ -321,6 +321,65 @@ try {
     check('★AI 側の値も見せる（人が選べるように）', row.aiValue === '1200');
   }
 
+  /*
+   * ★実機で見つかった抜け（2026-08-04）。
+   * 未来日が入っても、確認画面に何の断りも出ていなかった。
+   * §13 の警告はシートの警告内容列だけでなく、直せる場所＝画面にも出す。
+   */
+  {
+    const values = { usedOn: '2027-07-29', payee: 'A', totalAmount: 1200, originalUrl: 'https://x' };
+    const result = validate.validateAll(values, { now: NOW });
+
+    check('検証は未来日を捉えている', result.date.ok === false);
+
+    const model = review.buildReviewModel({
+      values,
+      validation: result,
+      confidenceLevel: CONFIDENCE_LEVEL.HIGH,
+    });
+
+    const row = model.rows.find((r) => r.key === 'usedOn');
+
+    check('★未来日の警告が利用日の行に出る',
+      row.warnings.some((w) => w.includes('未来')));
+    check('★その行を強調する', row.highlight === true);
+    check('★値は消さない（人が直す判断材料として残す）', row.value === '2027-07-29');
+    check('警告の全体一覧にも入る',
+      model.warnings.some((w) => w.includes('未来')));
+  }
+
+  {
+    /* 金額側の警告も、金額の行に出る。 */
+    const values = { usedOn: '2026-08-01', payee: 'A', totalAmount: '1.5', originalUrl: 'https://x' };
+    const model = review.buildReviewModel({
+      values,
+      validation: validate.validateAll(values, { now: NOW }),
+      confidenceLevel: CONFIDENCE_LEVEL.HIGH,
+    });
+
+    check('金額の警告は合計金額の行に出る',
+      model.rows.find((r) => r.key === 'totalAmount').warnings.length > 0);
+  }
+
+  {
+    /* 項目に結び付かない警告は、上部へまとめて出す。 */
+    const values = { usedOn: '2026-08-01', payee: '', totalAmount: 1200, originalUrl: 'https://x' };
+    const model = review.buildReviewModel({
+      values,
+      validation: validate.validateAll(values, { now: NOW }),
+      confidenceLevel: CONFIDENCE_LEVEL.HIGH,
+    });
+
+    check('必須項目の不足は全体の警告として出る',
+      model.generalWarnings.some((w) => w.includes('必須項目')));
+    check('項目に付けた警告は全体側へ重複させない',
+      !model.generalWarnings.some((w) => w.includes('未来')));
+  }
+
+  check('検証が無ければ警告は空',
+    review.buildReviewModel({ values: { usedOn: '2026-08-01', payee: 'A', totalAmount: 1 } })
+      .warnings.length === 0);
+
   check('★信頼度が低ければ全体を強調する',
     review.buildReviewModel({
       values: { usedOn: '2026-08-01', payee: 'A', totalAmount: 1 },

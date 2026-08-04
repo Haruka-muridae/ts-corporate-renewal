@@ -58,7 +58,8 @@ for (const id of [
   'ro-meta-name', 'ro-meta-hash', 'ro-meta-folder',
   'ro-start', 'ro-message', 'ro-progress',
   'ro-review-panel', 'ro-review-lead', 'ro-review-image', 'ro-review-confidence',
-  'ro-review-fields', 'ro-duplicate', 'ro-keep-review', 'ro-save', 'ro-cancel',
+  'ro-review-warnings', 'ro-review-fields', 'ro-duplicate',
+  'ro-keep-review', 'ro-save', 'ro-cancel',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -440,6 +441,7 @@ function renderReview() {
     values: pending.values,
     reconciliation: pending.reconciliation,
     confidenceLevel: pending.confidence.level,
+    validation: pending.validation,
   });
 
   el['ro-review-image'].src = selected.previewUrl;
@@ -453,6 +455,19 @@ function renderReview() {
   el['ro-review-lead'].textContent = model.highlightCount > 0
     ? `${model.highlightCount}件の項目は確認が必要です。内容を見て、必要なら直してください。`
     : '読み取った内容です。保存する前にご確認ください。';
+
+  /*
+   * 検証の警告（§13）。項目に結び付かないものをここへ出す。
+   * 項目ごとの警告は、その行の下に添える。
+   */
+  el['ro-review-warnings'].replaceChildren();
+  el['ro-review-warnings'].hidden = model.generalWarnings.length === 0;
+
+  for (const warning of model.generalWarnings) {
+    const item = document.createElement('li');
+    item.textContent = warning;
+    el['ro-review-warnings'].append(item);
+  }
 
   /* 行を作り直す。innerHTML は使わない（§13）。 */
   el['ro-review-fields'].replaceChildren();
@@ -483,6 +498,14 @@ function renderReview() {
       const hint = document.createElement('p');
       hint.className = 'ro-field-row__hint';
       hint.textContent = `AIの読み取り: ${row.aiValue}（食い違っています）`;
+      wrapper.append(hint);
+    }
+
+    /* 検証の警告（未来日・金額の桁など）。値は消さず、理由だけ添える。 */
+    for (const warning of row.warnings) {
+      const hint = document.createElement('p');
+      hint.className = 'ro-field-row__hint';
+      hint.textContent = warning;
       wrapper.append(hint);
     }
 

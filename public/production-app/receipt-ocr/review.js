@@ -47,23 +47,53 @@ function text(value) {
 }
 
 /*
+ * 検証の警告を、関係する項目へ割り当てる（v1.3 §13）。
+ *
+ * ------------------------------------------------------------------
+ * 警告はシートだけでなく画面にも出す
+ * ------------------------------------------------------------------
+ * 当初は buildRecord() が警告内容列へ書くだけで、確認画面には
+ * 出していなかった。実機で未来日（§13.2）が入った領収書を保存する際、
+ * 画面に何の断りも出ないことが分かった。
+ *
+ * 警告は「人が直す判断材料」なので、直せる場所＝確認画面に出す。
+ * 値そのものは消さない（消すと、何を直せばよいか分からなくなる）。
+ * ------------------------------------------------------------------
+ */
+function warningsByField(validation) {
+  if (!validation) {
+    return {};
+  }
+
+  return {
+    usedOn: [...(validation.date?.warnings ?? [])],
+    totalAmount: [...(validation.amount?.warnings ?? [])],
+  };
+}
+
+/*
  * 確認画面に出す行を作る。
  *
  * highlight が true の項目を強調表示する（§8）。
- * 強調の理由は「値が無い」「突合で食い違った」「信頼度が低い」の3つ。
+ * 強調の理由は「値が無い」「突合で食い違った」「検証の警告がある」
+ * 「信頼度が低い」の4つ。
  */
 export function buildReviewModel({
   values = {},
   reconciliation = null,
   confidenceLevel = null,
+  validation = null,
   fields = REVIEW_FIELDS,
 } = {}) {
+  const fieldWarnings = warningsByField(validation);
+
   const rows = fields.map((key) => {
     const column = columnOf(DATA_COLUMNS, key);
     const value = text(values[key]);
     const field = reconciliation?.fields?.[key] ?? null;
     const missing = REQUIRED_KEYS.has(key) && value === '';
     const conflicted = field?.status === RECONCILE.CONFLICT;
+    const warnings = fieldWarnings[key] ?? [];
 
     return {
       key,
@@ -74,7 +104,8 @@ export function buildReviewModel({
       /* 食い違ったときは AI 側の値も見せて、人が選べるようにする。 */
       aiValue: conflicted ? text(field.aiValue) : '',
       status: field?.status ?? null,
-      highlight: shouldHighlight({
+      warnings,
+      highlight: warnings.length > 0 || shouldHighlight({
         level: confidenceLevel,
         needsReview: Boolean(field?.needsReview),
         missing,
@@ -82,8 +113,17 @@ export function buildReviewModel({
     };
   });
 
+  /*
+   * どの項目にも結び付かない警告（必須項目の不足、税率別対象額の不一致など）。
+   * 画面の上部へまとめて出す。
+   */
+  const attached = new Set(Object.values(fieldWarnings).flat());
+  const general = (validation?.warnings ?? []).filter((warning) => !attached.has(warning));
+
   return {
     rows,
+    warnings: [...(validation?.warnings ?? [])],
+    generalWarnings: general,
     highlightCount: rows.filter((row) => row.highlight).length,
   };
 }

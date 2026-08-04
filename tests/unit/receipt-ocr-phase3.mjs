@@ -222,6 +222,114 @@ try {
     reconcileField({ ruleValue: '03-1234-5678', ai: { value: '03-1234-5678 ', evidence: 'TEL 03-1234-5678' }, ocrText: OCR }).status
       === RECONCILE.AGREED);
 
+  /* ---------------------------------------------------------------- */
+  section('§5-⑦ 書き方の違いを食い違いと呼ばない（2026-08-04 実機）');
+
+  {
+    /*
+     * ★実機で出た誤判定。
+     * ルールはハイフン無し、AI はハイフン付きで同じ番号を返す。
+     */
+    const PHONE_OCR = 'TEL 070-1240-0971';
+    const result = reconcileField({
+      ruleValue: '07012400971',
+      ai: { value: '070-1240-0971', evidence: 'TEL 070-1240-0971' },
+      ocrText: PHONE_OCR,
+      field: 'phoneNumber',
+    });
+
+    check('★電話番号のハイフン差を一致とみなす', result.status === RECONCILE.AGREED);
+    check('★要確認にしない', result.needsReview === false);
+    check('シートにはルール側の書き方を残す', result.value === '07012400971');
+  }
+
+  check('★金額の桁区切りと通貨記号の差を一致とみなす',
+    reconcileField({
+      ruleValue: '1200',
+      ai: { value: '¥1,200', evidence: '合計 ¥1,200' },
+      ocrText: OCR,
+      field: 'totalAmount',
+    }).status === RECONCILE.AGREED);
+
+  check('★日付の書式差を一致とみなす',
+    reconcileField({
+      ruleValue: '2026-08-01',
+      ai: { value: '2026年8月1日', evidence: '2026年8月1日' },
+      ocrText: OCR,
+      field: 'usedOn',
+    }).status === RECONCILE.AGREED);
+
+  check('★登録番号のハイフン差を一致とみなす',
+    reconcileField({
+      ruleValue: 'T1234567890123',
+      ai: { value: 'T-1234567890123', evidence: 'T1234567890123' },
+      ocrText: OCR,
+      field: 'registrationNumber',
+    }).status === RECONCILE.AGREED);
+
+  check('★レシートNo.の空白差を一致とみなす',
+    reconcileField({
+      ruleValue: '0001',
+      ai: { value: ' 0001 ', evidence: 'レシートNo. 0001' },
+      ocrText: OCR,
+      field: 'receiptNumber',
+    }).status === RECONCILE.AGREED);
+
+  /* 正規化しても値が違えば、きちんと食い違いとして扱う。 */
+  check('別の電話番号は食い違いのまま',
+    reconcileField({
+      ruleValue: '07012400971',
+      ai: { value: '070-9999-9999', evidence: 'TEL 070-1240-0971' },
+      ocrText: 'TEL 070-1240-0971',
+      field: 'phoneNumber',
+    }).status === RECONCILE.CONFLICT);
+
+  check('別の金額は食い違いのまま',
+    reconcileField({
+      ruleValue: '2000',
+      ai: { value: '¥1,200', evidence: '合計 ¥1,200' },
+      ocrText: OCR,
+      field: 'totalAmount',
+    }).status === RECONCILE.CONFLICT);
+
+  check('★T の有無は意味が違うので一致にしない',
+    reconcileField({
+      ruleValue: 'T1234567890123',
+      ai: { value: '1234567890123', evidence: 'T1234567890123' },
+      ocrText: OCR,
+      field: 'registrationNumber',
+    }).status === RECONCILE.CONFLICT);
+
+  {
+    /* 比較用の正規化を直接見る。 */
+    check('金額は数値へ寄せて比べる',
+      ai.comparableValue('totalAmount', '¥1,200') === '1200'
+      && ai.comparableValue('totalAmount', '1200') === '1200');
+
+    check('日付は YYYY-MM-DD へ寄せて比べる',
+      ai.comparableValue('usedOn', '2026年8月1日') === '2026-08-01'
+      && ai.comparableValue('usedOn', '2026/08/01') === '2026-08-01');
+
+    check('電話番号は記号を落として比べる',
+      ai.comparableValue('phoneNumber', '070-1240-0971') === '07012400971');
+
+    check('★支払先は記号を落とさない（店名の一部でありうる）',
+      ai.comparableValue('payee', '株式会社サンプル-商事') === '株式会社サンプル-商事');
+
+    check('読めない金額は文字列として比べる（取り違えない）',
+      ai.comparableValue('totalAmount', '約1000') === '約1000');
+  }
+
+  check('全項目の突合でも項目ごとの正規化が効く',
+    reconcile({
+      ruleValues: { phoneNumber: '07012400971', totalAmount: '1200' },
+      aiValues: {
+        phoneNumber: { value: '070-1240-0971', evidence: 'TEL 070-1240-0971' },
+        totalAmount: { value: '¥1,200', evidence: '合計 ¥1,200' },
+      },
+      ocrText: `${OCR}\nTEL 070-1240-0971`,
+    }).needsReview === false);
+
   {
     /* ルールが読めなかった項目を AI が埋める。これが「補完」。 */
     const result = reconcileField({

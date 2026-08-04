@@ -473,6 +473,41 @@ try {
   check('行の途中の「様」は宛名とみなさない',
     extract.extractPayee(toLines('王様のパン工房')).value === '王様のパン工房');
 
+  /*
+   * ★実機で採用してしまったゴミ行（2026-08-04）。
+   * 手書き領収証の複数の欄が1行へ潰れた形。
+   * 行全体が日付でもなく、行末が「様」でもないため、両方の除外をすり抜けた。
+   */
+  {
+    const GARBAGE = '様 様 2027 年 7 月 29 日 729';
+
+    check('★欄が潰れた混在行を店名にしない',
+      extract.extractPayee(toLines(GARBAGE)).value === null);
+
+    const result = extract.extractPayee(toLines([
+      '領収証',
+      GARBAGE,
+      'まるまるマート',
+    ].join('\n')));
+
+    check('★混在行を飛ばして店名へ届く', result.value === 'まるまるマート');
+  }
+
+  check('★単独で立つ「様」は行末でなくても宛名とみなす',
+    extract.extractPayee(toLines('様 2026年8月1日')).value === null);
+
+  check('★区切りに空白が入った日付も混在行として外す',
+    extract.extractPayee(toLines('2027 年 7 月 29 日 729')).value === null);
+
+  check('★「7月29日」だけの行も外す',
+    extract.extractPayee(toLines('7月29日 729')).value === null);
+
+  check('★令和表記が混ざる行も外す',
+    extract.extractPayee(toLines('令和 8 年 発行')).value === null);
+
+  check('法人格があれば混在行でも採る（外しすぎない）',
+    extract.extractPayee(toLines('株式会社サンプル商事 2027 年 7 月 29 日')).confirmed === true);
+
   {
     /* 法人格が読めている行は、日付や題字が同居していても採ってよい。 */
     const withDate = extract.extractPayee(toLines('株式会社サンプル商事 2026年8月1日'));

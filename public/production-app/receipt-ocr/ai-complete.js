@@ -25,6 +25,8 @@
 
 import { AppError, PROGRESS } from './errors.js';
 import { generate, textOf } from './gemini-client.js';
+import { normalizeAmount } from './amount.js';
+import { parseDate } from './extract.js';
 
 /*
  * 補完してもらう項目。
@@ -193,13 +195,73 @@ export function parseResponse(rawText, fields = COMPLETION_FIELDS) {
 /* ---------- evidence 照合（§13） ---------- */
 
 /*
- * 突き合わせのための正規化。
+ * evidence を原文から探すための正規化。
  *
  * OCR は空白や改行の入り方が安定しない。そこだけ吸収する。
  * 文字そのものは変えない（別の文字へ読み替えると照合の意味が薄れる）。
  */
 function normalizeForSearch(text) {
   return String(text ?? '').replace(/[\s　]/g, '');
+}
+
+/* ---------- 突合のための正規化（項目ごと） ---------- */
+
+/*
+ * ==================================================================
+ * 書き方の違いを「食い違い」と呼ばない
+ * ==================================================================
+ * ルール抽出と Gemini は同じ値を別の書き方で返す。
+ *
+ *   電話番号  07012400971   と 070-1240-0971
+ *   金額      1200          と ¥1,200
+ *   日付      2026-08-01    と 2026年8月1日
+ *
+ * 空白を落とすだけの比較では、これらが全部「不一致」になる。
+ * 不一致は §12.2 により要確認へ回るため、正しく読めている領収書まで
+ * 人の手に戻ってしまい、要確認が意味を持たなくなる。
+ *
+ * そこで、比較のときだけ項目の性質に合わせて正規化する。
+ * **シートへ書く値は正規化しない。** ここでやるのは比較のための
+ * 見比べ方の統一であって、値の書き換えではない。
+ * ==================================================================
+ */
+
+/* 数値として比べる項目（金額系）。 */
+const AMOUNT_FIELDS = new Set([
+  'totalAmount', 'taxTotal', 'tax8Base', 'tax8Amount', 'tax10Base', 'tax10Amount',
+]);
+
+/* 日付として比べる項目。 */
+const DATE_FIELDS = new Set(['usedOn']);
+
+/*
+ * 区切り記号を無視して比べる項目。
+ * 電話番号・登録番号・レシートNo. は、ハイフンの有無だけが違うことが多い。
+ */
+const IDENTIFIER_FIELDS = new Set(['phoneNumber', 'registrationNumber', 'receiptNumber']);
+
+export function comparableValue(field, value) {
+  const text = String(value ?? '').trim();
+
+  if (text === '') {
+    return '';
+  }
+
+  if (AMOUNT_FIELDS.has(field)) {
+    const number = normalizeAmount(text);
+    return number === null ? normalizeForSearch(text) : String(number);
+  }
+
+  if (DATE_FIELDS.has(field)) {
+    return parseDate(text) ?? normalizeForSearch(text);
+  }
+
+  if (IDENTIFIER_FIELDS.has(field)) {
+    /* 記号だけを落とす。文字と数字は残す（T の有無は意味を持つ）。 */
+    return normalizeForSearch(text).replace(/[-‐-―ー()（）.]/g, '').toUpperCase();
+  }
+
+  return normalizeForSearch(text);
 }
 
 /*
@@ -233,8 +295,17 @@ export const RECONCILE = Object.freeze({
   EMPTY: 'empty',
 });
 
-function sameValue(a, b) {
-  return normalizeForSearch(a) === normalizeForSearch(b) && normalizeForSearch(a) !== '';
+/*
+ * 同じ値とみなしてよいか。
+ *
+ * field を渡すと、その項目の性質に合わせて見比べる（comparableValue）。
+ * 渡さない場合は空白を落とすだけの比較に戻る。
+ */
+function sameValue(a, b, field = null) {
+  const left = field ? comparableValue(field, a) : normalizeForSearch(a);
+  const right = field ? comparableValue(field, b) : normalizeForSearch(b);
+
+  return left === right && left !== '';
 }
 
 /*
@@ -250,7 +321,7 @@ function sameValue(a, b) {
  * §15.1 は「誤った値を信頼度が高いとして提示した件数0件」を求めており、
  * 食い違いは、人が見るべき合図である。
  */
-export function reconcileField({ ruleValue = '', ai = null, ocrText = '' } = {}) {
+export function reconcileField({ ruleValue = '', ai = null, ocrText = '', field = null } = {}) {
   const rule = sanitizeText(ruleValue);
 
   if (!ai || !evidenceExists(ai.evidence, ocrText)) {
@@ -276,7 +347,11 @@ export function reconcileField({ ruleValue = '', ai = null, ocrText = '' } = {})
     return { status: RECONCILE.EMPTY, value: '', needsReview: false, source: 'none' };
   }
 
-  if (sameValue(rule, aiValue)) {
+  if (sameValue(rule, aiValue, field)) {
+    /*
+     * 一致。書き方が違うだけのことがあるが、値としては同じなので
+     * ルール側の書き方を残す（シートの表記を揺らさないため）。
+     */
     return { status: RECONCILE.AGREED, value: rule, needsReview: false, source: 'both' };
   }
 
@@ -308,6 +383,7 @@ export function reconcile({ ruleValues = {}, aiValues = {}, ocrText = '', fields
       ruleValue: ruleValues[field] ?? '',
       ai: aiValues?.[field] ?? null,
       ocrText,
+      field,
     });
 
     results[field] = result;
