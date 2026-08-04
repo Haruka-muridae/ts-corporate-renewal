@@ -87,8 +87,18 @@
           </p>
           <p class="poc-actions">
             <button class="auth-button" id="poc-run" type="button">検証を実行する</button>
+            <button class="auth-button auth-button--ghost" id="poc-models" type="button">利用できるモデルを調べる</button>
           </p>
           <p class="auth-message poc-message" id="poc-message" tabindex="-1" hidden></p>
+          <p class="poc-detail" id="poc-detail" hidden></p>
+          <div id="poc-models-result" hidden>
+            <h3 class="poc-subtitle">このキーで使えるモデル</h3>
+            <p class="poc-section__note">
+              モデル名は要件定義書 §20 で「フェーズ0で確定」とされた暫定値です。
+              現在の設定が一覧にあるかを確認できます。
+            </p>
+            <ul class="poc-list" id="poc-models-list"></ul>
+          </div>
 
           <div id="poc-gemini-result" hidden>
             <h3 class="poc-subtitle">原稿どおりの行順</h3>

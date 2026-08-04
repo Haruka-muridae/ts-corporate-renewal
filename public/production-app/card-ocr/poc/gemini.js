@@ -31,11 +31,14 @@ export const FALLBACK_MODEL = 'gemini-2.5-flash-lite';
 export const GeminiErrorCode = {
   KEY_MISSING: 'KEY_MISSING',
   KEY_REJECTED: 'KEY_REJECTED',
+  /* リクエストの形が不正。**キーの問題と混ぜない。** */
+  BAD_REQUEST: 'BAD_REQUEST',
   RATE_LIMITED: 'RATE_LIMITED',
   MODEL_NOT_FOUND: 'MODEL_NOT_FOUND',
   BAD_JSON: 'BAD_JSON',
   MISSING_FIELDS: 'MISSING_FIELDS',
   NETWORK: 'NETWORK',
+  SERVER_ERROR: 'SERVER_ERROR',
   UNKNOWN: 'UNKNOWN',
 };
 
@@ -46,39 +49,100 @@ export class GeminiError extends Error {
     this.name = 'GeminiError';
     this.code = code;
     this.status = status;
+    /*
+     * サーバーが返した理由をそのまま持つ。
+     * **画面とCSVへ出すのはこの値である。**「SYS-999」だけでは
+     * 何が起きたのか分からず、切り分けができない。
+     */
     this.detail = detail;
   }
 }
 
-/* 画面に出す言葉。エラーコードは要件定義書 §15 に対応する。 */
+/*
+ * エラー応答から、原因の要約を取り出す。
+ *
+ * Gemini は失敗時に { error: { code, status, message } } を返す。
+ * **message には原因がそのまま書かれている**（どのフィールドが不正か等）。
+ * 長すぎると画面が壊れるので頭を切る。キーは本文に出ないため、
+ * そのまま表示してよい。
+ */
+export function summarizeErrorBody(body, status) {
+  const error = body?.error;
+  const parts = [];
+
+  if (typeof error?.status === 'string' && error.status !== '') {
+    parts.push(error.status);
+  }
+
+  if (typeof error?.message === 'string' && error.message !== '') {
+    parts.push(error.message);
+  }
+
+  if (parts.length === 0) {
+    return `HTTP ${status}`;
+  }
+
+  const text = `HTTP ${status} ${parts.join(': ')}`;
+
+  return text.length > 300 ? `${text.slice(0, 297)}…` : text;
+}
+
+/*
+ * 画面に出す言葉。エラーコードは要件定義書 §15 に対応する。
+ *
+ * **detail を必ず返す。** 「SYS-999 不明なエラー」だけを出す画面は、
+ * 利用者にとっても開発者にとっても役に立たない。原因の要約を添える。
+ *
+ * GeminiError でない例外（こちらのコードの不具合）も、握りつぶさずに
+ * 名前とメッセージを出す。**どこで壊れたのかが分からない状態を作らない。**
+ */
 export function describeGeminiError(error) {
-  const code = error instanceof GeminiError ? error.code : GeminiErrorCode.UNKNOWN;
+  const isKnown = error instanceof GeminiError;
+  const code = isKnown ? error.code : GeminiErrorCode.UNKNOWN;
+  const detail = isKnown
+    ? String(error.detail ?? '')
+    : `${error?.name ?? 'Error'}: ${error?.message ?? String(error)}`;
+
+  const described = (text, errorCode) => ({ text, errorCode, detail });
 
   switch (code) {
     case GeminiErrorCode.KEY_MISSING:
-      return { text: 'Gemini APIキーが設定されていません。', errorCode: 'KEY-001' };
+      return described('Gemini APIキーが設定されていません。', 'KEY-001');
     case GeminiErrorCode.KEY_REJECTED:
-      return { text: 'このAPIキーでは接続できませんでした。', errorCode: 'KEY-002' };
+      return described('このAPIキーでは接続できませんでした。', 'KEY-002');
+    case GeminiErrorCode.BAD_REQUEST:
+      return described('リクエストの形式が不正です（キーの問題ではありません）。', 'AI-003');
     case GeminiErrorCode.RATE_LIMITED:
-      return {
-        text: '利用上限に達しています。無料枠の場合は時間をおいてお試しください。',
-        errorCode: 'AI-002',
-      };
+      return described('利用上限に達しています。無料枠の場合は時間をおいてお試しください。', 'AI-002');
     case GeminiErrorCode.MODEL_NOT_FOUND:
-      return { text: 'モデルが利用できませんでした。', errorCode: 'AI-005' };
+      return described('モデルが利用できませんでした。', 'AI-005');
     case GeminiErrorCode.BAD_JSON:
-      return { text: '応答の形式が不正でした。', errorCode: 'AI-003' };
+      return described('応答の形式が不正でした。', 'AI-003');
     case GeminiErrorCode.MISSING_FIELDS:
-      return { text: '応答に必要な項目がありませんでした。', errorCode: 'AI-004' };
+      return described('応答に必要な項目がありませんでした。', 'AI-004');
     case GeminiErrorCode.NETWORK:
-      return { text: '通信に失敗しました。', errorCode: 'AI-001' };
+      return described('通信に失敗しました。', 'AI-001');
+    case GeminiErrorCode.SERVER_ERROR:
+      return described('Gemini 側でエラーが起きました。', 'AI-001');
     default:
-      return { text: '不明なエラーが発生しました。', errorCode: 'SYS-999' };
+      return described('不明なエラーが発生しました。', 'SYS-999');
   }
 }
 
-function mapStatus(status) {
-  if (status === 400 || status === 401 || status === 403) {
+/*
+ * HTTPステータスを分類する。
+ *
+ * **400 をキーの問題にしない**（2026-08-04 の修正）。
+ * 400 はリクエストの形が不正なときに返る。キーが悪いときは 401/403 である。
+ * 混ぜると、こちらの組み立て間違いを「キーを確認してください」と
+ * 案内することになり、原因から遠ざかる。
+ */
+export function mapStatus(status) {
+  if (status === 400) {
+    return GeminiErrorCode.BAD_REQUEST;
+  }
+
+  if (status === 401 || status === 403) {
     return GeminiErrorCode.KEY_REJECTED;
   }
 
@@ -88,6 +152,10 @@ function mapStatus(status) {
 
   if (status === 404) {
     return GeminiErrorCode.MODEL_NOT_FOUND;
+  }
+
+  if (status >= 500) {
+    return GeminiErrorCode.SERVER_ERROR;
   }
 
   return GeminiErrorCode.UNKNOWN;
@@ -167,7 +235,21 @@ async function callOnce({ apiKey, model, text, fetchImpl, maxOutputTokens }) {
 
   if (!response?.ok) {
     const status = Number(response?.status) || 0;
-    throw new GeminiError(mapStatus(status), status, 'http_error');
+
+    /*
+     * **エラー本文を読んでから投げる。** ここを読み捨てると、
+     * 「どのフィールドが不正か」をサーバーが教えてくれているのに
+     * 画面には HTTP ステータスしか出ない。
+     */
+    let body = null;
+
+    try {
+      body = await response.json();
+    } catch {
+      /* JSON で無いこともある。その場合は status だけで要約する。 */
+    }
+
+    throw new GeminiError(mapStatus(status), status, summarizeErrorBody(body, status));
   }
 
   let payload = null;
@@ -213,4 +295,69 @@ export async function classifyCardText(text, {
 
     return callOnce({ apiKey: key, model: fallbackModel, text, fetchImpl, maxOutputTokens });
   }
+}
+
+/*
+ * このキーで使えるモデルの一覧を取る（GET）。
+ *
+ * ==================================================================
+ * なぜ要るのか
+ * ==================================================================
+ * モデル名は要件定義書 §20 で「フェーズ0で確定」とされた**暫定値**である。
+ * 名前が違えば 404 になるが、**404 を見ても正しい名前は分からない。**
+ *
+ * この一覧は Portal の疎通テストと同じ GET であり、実績のある呼び出しである。
+ * 生成が失敗したときに「そもそもどのモデルが使えるのか」を、
+ * 推測ではなく事実で確かめられるようにする。
+ *
+ * 戻り値: [{ name, displayName, supportsGenerate }]
+ * ==================================================================
+ */
+export async function listModels({ apiKey, fetchImpl } = {}) {
+  const key = String(apiKey ?? '').trim();
+
+  if (key === '') {
+    throw new GeminiError(GeminiErrorCode.KEY_MISSING, 0, 'no_key');
+  }
+
+  const impl = fetchImpl ?? globalThis.fetch;
+  let response = null;
+
+  try {
+    response = await impl(GEMINI_ENDPOINT_BASE, {
+      method: 'GET',
+      headers: { 'x-goog-api-key': key },
+    });
+  } catch {
+    throw new GeminiError(GeminiErrorCode.NETWORK, 0, 'fetch_failed');
+  }
+
+  if (!response?.ok) {
+    const status = Number(response?.status) || 0;
+    let body = null;
+
+    try {
+      body = await response.json();
+    } catch { /* JSON で無いこともある */ }
+
+    throw new GeminiError(mapStatus(status), status, summarizeErrorBody(body, status));
+  }
+
+  let payload = null;
+
+  try {
+    payload = await response.json();
+  } catch {
+    throw new GeminiError(GeminiErrorCode.BAD_JSON, 200, 'models_body_not_json');
+  }
+
+  const models = Array.isArray(payload?.models) ? payload.models : [];
+
+  return models.map((model) => ({
+    /* API は `models/xxx` の形で返す。呼び出しに使うのは後ろだけ。 */
+    name: String(model?.name ?? '').replace(/^models\//, ''),
+    displayName: String(model?.displayName ?? ''),
+    supportsGenerate: Array.isArray(model?.supportedGenerationMethods)
+      && model.supportedGenerationMethods.includes('generateContent'),
+  }));
 }

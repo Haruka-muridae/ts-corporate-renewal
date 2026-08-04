@@ -26,22 +26,38 @@ export const PROMPT_VERSION = 'poc-1';
  * - 非該当は空文字にする。キー自体を欠かせると、受け取り側が
  *   毎回 undefined を気にすることになる。
  */
+/*
+ * ==================================================================
+ * type は大文字にする（2026-08-04 の修正）
+ * ==================================================================
+ * REST API の `responseSchema` は JSON Schema そのものではなく、
+ * OpenAPI の部分集合を写した **proto の Schema メッセージ**である。
+ * `type` は列挙型で、正しい値は `OBJECT` `STRING` `ARRAY` のように
+ * **すべて大文字**。proto3 の JSON 解析は列挙名を大小区別して照合するため、
+ * `object` のような小文字は列挙名に一致せず、サーバー側で弾かれる。
+ *
+ * SDK を使うと変換してくれるが、**このアプリは fetch で REST を直接叩く**
+ * （要件定義書 §4.3）ので、こちらが正しい形で送る必要がある。
+ *
+ * 当初は小文字で書いており、これが SYS-999 の原因と見ている。
+ * ==================================================================
+ */
 export const CARD_SCHEMA = Object.freeze({
-  type: 'object',
+  type: 'OBJECT',
   properties: {
-    companyName: { type: 'string' },
-    departmentName: { type: 'string' },
-    jobTitle: { type: 'string' },
-    fullName: { type: 'string' },
-    fullNameKana: { type: 'string' },
-    postalCode: { type: 'string' },
-    address: { type: 'string' },
-    phone: { type: 'string' },
-    mobile: { type: 'string' },
-    fax: { type: 'string' },
-    email: { type: 'string' },
-    url: { type: 'string' },
-    uncertainFields: { type: 'array', items: { type: 'string' } },
+    companyName: { type: 'STRING' },
+    departmentName: { type: 'STRING' },
+    jobTitle: { type: 'STRING' },
+    fullName: { type: 'STRING' },
+    fullNameKana: { type: 'STRING' },
+    postalCode: { type: 'STRING' },
+    address: { type: 'STRING' },
+    phone: { type: 'STRING' },
+    mobile: { type: 'STRING' },
+    fax: { type: 'STRING' },
+    email: { type: 'STRING' },
+    url: { type: 'STRING' },
+    uncertainFields: { type: 'ARRAY', items: { type: 'STRING' } },
   },
   required: [
     'companyName',

@@ -23,6 +23,9 @@ import { createMessageArea, createSubmitButton } from '../../../auth/ui.js';
 import {
   classifyCardText,
   describeGeminiError,
+  listModels,
+  DEFAULT_MODEL,
+  FALLBACK_MODEL,
   GEMINI_HOST,
 } from './gemini.js';
 
@@ -94,8 +97,32 @@ const imageInput = document.getElementById('poc-image');
 const ocrStateElement = document.getElementById('poc-ocr-state');
 const ocrTextElement = document.getElementById('poc-ocr-text');
 
+const detailElement = document.getElementById('poc-detail');
+const modelsButton = document.getElementById('poc-models');
+const modelsResultElement = document.getElementById('poc-models-result');
+const modelsListElement = document.getElementById('poc-models-list');
+
 const message = createMessageArea(messageElement);
 const googleMessage = createMessageArea(googleMessageElement);
+
+/*
+ * 原因の要約を出す。
+ *
+ * **「SYS-999 不明なエラー」だけで終わらせない。** サーバーが返した理由や、
+ * こちらのコードが投げた例外の名前を、そのまま見えるようにする。
+ */
+function showDetail(detail) {
+  const text = String(detail ?? '').trim();
+
+  if (text === '') {
+    detailElement.hidden = true;
+    detailElement.textContent = '';
+    return;
+  }
+
+  detailElement.textContent = text;
+  detailElement.hidden = false;
+}
 const driveMessage = createMessageArea(driveMessageElement);
 const run = createSubmitButton(runButton, { busyLabel: '実行しています…' });
 const connect = createSubmitButton(connectButton, { busyLabel: '連携しています…' });
@@ -572,6 +599,8 @@ async function measureOne(file, no, { token, apiKey }) {
       fileName: file.name,
       status,
       errorCode: described.errorCode,
+      /* 原因の要約をCSVへ残す。あとから切り分けられるようにするため。 */
+      errorDetail: described.detail ?? '',
       recordedAt,
       totalMs: Date.now() - startedAt,
       ocrMs,
@@ -748,13 +777,77 @@ runButton.addEventListener('click', async () => {
     uncertainElement.textContent = `uncertainFields — 原稿順: ${orderedUncertain.join(', ') || 'なし'} / 入替: ${shuffledUncertain.join(', ') || 'なし'}`;
 
     geminiResultElement.hidden = false;
+    showDetail('');
     message.show('実行しました。上の表で判定を確認してください。', 'success');
   } catch (error) {
     const described = describeGeminiError(error);
+
     message.show(`${described.text}（${described.errorCode}）`, 'error');
+
+    /*
+     * 原因の要約を必ず出す。エラーコードだけでは切り分けができない。
+     * モデル名が疑わしいときは、次の操作も案内する。
+     */
+    const hint = described.errorCode === 'AI-005'
+      ? '\n\n→「利用できるモデルを調べる」を押して、設定中のモデル名が一覧にあるか確認してください。'
+      : '';
+
+    showDetail(`${described.detail}${hint}`);
     message.focus();
   } finally {
     run.stop();
+  }
+});
+
+/*
+ * このキーで使えるモデルを調べる。
+ *
+ * 生成が失敗したときに「そもそもどのモデルが使えるのか」を、
+ * 推測ではなく事実で確かめるための操作。
+ * Portal の疎通テストと同じ GET なので、生成が壊れていても動く。
+ */
+modelsButton.addEventListener('click', async () => {
+  message.clear();
+  showDetail('');
+
+  const key = KeyStore.get(PROVIDERS.gemini);
+
+  if (key === null) {
+    message.show('Gemini APIキーが設定されていません。（KEY-001）', 'error');
+    message.focus();
+    return;
+  }
+
+  try {
+    const models = await listModels({ apiKey: key, fetchImpl: countingFetch });
+    const usable = models.filter((model) => model.supportsGenerate);
+
+    modelsListElement.replaceChildren();
+
+    const configured = [DEFAULT_MODEL, FALLBACK_MODEL];
+
+    for (const name of configured) {
+      const found = usable.some((model) => model.name === name);
+      const item = document.createElement('li');
+
+      item.textContent = `設定中: ${name} — ${found ? '一覧にあります' : '★ 一覧にありません（404の原因）'}`;
+      item.className = found ? 'poc-list__ok' : 'poc-list__ng';
+      modelsListElement.append(item);
+    }
+
+    for (const model of usable) {
+      const item = document.createElement('li');
+      item.textContent = model.displayName ? `${model.name}（${model.displayName}）` : model.name;
+      modelsListElement.append(item);
+    }
+
+    modelsResultElement.hidden = false;
+    message.show(`generateContent を使えるモデルが ${usable.length} 件見つかりました。`, 'success');
+  } catch (error) {
+    const described = describeGeminiError(error);
+    message.show(`${described.text}（${described.errorCode}）`, 'error');
+    showDetail(described.detail);
+    message.focus();
   }
 });
 

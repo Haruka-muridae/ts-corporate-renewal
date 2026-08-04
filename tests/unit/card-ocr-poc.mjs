@@ -77,9 +77,29 @@ try {
     'confidence を持たせていない',
     !('confidence' in prompt.CARD_SCHEMA.properties),
   );
+
+  /*
+   * responseSchema は proto の列挙型。**小文字だとサーバーに弾かれる。**
+   * SYS-999 の原因になっていた箇所なので、テストで固定する。
+   */
+  check('スキーマの type は大文字（OBJECT）', prompt.CARD_SCHEMA.type === 'OBJECT');
+  check(
+    'すべてのプロパティの type が大文字',
+    Object.values(prompt.CARD_SCHEMA.properties)
+      .every((property) => property.type === property.type.toUpperCase()),
+    JSON.stringify(Object.values(prompt.CARD_SCHEMA.properties).map((p) => p.type)),
+  );
+  check(
+    '配列の items の type も大文字',
+    prompt.CARD_SCHEMA.properties.uncertainFields.items.type === 'STRING',
+  );
+  check(
+    'スキーマ全体に小文字の type が残っていない',
+    !/"type"\s*:\s*"[a-z]/.test(JSON.stringify(prompt.CARD_SCHEMA)),
+  );
   check(
     'uncertainFields を持っている',
-    prompt.CARD_SCHEMA.properties.uncertainFields?.type === 'array',
+    prompt.CARD_SCHEMA.properties.uncertainFields?.type === 'ARRAY',
   );
 
   for (const field of ['companyName', 'fullName', 'email', 'phone', 'uncertainFields']) {
@@ -191,6 +211,11 @@ try {
     [401, gemini.GeminiErrorCode.KEY_REJECTED, 'KEY-002', KEY],
     [403, gemini.GeminiErrorCode.KEY_REJECTED, 'KEY-002', KEY],
     [429, gemini.GeminiErrorCode.RATE_LIMITED, 'AI-002', KEY],
+    /* 400 はリクエストの形の問題。**キーの問題と混ぜない。** */
+    [400, gemini.GeminiErrorCode.BAD_REQUEST, 'AI-003', KEY],
+    /* 500番台はサーバー側。SYS-999 にしない。 */
+    [500, gemini.GeminiErrorCode.SERVER_ERROR, 'AI-001', KEY],
+    [503, gemini.GeminiErrorCode.SERVER_ERROR, 'AI-001', KEY],
   ];
 
   for (const [status, expectedCode, expectedErrorCode, key] of errorCases) {
@@ -241,6 +266,104 @@ try {
     } catch { /* 期待どおり */ }
 
     check('429 では再試行しない', calls.length === 1);
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('原因の要約を必ず返す（SYS-999 で終わらせない）');
+
+  {
+    /* サーバーが返した理由を detail に載せる。 */
+    const body = {
+      error: {
+        code: 400,
+        status: 'INVALID_ARGUMENT',
+        message: 'Invalid JSON payload received. Unknown value at generationConfig.responseSchema.type',
+      },
+    };
+
+    const stub = makeStub(jsonResponse(body, 400));
+    let caught = null;
+
+    try {
+      await gemini.classifyCardText('テキスト', { apiKey: KEY, fetchImpl: stub.impl });
+    } catch (error) { caught = error; }
+
+    const described = gemini.describeGeminiError(caught);
+
+    check('400 は AI-003（キーの問題にしない）', described.errorCode === 'AI-003');
+    check('detail にサーバーの status が入る', described.detail.includes('INVALID_ARGUMENT'));
+    check('detail にサーバーの message が入る', described.detail.includes('responseSchema'));
+    check('detail にHTTPステータスが入る', described.detail.includes('400'));
+  }
+
+  {
+    /* GeminiError でない例外でも、名前とメッセージを出す。 */
+    const described = gemini.describeGeminiError(new TypeError('x is not a function'));
+
+    check('未知の例外は SYS-999', described.errorCode === 'SYS-999');
+    check('未知の例外でも名前を出す', described.detail.includes('TypeError'));
+    check('未知の例外でもメッセージを出す', described.detail.includes('is not a function'));
+  }
+
+  {
+    /* 本文がJSONでなくても、ステータスだけは残す。 */
+    const impl = async () => ({ ok: false, status: 502, json: async () => { throw new Error('nope'); } });
+    let caught = null;
+
+    try {
+      await gemini.classifyCardText('テキスト', { apiKey: KEY, fetchImpl: impl });
+    } catch (error) { caught = error; }
+
+    const described = gemini.describeGeminiError(caught);
+
+    check('502 は SERVER_ERROR', caught?.code === gemini.GeminiErrorCode.SERVER_ERROR);
+    check('本文が読めなくても detail にステータスが残る', described.detail.includes('502'));
+  }
+
+  check(
+    'summarizeErrorBody は本文が空でもステータスを返す',
+    gemini.summarizeErrorBody(null, 500) === 'HTTP 500',
+  );
+  check(
+    'summarizeErrorBody は長すぎる message を切る',
+    gemini.summarizeErrorBody({ error: { message: 'あ'.repeat(500) } }, 400).length <= 300,
+  );
+
+  /* ---------------------------------------------------------------- */
+  section('モデル一覧（listModels）');
+
+  {
+    const payload = {
+      models: [
+        { name: 'models/gemini-2.5-flash-lite', displayName: 'Flash Lite', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/text-embedding-004', displayName: 'Embedding', supportedGenerationMethods: ['embedContent'] },
+      ],
+    };
+
+    const stub = makeStub(jsonResponse(payload));
+    const models = await gemini.listModels({ apiKey: KEY, fetchImpl: stub.impl });
+
+    check('models/ の接頭辞を落とす', models[0].name === 'gemini-2.5-flash-lite');
+    check('generateContent の可否を判定する', models[0].supportsGenerate === true);
+    check('embedContent だけのモデルは生成不可', models[1].supportsGenerate === false);
+    check('GET で取る', stub.calls[0].options.method === 'GET');
+    check('キーはヘッダーで送る', stub.calls[0].options.headers['x-goog-api-key'] === KEY);
+    check('キーが URL に出ない', !stub.calls[0].url.includes(KEY));
+    check(
+      '送信先は generativelanguage のみ',
+      new URL(stub.calls[0].url).host === gemini.GEMINI_HOST,
+    );
+  }
+
+  {
+    const stub = makeStub(jsonResponse({}, 403));
+    let caught = null;
+
+    try {
+      await gemini.listModels({ apiKey: KEY, fetchImpl: stub.impl });
+    } catch (error) { caught = error; }
+
+    check('一覧取得の403も KEY_REJECTED', caught?.code === gemini.GeminiErrorCode.KEY_REJECTED);
   }
 
   {
