@@ -43,6 +43,20 @@ import { describeDriveError } from './drive-api.js';
 import { StorageNotice, ensureStorage } from './drive-storage.js';
 import { spreadsheetUrl } from './sheets.js';
 
+import { describeCaptureError, shrinkToJpeg } from './capture.js';
+import {
+  CaptureStep,
+  clearAll,
+  clearBack,
+  createCaptureState,
+  currentStep,
+  describeStep,
+  setBack,
+  setFront,
+  skipBack,
+  wantBack,
+} from './capture-flow.js';
+
 /* /production-app/card-ocr/ はサイトのルートから2階層下。 */
 setScreenDepth(2);
 
@@ -54,7 +68,11 @@ for (const id of [
   'co-login-link', 'co-portal-link', 'co-connect',
   'co-ready', 'co-disconnect', 'co-message',
   'co-storage', 'co-storage-state', 'co-storage-notices',
-  'co-sheet-link', 'co-capture',
+  'co-sheet-link',
+  'co-capture', 'co-capture-title', 'co-capture-text',
+  'co-front-field', 'co-front-input', 'co-back-field', 'co-back-input',
+  'co-ask-back', 'co-skip-back', 'co-want-back',
+  'co-previews', 'co-start-actions', 'co-start', 'co-reset',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -67,6 +85,13 @@ let connecting = false;
 let storage = null;
 /* 用意の処理中。連続で押されても1回にする。 */
 let provisioning = false;
+/*
+ * 撮影の状態（capture-flow.js）。
+ * **画像はここにしか持たない。** localStorage へ書かない（§FR-21）。
+ */
+let capture = createCaptureState();
+/* 前処理の実行中。処理が終わる前に次を選ばせない。 */
+let processing = false;
 
 /* ---------- 表示の道具（innerHTML を使わない） ---------- */
 
@@ -232,7 +257,10 @@ async function prepareStorage() {
 
     el['co-sheet-link'].href = spreadsheetUrl(storage.spreadsheetId);
     el['co-sheet-link'].hidden = false;
+
+    /* 保存先が用意できてから撮影へ進ませる（§8.1 ステージ0 → 1）。 */
     el['co-capture'].hidden = false;
+    renderCapture();
   } catch (error) {
     storage = null;
     el['co-storage-state'].textContent = '確認できませんでした';
@@ -243,6 +271,129 @@ async function prepareStorage() {
   } finally {
     provisioning = false;
   }
+}
+
+/* ---------- 撮影・前処理（SC-01 / SC-02） ---------- */
+
+function renderPreviews() {
+  const target = el['co-previews'];
+  target.replaceChildren();
+
+  for (const side of ['front', 'back']) {
+    const image = capture[side];
+
+    if (!image) {
+      continue;
+    }
+
+    const figure = document.createElement('figure');
+    figure.className = 'co-preview';
+    figure.dataset.side = side;
+
+    const picture = document.createElement('img');
+    picture.className = 'co-preview-image';
+    picture.src = image.dataUrl;
+    /*
+     * 名刺の中身を代替テキストに出さない。読み上げても意味が無く、
+     * 第三者の個人情報が別の経路へ出る口を増やすだけである。
+     */
+    picture.alt = side === 'front' ? '表面のプレビュー' : '裏面のプレビュー';
+
+    const caption = document.createElement('figcaption');
+    caption.className = 'co-preview-caption';
+    caption.textContent = `${side === 'front' ? '表面' : '裏面'}／`
+      + `${image.width}×${image.height}px／`
+      + `${Math.round(image.bytes / 1024)}KB`;
+
+    const actions = document.createElement('div');
+    actions.className = 'co-preview-actions';
+
+    const rotate = document.createElement('button');
+    rotate.type = 'button';
+    rotate.className = 'auth-button auth-button--ghost';
+    rotate.textContent = '回転';
+    rotate.addEventListener('click', () => { void rotateSide(side); });
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'auth-button auth-button--ghost';
+    remove.textContent = side === 'front' ? '選び直す' : '裏面を取り消す';
+    remove.addEventListener('click', () => { removeSide(side); });
+
+    actions.append(rotate, remove);
+    figure.append(picture, caption, actions);
+    target.append(figure);
+  }
+}
+
+function renderCapture() {
+  const step = currentStep(capture);
+  const described = describeStep(step);
+
+  el['co-capture-title'].textContent = described.title;
+  el['co-capture-text'].textContent = described.text;
+
+  /* いま撮る面だけを出す（§FR-03「1画面に2つの入力欄を並べない」）。 */
+  el['co-front-field'].hidden = step !== CaptureStep.FRONT;
+  el['co-back-field'].hidden = step !== CaptureStep.BACK;
+  el['co-ask-back'].hidden = step !== CaptureStep.ASK_BACK;
+  el['co-start-actions'].hidden = step !== CaptureStep.READY;
+
+  /* 読み取りの実装は次のPR。押せる形だけ用意しておく。 */
+  el['co-start'].disabled = true;
+
+  renderPreviews();
+}
+
+/*
+ * 選ばれたファイルを前処理して状態へ入れる。
+ *
+ * **入力欄の値は毎回空へ戻す。** 同じファイルをもう一度選んだときに
+ * change が発火しなくなるため。
+ */
+async function acceptFile(side, file, rotation = 0) {
+  if (processing) {
+    return;
+  }
+
+  processing = true;
+  clearMessage();
+
+  try {
+    const image = await shrinkToJpeg(file, { rotation });
+
+    capture = side === 'front'
+      ? setFront(capture, { ...image, source: file, rotation })
+      : setBack(capture, { ...image, source: file, rotation });
+  } catch (error) {
+    const described = describeCaptureError(error);
+    showMessage(`${described.text}（${described.errorCode}）`, 'error');
+  } finally {
+    processing = false;
+    el['co-front-input'].value = '';
+    el['co-back-input'].value = '';
+    renderCapture();
+  }
+}
+
+/*
+ * 回転は**元の画像から作り直す。**
+ * 縮小済みの画像を回し続けると、回すたびに劣化が積み上がる。
+ */
+async function rotateSide(side) {
+  const image = capture[side];
+
+  if (!image?.source) {
+    return;
+  }
+
+  await acceptFile(side, image.source, (image.rotation ?? 0) + 90);
+}
+
+function removeSide(side) {
+  capture = side === 'front' ? clearAll() : clearBack(capture);
+  clearMessage();
+  renderCapture();
 }
 
 /* ---------- Google 連携 ---------- */
@@ -319,6 +470,30 @@ async function start() {
 
 el['co-connect'].addEventListener('click', () => { void connect(); });
 el['co-disconnect'].addEventListener('click', disconnect);
+
+el['co-front-input'].addEventListener('change', (event) => {
+  void acceptFile('front', event.target.files?.[0] ?? null);
+});
+
+el['co-back-input'].addEventListener('change', (event) => {
+  void acceptFile('back', event.target.files?.[0] ?? null);
+});
+
+el['co-skip-back'].addEventListener('click', () => {
+  capture = skipBack(capture);
+  renderCapture();
+});
+
+el['co-want-back'].addEventListener('click', () => {
+  capture = wantBack(capture);
+  renderCapture();
+});
+
+el['co-reset'].addEventListener('click', () => {
+  capture = clearAll();
+  clearMessage();
+  renderCapture();
+});
 
 /*
  * 画面を離れるときにトークンを捨てる。

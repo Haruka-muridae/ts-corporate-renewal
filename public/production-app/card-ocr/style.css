@@ -121,6 +121,70 @@
   min-height: 44px;
 }
 
+/* ---------- 撮影（SC-01 / SC-02） ---------- */
+
+.co-field {
+  margin-bottom: 1rem;
+}
+
+.co-field-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-weight: 700;
+}
+
+/* ファイル選択は押しやすさを優先する。 */
+.co-field-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem;
+  border: 1px solid #c3ccd8;
+  border-radius: 0.375rem;
+  background: #fff;
+}
+
+.co-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0 0;
+}
+
+.co-preview {
+  flex: 1 1 14rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid #d9dee5;
+  border-radius: 0.375rem;
+  background: #fbfcfd;
+}
+
+.co-preview-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.25rem;
+  background: #eef2f7;
+}
+
+.co-preview-caption {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.co-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.co-preview-actions .auth-button {
+  min-height: 44px;
+  flex: 1 1 auto;
+}
+
 @media (max-width: 26rem) {
   .co-status {
     grid-template-columns: 1fr;

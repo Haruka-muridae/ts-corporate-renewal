@@ -123,8 +123,47 @@
              href="#" target="_blank" rel="noopener noreferrer" hidden>名刺管理シートを開く</a>
         </div>
 
-        <p id="co-capture" class="co-guidance-text" hidden>
-          名刺の読み取りは次の段階で実装します。現在は保存先の用意までを行います。
+      </section>
+
+      <!--
+        名刺の撮影・選択（SC-01 / SC-02）。
+        **表面と裏面を1画面に並べない**（§FR-03）。
+        いま撮る面だけを出し、順に進む。
+      -->
+      <section id="co-capture" class="co-panel" aria-live="polite" hidden>
+        <h2 id="co-capture-title" class="co-panel-title"></h2>
+        <p id="co-capture-text" class="co-guidance-text"></p>
+
+        <!-- 面ごとの入力。表示するのは片方だけ。 -->
+        <div id="co-front-field" class="co-field" hidden>
+          <label class="co-field-label" for="co-front-input">表面の画像</label>
+          <input id="co-front-input" class="co-field-input" type="file"
+                 accept="image/jpeg,image/png" capture="environment">
+        </div>
+
+        <div id="co-back-field" class="co-field" hidden>
+          <label class="co-field-label" for="co-back-input">裏面の画像</label>
+          <input id="co-back-input" class="co-field-input" type="file"
+                 accept="image/jpeg,image/png" capture="environment">
+        </div>
+
+        <!-- 裏面を撮るかどうか。「なしで進む」を先に置く（多数派のため）。 -->
+        <div id="co-ask-back" class="co-actions" hidden>
+          <button id="co-skip-back" type="button" class="auth-button">裏面なしで進む</button>
+          <button id="co-want-back" type="button" class="auth-button auth-button--ghost">裏面も読み取る</button>
+        </div>
+
+        <!-- プレビュー（§FR-04）。面ごとに取り消し・回転できる。 -->
+        <div id="co-previews" class="co-previews"></div>
+
+        <div id="co-start-actions" class="co-actions" hidden>
+          <button id="co-start" type="button" class="auth-button" disabled>読み取りを開始する</button>
+          <button id="co-reset" type="button" class="auth-button auth-button--ghost">選び直す</button>
+        </div>
+
+        <p id="co-capture-note" class="co-guidance-text">
+          読み取り（OCRと項目の振り分け）は次の段階で実装します。
+          現在は撮影・前処理までを行います。
         </p>
       </section>
 
