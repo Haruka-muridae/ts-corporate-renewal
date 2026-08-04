@@ -881,11 +881,758 @@ try {
   );
 
   /* ================================================================ */
+  section('台帳へ書く値の無害化（sanitize.js / FR-18）');
+
+  const sanitize = await import('../../public/production-app/card-ocr/sanitize.js');
+
+  {
+    const cases = [
+      ['=1+1', "'=1+1"],
+      ['=HYPERLINK("http://evil.example","x")', '\'=HYPERLINK("http://evil.example","x")'],
+      ['+81312345678', "'+81312345678"],
+      ['-5', "'-5"],
+      ['@example.com', "'@example.com"],
+      ['\tタブ始まり', "'\tタブ始まり"],
+      ['\r復帰始まり', "'\r復帰始まり"],
+      ['株式会社サンプル商事', '株式会社サンプル商事'],
+      ['taro@example.com', 'taro@example.com'],
+      ['', ''],
+    ];
+
+    for (const [input, expected] of cases) {
+      check(
+        `escapeCellText(${JSON.stringify(input).slice(0, 26)})`,
+        sanitize.escapeCellText(input) === expected,
+        JSON.stringify(sanitize.escapeCellText(input)),
+      );
+    }
+
+    check(
+      '**タブと復帰も対象にしている（PoC より広い）**',
+      sanitize.escapeCellText('\t=1').startsWith("'"),
+    );
+    check('null でも壊れない', sanitize.escapeCellText(null) === '');
+    check('undefined でも壊れない', sanitize.escapeCellText(undefined) === '');
+    check('数値も文字列にして返す', sanitize.escapeCellText(123) === '123');
+
+    const long = 'あ'.repeat(sanitize.SHORT_CELL_MAX_LENGTH + 100);
+    check('上限を超えたら切り詰める', sanitize.escapeCellText(long).length === sanitize.SHORT_CELL_MAX_LENGTH);
+    check('OCR本文は上限が広い', sanitize.escapeOcrText('あ'.repeat(2000)).length === 2000);
+  }
+
+  {
+    /* 画像リンクはこちらが組み立てる数式。URLは検証する。 */
+    const link = sanitize.buildImageLink('https://drive.google.com/file/d/ABC/view', '表面画像を見る');
+
+    check('Drive のURLなら数式を作る', link === '=HYPERLINK("https://drive.google.com/file/d/ABC/view","表面画像を見る")', link);
+    check(
+      'docs.google.com も許す（スプレッドシート）',
+      sanitize.buildImageLink('https://docs.google.com/spreadsheets/d/X/edit', 'x').startsWith('=HYPERLINK('),
+    );
+    check(
+      '**Drive 以外のURLでは数式を作らない**',
+      sanitize.buildImageLink('https://evil.example/x', 'x') === '',
+    );
+    check('http は許さない', sanitize.buildImageLink('http://drive.google.com/x', 'x') === '');
+    check('空でも壊れない', sanitize.buildImageLink(null, null) === '');
+    check(
+      '見出しの " をエスケープする',
+      sanitize.buildImageLink('https://drive.google.com/x', 'a"b').includes('"a""b"'),
+    );
+  }
+
+  {
+    check(
+      'ファイル名から使えない記号を落とす',
+      sanitize.sanitizeFileNamePart('株式会社/サンプル:商事*') === '株式会社サンプル商事',
+      sanitize.sanitizeFileNamePart('株式会社/サンプル:商事*'),
+    );
+    check(
+      'ハイフンと空白は残す（社名に現れる）',
+      sanitize.sanitizeFileNamePart('サンプル - 商事') === 'サンプル - 商事',
+    );
+    check(
+      '改行は空白へ畳む',
+      sanitize.sanitizeFileNamePart('サンプル\n商事') === 'サンプル 商事',
+    );
+  }
+
+  /* ================================================================ */
+  section('画像のハッシュ（hash.js）');
+
+  const hash = await import('../../public/production-app/card-ocr/hash.js');
+
+  check('計算できる環境か判定できる', typeof hash.isHashAvailable() === 'boolean');
+
+  if (hash.isHashAvailable()) {
+    const value = await hash.sha256OfBlob(new Blob(['abc']));
+
+    check(
+      'SHA-256 を16進で返す',
+      value === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      String(value),
+    );
+    check('長さは64文字', value.length === 64);
+
+    const both = await hash.hashBothSides({ front: new Blob(['abc']), back: null });
+    check('表面だけでも計算できる', both.front === value);
+    check('裏面が無ければ null', both.back === null);
+  }
+
+  check('Blob でなければ null', await hash.sha256OfBlob(null) === null);
+  check('引数が無くても壊れない', (await hash.hashBothSides()).front === null);
+
+  /* ================================================================ */
+  section('台帳の列構成（schema.js / §11.2・§11.3）');
+
+  const schema = await import('../../public/production-app/card-ocr/schema.js');
+
+  {
+    const headers = schema.headersOf(schema.DATA_COLUMNS);
+
+    check('列名が重複していない', new Set(headers).size === headers.length);
+    check('キーが重複していない', new Set(schema.DATA_COLUMNS.map((c) => c.key)).size === schema.DATA_COLUMNS.length);
+
+    for (const name of [
+      'record_id', 'duplicate_key',
+      'has_back', 'back_filled_fields',
+      'front_image_hash', 'back_image_hash',
+      'front_file_id', 'back_file_id',
+      'front_file_url', 'back_file_url',
+      'app_version', 'prompt_version',
+    ]) {
+      check(`§11.2 の列 ${name} がある`, headers.includes(name));
+    }
+
+    check(
+      '**v3.0 の統合列を残していない**',
+      !headers.includes('drive_file_id')
+        && !headers.includes('drive_file_url')
+        && !headers.includes('image_hash'),
+    );
+    check(
+      'FR-12 の主要5項目に対応する列がある',
+      ['会社名', '氏名', '役職', 'メールアドレス', '電話番号'].every((h) => headers.includes(h)),
+    );
+
+    const historyHeaders = schema.headersOf(schema.HISTORY_COLUMNS);
+    check(
+      '変更履歴は §11.3 の6列',
+      historyHeaders.join(',') === 'history_id,changed_at,record_id,field_name,old_value,new_value',
+      historyHeaders.join(','),
+    );
+    check('changed_by を持たない（本人のみ）', !historyHeaders.includes('changed_by'));
+  }
+
+  {
+    /* ヘッダー検証。**改変を見つけたら止める。** */
+    const expected = schema.headersOf(schema.DATA_COLUMNS);
+
+    check('一致すれば ok', schema.verifyHeader(expected).status === 'ok');
+    check('空なら empty', schema.verifyHeader([]).status === 'empty');
+    check('配列でなくても empty', schema.verifyHeader(null).status === 'empty');
+    check('右端の空欄は無視する', schema.verifyHeader([...expected, '', '']).status === 'ok');
+    check(
+      '前後の空白は改変とみなさない（手編集で紛れ込む）',
+      schema.verifyHeader(expected.map((h, i) => (i === 0 ? ` ${h} ` : h))).status === 'ok',
+    );
+    check(
+      '足りないだけなら upgrade',
+      schema.verifyHeader(expected.slice(0, 5)).status === 'upgrade',
+    );
+    check(
+      'upgrade は不足分を返す',
+      schema.verifyHeader(expected.slice(0, 5)).missing.length === expected.length - 5,
+    );
+    check(
+      '**並べ替えは altered（書き込みを止める）**',
+      schema.verifyHeader([expected[1], expected[0], ...expected.slice(2)]).status === 'altered',
+    );
+    check(
+      '**改名も altered**',
+      schema.verifyHeader(expected.map((h, i) => (i === 3 ? 'かってな見出し' : h))).status === 'altered',
+    );
+    check(
+      '途中の削除も altered（後ろがずれるため）',
+      schema.verifyHeader(expected.filter((_, i) => i !== 2)).status === 'altered',
+    );
+  }
+
+  {
+    /* 欠けているタブ。 */
+    check('欠けを見つける', schema.missingTabs(['名刺データ'], ['名刺データ', '変更履歴']).join(',') === '変更履歴');
+    check('揃っていれば空', schema.missingTabs(['名刺データ', '変更履歴'], ['名刺データ', '変更履歴']).length === 0);
+    check('前後の空白は無視する', schema.missingTabs([' 名刺データ '], ['名刺データ']).length === 0);
+  }
+
+  {
+    /* 重複判定キー（FR-19）。 */
+    check(
+      'メールが最優先',
+      schema.buildDuplicateKey({ email: 'A@Example.com', mobile: '090-1', companyName: 'X' }).key === 'email:a@example.com',
+    );
+    check('メールは小文字化して比べる', schema.buildDuplicateKey({ email: ' A@B.com ' }).key === 'email:a@b.com');
+    check(
+      'メールが無ければ携帯',
+      schema.buildDuplicateKey({ mobile: '090-1234-5678', companyName: 'X' }).key === 'mobile:09012345678',
+    );
+    check(
+      '番号は記号を落として数字だけで比べる',
+      schema.buildDuplicateKey({ mobile: '+81 90 1234 5678' }).key === 'mobile:819012345678',
+    );
+    check(
+      '連絡先が無ければ会社名＋氏名',
+      schema.buildDuplicateKey({ companyName: '株式会社 見本', fullName: '見本 太郎' }).key === 'name:株式会社見本/見本太郎',
+    );
+    check(
+      '**会社名＋氏名は確定に使わない（同姓同名がありうる）**',
+      schema.buildDuplicateKey({ companyName: 'X', fullName: 'Y' }).strong === false,
+    );
+    check('メールは確定に使える', schema.buildDuplicateKey({ email: 'a@b.com' }).strong === true);
+    check('何も無ければ空', schema.buildDuplicateKey({}).key === '');
+    check('引数が無くても壊れない', schema.buildDuplicateKey().source === 'none');
+  }
+
+  {
+    /* 行の組み立て。**列定義の順に、必ずサニタイズを通す。** */
+    const row = schema.buildDataRow({
+      record_id: 'R1',
+      companyName: '=DANGER()',
+      fullName: '見本 太郎',
+      uncertainFields: ['jobTitle', 'fax'],
+      hasBack: true,
+      backFilledFields: ['email'],
+      frontFileUrl: 'https://drive.google.com/file/d/F/view',
+      backFileUrl: '',
+    });
+
+    const index = (header) => schema.headersOf(schema.DATA_COLUMNS).indexOf(header);
+
+    check('列の数が定義と一致する', row.length === schema.DATA_COLUMNS.length);
+    check(
+      '**数式をそのまま入れない**',
+      row[index('会社名')] === "'=DANGER()",
+      row[index('会社名')],
+    );
+    check('配列は空白区切りにする', row[index('要確認項目')] === 'jobTitle fax');
+    check('has_back は TRUE', row[index('has_back')] === 'TRUE');
+    check(
+      '画像リンクは数式として組み立てる',
+      row[index('front_file_url')].startsWith('=HYPERLINK('),
+      row[index('front_file_url')],
+    );
+    check('裏面のURLが空なら空欄', row[index('back_file_url')] === '');
+    check(
+      '**裏面が無くても列は詰めない（空欄で置く）**',
+      row[index('back_image_hash')] === '' && row[index('back_file_id')] === '',
+    );
+    check('未指定の項目は空文字', row.every((value) => typeof value === 'string'));
+
+    const noBack = schema.buildDataRow({ hasBack: false });
+    check('has_back が false なら空欄（§11.2）', noBack[index('has_back')] === '');
+  }
+
+  /* ================================================================ */
+  section('Sheets API（sheets.js）');
+
+  const sheets = await import('../../public/production-app/card-ocr/sheets.js');
+
+  {
+    check('0 は A', sheets.columnLetter(0) === 'A');
+    check('25 は Z', sheets.columnLetter(25) === 'Z');
+    check('26 は AA', sheets.columnLetter(26) === 'AA', sheets.columnLetter(26));
+    check('51 は AZ', sheets.columnLetter(51) === 'AZ', sheets.columnLetter(51));
+    check('52 は BA', sheets.columnLetter(52) === 'BA', sheets.columnLetter(52));
+    check('負でも壊れない', sheets.columnLetter(-1) === 'A');
+
+    check(
+      '**列が26を超えても扱える（v3.1 で面ごとに分けたため）**',
+      schema.DATA_COLUMNS.length <= 26 || sheets.columnLetter(schema.DATA_COLUMNS.length - 1).length === 2,
+      `列数 ${schema.DATA_COLUMNS.length} → ${sheets.columnLetter(schema.DATA_COLUMNS.length - 1)}`,
+    );
+  }
+
+  check("タブ名を ' で囲む", sheets.quoteTabTitle('名刺データ') === "'名刺データ'");
+  check("タブ名の ' を二重にする", sheets.quoteTabTitle("a'b") === "'a''b'");
+
+  {
+    /* 追記は USER_ENTERED（§11.2 の HYPERLINK のため）。 */
+    const seen = [];
+
+    const impl = async (url, options = {}) => {
+      seen.push({ url: String(url), options });
+      return { ok: true, status: 200, json: async () => ({ updates: { updatedRange: "'名刺データ'!A2:Z2" } }) };
+    };
+
+    await sheets.appendRow('SHEET-ID', '名刺データ', ['a', 'b'], { token: 'T', fetchImpl: impl });
+
+    check(
+      '**追記は USER_ENTERED**（RAW だと HYPERLINK が文字列のまま残る）',
+      seen[0].url.includes('valueInputOption=USER_ENTERED'),
+      seen[0].url,
+    );
+    check('行として挿入する', seen[0].url.includes('insertDataOption=INSERT_ROWS'));
+    check('append を呼んでいる', seen[0].url.includes(':append'));
+    check('送信先は Sheets API', seen[0].url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/'));
+  }
+
+  {
+    /* 見出しは静的なので RAW でよい。 */
+    const seen = [];
+
+    const impl = async (url) => {
+      seen.push(String(url));
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    await sheets.writeHeader('SHEET-ID', '名刺データ', schema.DATA_COLUMNS, { token: 'T', fetchImpl: impl });
+
+    check('見出しは RAW で書く（数式にならない）', seen[0].includes('valueInputOption=RAW'), seen[0]);
+  }
+
+  {
+    /* 不足列は右端へ足す。既存列に触れない。 */
+    const seen = [];
+
+    const impl = async (url) => {
+      seen.push(decodeURIComponent(String(url)));
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    await sheets.appendMissingColumns('S', '名刺データ', 5, schema.DATA_COLUMNS.slice(5), {
+      token: 'T', fetchImpl: impl,
+    });
+
+    check('**6列目（F）から書き始める**', seen[0].includes("'名刺データ'!F1"), seen[0]);
+
+    seen.length = 0;
+    await sheets.appendMissingColumns('S', 'x', 0, [], { token: 'T', fetchImpl: impl });
+    check('足すものが無ければ通信しない', seen.length === 0);
+  }
+
+  {
+    /* 台帳の作成。タブを2つ作り、見出しを書き、フォルダへ移す。 */
+    const calls = [];
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      calls.push({ url: text, method: options.method ?? 'GET', body: options.body ?? null });
+
+      if (text.startsWith('https://sheets.googleapis.com/v4/spreadsheets?')) {
+        return { ok: true, status: 200, json: async () => ({ spreadsheetId: 'NEW-SHEET' }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    const id = await sheets.createSpreadsheet('FOLDER', { token: 'T', fetchImpl: impl });
+
+    check('IDを返す', id === 'NEW-SHEET');
+
+    const createBody = JSON.parse(calls[0].body);
+    check('タイトルは 名刺管理', createBody.properties.title === '名刺管理');
+    check('ロケールと時間帯を指定する', createBody.properties.locale === 'ja_JP' && createBody.properties.timeZone === 'Asia/Tokyo');
+    check(
+      '**タブを2つ作る（名刺データ / 変更履歴）**',
+      createBody.sheets.map((s) => s.properties.title).join(',') === '名刺データ,変更履歴',
+    );
+    check('見出しを2タブぶん書く', calls.filter((c) => c.method === 'PUT').length === 2);
+    check(
+      '作成後にフォルダへ移す（spreadsheets.create は親を指定できない）',
+      calls.some((c) => c.method === 'PATCH' && c.url.includes('addParents=FOLDER')),
+    );
+  }
+
+  {
+    /* 移動に失敗しても台帳は使える。全体を失敗にしない。 */
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+
+      if ((options.method ?? 'GET') === 'PATCH') {
+        return { ok: false, status: 403, json: async () => ({}) };
+      }
+
+      if (text.startsWith('https://sheets.googleapis.com/v4/spreadsheets?')) {
+        return { ok: true, status: 200, json: async () => ({ spreadsheetId: 'NEW-SHEET' }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    let id = null;
+    try { id = await sheets.createSpreadsheet('F', { token: 'T', fetchImpl: impl }); } catch { id = null; }
+
+    check('**フォルダへ移せなくても台帳は返す**', id === 'NEW-SHEET');
+  }
+
+  /* ================================================================ */
+  section('保存構造の解決（drive-storage.js / FR-07）');
+
+  const storage = await import('../../public/production-app/card-ocr/drive-storage.js');
+
+  /* localStorage の代わり。テスト間で状態を持ち越さない。 */
+  function installLocalStorage(initial = {}) {
+    const map = new Map(Object.entries(initial));
+
+    globalThis.localStorage = {
+      getItem: (key) => (map.has(key) ? map.get(key) : null),
+      setItem: (key, value) => { map.set(key, String(value)); },
+      removeItem: (key) => { map.delete(key); },
+    };
+
+    return map;
+  }
+
+  function clearLocalStorage() {
+    delete globalThis.localStorage;
+  }
+
+  check('IDの形を検査する', storage.isFileId('1a2B3c4D5e6F7g8H'));
+  check('短すぎる値は弾く', !storage.isFileId('abc'));
+  check('記号が混ざる値は弾く', !storage.isFileId('abc/def/ghi/jkl'));
+  check('null は弾く', !storage.isFileId(null));
+
+  {
+    /*
+     * 段階2を必ず通す。**キャッシュが空というだけでは作らない。**
+     */
+    installLocalStorage();
+    const calls = [];
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      calls.push({ url: text, method: options.method ?? 'GET' });
+
+      if ((options.method ?? 'GET') === 'GET' && text.includes('?q=') === false && text.includes('&q=') === false) {
+        /* files 一覧（検索）以外は空で返す。 */
+      }
+
+      if (text.includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [{ id: 'FOUND-1' }] }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ id: 'X' }) };
+    };
+
+    const result = await storage.resolveFolder('TSAM AI', null, 'k', { token: 'T', fetchImpl: impl });
+
+    check('検索で見つかればそれを使う', result.id === 'FOUND-1' && result.from === 'search');
+    check('**作成していない**', !calls.some((c) => c.method === 'POST'));
+    check('キャッシュへ書き戻す', globalThis.localStorage.getItem('k') === 'FOUND-1');
+
+    clearLocalStorage();
+  }
+
+  {
+    /* 見つからなければ作る。 */
+    installLocalStorage();
+
+    const impl = async (url) => {
+      if (String(url).includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [] }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ id: 'CREATED-1' }) };
+    };
+
+    const result = await storage.resolveFolder('TSAM AI', null, 'k', { token: 'T', fetchImpl: impl });
+
+    check('見つからなければ作る', result.id === 'CREATED-1' && result.created === true);
+    clearLocalStorage();
+  }
+
+  {
+    /* キャッシュが有効なら検索しない。 */
+    installLocalStorage({ k: '1a2B3c4D5e6F7g8H' });
+    const calls = [];
+
+    const impl = async (url) => {
+      calls.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: '1a2B3c4D5e6F7g8H',
+          name: 'TSAM AI',
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [],
+          trashed: false,
+        }),
+      };
+    };
+
+    const result = await storage.resolveFolder('TSAM AI', null, 'k', { token: 'T', fetchImpl: impl });
+
+    check('キャッシュをそのまま使う', result.from === 'cache');
+    check('検索していない', !calls.some((url) => url.includes('q=')));
+    clearLocalStorage();
+  }
+
+  {
+    /* キャッシュが別のものを指していたら捨てて探し直す。 */
+    installLocalStorage({ k: '1a2B3c4D5e6F7g8H' });
+
+    const impl = async (url) => {
+      const text = String(url);
+
+      if (text.includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [{ id: 'FOUND-2' }] }) };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: '1a2B3c4D5e6F7g8H',
+          /* 名前が違う＝別のフォルダを指している。 */
+          name: 'まったく別のフォルダ',
+          mimeType: 'application/vnd.google-apps.folder',
+          trashed: false,
+        }),
+      };
+    };
+
+    const result = await storage.resolveFolder('TSAM AI', null, 'k', { token: 'T', fetchImpl: impl });
+
+    check('**名前が違えばキャッシュを捨てる**', result.from === 'search' && result.id === 'FOUND-2');
+    clearLocalStorage();
+  }
+
+  {
+    /* ゴミ箱に入っていても捨てる。 */
+    installLocalStorage({ k: '1a2B3c4D5e6F7g8H' });
+
+    const impl = async (url) => {
+      if (String(url).includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [{ id: 'FOUND-3' }] }) };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: '1a2B3c4D5e6F7g8H',
+          name: 'TSAM AI',
+          mimeType: 'application/vnd.google-apps.folder',
+          trashed: true,
+        }),
+      };
+    };
+
+    const result = await storage.resolveFolder('TSAM AI', null, 'k', { token: 'T', fetchImpl: impl });
+    check('ゴミ箱のIDは使わない', result.id === 'FOUND-3');
+    clearLocalStorage();
+  }
+
+  {
+    /*
+     * **401 と 403 ではキャッシュを捨てない。**
+     * 認可の問題やレート制限で捨てると、復旧したときに重複して作る。
+     */
+    for (const status of [401, 403, 500]) {
+      installLocalStorage({ k: '1a2B3c4D5e6F7g8H' });
+
+      const impl = async () => ({ ok: false, status, json: async () => ({}) });
+
+      let caught = null;
+      try {
+        await storage.resolveFolder('TSAM AI', null, 'k', { token: 'T', fetchImpl: impl });
+      } catch (error) { caught = error; }
+
+      check(`${status} は投げ返す`, caught !== null);
+      check(
+        `**${status} でキャッシュを捨てない**`,
+        globalThis.localStorage.getItem('k') === '1a2B3c4D5e6F7g8H',
+      );
+
+      clearLocalStorage();
+    }
+  }
+
+  {
+    /* 404 なら捨てて探し直す。実体が消えているため。 */
+    installLocalStorage({ k: '1a2B3c4D5e6F7g8H' });
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+
+      if (text.includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [] }) };
+      }
+
+      if ((options.method ?? 'GET') === 'POST') {
+        return { ok: true, status: 200, json: async () => ({ id: 'REMADE' }) };
+      }
+
+      /* キャッシュしたIDの実体が消えている。 */
+      return { ok: false, status: 404, json: async () => ({}) };
+    };
+
+    const result = await storage.resolveFolder('TSAM AI', null, 'k', { token: 'T', fetchImpl: impl });
+
+    check('404 なら作り直しへ進む', result.created === true && result.id === 'REMADE');
+    check('新しいIDでキャッシュを置き換える', globalThis.localStorage.getItem('k') === 'REMADE');
+    clearLocalStorage();
+  }
+
+  {
+    /* 既存シートの健全性。**改変されていたら書き込みを止める。** */
+    installLocalStorage();
+    const expected = schema.headersOf(schema.DATA_COLUMNS);
+
+    const makeImpl = (header) => async (url, options = {}) => {
+      const text = String(url);
+
+      if (text.includes('/values/') && (options.method ?? 'GET') === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ values: [header] }) };
+      }
+
+      if (text.includes('fields=sheets')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sheets: [
+              { properties: { sheetId: 0, title: '名刺データ' } },
+              { properties: { sheetId: 1, title: '変更履歴' } },
+            ],
+          }),
+        };
+      }
+
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    const ok = await storage.inspectSpreadsheet('S', { token: 'T', fetchImpl: makeImpl(expected) });
+    check('揃っていれば書き込める', ok.writable === true && ok.notices.length === 0);
+
+    const altered = [expected[1], expected[0], ...expected.slice(2)];
+    const blocked = await storage.inspectSpreadsheet('S', { token: 'T', fetchImpl: makeImpl(altered) });
+
+    check('**列が改変されていたら書き込みを止める**', blocked.writable === false);
+    check('理由を返す', blocked.notices.includes(storage.StorageNotice.SCHEMA_ALTERED));
+
+    const upgraded = await storage.inspectSpreadsheet('S', { token: 'T', fetchImpl: makeImpl(expected.slice(0, 5)) });
+    check('足りないだけなら足して続ける', upgraded.writable === true);
+    check('足したことを伝える', upgraded.notices.includes(storage.StorageNotice.SCHEMA_UPGRADED));
+
+    clearLocalStorage();
+  }
+
+  {
+    /* タブが欠けていたら作り直す。 */
+    installLocalStorage();
+    const created = [];
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+
+      if (text.includes(':batchUpdate')) {
+        created.push(JSON.parse(options.body).requests.map((r) => r.addSheet.properties.title));
+        return { ok: true, status: 200, json: async () => ({}) };
+      }
+
+      if (text.includes('/values/') && (options.method ?? 'GET') === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ values: [schema.headersOf(schema.DATA_COLUMNS)] }) };
+      }
+
+      if (text.includes('fields=sheets')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ sheets: [{ properties: { sheetId: 0, title: '名刺データ' } }] }),
+        };
+      }
+
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    const result = await storage.inspectSpreadsheet('S', { token: 'T', fetchImpl: impl });
+
+    check('欠けたタブを作る', created.flat().join(',') === '変更履歴', created.flat().join(','));
+    check('作り直したことを伝える', result.notices.includes(storage.StorageNotice.TABS_REPAIRED));
+    check('書き込みは続けられる', result.writable === true);
+
+    clearLocalStorage();
+  }
+
+  {
+    /* まとめて用意する。2回目に重複作成しないこと。 */
+    installLocalStorage();
+    let creates = 0;
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      const method = options.method ?? 'GET';
+
+      if (text.includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [] }) };
+      }
+
+      if (text.startsWith('https://sheets.googleapis.com/v4/spreadsheets?')) {
+        creates += 1;
+        return { ok: true, status: 200, json: async () => ({ spreadsheetId: 'SHEET-1' }) };
+      }
+
+      if (method === 'POST' && text.startsWith('https://www.googleapis.com/drive/v3/files?')) {
+        creates += 1;
+        return { ok: true, status: 200, json: async () => ({ id: `FOLDER-${creates}` }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    const first = await storage.ensureStorage({ token: 'T', fetchImpl: impl });
+
+    check('フォルダ3つと台帳を作る', creates === 4, String(creates));
+    check('**初回として扱う**', first.firstRun === true);
+    check('作成を伝える', first.notices.includes(storage.StorageNotice.CREATED));
+    check('書き込める', first.writable === true);
+    check('4か所のIDを返す', Boolean(first.appFolderId && first.imageFolderId && first.spreadsheetId));
+
+    clearLocalStorage();
+  }
+
+  {
+    /* フォルダはあるのに台帳だけ消えていたら「作り直し」。 */
+    installLocalStorage();
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      const method = options.method ?? 'GET';
+
+      if (text.includes('q=')) {
+        /* フォルダは見つかるが、スプレッドシートは見つからない。 */
+        const isSheet = text.includes(encodeURIComponent('application/vnd.google-apps.spreadsheet'));
+        return { ok: true, status: 200, json: async () => ({ files: isSheet ? [] : [{ id: 'EXISTING' }] }) };
+      }
+
+      if (text.startsWith('https://sheets.googleapis.com/v4/spreadsheets?')) {
+        return { ok: true, status: 200, json: async () => ({ spreadsheetId: 'SHEET-2' }) };
+      }
+
+      if (method === 'POST' && text.startsWith('https://www.googleapis.com/drive/v3/files?')) {
+        return { ok: true, status: 200, json: async () => ({ id: 'NEW-FOLDER' }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    const result = await storage.ensureStorage({ token: 'T', fetchImpl: impl });
+
+    check('**「作り直し」として伝える**', result.notices.includes(storage.StorageNotice.RECREATED));
+    check('初回とは呼ばない', result.firstRun === false);
+
+    clearLocalStorage();
+  }
+
+  /* ================================================================ */
   section('ソース検査（守るべき制約）');
 
   const FILES = [
     'config.js', 'gis-loader.js', 'drive-auth.js', 'drive-api.js',
-    'prerequisites.js', 'app.js',
+    'prerequisites.js', 'sanitize.js', 'hash.js', 'schema.js',
+    'sheets.js', 'drive-storage.js', 'app.js',
   ];
   const sources = [];
 
@@ -945,8 +1692,18 @@ try {
    * tsam-ai.com は当社自身のオリジンで、外部通信先ではない。
    */
   const allowedHosts = [
+    /* §12 が許す通信先。generativelanguage はフェーズ2で足す。 */
     'www.googleapis.com',
+    'sheets.googleapis.com',
+    /* GIS の配信元（docs/external-dependency-approvals.md）。 */
     'accounts.google.com',
+    /*
+     * 利用者が**クリックして開くリンク**の宛先であって、
+     * fetch の宛先ではない。§12 の「呼び出す外部API」には当たらない。
+     */
+    'docs.google.com',
+    'drive.google.com',
+    /* 当社自身のオリジン。 */
     'tsam-ai.com',
   ];
 
