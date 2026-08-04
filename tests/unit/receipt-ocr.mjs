@@ -911,6 +911,16 @@ try {
   check('OAuth スコープは drive.file のみ',
     config.OAUTH.scope === 'https://www.googleapis.com/auth/drive.file');
 
+  /*
+   * クライアントIDは秘密ではない（配信される JS に含まれる公開値）。
+   * 空に戻ると画面が OAUTH-001 で止まるため、設定済みであることを見る。
+   */
+  check('OAuth クライアントIDが設定済み', config.isOauthConfigured() === true);
+
+  check('client secret を持っていない',
+    !/client[_-]?secret/i.test(sources.get('config.js'))
+    && !/GOCSPX-/.test(sources.get('config.js')));
+
   check('ドライブ全体を読むスコープを要求していない',
     !/auth\/drive(\s|'|"|$)|drive\.readonly|drive\.metadata/.test(sources.get('config.js')));
 

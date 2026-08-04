@@ -31,8 +31,17 @@ export const SCREEN_DEPTH = 2;
  * 届く。§9.2-3 の再発見が成立するのはこの性質による。
  */
 export const OAUTH = Object.freeze({
-  /* TODO: Google Cloud Console で発行したウェブアプリ用クライアントIDを入れる。 */
-  clientId: '',
+  /*
+   * Google Cloud Console で発行したウェブアプリ用クライアントID。
+   *
+   * これは秘密情報ではない（配信される JS に必ず含まれる公開値）。
+   * 実質的な防御は Cloud Console 側の「承認済みの JavaScript 生成元」であり、
+   * 本番オリジンと開発オリジンだけを登録しておくこと。
+   *
+   * client secret は使わない。静的サイトに秘密は置けないためで、
+   * ここへ貼らないこと（oauth.js の暗黙フローで secret は不要）。
+   */
+  clientId: '603018562548-j2he1aeo96p2igqfk65gaevj55pdaikc.apps.googleusercontent.com',
   scope: 'https://www.googleapis.com/auth/drive.file',
 });
 
