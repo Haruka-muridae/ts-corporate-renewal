@@ -445,6 +445,34 @@ try {
     check('★誤読された題字と日付を飛ばして店名へ届く', result.value === 'まるまるマート');
   }
 
+  /*
+   * 宛名の除外（2026-08-04 予防対応）。
+   * 宛名はたいてい法人名で書かれるため、ここだけは法人格の例外を認めない。
+   */
+  for (const addressee of ['上様', '御中', '各位', '山田太郎 様', '株式会社クライアント 御中']) {
+    check(`★宛名（${addressee}）を店名にしない`,
+      extract.extractPayee(toLines(addressee)).value === null);
+  }
+
+  check('★宛名は法人格があっても除外する',
+    extract.extractPayee(toLines('株式会社クライアント 御中')).value === null);
+
+  {
+    /* 領収証の実際の並び。宛名が発行者より上に来る。 */
+    const result = extract.extractPayee(toLines([
+      '領収証',
+      '株式会社クライアント 御中',
+      '2026年8月1日',
+      '株式会社サンプル商事',
+    ].join('\n')));
+
+    check('★宛名を飛ばして発行者へ届く', result.value === '株式会社サンプル商事');
+    check('★自社名（宛名）を支払先にしない', result.value !== '株式会社クライアント 御中');
+  }
+
+  check('行の途中の「様」は宛名とみなさない',
+    extract.extractPayee(toLines('王様のパン工房')).value === '王様のパン工房');
+
   {
     /* 法人格が読めている行は、日付や題字が同居していても採ってよい。 */
     const withDate = extract.extractPayee(toLines('株式会社サンプル商事 2026年8月1日'));
