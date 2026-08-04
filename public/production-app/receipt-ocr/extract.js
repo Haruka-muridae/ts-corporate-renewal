@@ -560,7 +560,18 @@ export function extractTaxBreakdown(lines) {
 /* ---------- §10.10 支払方法 ---------- */
 
 const PAYMENT_METHODS = Object.freeze([
-  { label: '現金', pattern: /(現金|キャッシュ|お預[りかっ])/ },
+  /*
+   * 「お預り」「おつり」を現金の根拠にしないこと。
+   *
+   * POS はカード払いでも「お預り ¥2,761 / おつり ¥0」を印字する
+   * （実機のレシートで確認）。これはレジの表示様式であって、
+   * 支払方法の記載ではない。根拠にすると、カード払いが必ず現金になる。
+   *
+   * 現金は「現金」と書かれているときだけ現金とする。
+   * 取れなくても §10.10 は「取得できた場合のみ記録」としており、
+   * 誤って現金と決めるより、空のほうがよい。
+   */
+  { label: '現金', pattern: /(現金|キャッシュ)/ },
   { label: 'クレジットカード', pattern: /(クレジット|VISA|Visa|MasterCard|Mastercard|JCB|AMEX|AmericanExpress|カード払|ご利用カード)/ },
   { label: 'コード決済', pattern: /(PayPay|ペイペイ|楽天ペイ|d払い|au ?PAY|メルペイ|LINE ?Pay)/i },
   { label: '交通系IC', pattern: /(Suica|PASMO|ICOCA|PiTaPa|manaca|TOICA|SUGOCA|nimoca|Kitaca|交通系)/i },
@@ -733,6 +744,17 @@ function hasPhoneInLine(line) {
 }
 
 /*
+ * 用紙に印刷されている見出しと定型文。
+ *
+ * レシートは金額欄の見出しが先に並び、店名は後ろに出ることがある。
+ * 実機のレシートでは、先頭8行が金額と見出しだけで埋まり、
+ * 「稅金額」を店名として採ってしまった。
+ *
+ * 値のある行かどうかではなく、**用紙の一部かどうか**で外す。
+ */
+const BOILERPLATE_MARK = /^(税|稅|消費税|内消費税|税率|小計|合計|総計|点数|数量|単価|お預|おつり|お釣|釣銭|残高|ポイント|受付|担当|テーブル|人数|POS|レジ|伝票|但し|上記|印刷|ありがとう|またのお越し|〒)/;
+
+/*
  * ==================================================================
  * 支払先として採ってよい行か（§10.3）
  * ==================================================================
@@ -773,12 +795,56 @@ export function isPayeeCandidate(line) {
     return true;
   }
 
+  /* 用紙に印刷された見出し・定型文。 */
+  if (BOILERPLATE_MARK.test(text)) {
+    return false;
+  }
+
   /* 法人格が読めない行は、他の欄の中身を含まないことを求める。 */
   return !hasMoneyInLine(text)
     && !hasDateInLine(text)
     && !hasPhoneInLine(text)
     && !ADDRESS_MARK.test(text)
     && !isTitleLine(text);
+}
+
+/*
+ * 「事業者名:◯◯」のようにラベルが付いた支払先（§10.3）。
+ *
+ * 位置で推し量る §10.3-2 より、ラベルのほうがはるかに確かである。
+ * 店舗マスタの次に見る。
+ */
+const PAYEE_LABEL = /(事業者名|発行者|販売者|店名|屋号)(.*)$/;
+
+export function extractLabeledPayee(lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const match = lines[i].match(PAYEE_LABEL);
+
+    if (!match) {
+      continue;
+    }
+
+    /* 区切り記号はここで落とす。ラベルだけの行を「:」という値にしない。 */
+    let value = match[2].replace(/^[\s　:：]+/, '').trim();
+
+    if (value === '') {
+      continue;
+    }
+
+    /*
+     * OCR が「株式会社」を行またぎで割ることがある
+     * （実機で「…株式会」＋「社」に割れた）。次の行が「社」だけなら継ぐ。
+     */
+    const next = String(lines[i + 1] ?? '').trim();
+
+    if (/(株式会|有限会|合同会|合資会)$/.test(value) && next === '社') {
+      value += '社';
+    }
+
+    return { value, evidence: lines[i] };
+  }
+
+  return null;
 }
 
 /*
@@ -823,10 +889,28 @@ export function extractPayee(lines, { storeMaster = [], phoneDigits = null } = {
     return result;
   }
 
-  /* 2〜3. 先頭付近の法人名・店舗名。 */
+  /* 2. ラベルの付いた事業者名。位置で推し量るより確かなので先に見る。 */
+  const labeled = extractLabeledPayee(lines);
+
+  if (labeled) {
+    result.value = labeled.value;
+    result.evidence = labeled.evidence;
+    result.confirmed = true;
+    result.candidates = 1;
+    return result;
+  }
+
+  /*
+   * 3. 法人格を含む行（§10.3-3）。
+   *
+   * 探す範囲を先頭に限らない。レシートは金額欄が先に並び、
+   * 発行者が末尾に出ることがある。先頭を優先しつつ、
+   * 無ければ全体から探す。
+   */
   const head = lines.slice(0, 8);
 
-  const withCompany = head.find((line) => COMPANY_MARK.test(line) && isPayeeCandidate(line));
+  const withCompany = head.find((line) => COMPANY_MARK.test(line) && isPayeeCandidate(line))
+    ?? lines.find((line) => COMPANY_MARK.test(line) && isPayeeCandidate(line));
 
   if (withCompany) {
     result.value = withCompany;

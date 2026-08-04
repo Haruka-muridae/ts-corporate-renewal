@@ -680,6 +680,148 @@ try {
     check('確定しない', result.usedOn.confirmed === false && result.totalAmount.confirmed === false);
   }
 
+  /* ---------------------------------------------------------------- */
+  section('実機レシートの通し（2026-08-04・カフェのカード払い）');
+
+  /*
+   * 実機で誤りが出た領収書の OCR原文をそのまま使う。
+   * 直した箇所が本当に直っているかは、作った入力ではなく
+   * 実際に落ちた入力で確かめる。
+   */
+  const REAL = [
+    '領収書',
+    '2026年8月1日',
+    '¥2,761',
+    '稅金額',
+    '¥2,510',
+    '消費税',
+    '¥251',
+    '税率 10%',
+    '¥2,761',
+    '(内消費税',
+    '¥251)',
+    '税率 8%',
+    '¥0',
+    '(内消費税',
+    '¥0)',
+    '上記正に領収いたしました。',
+    '様',
+    '印刷面を内側に折って保管願います。',
+    '但し 店内ご飲食代として',
+    '〔クレジット払い]',
+    'WIRED CAFE 新宿',
+    '〒 160-0022',
+    '東京都新宿区新宿3-38-1',
+    'ルミネエスト新宿8F',
+    'TEL:0333417092',
+    '登録番号:T6011001055489',
+    '事業者名:カフェ・カンパニー株式会',
+    '社',
+    '2026年8月1日 13:50',
+    'No.00016556',
+    '受付時間: 12:33',
+    '担当者:箱山',
+    'POS: 001',
+    'オーツミルクカフェラテ(HOT)',
+    '715x 1 ¥715内',
+    '小計',
+    '点数',
+    '¥2,761内 2',
+    '合計',
+    '¥2,761',
+    'お預り',
+    'クレジット',
+    'クレジット',
+    '¥2,761',
+    'おつり',
+    '¥0',
+  ].join('\n');
+
+  {
+    const result = extract.extractAll(REAL);
+    const values = extract.toValues(result);
+
+    /* ★誤判定の本体。お預りを根拠に現金と判定していた。 */
+    check('★支払方法はクレジットカード', values.paymentMethod === 'クレジットカード');
+    check('★現金と判定しない', values.paymentMethod !== '現金');
+    check('確定してよい', result.paymentMethod.confirmed === true);
+
+    /* ★支払先。金額行・見出し行を飛ばして事業者名へ届く。 */
+    check('★「稅金額」を支払先にしない', values.payee !== '稅金額');
+    check('★「¥2,761」を支払先にしない', values.payee !== '¥2,761');
+    check('★ラベル付きの事業者名を採る', values.payee === 'カフェ・カンパニー株式会社');
+    check('★行またぎで割れた「社」を継ぐ', values.payee.endsWith('株式会社'));
+    check('支払先を確定してよい', result.payee.confirmed === true);
+
+    /* 併せて、他の項目が壊れていないこと。 */
+    check('合計金額を取れる', values.totalAmount === 2761);
+    check('登録番号を取れる', values.registrationNumber === 'T6011001055489');
+    check('登録番号の状態は「取得済み」',
+      values.registrationStatus === REGISTRATION_STATUS.FOUND);
+    check('電話番号を取れる', values.phoneNumber === '0333417092');
+
+    /*
+     * この用紙は「税率 10%」と金額が別の行に分かれており、
+     * 現在の実装は税率別内訳を拾えない。
+     * §10.9 は「取得できた場合のみ記録（必須項目ではない）」としているため
+     * 仕様違反ではない。ここでは**誤った値を入れていない**ことだけ確かめる。
+     * 拾えるようにするかは要判断事項として報告済み。
+     */
+    check('税率別内訳に誤った値を入れない',
+      values.tax10Amount === '' && values.tax8Amount === ''
+      && values.tax10Base === '' && values.tax8Base === '');
+
+    /*
+     * 利用日はラベルが無いため、ルールでは確定しない（§10.2）。
+     * 未来日等の誤取得を避けるための仕様どおりの動き。
+     */
+    check('日付ラベルが無いので利用日は確定しない', result.usedOn.confirmed === false);
+  }
+
+  check('★「お預り」だけでは現金と判定しない',
+    extract.extractPaymentMethod(toLines(['お預り ¥2,000', 'おつり ¥0'])).value === null);
+
+  check('「現金」と書かれていれば現金と判定する',
+    extract.extractPaymentMethod(toLines(['現金 ¥2,000'])).value === '現金');
+
+  /* ---------------------------------------------------------------- */
+  section('§10.3 ラベル付きの事業者名');
+
+  check('事業者名ラベルを読む',
+    extract.extractLabeledPayee(toLines('事業者名:株式会社サンプル')).value === '株式会社サンプル');
+
+  check('店名・発行者・屋号も同じ扱い',
+    extract.extractLabeledPayee(toLines('店名: まるまるマート')).value === 'まるまるマート'
+    && extract.extractLabeledPayee(toLines('発行者：サンプル商店')).value === 'サンプル商店');
+
+  check('ラベルが無ければ null',
+    extract.extractLabeledPayee(toLines('まるまるマート')) === null);
+
+  check('ラベルだけで値が無ければ拾わない',
+    extract.extractLabeledPayee(toLines('事業者名:')) === null);
+
+  check('★ラベルは位置より優先する',
+    extract.extractPayee(toLines([
+      'まるまるマート',
+      '事業者名:株式会社ほんとうの発行者',
+    ].join('\n'))).value === '株式会社ほんとうの発行者');
+
+  check('用紙の見出し行を支払先にしない',
+    extract.isPayeeCandidate('稅金額') === false
+    && extract.isPayeeCandidate('消費税') === false
+    && extract.isPayeeCandidate('点数') === false
+    && extract.isPayeeCandidate('担当者:箱山') === false
+    && extract.isPayeeCandidate('上記正に領収いたしました。') === false
+    && extract.isPayeeCandidate('但し 店内ご飲食代として') === false);
+
+  check('★発行者が末尾にあっても法人名を見つける',
+    extract.extractPayee(toLines([
+      '合計',
+      '¥1,000',
+      'ありがとうございました',
+      '株式会社おそい発行者',
+    ].join('\n'))).value === '株式会社おそい発行者');
+
   finish();
 } catch (error) {
   fatal(error);
