@@ -22,11 +22,37 @@ export const GEMINI_HOST = 'generativelanguage.googleapis.com';
 
 const GEMINI_ENDPOINT_BASE = `https://${GEMINI_HOST}/v1beta/models`;
 
-/* 初期設定モデル（要件定義書 §FR-11、§20）。 */
-export const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+/*
+ * ==================================================================
+ * ★ 切り分けのため、主モデルを一時的に入れ替えている（2026-08-04）
+ * ==================================================================
+ * `gemini-3.5-flash-lite` で 503 が出た。503 は「サービス利用不可」で、
+ * Gemini では**モデルの混雑**で返ることが多い。リクエストの形の問題なら
+ * 400 になるはずなので、形ではなく**そのモデルの空き具合**が原因である
+ * 疑いが強い。
+ *
+ * それを実証するために、主とフォールバックを入れ替えてある。
+ *
+ *   `gemini-2.5-flash-lite` で通る  → 503 はモデル単位の混雑だった
+ *   同じく 503 になる                → モデルによらない。キーや経路を疑う
+ *
+ * **これは恒久の設定ではない。** 要件定義書 §20 は初期設定モデルを
+ * 「フェーズ0で確定」としており、この実験の結果をもって確定させる。
+ * 結論が出たら、この注記ごと書き換えること。
+ * ==================================================================
+ */
 
-/* 主モデルが404のときに1回だけ試すモデル。会社キーへは落とさない。 */
-export const FALLBACK_MODEL = 'gemini-2.5-flash-lite';
+/* 初期設定モデル（要件定義書 §FR-11、§20）。 */
+export const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
+
+/*
+ * 主モデルが404のときに1回だけ試すモデル。会社キーへは落とさない。
+ *
+ * **503 ではフォールバックしない。** 404（モデルが存在しない）だけを
+ * 切り替えの条件にしている。混雑で別モデルへ逃がすかどうかは、
+ * この実験の結果を見て決める（下の注記を参照）。
+ */
+export const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 
 export const GeminiErrorCode = {
   KEY_MISSING: 'KEY_MISSING',
@@ -123,7 +149,16 @@ export function describeGeminiError(error) {
     case GeminiErrorCode.NETWORK:
       return described('通信に失敗しました。', 'AI-001');
     case GeminiErrorCode.SERVER_ERROR:
-      return described('Gemini 側でエラーが起きました。', 'AI-001');
+      /*
+       * 503 は多くの場合「そのモデルが混んでいる」である。
+       * 利用者の操作で直る種類のものではないので、待つよう案内する。
+       */
+      return described(
+        error?.status === 503
+          ? 'Gemini が混雑しています。時間をおくか、別のモデルをお試しください。'
+          : 'Gemini 側でエラーが起きました。',
+        'AI-001',
+      );
     default:
       return described('不明なエラーが発生しました。', 'SYS-999');
   }

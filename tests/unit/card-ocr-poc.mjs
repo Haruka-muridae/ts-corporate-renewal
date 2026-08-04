@@ -320,6 +320,48 @@ try {
     check('本文が読めなくても detail にステータスが残る', described.detail.includes('502'));
   }
 
+  {
+    /*
+     * 503 は「そのモデルが混んでいる」ことが多い。
+     * 500 と同じ文言にすると、待てば直るのか分からない。
+     */
+    const stub = makeStub(jsonResponse({ error: { status: 'UNAVAILABLE', message: 'The model is overloaded.' } }, 503));
+    let caught = null;
+
+    try {
+      await gemini.classifyCardText('テキスト', { apiKey: KEY, fetchImpl: stub.impl });
+    } catch (error) { caught = error; }
+
+    const described = gemini.describeGeminiError(caught);
+
+    check('503 は SERVER_ERROR', caught?.code === gemini.GeminiErrorCode.SERVER_ERROR);
+    check('503 は混雑として案内する', described.text.includes('混雑'));
+    check('500 は混雑と言わない', gemini.describeGeminiError(
+      new gemini.GeminiError(gemini.GeminiErrorCode.SERVER_ERROR, 500, 'x'),
+    ).text.includes('混雑') === false);
+    check('503 の detail にサーバーの文言が残る', described.detail.includes('overloaded'));
+  }
+
+  {
+    /* **503 ではフォールバックしない。** 切り替えの条件は404だけ。 */
+    const calls = [];
+    const impl = async (url) => {
+      calls.push(String(url));
+      return { ok: false, status: 503, json: async () => ({}) };
+    };
+
+    try {
+      await gemini.classifyCardText('テキスト', { apiKey: KEY, fetchImpl: impl });
+    } catch { /* 期待どおり */ }
+
+    check('503 ではフォールバックへ切り替えない', calls.length === 1, String(calls.length));
+  }
+
+  check(
+    '主モデルとフォールバックが別物である（切替が機能する条件）',
+    gemini.DEFAULT_MODEL !== gemini.FALLBACK_MODEL,
+  );
+
   check(
     'summarizeErrorBody は本文が空でもステータスを返す',
     gemini.summarizeErrorBody(null, 500) === 'HTTP 500',
