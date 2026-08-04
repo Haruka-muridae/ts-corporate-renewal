@@ -294,11 +294,24 @@ try {
     gconfig.GIS_SCRIPT_URL,
   );
   check(
-    'クライアントIDは未設定（プレースホルダのまま）',
-    gconfig.GOOGLE_CLIENT_ID === gconfig.CLIENT_ID_PLACEHOLDER,
+    'クライアントIDが設定済み',
+    gconfig.isClientIdConfigured() === true,
   );
-  check('未設定を未設定と判定する', gconfig.isClientIdConfigured() === false);
-  check('空文字も未設定', gconfig.isClientIdConfigured('') === false);
+  check(
+    'クライアントIDは Google の形式',
+    /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(gconfig.GOOGLE_CLIENT_ID),
+    gconfig.GOOGLE_CLIENT_ID,
+  );
+  check(
+    'テスト環境（/apps/）の既存クライアントIDとは別のものを使う（§6-2 の決定）',
+    gconfig.GOOGLE_CLIENT_ID
+      !== '603018562548-a0fs4g4eetdhg5jrfjbh5qqos547g69r.apps.googleusercontent.com',
+  );
+  check(
+    'プレースホルダは未設定と判定される',
+    gconfig.isClientIdConfigured(gconfig.CLIENT_ID_PLACEHOLDER) === false,
+  );
+  check('空文字は未設定', gconfig.isClientIdConfigured('') === false);
   check('空白だけも未設定', gconfig.isClientIdConfigured('   ') === false);
   check('文字列以外も未設定', gconfig.isClientIdConfigured(null) === false);
   check(
@@ -353,12 +366,18 @@ try {
   check('スタブ前は GIS 未読込と判定する', loader.isGisLoaded() === false);
 
   {
-    /* クライアントID未設定なら、GIS を読み込まずに落ちる。 */
+    /*
+     * クライアントID未設定なら、GIS を読み込まずに落ちる。
+     *
+     * 既定値は設定済みになったため、未設定の状態を明示的に渡して確かめる。
+     * ここで見たいのは「未設定のときに外部通信を出さないこと」であり、
+     * 既定値が何かではない。
+     */
     clearGis();
     let caught = null;
 
     try {
-      await auth.ensureAccessToken();
+      await auth.ensureAccessToken({ clientId: gconfig.CLIENT_ID_PLACEHOLDER });
     } catch (error) { caught = error; }
 
     check('未設定なら CLIENT_ID_MISSING', caught?.code === auth.DriveAuthErrorCode.CLIENT_ID_MISSING);
@@ -596,8 +615,8 @@ try {
    *
    * accounts.google.com は docs/external-dependency-approvals.md で
    * 承認済みの GIS 配信元。
-   * tsam-ai.com は当社自身のオリジンで、外部通信先ではない
-   * （google-config.js が生成元として登録する値をコメントで示している）。
+   * tsam-ai.com と *.vercel.app は当社自身のオリジンで、外部通信先ではない
+   * （google-config.js が生成元として登録した値をコメントで示している）。
    */
   const allowedHosts = [
     'generativelanguage.googleapis.com',
@@ -607,9 +626,11 @@ try {
     'tsam-ai.com',
   ];
 
+  const isOwnOrigin = (host) => allowedHosts.includes(host) || host.endsWith('.vercel.app');
+
   for (const source of sources) {
     const hosts = [...source.matchAll(/https:\/\/([a-z0-9.-]+)/gi)].map((m) => m[1]);
-    const unexpected = hosts.filter((host) => !allowedHosts.includes(host) && !host.endsWith('example.com'));
+    const unexpected = hosts.filter((host) => !isOwnOrigin(host) && !host.endsWith('example.com'));
 
     check(
       '許可されていない外部ホストがソースに無い',

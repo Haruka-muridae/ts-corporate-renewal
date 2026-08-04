@@ -8,10 +8,11 @@
  * ほかのファイルにクライアントIDを書かないこと。
  *
  * 発行手順は docs/specs/card-ocr-phase0-plan.md §4-2 B。
- * 承認済みJavaScript生成元には次の2つを登録する。
+ * 承認済みJavaScript生成元には次の2つを登録済み（2026-08-03）。
  *
- *   https://tsam-ai.com          … 本番
- *   https://<プレビュー>.vercel.app … フェーズ0の検証用（終わったら外す）
+ *   https://tsam-ai.com  … 本番
+ *   https://ts-corporate-renewal-git-docs-c-17e1f8-architect-3362s-projects.vercel.app
+ *                        … フェーズ0の検証用。**終わったら外す**（計画 §3-3）
  *
  * **クライアントIDは秘密ではない。** リポジトリに入れてよい
  * （既存の public/apps/auth-config.js も同じ扱い）。
@@ -22,8 +23,17 @@
 /* 未設定の目印。この値のままなら連携を開始しない。 */
 export const CLIENT_ID_PLACEHOLDER = 'REPLACE_WITH_GOOGLE_CLIENT_ID';
 
-/* ★ ここを差し替える。 */
-export const GOOGLE_CLIENT_ID = CLIENT_ID_PLACEHOLDER;
+/*
+ * ★ 差し替える箇所はここ1つ。
+ *
+ * card-ocr 専用に新規発行したもの（2026-08-03）。
+ * テスト環境 /apps/ が使う既存IDとは**別のクライアント**である
+ * （フェーズ0計画 §6-2 の決定）。
+ *
+ * このIDで作成したファイルだけが drive.file の対象になるため、
+ * card-scanner が作ったファイルはこのアプリからは見えない。これは意図どおり。
+ */
+export const GOOGLE_CLIENT_ID = '603018562548-6653ifft0dji8g93m9sba919rn0nv4li.apps.googleusercontent.com';
 
 /*
  * 要求するスコープはこの1つだけ。**増やさないこと。**
