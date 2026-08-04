@@ -1,0 +1,122 @@
+/*
+ * 名刺OCRアプリの見た目。
+ *
+ * 共通の色と部品は css/style.css と auth/auth.css を読み込んだうえで、
+ * 足りない分だけをここに書く（要件定義書 §10.2「Portal・ログイン画面との
+ * 視覚的一貫性」）。
+ *
+ * スマートフォン優先。押しやすさのため、操作要素は 44px 以上を確保する。
+ */
+
+.co-header {
+  margin-bottom: 1.75rem;
+}
+
+.co-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.co-lead {
+  margin: 0;
+  color: #4a5568;
+  line-height: 1.7;
+}
+
+.co-panel {
+  border: 1px solid #d9dee5;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  background: #fff;
+}
+
+.co-panel--notice {
+  border-color: #b9c6d8;
+  background: #f6f9fd;
+}
+
+/* 誘導は1画面に1つだけ。目立たせる。 */
+.co-panel--guidance {
+  border-color: #c8a34a;
+  background: #fdfaf1;
+}
+
+.co-panel-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.875rem;
+}
+
+.co-notice-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.8;
+  color: #37414f;
+}
+
+.co-notice-list li + li {
+  margin-top: 0.5rem;
+}
+
+/* 準備の状況。狭い画面では縦に積む。 */
+.co-status {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  margin: 0;
+  align-items: baseline;
+}
+
+.co-status-label {
+  margin: 0;
+  color: #4a5568;
+}
+
+.co-status-value {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* 記号ではなく色と語で示す。色だけに意味を持たせない。 */
+.co-status-value[data-ok='yes'] {
+  color: #1f6f43;
+}
+
+.co-status-value[data-ok='no'] {
+  color: #8a5a00;
+}
+
+.co-guidance-text {
+  margin: 0 0 1rem;
+  line-height: 1.8;
+  color: #37414f;
+}
+
+.co-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.co-actions .auth-button {
+  min-height: 44px;
+}
+
+@media (max-width: 26rem) {
+  .co-status {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .co-status-value {
+    text-align: left;
+    margin-bottom: 0.5rem;
+  }
+
+  .co-actions .auth-button {
+    width: 100%;
+  }
+}

@@ -14,7 +14,7 @@
  * PoC はフェーズ2の測定で使うため、まだ残してある。
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 
 const APP_DIR = new URL('../../public/production-app/card-ocr/', import.meta.url);
@@ -615,9 +615,278 @@ try {
   }
 
   /* ================================================================ */
+  section('SC-00 前提の判別（prerequisites.js）');
+
+  const pre = await import('../../public/production-app/card-ocr/prerequisites.js');
+
+  const ALL_OK = {
+    signedIn: true,
+    keyStoreAvailable: true,
+    hasGeminiKey: true,
+    clientIdConfigured: true,
+    googleLinked: true,
+  };
+
+  check('すべて揃えば READY', pre.evaluatePrerequisites(ALL_OK) === pre.Prerequisite.READY);
+
+  {
+    /* 1つずつ欠けさせて、返る状態を確かめる。 */
+    const cases = [
+      ['signedIn', pre.Prerequisite.SIGNED_OUT],
+      ['keyStoreAvailable', pre.Prerequisite.KEYSTORE_UNAVAILABLE],
+      ['hasGeminiKey', pre.Prerequisite.KEY_MISSING],
+      ['clientIdConfigured', pre.Prerequisite.CLIENT_ID_MISSING],
+      ['googleLinked', pre.Prerequisite.GOOGLE_NOT_LINKED],
+    ];
+
+    for (const [missing, expected] of cases) {
+      check(
+        `${missing} が欠けると ${expected}`,
+        pre.evaluatePrerequisites({ ...ALL_OK, [missing]: false }) === expected,
+        pre.evaluatePrerequisites({ ...ALL_OK, [missing]: false }),
+      );
+    }
+  }
+
+  check(
+    '引数が無くても壊れず SIGNED_OUT を返す',
+    pre.evaluatePrerequisites() === pre.Prerequisite.SIGNED_OUT,
+  );
+
+  {
+    /*
+     * **判別の順序。** 複数が欠けていても、返るのは1つだけ。
+     * 「該当する誘導のみを表示する」（要件定義書 §10.1）ため、
+     * 状態を1つに決められることが前提になる。
+     */
+    check(
+      '未ログインが最優先',
+      pre.evaluatePrerequisites({}) === pre.Prerequisite.SIGNED_OUT,
+    );
+    check(
+      '**キーは Google 連携より先に案内する**',
+      pre.evaluatePrerequisites({
+        ...ALL_OK, hasGeminiKey: false, googleLinked: false,
+      }) === pre.Prerequisite.KEY_MISSING,
+    );
+    check(
+      'クライアントID未設定は Google 未連携より先（当社側の設定漏れのため）',
+      pre.evaluatePrerequisites({
+        ...ALL_OK, clientIdConfigured: false, googleLinked: false,
+      }) === pre.Prerequisite.CLIENT_ID_MISSING,
+    );
+    check(
+      'キー保存不可はキー未設定より先',
+      pre.evaluatePrerequisites({
+        ...ALL_OK, keyStoreAvailable: false, hasGeminiKey: false,
+      }) === pre.Prerequisite.KEYSTORE_UNAVAILABLE,
+    );
+  }
+
+  {
+    /* 表示。§15 のコードに収める。誘導は1つだけ。 */
+    const allowedCodes = new Set(['AUTH-001', 'KEY-001', 'OAUTH-001', null]);
+    const guidances = new Set(Object.values(pre.Guidance));
+
+    for (const state of Object.values(pre.Prerequisite)) {
+      const described = pre.describePrerequisite(state);
+
+      check(`${state}: 見出しがある`, described.title.length > 0);
+      check(`${state}: 説明がある`, described.text.length > 0);
+      check(`${state}: errorCode が §15 の範囲`, allowedCodes.has(described.errorCode), String(described.errorCode));
+      check(`${state}: 誘導は定義済みの1種`, guidances.has(described.guidance), described.guidance);
+    }
+
+    check(
+      'READY だけが blocking でない',
+      Object.values(pre.Prerequisite)
+        .filter((state) => !pre.describePrerequisite(state).blocking)
+        .join(',') === pre.Prerequisite.READY,
+    );
+
+    check(
+      '未知の状態でも壊れない（READY として扱う）',
+      pre.describePrerequisite('NOT_A_STATE').guidance === pre.Guidance.NONE,
+    );
+  }
+
+  {
+    /* 誘導の内容。 */
+    check(
+      '未ログインはログインへ誘導する',
+      pre.describePrerequisite(pre.Prerequisite.SIGNED_OUT).guidance === pre.Guidance.LOGIN,
+    );
+    check(
+      'キー未設定は Portal へ誘導する',
+      pre.describePrerequisite(pre.Prerequisite.KEY_MISSING).guidance === pre.Guidance.PORTAL,
+    );
+    check(
+      'Google未連携は連携ボタンを出す',
+      pre.describePrerequisite(pre.Prerequisite.GOOGLE_NOT_LINKED).guidance === pre.Guidance.CONNECT,
+    );
+
+    const keyText = pre.describePrerequisite(pre.Prerequisite.KEY_MISSING).text;
+
+    check(
+      '**戻り方を文言で示す（導線を循環させない。FR-25 の3）**',
+      keyText.includes('開き直して'),
+      keyText,
+    );
+    check(
+      'キーが端末内にとどまることを伝える（§5.3）',
+      keyText.includes('端末') && keyText.includes('送られません'),
+    );
+
+    check(
+      'クライアントID未設定は利用者に操作を促さない（当社側の問題）',
+      pre.describePrerequisite(pre.Prerequisite.CLIENT_ID_MISSING).guidance === pre.Guidance.NONE,
+    );
+  }
+
+  {
+    /* 状態の一覧は3つとも出す。誘導とは別物。 */
+    const list = pre.buildStatusList(ALL_OK);
+
+    check('一覧は3件', list.length === 3, String(list.length));
+    check('ログイン・キー・Google の順', list.map((i) => i.id).join(',') === 'signin,key,google');
+    check('すべて ok として出る', list.every((item) => item.ok));
+
+    const partial = pre.buildStatusList({ ...ALL_OK, hasGeminiKey: false });
+    check('欠けている項目だけ ok が false', partial.filter((item) => !item.ok).length === 1);
+    check('キーが未設定と分かる', partial[1].text === '未設定');
+
+    const noStore = pre.buildStatusList({ ...ALL_OK, keyStoreAvailable: false });
+    check('保存できないことを区別して出す', noStore[1].text === '保存できません');
+    check(
+      '**一覧に鍵の値を出さない**',
+      list.every((item) => !/[A-Za-z0-9_-]{20,}/.test(item.text)),
+    );
+  }
+
+  /* ================================================================ */
+  section('SC-00 の画面（index.html / app.js）');
+
+  const htmlSource = await readFile(new URL('index.html', APP_DIR), 'utf8');
+  const appSource = await readFile(new URL('app.js', APP_DIR), 'utf8');
+
+  {
+    /* CSP（フェーズ0 の残項目15）。 */
+    const csp = /<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(htmlSource)?.[1] ?? '';
+
+    check('CSP を宣言している', csp !== '');
+    check("default-src は 'self'", csp.includes("default-src 'self'"));
+    check(
+      'script-src は自分自身と GIS だけ',
+      csp.includes("script-src 'self' https://accounts.google.com"),
+    );
+    check("object-src を止めている", csp.includes("object-src 'none'"));
+    check("base-uri を止めている", csp.includes("base-uri 'none'"));
+
+    const connect = /connect-src ([^;]+)/.exec(csp)?.[1] ?? '';
+    const allowedConnect = [
+      "'self'",
+      'https://www.googleapis.com',
+      'https://sheets.googleapis.com',
+      'https://generativelanguage.googleapis.com',
+      'https://script.google.com',
+      'https://script.googleusercontent.com',
+    ];
+
+    check(
+      '**connect-src が §12 の3系統＋認証系に収まっている**',
+      connect.trim().split(/\s+/).every((host) => allowedConnect.includes(host)),
+      connect,
+    );
+    check(
+      '§12 の3系統がすべて入っている',
+      ['www.googleapis.com', 'sheets.googleapis.com', 'generativelanguage.googleapis.com']
+        .every((host) => connect.includes(host)),
+    );
+    check(
+      "画像プレビュー用に blob: を許している",
+      /img-src [^;]*blob:/.test(csp),
+    );
+    check(
+      '**CSP に unsafe-inline / unsafe-eval が無い**',
+      !/unsafe-inline|unsafe-eval/.test(csp),
+    );
+  }
+
+  check('検索避けを入れている', /name="robots"\s+content="noindex/.test(htmlSource));
+  check(
+    'guardPage() が返るまで中身を隠している',
+    /id="co-content"[^>]*hidden/.test(htmlSource),
+  );
+  check(
+    '誘導は既定で隠してある（1つだけ出すため）',
+    /id="co-guidance"[^>]*hidden/.test(htmlSource)
+      && /id="co-login-link"[^>]*hidden/.test(htmlSource)
+      && /id="co-portal-link"[^>]*hidden/.test(htmlSource)
+      && /id="co-connect"[^>]*hidden/.test(htmlSource),
+  );
+  check(
+    '§5.3 の明示事項を載せている',
+    htmlSource.includes('あなたのGoogleドライブにのみ')
+      && htmlSource.includes('プロダクト改善')
+      && htmlSource.includes('復旧の義務'),
+  );
+  check(
+    'インラインの <script> を置いていない（CSP と整合）',
+    !/<script(?![^>]*\ssrc=)[^>]*>/.test(htmlSource),
+  );
+  check('本文へのスキップリンクがある', htmlSource.includes('skip-link'));
+
+  {
+    /*
+     * サイト内リンクは**ルートからの相対パス**。
+     * 先頭に '/' を付けない、'apps/' を含めない
+     * （public/portal/app-registry.js の注意書き）。
+     */
+    const hrefs = [...htmlSource.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    const internal = hrefs.filter((href) => !/^https?:|^#/.test(href));
+
+    check(
+      'サイト内リンクの先頭に / を付けていない',
+      internal.every((href) => !href.startsWith('/')),
+      internal.filter((href) => href.startsWith('/')).join(', '),
+    );
+    check(
+      "サイト内リンクに 'apps/' を含めていない",
+      internal.every((href) => !href.includes('apps/')),
+      internal.filter((href) => href.includes('apps/')).join(', '),
+    );
+  }
+
+  check('guardPage() を通している', appSource.includes('guardPage'));
+  check('画面の深さを 2 に設定している', appSource.includes('setScreenDepth(2)'));
+  check(
+    '**キーは has() だけを見て、値を読み出していない**',
+    appSource.includes('KeyStore.has(PROVIDERS.gemini)') && !/KeyStore\.get\(/.test(appSource),
+  );
+  check(
+    'KeyStore へ書き込んでいない',
+    !/KeyStore\.(set|remove)\(/.test(appSource),
+  );
+  check(
+    '誘導のリンク先は screenPath() で作る（先頭スラッシュを作らない）',
+    appSource.includes("screenPath('portal')") && appSource.includes("screenPath('login')"),
+  );
+  check(
+    '連携の二重押下を防いでいる',
+    appSource.includes('connecting'),
+  );
+  check(
+    'pagehide でトークンを捨てている',
+    /pagehide/.test(appSource) && /clearAccessToken/.test(appSource),
+  );
+
+  /* ================================================================ */
   section('ソース検査（守るべき制約）');
 
-  const FILES = ['config.js', 'gis-loader.js', 'drive-auth.js', 'drive-api.js'];
+  const FILES = [
+    'config.js', 'gis-loader.js', 'drive-auth.js', 'drive-api.js',
+    'prerequisites.js', 'app.js',
+  ];
   const sources = [];
 
   for (const name of FILES) {
@@ -703,10 +972,22 @@ try {
     !/403/.test(authSource.replace(/\/\*[\s\S]*?\*\//g, '')),
   );
 
-  check(
-    'この一覧が実ファイルと一致している',
-    FILES.length === sources.length && sources.every(({ text }) => text.length > 0),
-  );
+  {
+    /*
+     * **検査対象の一覧が実ファイルと一致していること。**
+     * 新しいモジュールを足したのに、ここへ書き忘れると
+     * 上のすべての検査をすり抜ける。
+     */
+    const entries = await readdir(APP_DIR);
+    const actual = entries.filter((name) => name.endsWith('.js')).sort();
+
+    check(
+      '検査対象の一覧が実ファイルと一致している',
+      actual.join(',') === [...FILES].sort().join(','),
+      `実際: ${actual.join(',')}`,
+    );
+    check('すべて読めている', sources.every(({ text }) => text.length > 0));
+  }
 
   finish();
 } catch (error) {
