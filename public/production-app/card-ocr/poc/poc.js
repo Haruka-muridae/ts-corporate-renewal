@@ -49,6 +49,19 @@ import { describeDriveError } from './drive-api.js';
 import { clearStorageCache, ensureStorage, spreadsheetUrl } from './drive-storage.js';
 import { collectOrphanTempDocs, describeOcrError, ocrImage } from './drive-ocr.js';
 
+import {
+  MeasureStatus,
+  buildRow,
+  clearSession,
+  downloadCsv,
+  loadSession,
+  recordRateLimit,
+  saveSession,
+  summarize,
+} from './measurement.js';
+
+import { GeminiErrorCode } from './gemini.js';
+
 /* /production-app/card-ocr/poc/ はサイトのルートから3階層下。 */
 setScreenDepth(3);
 
@@ -90,6 +103,33 @@ const storage = createSubmitButton(storageButton, { busyLabel: '用意してい�
 
 /* 何回目の実行か。2回目以降は「再発見」を期待する（計画 §5 の項目10）。 */
 let storageRunCount = 0;
+
+/* ---------- 測定モード（計画 §7） ---------- */
+
+const measureStartInput = document.getElementById('poc-measure-start');
+const measureIntervalInput = document.getElementById('poc-measure-interval');
+const measureFilesInput = document.getElementById('poc-measure-files');
+const measureRunButton = document.getElementById('poc-measure-run');
+const measureStopButton = document.getElementById('poc-measure-stop');
+const measureMessageElement = document.getElementById('poc-measure-message');
+const measureProgressElement = document.getElementById('poc-measure-progress');
+const measureSummaryElement = document.getElementById('poc-measure-summary');
+const measureDownloadButton = document.getElementById('poc-measure-download');
+const measureResetButton = document.getElementById('poc-measure-reset');
+const measureTable = document.getElementById('poc-measure-table');
+const measureBody = document.getElementById('poc-measure-body');
+const measureRateLimitsElement = document.getElementById('poc-measure-ratelimits');
+
+const measureMessage = createMessageArea(measureMessageElement);
+
+/*
+ * 測定した行は**メモリにだけ**持つ（要件定義書 §FR-21）。
+ * ページを閉じれば消えるため、閉じる前のダウンロードを促す。
+ */
+let measureRows = [];
+let measureSession = loadSession();
+let measureRunning = false;
+let measureStopRequested = false;
 
 /*
  * 実際に呼んだホストを記録する。
@@ -405,6 +445,268 @@ imageInput.addEventListener('change', async () => {
   }
 });
 
+function renderMeasureState() {
+  measureStartInput.value = String(measureSession.nextNo);
+  measureDownloadButton.disabled = measureRows.length === 0;
+
+  const summary = summarize(measureRows);
+
+  measureProgressElement.textContent = measureRows.length === 0
+    ? `まだ測定していません。次は ${measureSession.nextNo} 枚目からです。`
+    : `このセッションで ${measureRows.length} 件。次は ${measureSession.nextNo} 枚目です。`;
+
+  if (measureRows.length > 0) {
+    const rate = summary.completionRate === null ? '—' : `${Math.round(summary.completionRate * 100)}%`;
+    const median = summary.medianMs === null ? '—' : `${(summary.medianMs / 1000).toFixed(1)}秒`;
+    const p95 = summary.p95Ms === null ? '—' : `${(summary.p95Ms / 1000).toFixed(1)}秒`;
+
+    measureSummaryElement.textContent = [
+      `成功 ${summary.ok} / 429 ${summary.rateLimited} / 失敗 ${summary.failed}`,
+      `処理完了率 ${rate}（基準95%以上）`,
+      `所要時間 中央値 ${median}（基準45秒以内） / 95パーセンタイル ${p95}（基準90秒以内）`,
+    ].join(' ／ ');
+  } else {
+    measureSummaryElement.textContent = '';
+  }
+
+  const events = measureSession.rateLimitEvents;
+
+  measureRateLimitsElement.textContent = events.length === 0
+    ? ''
+    : `429の記録（項目14）: ${events.map((e) => `${e.no}枚目 ${e.at}`).join(' / ')}`;
+}
+
+function appendMeasureRow(row) {
+  measureRows.push(row);
+
+  const seconds = row.total_ms === '' ? '—' : (Number(row.total_ms) / 1000).toFixed(1);
+  const ok = row.status === MeasureStatus.OK;
+
+  addRow(
+    measureBody,
+    [String(row.no), row.file_name, row.status, seconds, row.companyName || '—'],
+    ok,
+  );
+
+  /* 直近20件だけ画面に残す。CSVには全件入る。 */
+  while (measureBody.children.length > 20) {
+    measureBody.firstElementChild?.remove();
+  }
+
+  measureTable.hidden = false;
+  renderMeasureState();
+}
+
+function wait(ms) {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
+/*
+ * 1枚を通しで測る。画像 → OCR → Gemini。
+ *
+ * 要件定義書 §13.1 の「読み取り開始〜確認画面表示」に相当する区間を
+ * total_ms として測る。
+ */
+async function measureOne(file, no, { token, apiKey }) {
+  const startedAt = Date.now();
+  const recordedAt = new Date().toISOString();
+
+  let ocrMs = null;
+  let ocrChars = null;
+  let ocrAttempts = null;
+
+  try {
+    const ocrResult = await ocrImage({ token, blob: file, fetchImpl: countingFetch });
+
+    ocrMs = Date.now() - startedAt;
+    ocrChars = ocrResult.text.length;
+    ocrAttempts = ocrResult.attempts;
+
+    const geminiStartedAt = Date.now();
+    const fields = await classifyCardText(ocrResult.text, {
+      apiKey,
+      fetchImpl: countingFetch,
+    });
+
+    const geminiMs = Date.now() - geminiStartedAt;
+
+    return buildRow({
+      no,
+      fileName: file.name,
+      status: MeasureStatus.OK,
+      recordedAt,
+      totalMs: Date.now() - startedAt,
+      ocrMs,
+      geminiMs,
+      ocrChars,
+      ocrAttempts,
+      fields,
+    });
+  } catch (error) {
+    /*
+     * 429 は測定を止める理由にならない。**項目14 の観測データ**として
+     * 記録し、次の1枚へ進む（計画 §7-3）。
+     */
+    const rateLimited = error?.code === GeminiErrorCode.RATE_LIMITED;
+
+    if (rateLimited) {
+      const at = new Date().toTimeString().slice(0, 5);
+      measureSession = recordRateLimit(measureSession, { no, at });
+      saveSession(measureSession);
+    }
+
+    const described = error?.name === 'GeminiError'
+      ? describeGeminiError(error)
+      : (error?.name === 'OcrError' ? describeOcrError(error) : describeDriveError(error));
+
+    let status = MeasureStatus.ERROR;
+
+    if (rateLimited) {
+      status = MeasureStatus.RATE_LIMITED;
+    } else if (error?.name === 'OcrError') {
+      status = MeasureStatus.OCR_EMPTY;
+    }
+
+    return buildRow({
+      no,
+      fileName: file.name,
+      status,
+      errorCode: described.errorCode,
+      recordedAt,
+      totalMs: Date.now() - startedAt,
+      ocrMs,
+      ocrChars,
+      ocrAttempts,
+    });
+  }
+}
+
+measureRunButton.addEventListener('click', async () => {
+  if (measureRunning) {
+    return;
+  }
+
+  measureMessage.clear();
+
+  const token = getCachedAccessToken();
+
+  if (token === null) {
+    measureMessage.show('先に「Googleと連携する」を押してください。（OAUTH-001）', 'error');
+    measureMessage.focus();
+    return;
+  }
+
+  const apiKey = KeyStore.get(PROVIDERS.gemini);
+
+  if (apiKey === null) {
+    measureMessage.show('Gemini APIキーが設定されていません。（KEY-001）', 'error');
+    measureMessage.focus();
+    return;
+  }
+
+  const files = [...(measureFilesInput.files ?? [])];
+
+  if (files.length === 0) {
+    measureMessage.show('名刺画像を選んでください。', 'error');
+    measureMessage.focus();
+    return;
+  }
+
+  /* ファイル名で並べる。01.jpg〜50.jpg なら通し番号と一致する。 */
+  files.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+
+  const startNo = Math.max(1, Math.floor(Number(measureStartInput.value) || 1));
+  const intervalMs = Math.max(0, Math.floor(Number(measureIntervalInput.value) || 0)) * 1000;
+
+  if (measureSession.startedAt === null) {
+    measureSession = { ...measureSession, startedAt: new Date().toISOString() };
+  }
+
+  measureRunning = true;
+  measureStopRequested = false;
+  measureRunButton.disabled = true;
+  measureStopButton.hidden = false;
+
+  try {
+    for (const [index, file] of files.entries()) {
+      if (measureStopRequested) {
+        measureMessage.show('中断しました。CSVをダウンロードしてください。', 'info');
+        break;
+      }
+
+      const no = startNo + index;
+
+      measureProgressElement.textContent = `${no} 枚目を測定中…（${index + 1}/${files.length}）`;
+
+      const row = await measureOne(file, no, { token, apiKey });
+
+      appendMeasureRow(row);
+
+      measureSession = { ...measureSession, nextNo: no + 1 };
+      saveSession(measureSession);
+
+      /* 最後の1枚のあとは待たない。 */
+      if (intervalMs > 0 && index < files.length - 1 && !measureStopRequested) {
+        await wait(intervalMs);
+      }
+    }
+
+    if (!measureStopRequested) {
+      measureMessage.show('測定が終わりました。**CSVをダウンロードしてください。**', 'success');
+    }
+  } finally {
+    measureRunning = false;
+    measureStopRequested = false;
+    measureRunButton.disabled = false;
+    measureStopButton.hidden = true;
+    measureFilesInput.value = '';
+    renderMeasureState();
+  }
+});
+
+measureStopButton.addEventListener('click', () => {
+  measureStopRequested = true;
+  measureProgressElement.textContent = '現在の1枚が終わったら止まります…';
+});
+
+measureDownloadButton.addEventListener('click', () => {
+  if (measureRows.length === 0) {
+    return;
+  }
+
+  downloadCsv(measureRows);
+  measureMessage.show(`${measureRows.length} 件をCSVへ書き出しました。`, 'success');
+});
+
+measureResetButton.addEventListener('click', () => {
+  if (measureRows.length > 0
+    && !globalThis.confirm('未保存の測定結果があります。破棄してよろしいですか。')) {
+    return;
+  }
+
+  clearSession();
+  measureSession = loadSession();
+  measureRows = [];
+  measureBody.replaceChildren();
+  measureTable.hidden = true;
+  measureMessage.show('進行状況をリセットしました。', 'info');
+  renderMeasureState();
+});
+
+/*
+ * 未保存のまま閉じさせない。
+ * 結果はメモリにしか無いため、閉じるとその回の測定が消える。
+ */
+globalThis.addEventListener('beforeunload', (event) => {
+  if (measureRows.length === 0) {
+    return;
+  }
+
+  event.preventDefault();
+  /* 文言はブラウザ側で決まる。値を返すことが「引き止める」の合図。 */
+  event.returnValue = '';
+});
+
 runButton.addEventListener('click', async () => {
   if (run.isBusy()) {
     return;
@@ -471,6 +773,7 @@ async function start() {
   renderGoogleState();
   renderSanitize();
   renderHosts();
+  renderMeasureState();
 }
 
 start();

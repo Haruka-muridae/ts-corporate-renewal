@@ -1012,6 +1012,184 @@ try {
   }
 
   /* ---------------------------------------------------------------- */
+  section('測定モード（measurement.js）');
+
+  const measure = await import('../../public/production-app/card-ocr/poc/measurement.js');
+
+  check(
+    '正解列は空で出す（画面から入力させない）',
+    measure.CSV_COLUMNS.includes('expected_companyName')
+      && measure.CSV_COLUMNS.includes('expected_email'),
+  );
+  check(
+    '所要時間の列がある（項目13）',
+    measure.CSV_COLUMNS.includes('total_ms') && measure.CSV_COLUMNS.includes('ocr_ms'),
+  );
+  check(
+    '429 を状態として持つ（項目14）',
+    measure.MeasureStatus.RATE_LIMITED === 'rate_limited',
+  );
+
+  {
+    /* CSV のエスケープ。表計算ソフトで開いたときに壊れない・評価されない。 */
+    check('通常の値はそのまま', measure.csvEscape('株式会社サンプル') === '株式会社サンプル');
+    check('カンマを含む値は引用する', measure.csvEscape('a,b') === '"a,b"');
+    check('引用符は二重にして引用する', measure.csvEscape('a"b') === '"a""b"');
+    check('改行を含む値は引用する', measure.csvEscape('a\nb') === '"a\nb"');
+    check('空文字は空のまま', measure.csvEscape('') === '');
+    check('null でも壊れない', measure.csvEscape(null) === '');
+
+    /* CSV でも数式インジェクションは起きる（要件定義書 §FR-18 と同じ問題）。 */
+    check('= で始まる値を数式にしない', measure.csvEscape('=1+1') === "'=1+1");
+    check('+ で始まる値を数式にしない', measure.csvEscape('+81312345678') === "'+81312345678");
+    check('@ で始まる値を数式にしない', measure.csvEscape('@x') === "'@x");
+    check(
+      '数式かつカンマを含む値は両方処理する',
+      measure.csvEscape('=HYPERLINK("a","b")') === '"\'=HYPERLINK(""a"",""b"")"',
+      measure.csvEscape('=HYPERLINK("a","b")'),
+    );
+  }
+
+  {
+    const row = measure.buildRow({
+      no: 3,
+      fileName: '03.jpg',
+      status: measure.MeasureStatus.OK,
+      recordedAt: '2026-08-03T12:00:00.000Z',
+      totalMs: 41000,
+      ocrMs: 30000,
+      geminiMs: 11000,
+      ocrChars: 120,
+      ocrAttempts: 1,
+      fields: {
+        companyName: '株式会社サンプル商事',
+        fullName: '見本 太郎',
+        email: 'taro@example.com',
+        phone: '03-1234-5678',
+        uncertainFields: ['jobTitle', 'fax'],
+      },
+    });
+
+    check('通し番号が入る', row.no === 3);
+    check('抽出値が入る', row.companyName === '株式会社サンプル商事');
+    check('uncertainFields は空白区切り', row.uncertainFields === 'jobTitle fax');
+    check('正解列は空', row.expected_companyName === '' && row.expected_phone === '');
+    check('未指定の項目は空文字', row.mobile === '');
+
+    const csv = measure.buildCsv([row]);
+    const lines = csv.split('\r\n');
+
+    check('CSV の改行は CRLF', csv.includes('\r\n'));
+    check('1行目は見出し', lines[0] === measure.CSV_COLUMNS.join(','));
+    check('データは1行', lines.length === 2);
+    check('列数が見出しと一致する', lines[1].split(',').length === measure.CSV_COLUMNS.length);
+  }
+
+  {
+    /* 失敗した行も記録する。測定は止めない。 */
+    const row = measure.buildRow({
+      no: 7,
+      fileName: '07.jpg',
+      status: measure.MeasureStatus.RATE_LIMITED,
+      errorCode: 'AI-002',
+      recordedAt: '2026-08-03T12:05:00.000Z',
+      totalMs: 3000,
+    });
+
+    check('429 の行を作れる', row.status === 'rate_limited');
+    check('エラーコードが入る', row.error_code === 'AI-002');
+    check('抽出値は空', row.companyName === '');
+  }
+
+  {
+    /* 進行状況。**個人情報を入れない。** */
+    const store = new Map();
+
+    globalThis.localStorage = {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => { store.set(key, String(value)); },
+      removeItem: (key) => { store.delete(key); },
+    };
+
+    check('初期状態は1枚目から', measure.loadSession().nextNo === 1);
+
+    let session = { startedAt: '2026-08-03T12:00:00.000Z', nextNo: 24, rateLimitEvents: [] };
+    session = measure.recordRateLimit(session, { no: 23, at: '12:34' });
+    measure.saveSession(session);
+
+    const loaded = measure.loadSession();
+
+    check('中断した位置を復元できる', loaded.nextNo === 24, String(loaded.nextNo));
+    check('429 の記録を復元できる', loaded.rateLimitEvents[0]?.no === 23);
+    check('429 の時刻を復元できる', loaded.rateLimitEvents[0]?.at === '12:34');
+
+    const saved = store.get(measure.SESSION_STORAGE_KEY);
+
+    check(
+      '**進行状況に個人情報を入れていない（FR-21）**',
+      !/companyName|fullName|email|phone|@/.test(saved),
+      saved,
+    );
+    check(
+      '進行状況に画像やテキストを入れていない',
+      !/text|image|blob|base64/i.test(saved),
+    );
+
+    measure.clearSession();
+    check('リセットすると1枚目に戻る', measure.loadSession().nextNo === 1);
+
+    /* 壊れた値でも測定を止めない。 */
+    for (const broken of ['{', 'null', '"x"', '[1]', '']) {
+      store.set(measure.SESSION_STORAGE_KEY, broken);
+      check(`壊れた進行状況（${broken || '空文字'}）でも既定へ落ちる`, measure.loadSession().nextNo === 1);
+    }
+
+    store.delete(measure.SESSION_STORAGE_KEY);
+    delete globalThis.localStorage;
+
+    check('保存領域が無くても読める', measure.loadSession().nextNo === 1);
+    check('保存領域が無くても保存呼び出しで落ちない', measure.saveSession(session) === false);
+  }
+
+  {
+    /* 集計。要件定義書 §16.2 / §13.1 の基準に対応する。 */
+    const rows = [
+      { status: 'ok', total_ms: 30000 },
+      { status: 'ok', total_ms: 40000 },
+      { status: 'ok', total_ms: 50000 },
+      { status: 'rate_limited', total_ms: 2000 },
+      { status: 'error', total_ms: 1000 },
+    ];
+
+    const summary = measure.summarize(rows);
+
+    check('総数を数える', summary.total === 5);
+    check('成功数を数える', summary.ok === 3);
+    check('429 を数える', summary.rateLimited === 1);
+    check('失敗を数える', summary.failed === 1);
+    check('処理完了率は成功/全体', Math.abs(summary.completionRate - 0.6) < 1e-9);
+    check('中央値は成功分から求める', summary.medianMs === 40000, String(summary.medianMs));
+    check('空でも壊れない', measure.summarize([]).medianMs === null);
+  }
+
+  check(
+    'CSVファイル名に日時が入る',
+    /^card-ocr-measure-\d{8}-\d{4}\.csv$/.test(measure.buildCsvFileName(new Date(2026, 7, 3, 9, 5))),
+    measure.buildCsvFileName(new Date(2026, 7, 3, 9, 5)),
+  );
+
+  {
+    /* Excel が UTF-8 と判定できるよう BOM を付ける。 */
+    const blob = measure.buildCsvBlob([]);
+    const head = new Uint8Array(await blob.arrayBuffer()).slice(0, 3);
+
+    check(
+      'CSV に BOM を付ける（Excel の文字化け対策）',
+      head[0] === 0xEF && head[1] === 0xBB && head[2] === 0xBF,
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
   section('ページ本体のソース検査（守るべき制約）');
 
   const pocSource = await readFile(new URL('poc.js', POC_DIR), 'utf8');
@@ -1024,6 +1202,21 @@ try {
     await readFile(new URL('drive-auth.js', POC_DIR), 'utf8'),
     await readFile(new URL('drive-api.js', POC_DIR), 'utf8'),
     await readFile(new URL('drive-ocr.js', POC_DIR), 'utf8')];
+
+  const measureSource = await readFile(new URL('measurement.js', POC_DIR), 'utf8');
+
+  check(
+    '測定結果をドライブへ上げていない（CSVはダウンロードのみ）',
+    !/googleapis\.com|upload/i.test(measureSource),
+  );
+  check(
+    '**抽出結果を localStorage へ保存していない（FR-21）**',
+    !/setItem\([^)]*rows|setItem\([^)]*fields/.test(measureSource),
+  );
+  check(
+    'テスト環境（apps/）から import していない（measurement.js）',
+    !/from\s+['"][^'"]*\/apps\//.test(measureSource),
+  );
 
   /*
    * drive-storage.js は保存先IDのキャッシュに localStorage を使うため、

@@ -111,6 +111,21 @@
 .poc-list__ng { color: #b91c1c; font-weight: 700; }
 
 /*
+ * 測定モードの警告。
+ * 結果がメモリにしかないことを見落とすと、測り直しになる。
+ */
+.poc-warn {
+  margin: 0 0 1.25rem;
+  padding: 0.875rem 1rem;
+  border-left: 4px solid #b91c1c;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: #7f1d1d;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+/*
  * OCR の結果本文。
  * 名刺の中身が入るため、画面から溢れさせず折り返す。
  */

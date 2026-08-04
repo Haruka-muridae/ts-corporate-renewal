@@ -41,9 +41,8 @@
 
       <p class="poc-lead">
         フェーズ0計画（<code>docs/specs/card-ocr-phase0-plan.md</code>）§5 のうち、
-        0-2（Vercel SSO とポップアップの相性）、1〜8、および 9〜11（保存構造と
-        Drive OCR）をこのページで実行します。
-        精度の実測（12・13）は評価用サンプルを揃えてから別途行います。
+        0-2 と 1〜13 をこのページで実行します。
+        精度の実測（12・13）は「5. 精度・所要時間の測定」で行います。
       </p>
 
       <!-- 読み込み中。guardPage() の結果が出るまで本文を出さない。 -->
@@ -152,8 +151,71 @@
           <pre class="poc-ocr-text" id="poc-ocr-text" hidden></pre>
         </section>
 
+        <section class="poc-section" aria-labelledby="poc-measure-title">
+          <h2 class="poc-section__title" id="poc-measure-title">5. 精度・所要時間の測定（項目12・13）</h2>
+          <p class="poc-section__note">
+            画像 → OCR → Gemini を通しで実行し、1件ずつ計測してCSVにためます。
+            <strong>先に「2. Google 連携」を済ませてください。</strong>
+          </p>
+
+          <p class="poc-warn" role="status">
+            <strong>結果はこのページのメモリにしかありません。</strong>
+            要件定義書 FR-21 により、抽出結果をブラウザに保存しないためです。
+            <strong>閉じる前に必ずCSVをダウンロードしてください。</strong>
+            中断するときも同じで、再開後は別のCSVになります（表計算ソフトで結合します）。
+          </p>
+
+          <div class="auth-field">
+            <label class="auth-field__label" for="poc-measure-start">次の通し番号</label>
+            <input class="auth-field__input" id="poc-measure-start" type="number" min="1" step="1" value="1">
+          </div>
+
+          <div class="auth-field">
+            <label class="auth-field__label" for="poc-measure-interval">1件ごとの間隔（秒）</label>
+            <input class="auth-field__input" id="poc-measure-interval" type="number" min="0" step="1" value="5">
+          </div>
+          <p class="poc-section__note">
+            無料枠キーはレート上限が低いため、間隔を空けます。
+            <strong>429 が出ても止まりません。</strong>何枚目・何時何分かをCSVへ記録して次へ進みます
+            （項目14 の観測データになります）。
+          </p>
+
+          <div class="auth-field">
+            <label class="auth-field__label" for="poc-measure-files">名刺画像（複数選択できます）</label>
+            <input class="auth-field__input" id="poc-measure-files" type="file"
+                   accept="image/jpeg,image/png" multiple>
+          </div>
+
+          <p class="poc-actions">
+            <button class="auth-button" id="poc-measure-run" type="button">測定を開始する</button>
+            <button class="auth-button auth-api-panel__danger" id="poc-measure-stop" type="button" hidden>中断する</button>
+          </p>
+
+          <p class="auth-message poc-message" id="poc-measure-message" tabindex="-1" hidden></p>
+          <p class="poc-result" id="poc-measure-progress">まだ測定していません。</p>
+          <p class="poc-result" id="poc-measure-summary"></p>
+
+          <p class="poc-actions">
+            <button class="auth-button" id="poc-measure-download" type="button" disabled>CSVをダウンロード</button>
+            <button class="auth-button auth-button--ghost" id="poc-measure-reset" type="button">進行状況をリセット</button>
+          </p>
+
+          <table class="poc-table" id="poc-measure-table" hidden>
+            <caption class="poc-table__caption">直近の測定結果（CSVには全件入ります）</caption>
+            <thead>
+              <tr>
+                <th scope="col">No</th><th scope="col">ファイル</th><th scope="col">状態</th>
+                <th scope="col">所要(秒)</th><th scope="col">会社名</th><th scope="col">氏名</th>
+              </tr>
+            </thead>
+            <tbody id="poc-measure-body"></tbody>
+          </table>
+
+          <p class="poc-result" id="poc-measure-ratelimits"></p>
+        </section>
+
         <section class="poc-section" aria-labelledby="poc-sanitize-title">
-          <h2 class="poc-section__title" id="poc-sanitize-title">5. 数式インジェクション対策</h2>
+          <h2 class="poc-section__title" id="poc-sanitize-title">6. 数式インジェクション対策</h2>
           <p class="poc-section__note">
             スプレッドシートへ入れる前の保護（要件定義書 FR-18）。通信は発生しません。
           </p>
@@ -167,7 +229,7 @@
         </section>
 
         <section class="poc-section" aria-labelledby="poc-scope-title">
-          <h2 class="poc-section__title" id="poc-scope-title">6. 外部通信先</h2>
+          <h2 class="poc-section__title" id="poc-scope-title">7. 外部通信先</h2>
           <p class="poc-section__note">
             このページが実際に呼んだ通信先を記録します。要件定義書 §12 の3系統以外へ
             出ていないことを目視で確認できます。
