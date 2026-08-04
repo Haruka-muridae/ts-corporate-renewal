@@ -34,7 +34,7 @@
 
 | 要件定義書 | 対象範囲 | 版 |
 | --- | --- | --- |
-| [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.1 |
+| [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.2 |
 
 要件定義書も**実装の正**です。上の仕様書と同じく、コードと食い違う場合は
 コードのほうが間違っているとみなします。
