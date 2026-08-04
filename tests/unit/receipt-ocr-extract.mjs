@@ -230,6 +230,47 @@ try {
   check('★電話番号の数字列を登録番号にしない',
     extract.extractRegistrationNumber(toLines(['TEL 03-1234-5678'])).value === null);
 
+  /*
+   * 実機で見つかった誤判定（2026-08-04）。
+   * 市販の領収証用紙は登録番号欄が印刷されており、免税事業者は空欄で渡す。
+   * 「欄はあるが何も書いていない」は記載なしであって、読取失敗ではない。
+   */
+  {
+    const result = extract.extractRegistrationNumber(toLines([
+      '領収証',
+      '株式会社サンプル商事',
+      '登録番号',
+      '',
+    ].join('\n')));
+
+    check('★登録番号欄が空欄なら「記載なし（免税の可能性）」',
+      result.status === REGISTRATION_STATUS.ABSENT);
+    check('★空欄を「読取失敗」にしない',
+      result.status !== REGISTRATION_STATUS.UNREADABLE);
+  }
+
+  check('★登録番号欄の下の電話番号を「番号が書いてある」と読まない',
+    extract.extractRegistrationNumber(toLines([
+      '登録番号',
+      'TEL 03-1234-5678',
+    ].join('\n'))).status === REGISTRATION_STATUS.ABSENT);
+
+  check('★登録番号欄の下の裸の電話番号も拾わない（桁数で見分ける）',
+    extract.extractRegistrationNumber(toLines([
+      '登録番号',
+      '03-1234-5678',
+    ].join('\n'))).status === REGISTRATION_STATUS.ABSENT);
+
+  check('欄が改行で割れて13桁が入っていれば「読取失敗」',
+    extract.extractRegistrationNumber(toLines([
+      '登録番号',
+      '1234567890123',
+    ].join('\n'))).status === REGISTRATION_STATUS.UNREADABLE);
+
+  check('インボイスの語だけがあっても、数字が無ければ「記載なし」',
+    extract.extractRegistrationNumber(toLines(['インボイス対応'])).status
+      === REGISTRATION_STATUS.ABSENT);
+
   check('チェックデジットは加点材料として計算できる',
     typeof extract.checkDigitValid('T1234567890123') === 'boolean');
 
@@ -363,6 +404,54 @@ try {
     const result = extract.extractPayee(toLines(['セブンイレブン 大手町店']), { storeMaster: master });
 
     check('電話番号が無ければキーワードで照合する', result.masterMatch === 'keyword');
+  }
+
+  /*
+   * 実機で見つかった誤採用（2026-08-04）。
+   * 日付は領収証のどこにでも印字され、店名より上に来ることもある。
+   */
+  {
+    const result = extract.extractPayee(toLines([
+      '2026年8月1日',
+      'まるまるマート',
+      '合計 ¥500',
+    ].join('\n')));
+
+    check('★日付の行を店名にしない', result.value !== '2026年8月1日');
+    check('日付を飛ばして次の候補を採る', result.value === 'まるまるマート');
+  }
+
+  for (const dateLine of ['2026年8月1日', '2026/08/02', '令和8年8月2日', '26/08/02']) {
+    check(`★日付だけの行（${dateLine}）は候補にしない`,
+      extract.extractPayee(toLines(dateLine)).value === null);
+  }
+
+  /*
+   * 実機で見つかった誤採用（2026-08-04）。
+   * 手書き領収証の題字は崩れており、「領取 証」のように誤読される。
+   */
+  for (const title of ['領収証', '領収書', 'レシート', '領取 証', '領 収 証', '受取証', 'お買上票']) {
+    check(`★題字（${title}）を店名にしない`,
+      extract.extractPayee(toLines(title)).value === null);
+  }
+
+  {
+    const result = extract.extractPayee(toLines([
+      '領取 証',
+      '2026年8月1日',
+      'まるまるマート',
+    ].join('\n')));
+
+    check('★誤読された題字と日付を飛ばして店名へ届く', result.value === 'まるまるマート');
+  }
+
+  {
+    /* 法人格が読めている行は、日付や題字が同居していても採ってよい。 */
+    const withDate = extract.extractPayee(toLines('株式会社サンプル商事 2026年8月1日'));
+
+    check('法人名に日付が同居していても採る',
+      withDate.value === '株式会社サンプル商事 2026年8月1日');
+    check('確定してよい', withDate.confirmed === true);
   }
 
   check('「〜店」で終わる行も店舗名として確定してよい（§10.3-3）',

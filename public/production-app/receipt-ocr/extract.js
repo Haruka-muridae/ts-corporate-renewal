@@ -352,6 +352,48 @@ export function extractReceiptNumber(lines, phoneDigits = null) {
 const REGISTRATION_LABEL = /(登録番号|適格請求書|インボイス|事業者番号)/;
 
 /*
+ * 登録番号のラベルの近くに、書き込まれた数字があるか。
+ *
+ * 見るのは次の2つだけにする。
+ *   ・ラベルと同じ行の、ラベルより後ろ
+ *   ・次の行が「数字とTと区切りだけ」でできている場合（欄が改行で割れた形）
+ *
+ * 次の行を無条件に見ると、下に印字された電話番号や日付を
+ * 「登録番号が書いてある」と読んでしまう。
+ */
+function hasNumberNearRegistrationLabel(lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const label = line.match(REGISTRATION_LABEL);
+
+    if (!label) {
+      continue;
+    }
+
+    /* ラベルより後ろに数字が並んでいるか。 */
+    const tail = line.slice(label.index + label[0].length).replace(/[\s-]/g, '');
+
+    if (/\d{8,}/.test(tail)) {
+      return true;
+    }
+
+    /*
+     * 欄が改行で割れた形。次の行が数字だけでできているときに限る。
+     *
+     * 桁数は12以上を求める。登録番号は13桁で、10〜11桁だと
+     * すぐ下に印字された電話番号を拾ってしまう。
+     */
+    const next = lines[i + 1];
+
+    if (next && /^[T\d\s-]+$/.test(next) && next.replace(/\D/g, '').length >= 12) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/*
  * §10.6。
  *
  * **「T」が明示的に認識できた場合のみ採用する。**
@@ -379,10 +421,23 @@ export function extractRegistrationNumber(lines) {
   }
 
   /*
-   * T が取れなかった。ラベルがあるなら「書いてあるが読めなかった」、
-   * 無いなら「そもそも書かれていない」。値は補正しない。
+   * T が取れなかった。値は補正しない。
+   *
+   * ------------------------------------------------------------------
+   * ラベルがあるだけでは「読取失敗」にしない
+   * ------------------------------------------------------------------
+   * 市販の領収証用紙には登録番号欄が**あらかじめ印刷されている**。
+   * 免税事業者はそこを空欄のまま渡すため、「欄はあるが何も書いていない」
+   * 領収証が普通に出てくる。これは「記載なし（免税の可能性）」であって
+   * 「読取失敗」ではない。§10.6 が両者を区別せよと言うのは、
+   * 仕入税額控除の処理が違うからで、ここを取り違えると
+   * 控除できない取引を控除できるものとして扱ってしまう。
+   *
+   * 「書いてあるが読めなかった」とみなすのは、ラベルの近くに
+   * 実際にそれらしい数字列があるときだけにする。
+   * ------------------------------------------------------------------
    */
-  result.status = REGISTRATION_LABEL.test(text)
+  result.status = hasNumberNearRegistrationLabel(lines)
     ? REGISTRATION_STATUS.UNREADABLE
     : REGISTRATION_STATUS.ABSENT;
 
@@ -541,7 +596,36 @@ export function extractPaymentMethod(lines) {
 
 const COMPANY_MARK = /(株式会社|\(株\)|合同会社|有限会社|合資会社|一般社団法人|店$|支店|営業所)/;
 const ADDRESS_MARK = /(都|道|府|県|市|区|町|村|丁目|番地|[0-9]-[0-9])/;
-const HEADER_MARK = /^(領収書|領収証|レシート|受領証|お買上票|明細)/;
+
+/*
+ * 用紙の題字（§10.3 が「店舗名として採用しない」とする類）。
+ *
+ * ------------------------------------------------------------------
+ * 誤読に耐える形にする
+ * ------------------------------------------------------------------
+ * 手書き領収証の題字は大きく崩した字で書かれ、OCR が
+ * 「領取 証」「領 収 証」のように読むことがある。実機で
+ * 「領取 証」を店名として採用してしまった。
+ *
+ * そこで、空白を落としてから、収と取・証と書の揺れを許して照合する。
+ * 完全一致・行頭一致にすると、この手の誤読を素通りさせる。
+ * ------------------------------------------------------------------
+ */
+const TITLE_MARK = /(領[収取叉]?[証書]|レシート|受領証|受取証|お買上|お買い上げ|明細書|計算書|請求書|納品書)/;
+
+function isTitleLine(line) {
+  return TITLE_MARK.test(line.replace(/[\s　]/g, ''));
+}
+
+/*
+ * その行が日付そのものか（§10.2 が扱う書式に一致するか）。
+ *
+ * 実機で「2026年8月1日」を店名として採用してしまった。
+ * 日付は領収証のどこにでも印字され、店名より上に来ることもある。
+ */
+function isDateLine(line) {
+  return parseDate(line) !== null;
+}
 
 /*
  * §10.3。優先順位は
@@ -586,14 +670,35 @@ export function extractPayee(lines, { storeMaster = [], phoneDigits = null } = {
   }
 
   /* 2〜3. 先頭付近の法人名・店舗名。 */
-  const head = lines.slice(0, 8).filter((line) => !HEADER_MARK.test(line));
+  const head = lines.slice(0, 8);
 
+  /*
+   * 店名として採ってよい行か。
+   *
+   * 除外は「法人格が無い場合に限る」形にしてある。
+   * 「株式会社◯◯ 2026年8月1日」のように、正しい店名の行に
+   * 日付が同居することがあるため、法人格が読めているほうを優先する。
+   */
   const looksLikePayee = (line) => {
+    const hasCompanyMark = COMPANY_MARK.test(line);
+
+    /* 用紙の題字（領収証・レシート等）。 */
+    if (isTitleLine(line) && !hasCompanyMark) {
+      return false;
+    }
+
+    /* 日付だけの行。 */
+    if (isDateLine(line) && !hasCompanyMark) {
+      return false;
+    }
+
+    /* 電話番号の行。 */
     if (PHONE_LABEL.test(line) || /(?<!\d)0\d{1,4}[-(]\d{1,4}/.test(line)) {
       return false;
     }
 
-    if (ADDRESS_MARK.test(line) && !COMPANY_MARK.test(line)) {
+    /* 住所の行。 */
+    if (ADDRESS_MARK.test(line) && !hasCompanyMark) {
       return false;
     }
 
