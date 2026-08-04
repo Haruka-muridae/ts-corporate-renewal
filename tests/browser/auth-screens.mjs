@@ -27,6 +27,16 @@
 
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { startSuite } from '../../public/apps/tests/helpers/browser-harness.mjs';
+import { APP_REGISTRY } from '../../public/portal/app-registry.js';
+
+/*
+ * 組み込みのレジストリに載っている id の並び。
+ *
+ * 期待値をここに書き写さない。アプリを1件足すたびに
+ * 書き写した側だけが古くなり、実装ではなくテストが落ちる。
+ * 見たいのは「レジストリのとおりに、その順で並ぶこと」である。
+ */
+const REGISTRY_IDS = APP_REGISTRY.map((app) => app.id);
 
 /* 既存の apps 側テストとポートが衝突しないよう、離れた番号を使う。 */
 const SUITE_INDEX = 20;
@@ -2966,22 +2976,27 @@ try {
     })()`),
   );
 
-  /* ---- 既定のレジストリ（仮データ3件） ---- */
+  /* ---- 既定のレジストリ ---- */
 
+  /*
+   * 仮データ3件に加え、実物のアプリが並ぶ。
+   * 件数を直に書くと、アプリを1つ足すたびにここが落ちる。
+   * レジストリから期待値を作り、順序が保たれることだけを見る。
+   */
   await page.evaluate('localStorage.removeItem("tsam-app-layout")');
   await page.goto(`${origin}/portal/`, 1500);
   await page.sleep(600);
 
   check(
-    '既定のレジストリの3件がカタログに出る',
-    JSON.stringify(await catalogIds()) === JSON.stringify(['202607No01', '202607No02', '202607No03']),
+    '既定のレジストリの全件がカタログに出る',
+    JSON.stringify(await catalogIds()) === JSON.stringify(REGISTRY_IDS),
     JSON.stringify(await catalogIds()),
   );
 
   check(
     '仮データのアイコンは読み込みに失敗し、頭文字になる',
     await page.evaluate(`
-      [...document.querySelectorAll("#portal-catalog .auth-app-card__icon")]
+      [...document.querySelectorAll("#portal-catalog .auth-app-card[data-app-id^='2026'] .auth-app-card__icon")]
         .every((icon) => !icon.classList.contains("auth-app-card__icon--image-ready")
           && icon.querySelector(".auth-app-card__icon-letter").textContent !== "")
     `),
@@ -2990,8 +3005,18 @@ try {
   check(
     '仮データの外部リンクは別タブ・noopener noreferrer',
     await page.evaluate(`
-      [...document.querySelectorAll("#portal-catalog .auth-app-card__link")].every((a) =>
-        a.target === "_blank" && a.rel.includes("noopener") && a.rel.includes("noreferrer"))
+      [...document.querySelectorAll("#portal-catalog .auth-app-card__link")]
+        .filter((a) => /^https?:/i.test(a.getAttribute("href") || ""))
+        .every((a) => a.target === "_blank" && a.rel.includes("noopener") && a.rel.includes("noreferrer"))
+    `),
+  );
+
+  check(
+    'サイト内のアプリは同じタブで開く',
+    await page.evaluate(`
+      [...document.querySelectorAll("#portal-catalog .auth-app-card__link")]
+        .filter((a) => !/^https?:/i.test(a.getAttribute("href") || ""))
+        .every((a) => a.target !== "_blank")
     `),
   );
 
@@ -3122,8 +3147,8 @@ try {
   await openPortal();
 
   check(
-    'キャッシュも無ければ組み込みの仮データ3件で描く',
-    JSON.stringify(await catalogIds()) === JSON.stringify(['202607No01', '202607No02', '202607No03']),
+    'キャッシュも無ければ組み込みのレジストリで描く',
+    JSON.stringify(await catalogIds()) === JSON.stringify(REGISTRY_IDS),
     JSON.stringify(await catalogIds()),
   );
 
@@ -3142,7 +3167,7 @@ try {
 
   check(
     '401（共有設定が未了）でも画面は組み込みの一覧で開く',
-    JSON.stringify(await catalogIds()) === JSON.stringify(['202607No01', '202607No02', '202607No03'])
+    JSON.stringify(await catalogIds()) === JSON.stringify(REGISTRY_IDS)
     && await page.evaluate('document.getElementById("portal-apps-message").hidden === false'),
     JSON.stringify(await catalogIds()),
   );

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>領収書スキャナ｜TSAM AI</title>
+
+<!--
+  検索避け。ログインが要る画面であり、内容を索引させる意味がない。
+-->
+<meta name="robots" content="noindex, nofollow">
+
+<!--
+  第三者CDNを読まない（仕様書 §13）。
+  script-src に accounts.google.com が入っているのは Google Identity Services のためで、
+  これは認可そのものの提供元である。ここへ他のホストを足さないこと。
+  connect-src も Google と当社の認証系（Apps Script）に限る（§15.3）。
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'">
+
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!--
+  guardPage() が利用者を返すまで中身を出さない（§4-1）。
+  hidden を外すのは app.js だけ。
+-->
+<main id="ro-main" class="ro-main" hidden>
+
+  <header class="ro-header">
+    <h1 class="ro-title">領収書スキャナ</h1>
+    <p class="ro-lead">
+      領収書の画像から必要な項目を読み取り、あなたのGoogleドライブに保存します。
+    </p>
+  </header>
+
+  <!-- 初回案内（§9.2 末尾・§0.3・§0.4・§0.5）。 -->
+  <section id="ro-first-run" class="ro-panel ro-panel--notice" hidden>
+    <h2 class="ro-panel__title">はじめに、3点だけご確認ください</h2>
+    <ul class="ro-list">
+      <li>データと画像は<strong>あなたのGoogleドライブ</strong>に保存されます。当社は閲覧できません。</li>
+      <li>あなたがシートやフォルダを削除した場合、<strong>当社は復元できません</strong>（控えを持たないため）。</li>
+      <li>本アプリは電子帳簿保存法のスキャナ保存要件を満たしません。<strong>紙の原本は破棄しないでください。</strong></li>
+    </ul>
+    <p class="ro-note" id="ro-key-disclosure">
+      Gemini APIキーはあなた自身のものを使います。無料枠のキーでは、送信した画像や文字が
+      Google 側で利用される場合があります。業務で使う場合は有料枠のご利用をご検討ください。
+    </p>
+    <button type="button" id="ro-first-run-ack" class="auth-button">確認しました</button>
+  </section>
+
+  <!-- 3層ガードの状態表示（§4）。 -->
+  <section class="ro-panel">
+    <h2 class="ro-panel__title">利用の準備</h2>
+    <ol class="ro-steps">
+      <li class="ro-step" id="ro-step-auth">
+        <span class="ro-step__label">TSAM AI ログイン</span>
+        <span class="ro-step__state" id="ro-state-auth">確認しています…</span>
+      </li>
+      <li class="ro-step" id="ro-step-oauth">
+        <span class="ro-step__label">Google ドライブとの連携</span>
+        <span class="ro-step__state" id="ro-state-oauth">未連携</span>
+        <button type="button" id="ro-connect" class="auth-button auth-button--small">連携する</button>
+      </li>
+      <li class="ro-step" id="ro-step-key">
+        <span class="ro-step__label">Gemini APIキー</span>
+        <span class="ro-step__state" id="ro-state-key">確認しています…</span>
+        <a href="../../portal/" id="ro-key-link" class="ro-link" hidden>ポータルで設定する</a>
+      </li>
+      <li class="ro-step" id="ro-step-storage">
+        <span class="ro-step__label">保存先</span>
+        <span class="ro-step__state" id="ro-state-storage">未確認</span>
+      </li>
+    </ol>
+  </section>
+
+  <!-- 画像の選択と原本保存（§5-② / §5-④）。 -->
+  <section class="ro-panel" id="ro-capture-panel" hidden>
+    <h2 class="ro-panel__title">領収書を選ぶ</h2>
+
+    <label class="ro-field">
+      <span class="ro-field__label">画像ファイル（JPEG / PNG）</span>
+      <input type="file" id="ro-file" class="ro-file" accept="image/jpeg,image/png" capture="environment">
+    </label>
+
+    <div class="ro-preview" id="ro-preview" hidden>
+      <img id="ro-preview-image" class="ro-preview__image" alt="選択した領収書の画像">
+      <dl class="ro-meta">
+        <div class="ro-meta__row">
+          <dt class="ro-meta__key">ファイル名</dt>
+          <dd class="ro-meta__value" id="ro-meta-name"></dd>
+        </div>
+        <div class="ro-meta__row">
+          <dt class="ro-meta__key">画像ハッシュ（SHA-256）</dt>
+          <dd class="ro-meta__value ro-meta__value--mono" id="ro-meta-hash"></dd>
+        </div>
+        <div class="ro-meta__row">
+          <dt class="ro-meta__key">保存先</dt>
+          <dd class="ro-meta__value" id="ro-meta-folder"></dd>
+        </div>
+      </dl>
+    </div>
+
+    <button type="button" id="ro-start" class="auth-button" disabled>
+      原本を保存して読み取る
+    </button>
+  </section>
+
+  <!--
+    保存前確認（仕様書 v2.0 §8）。
+    抽出結果と原本画像を並べ、利用者が直せる状態でシート保存の前に止める。
+    この画面を飛ばして保存する経路を作らないこと。
+  -->
+  <section class="ro-panel" id="ro-review-panel" hidden>
+    <h2 class="ro-panel__title">保存前の確認</h2>
+
+    <p class="ro-review__lead" id="ro-review-lead"></p>
+
+    <!--
+      検証の警告（v1.3 §13）。未来日・金額の桁・必須項目の不足など。
+      値は消さず、人が直す判断材料として出す。
+    -->
+    <ul class="ro-warnings" id="ro-review-warnings" hidden></ul>
+
+    <!--
+      突合で食い違った項目をまとめて AI の読み取りに入れ替える。
+      入力欄へ入れるだけで、保存は下の保存ボタンを押したときのみ。
+    -->
+    <p class="ro-adopt-all" id="ro-adopt-all-row" hidden>
+      <button type="button" id="ro-adopt-all" class="auth-button auth-button--ghost auth-button--small">
+        AIの読み取りをすべて採用
+      </button>
+      <span class="ro-note" id="ro-adopt-all-note"></span>
+    </p>
+
+    <div class="ro-review">
+      <div class="ro-review__image">
+        <img id="ro-review-image" class="ro-preview__image" alt="読み取った領収書の原本画像">
+        <p class="ro-note" id="ro-review-confidence"></p>
+      </div>
+
+      <!-- 行は app.js が createElement で組み立てる（innerHTML 不使用）。 -->
+      <div class="ro-review__fields" id="ro-review-fields"></div>
+    </div>
+
+    <p class="ro-message" id="ro-duplicate" role="status" hidden></p>
+
+    <label class="ro-check">
+      <input type="checkbox" id="ro-keep-review">
+      <span>要確認のまま保存する（あとでシート上で直す）</span>
+    </label>
+
+    <div class="ro-actions">
+      <button type="button" id="ro-save" class="auth-button">この内容でシートに保存する</button>
+      <button type="button" id="ro-cancel" class="auth-button auth-button--ghost">やめる</button>
+    </div>
+  </section>
+
+  <!-- 状態とエラー（§12）。role="status" で読み上げに乗せる。 -->
+  <p class="ro-message" id="ro-message" role="status" aria-live="polite" hidden></p>
+  <p class="ro-message ro-message--progress" id="ro-progress" hidden></p>
+
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

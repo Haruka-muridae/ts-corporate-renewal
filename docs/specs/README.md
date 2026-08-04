@@ -17,6 +17,13 @@
 | [portal-spec-v1.md](./portal-spec-v1.md) | `/portal/` のレイアウトと表示条件 | v1.4 |
 | [keystore-spec-v1.md](./keystore-spec-v1.md) | 外部AIサービスのAPIキーの保管（`public/auth/keystore.js`）。端末内のみ・サーバーへ送らない | v1 |
 | [apps-grid-spec-v1.md](./apps-grid-spec-v1.md) | `/portal/` のアプリグリッド（ページ式）と配置データ ＋ `public/portal/app-registry.js` | v1 |
+| [receipt-ocr-v2.md](./receipt-ocr-v2.md) | 領収書スキャナ（`public/production-app/receipt-ocr/`。アプリID `receipt-ocr`）。利用者のドライブに保存し、当社サーバーを通さない | v2.0（ドラフト） |
+| [receipt-ocr-v1.3.md](./receipt-ocr-v1.3.md) | 上の前身。**抽出・検証の仕様（10・11・13・14・15・16.1・18.2章）は現役**で、v2.0 がここを参照する | v1.3 |
+
+> `receipt-ocr-v1.3.md` にはサーバー（GAS）前提の記述が残っています。
+> **アーキテクチャは v2.0 が正**であり、v1.3 のうち参照してよいのは
+> v2.0 §7 / §9.1 が名指しする章に限ります。2段階フロー・idempotencyKey・
+> LockService・APIトークン・処理台帳は実装しません。
 
 参照するときは、セクション番号（§n）で指し示してください。
 行番号は変わるため使いません。

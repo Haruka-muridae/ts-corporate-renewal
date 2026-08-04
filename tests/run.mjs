@@ -46,6 +46,11 @@ const SUITES = [
   { name: 'event-result', file: 'unit/event-result.mjs', kind: 'unit' },
   { name: 'event-admin', file: 'unit/event-admin.mjs', kind: 'unit' },
   { name: 'event-config', file: 'unit/event-config.mjs', kind: 'unit' },
+  { name: 'receipt-ocr', file: 'unit/receipt-ocr.mjs', kind: 'unit' },
+  { name: 'receipt-ocr-phase2', file: 'unit/receipt-ocr-phase2.mjs', kind: 'unit' },
+  { name: 'receipt-ocr-extract', file: 'unit/receipt-ocr-extract.mjs', kind: 'unit' },
+  { name: 'receipt-ocr-phase3', file: 'unit/receipt-ocr-phase3.mjs', kind: 'unit' },
+  { name: 'receipt-ocr-review', file: 'unit/receipt-ocr-review.mjs', kind: 'unit' },
   { name: 'card-ocr-poc', file: 'unit/card-ocr-poc.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
