@@ -41,8 +41,9 @@
 
       <p class="poc-lead">
         フェーズ0計画（<code>docs/specs/card-ocr-phase0-plan.md</code>）§5 のうち、
-        0-2（Vercel SSO とポップアップの相性）、1〜7、および 8（OAuth 同意フロー）を
-        このページで実行します。Drive OCR と保存構造（9〜11）は未実装です。
+        0-2（Vercel SSO とポップアップの相性）、1〜8、および 9〜11（保存構造と
+        Drive OCR）をこのページで実行します。
+        精度の実測（12・13）は評価用サンプルを揃えてから別途行います。
       </p>
 
       <!-- 読み込み中。guardPage() の結果が出るまで本文を出さない。 -->
@@ -113,8 +114,46 @@
           </div>
         </section>
 
+        <section class="poc-section" aria-labelledby="poc-drive-title">
+          <h2 class="poc-section__title" id="poc-drive-title">4. 保存構造と Drive OCR</h2>
+          <p class="poc-section__note">
+            計画 §5 の 9（保存構造の作成）、10（再発見）、11（Drive OCR の疎通）を確かめます。
+            <strong>先に「2. Google 連携」を済ませてください。</strong>
+            作られるのはご自身のマイドライブの <code>TSAM AI/名刺データ/</code> です。
+          </p>
+
+          <p class="poc-actions">
+            <button class="auth-button" id="poc-storage" type="button">保存構造を用意する</button>
+            <button class="auth-button auth-button--ghost" id="poc-storage-again" type="button" hidden>もう一度実行（再発見の確認）</button>
+          </p>
+          <p class="auth-message poc-message" id="poc-drive-message" tabindex="-1" hidden></p>
+
+          <table class="poc-table" id="poc-storage-table" hidden>
+            <caption class="poc-table__caption">各段階がどこから解決されたか</caption>
+            <thead>
+              <tr><th scope="col">対象</th><th scope="col">解決元</th><th scope="col">判定</th></tr>
+            </thead>
+            <tbody id="poc-storage-body"></tbody>
+          </table>
+          <p class="poc-result" id="poc-storage-links"></p>
+
+          <h3 class="poc-subtitle">OCR の疎通</h3>
+          <p class="poc-section__note">
+            名刺の画像を1枚選ぶと、Drive で文字を読み取ります。
+            <strong>一時ドキュメントは読み取り後すぐに完全削除します。</strong>
+            画像はドライブに保存しません（この検証では読み取りだけ行います）。
+          </p>
+          <p class="poc-actions">
+            <label class="auth-field__label" for="poc-image">名刺画像</label>
+            <input class="auth-field__input" id="poc-image" type="file"
+                   accept="image/jpeg,image/png" capture="environment">
+          </p>
+          <p class="poc-result" id="poc-ocr-state">まだ実行していません。</p>
+          <pre class="poc-ocr-text" id="poc-ocr-text" hidden></pre>
+        </section>
+
         <section class="poc-section" aria-labelledby="poc-sanitize-title">
-          <h2 class="poc-section__title" id="poc-sanitize-title">4. 数式インジェクション対策</h2>
+          <h2 class="poc-section__title" id="poc-sanitize-title">5. 数式インジェクション対策</h2>
           <p class="poc-section__note">
             スプレッドシートへ入れる前の保護（要件定義書 FR-18）。通信は発生しません。
           </p>
@@ -128,7 +167,7 @@
         </section>
 
         <section class="poc-section" aria-labelledby="poc-scope-title">
-          <h2 class="poc-section__title" id="poc-scope-title">5. 外部通信先</h2>
+          <h2 class="poc-section__title" id="poc-scope-title">6. 外部通信先</h2>
           <p class="poc-section__note">
             このページが実際に呼んだ通信先を記録します。要件定義書 §12 の3系統以外へ
             出ていないことを目視で確認できます。

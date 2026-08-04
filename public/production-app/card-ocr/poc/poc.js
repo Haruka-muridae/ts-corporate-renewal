@@ -39,10 +39,15 @@ import {
   clearAccessToken,
   describeDriveAuthError,
   ensureAccessToken,
+  getCachedAccessToken,
   hasValidAccessToken,
 } from './drive-auth.js';
 
 import { DRIVE_SCOPE, isClientIdConfigured } from './google-config.js';
+
+import { describeDriveError } from './drive-api.js';
+import { clearStorageCache, ensureStorage, spreadsheetUrl } from './drive-storage.js';
+import { collectOrphanTempDocs, describeOcrError, ocrImage } from './drive-ocr.js';
 
 /* /production-app/card-ocr/poc/ はサイトのルートから3階層下。 */
 setScreenDepth(3);
@@ -66,10 +71,25 @@ const googleMessageElement = document.getElementById('poc-google-message');
 const connectButton = document.getElementById('poc-connect');
 const disconnectButton = document.getElementById('poc-disconnect');
 
+const driveMessageElement = document.getElementById('poc-drive-message');
+const storageButton = document.getElementById('poc-storage');
+const storageAgainButton = document.getElementById('poc-storage-again');
+const storageTable = document.getElementById('poc-storage-table');
+const storageBody = document.getElementById('poc-storage-body');
+const storageLinks = document.getElementById('poc-storage-links');
+const imageInput = document.getElementById('poc-image');
+const ocrStateElement = document.getElementById('poc-ocr-state');
+const ocrTextElement = document.getElementById('poc-ocr-text');
+
 const message = createMessageArea(messageElement);
 const googleMessage = createMessageArea(googleMessageElement);
+const driveMessage = createMessageArea(driveMessageElement);
 const run = createSubmitButton(runButton, { busyLabel: '実行しています…' });
 const connect = createSubmitButton(connectButton, { busyLabel: '連携しています…' });
+const storage = createSubmitButton(storageButton, { busyLabel: '用意しています…' });
+
+/* 何回目の実行か。2回目以降は「再発見」を期待する（計画 §5 の項目10）。 */
+let storageRunCount = 0;
 
 /*
  * 実際に呼んだホストを記録する。
@@ -243,8 +263,146 @@ disconnectButton.addEventListener('click', () => {
    * （要件定義書 FR-24 の「連携解除方法のマニュアル記載」）。
    */
   clearAccessToken();
+
+  /*
+   * 保存先IDのキャッシュも一緒に捨てる。**Drive 上の実体は消さない。**
+   * 次に「保存構造を用意する」を押したとき、段階2の検索から復旧できることを
+   * 確かめられるようにするため（計画 §5 の項目10）。
+   */
+  clearStorageCache();
+  storageRunCount = 0;
+
   googleMessage.show('この画面の連携を解除しました。Google 側の許可は残っています。', 'info');
   renderGoogleState();
+});
+
+/*
+ * 保存構造の用意（計画 §5 の項目9・10）。
+ *
+ * 1回目は作成、2回目以降は再発見になるのが正しい。
+ * 2回目に created が出たら重複作成であり、不合格。
+ */
+async function runStorage() {
+  const token = getCachedAccessToken();
+
+  if (token === null) {
+    driveMessage.show('先に「Googleと連携する」を押してください。（OAUTH-001）', 'error');
+    driveMessage.focus();
+    return;
+  }
+
+  driveMessage.clear();
+  storage.start();
+
+  try {
+    /* 前回消し損ねた一時ドキュメントを先に片付ける（要件定義書 8.1 ステージ0 の5）。 */
+    const orphans = await collectOrphanTempDocs({ token, fetchImpl: countingFetch });
+
+    const result = await ensureStorage({ token, fetchImpl: countingFetch });
+
+    storageRunCount += 1;
+    renderStorage(result, orphans);
+
+    storageAgainButton.hidden = false;
+
+    const expected = storageRunCount === 1 ? '初回のため作成されていれば合格です。' : '2回目以降は cache か search になれば合格です。';
+
+    driveMessage.show(`保存構造を用意しました。${expected}`, 'success');
+  } catch (error) {
+    const described = describeDriveError(error);
+    driveMessage.show(`${described.text}（${described.errorCode}）`, 'error');
+    driveMessage.focus();
+  } finally {
+    storage.stop();
+  }
+}
+
+function renderStorage(result, orphans) {
+  storageBody.replaceChildren();
+
+  const labels = {
+    root: 'TSAM AI（フォルダ）',
+    app: '名刺データ（フォルダ）',
+    images: 'images（フォルダ）',
+    spreadsheet: '名刺管理（スプレッドシート）',
+  };
+
+  for (const [key, from] of Object.entries(result.steps)) {
+    /*
+     * 1回目は created でも search でもよい（既にある場合がある）。
+     * 2回目以降に created が出たら重複作成であり不合格。
+     */
+    const ok = storageRunCount === 1 ? true : from !== 'created';
+
+    addRow(storageBody, [labels[key] ?? key, from], ok);
+  }
+
+  storageTable.hidden = false;
+
+  const sheetLink = document.createElement('a');
+  sheetLink.href = spreadsheetUrl(result.spreadsheetId);
+  sheetLink.target = '_blank';
+  sheetLink.rel = 'noopener noreferrer';
+  sheetLink.textContent = '作られたスプレッドシートを開く（新しいタブ）';
+
+  storageLinks.replaceChildren(sheetLink);
+
+  if (orphans.found > 0) {
+    const note = document.createElement('span');
+    note.textContent = ` ／ 孤児の一時ドキュメント: ${orphans.found}件見つけ、${orphans.deleted}件削除`;
+    storageLinks.append(note);
+  }
+}
+
+storageButton.addEventListener('click', runStorage);
+storageAgainButton.addEventListener('click', runStorage);
+
+/*
+ * OCR の疎通（計画 §5 の項目11）。
+ *
+ * 画像は Drive へ保存しない。読み取って、一時ドキュメントを消すところまで。
+ */
+imageInput.addEventListener('change', async () => {
+  const file = imageInput.files?.[0];
+
+  if (!file) {
+    return;
+  }
+
+  const token = getCachedAccessToken();
+
+  if (token === null) {
+    ocrStateElement.textContent = '先に「Googleと連携する」を押してください。（OAUTH-001）';
+    return;
+  }
+
+  ocrStateElement.textContent = '読み取っています…（あなたのGoogleドライブを利用します）';
+  ocrTextElement.hidden = true;
+
+  const startedAt = Date.now();
+
+  try {
+    const result = await ocrImage({ token, blob: file, fetchImpl: countingFetch });
+    const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+
+    ocrStateElement.textContent = [
+      `読み取れました（${seconds}秒、試行${result.attempts}回、${result.text.length}文字）。`,
+      result.deleted ? '一時ドキュメントは削除済みです。' : '★ 一時ドキュメントの削除に失敗しました。次回起動時に回収します。',
+    ].join(' ');
+
+    /* テキストは textContent で入れる。innerHTML を使わない（§14.3）。 */
+    ocrTextElement.textContent = result.text;
+    ocrTextElement.hidden = false;
+  } catch (error) {
+    const described = error?.name === 'OcrError'
+      ? describeOcrError(error)
+      : describeDriveError(error);
+
+    ocrStateElement.textContent = `${described.text}（${described.errorCode}）`;
+  } finally {
+    /* 同じファイルを選び直せるようにする。 */
+    imageInput.value = '';
+  }
 });
 
 runButton.addEventListener('click', async () => {

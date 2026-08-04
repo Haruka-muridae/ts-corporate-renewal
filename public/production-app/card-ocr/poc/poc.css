@@ -110,6 +110,24 @@
 .poc-list__ok { color: #15803d; }
 .poc-list__ng { color: #b91c1c; font-weight: 700; }
 
+/*
+ * OCR の結果本文。
+ * 名刺の中身が入るため、画面から溢れさせず折り返す。
+ */
+.poc-ocr-text {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem;
+  max-height: 20rem;
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .poc-footer {
   margin: 2.5rem 0 0;
   font-size: 0.9375rem;
