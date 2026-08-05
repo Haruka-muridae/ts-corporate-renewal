@@ -857,6 +857,68 @@ try {
       !/notice/i.test(appSource) || !/setItem/.test(appSource.match(/notice[\s\S]{0,200}/i)?.[0] ?? ''),
     );
   }
+
+  {
+    /* 「準備」の親アコーディオンと、その中の3つ。 */
+    check(
+      '親アコーディオンがある',
+      /<details id="co-prep"[^>]*>/.test(htmlSource) && /<summary id="co-prep-summary"/.test(htmlSource),
+    );
+    check(
+      '**親は既定で開く（JS が動く前に畳まれていない）**',
+      /<details id="co-prep"[^>]*\sopen>/.test(htmlSource),
+    );
+    check(
+      '準備の状況も保存先も details にした',
+      /<details id="co-status-panel"[^>]*\sopen>/.test(htmlSource)
+        && /<details id="co-storage"[^>]*\sopen[\s>]/.test(htmlSource),
+    );
+    check(
+      '**誘導は親の外に置く（畳まれて気づかない、を作らない）**',
+      htmlSource.indexOf('id="co-guidance"') > htmlSource.indexOf('／親アコーディオン「準備」ここまで'),
+    );
+    check(
+      'ご利用の前に・準備の状況・保存先は親の中にある',
+      ['co-notice', 'co-status-panel', 'co-storage'].every((id) => {
+        const at = htmlSource.indexOf(`id="${id}"`);
+        return at > htmlSource.indexOf('id="co-prep"')
+          && at < htmlSource.indexOf('／親アコーディオン「準備」ここまで');
+      }),
+    );
+
+    check(
+      '**すべて完了のときだけ準備の状況を畳む**',
+      /setPanelOpen\('co-status-panel', !allReady\)/.test(appSource),
+    );
+    check(
+      '**保存先は異常か案内があるときに開く**',
+      /setPanelOpen\('co-storage', !ok \|\| hasNotices\)/.test(appSource),
+    );
+    check(
+      '**中のどれかが開いていれば親も開く**',
+      /const anyOpen = el\['co-status-panel'\]\.open \|\|/.test(appSource)
+        && /setPanelOpen\('co-prep', anyOpen\)/.test(appSource),
+    );
+    check(
+      '見出しに状態を添える（閉じていても分かる）',
+      /setSummary\('co-status-summary', '準備の状況'/.test(appSource)
+        && /setSummary\('co-storage-summary', '保存先'/.test(appSource)
+        && /setSummary\('co-prep-summary', '準備'/.test(appSource),
+    );
+    check(
+      '**書き込み停止と失敗のときは開いたままにする**',
+      (appSource.match(/applyStoragePanel\(\{ label: '[^']*', ok: false/g) ?? []).length >= 2,
+    );
+    check(
+      '**どの経路でも最後に親を決め直す（finally）**',
+      /finally \{[\s\S]{0,300}applyPrepPanel\(\)/.test(appSource),
+    );
+    check(
+      '前提が欠けたときも親を開き直す',
+      (appSource.match(/applyPrepPanel\(\)/g) ?? []).length >= 4,
+      String((appSource.match(/applyPrepPanel\(\)/g) ?? []).length),
+    );
+  }
   check(
     'インラインの <script> を置いていない（CSP と整合）',
     !/<script(?![^>]*\ssrc=)[^>]*>/.test(htmlSource),

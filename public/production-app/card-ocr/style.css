@@ -37,6 +37,48 @@
   background: #f6f9fd;
 }
 
+/* ---------- 「準備」の親アコーディオン ---------- */
+
+.co-prep-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin: 0;
+}
+
+.co-prep[open] > .co-prep-summary {
+  margin-bottom: 1rem;
+}
+
+/* 中の小見出しは、親より一段控えめにする。 */
+.co-sub {
+  margin-bottom: 0.75rem;
+  background: #fbfcfd;
+}
+
+.co-prep > .co-sub:last-of-type {
+  margin-bottom: 0;
+}
+
+.co-sub-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.co-sub[open] > .co-sub-summary {
+  margin-bottom: 0.75rem;
+}
+
+.co-prep-summary:focus-visible,
+.co-sub-summary:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
 /*
  * 「ご利用の前に」の見出し。**閉じていても常に見える。**
  *
