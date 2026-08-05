@@ -192,15 +192,47 @@
           <dd id="co-fields-state" class="co-status-value" data-ok="pending">振り分けています…</dd>
         </dl>
 
-        <dl id="co-fields-list" class="co-fields"></dl>
+        <!--
+          確認・修正（SC-04）。入力欄は JS が組み立てる。
+          **保存されるのは、この欄に見えている値**である。
+        -->
+        <div id="co-fields-list" class="co-fields"></div>
 
         <!-- 値の由来。どこから来たかを追えるようにする（§FR-15 の5）。 -->
         <ul id="co-fields-notes" class="co-notice-list" hidden></ul>
 
+        <div class="co-actions">
+          <button id="co-register" type="button" class="auth-button">この内容で登録する</button>
+        </div>
+
         <p class="co-guidance-text">
-          修正・候補の選択・重複の確認・保存は次の段階で実装します。
-          現在は振り分けまでを行います。
+          登録すると、画像はあなたのドライブの
+          <code>TSAM AI／名刺データ／images</code> に、内容は
+          <code>名刺管理</code> シートに1行として保存されます。
         </p>
+      </section>
+
+      <!-- 登録の結果（SC-06）。 -->
+      <section id="co-saved" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">登録しました</h2>
+        <dl id="co-saved-list" class="co-status"></dl>
+
+        <div class="co-actions">
+          <a id="co-saved-sheet" class="auth-button auth-button--ghost"
+             href="#" target="_blank" rel="noopener noreferrer">名刺管理シートを開く</a>
+          <button id="co-next" type="button" class="auth-button">次の名刺を登録する</button>
+        </div>
+      </section>
+
+      <!-- 同じ画像が既に登録されていたとき（DUP-001）。 -->
+      <section id="co-duplicate" class="co-panel co-panel--guidance" aria-live="polite" hidden>
+        <h2 class="co-panel-title">同じ画像が既に登録されています</h2>
+        <p id="co-duplicate-text" class="co-guidance-text"></p>
+
+        <div class="co-actions">
+          <button id="co-register-anyway" type="button" class="auth-button auth-button--ghost">それでも登録する</button>
+          <button id="co-duplicate-cancel" type="button" class="auth-button">やめる</button>
+        </div>
       </section>
 
       <p id="co-message" class="auth-message" role="status" aria-live="polite" tabindex="-1" hidden></p>

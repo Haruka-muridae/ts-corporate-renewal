@@ -188,22 +188,21 @@
 /* ---------- 読み取り結果（§8.1 ステージ3・4） ---------- */
 
 .co-fields {
-  display: grid;
-  grid-template-columns: 8rem 1fr;
-  gap: 0.5rem 1rem;
-  margin: 1rem 0 0;
-  align-items: baseline;
+  margin: 1rem 0 1.25rem;
 }
 
-.co-field-value {
-  margin: 0;
-  word-break: break-all;
+.co-field-row {
+  margin-bottom: 0.75rem;
 }
 
-/* 空欄と要確認は色だけで示さない。語でも示す。 */
-.co-field-value[data-review='yes'] {
+/* 要確認は色だけで示さない。「要確認」の語も添える。 */
+.co-field-row .co-review-mark {
   color: #7a4b00;
-  font-weight: 700;
+}
+
+.co-field-row .co-field-input[data-review='yes'] {
+  border-color: #c8a34a;
+  background: #fdfaf1;
 }
 
 .co-review-mark {

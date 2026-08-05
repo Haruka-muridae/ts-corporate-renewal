@@ -104,8 +104,18 @@ export function isFileId(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{10,120}$/.test(value);
 }
 
-/* 保存領域が使えない環境（プライベートモード等）でも壊れない。 */
+/*
+ * 保存領域が使えない環境（プライベートモード等）でも壊れない。
+ *
+ * **キーが null のときは何もしない。** 年月フォルダのように
+ * キャッシュを持たない解決があり、そこで `null` というキーの項目を
+ * 作ってしまわないため。
+ */
 function readCache(key) {
+  if (!key) {
+    return null;
+  }
+
   try {
     const value = globalThis.localStorage?.getItem(key);
     return isFileId(value) ? value : null;
@@ -115,6 +125,10 @@ function readCache(key) {
 }
 
 function writeCache(key, value) {
+  if (!key) {
+    return;
+  }
+
   try {
     globalThis.localStorage?.setItem(key, value);
   } catch {
@@ -123,6 +137,10 @@ function writeCache(key, value) {
 }
 
 function dropCache(key) {
+  if (!key) {
+    return;
+  }
+
   try {
     globalThis.localStorage?.removeItem(key);
   } catch {
@@ -227,6 +245,19 @@ export async function resolveFolder(name, parentId, cacheKey, { token, fetchImpl
   writeCache(cacheKey, id);
 
   return { id, created: true, from: 'created' };
+}
+
+/*
+ * 保存画像を入れる `images/YYYY/MM` を解決する（§FR-07）。
+ *
+ * **キャッシュは持たない。** 月が変われば別のフォルダになり、キーが
+ * 増え続ける。登録は1件につき1回しか呼ばないので、検索2回で足りる。
+ * （最も簡単な形を選んだ。速度が問題になったら考え直す）
+ */
+export async function resolveMonthFolder(imageFolderId, { year, month }, { token, fetchImpl, signal } = {}) {
+  const yearFolder = await resolveFolder(String(year), imageFolderId, null, { token, fetchImpl, signal });
+
+  return resolveFolder(String(month), yearFolder.id, null, { token, fetchImpl, signal });
 }
 
 /* 台帳をフォルダと同じ3段階で解決する。 */

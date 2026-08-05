@@ -39,6 +39,7 @@
 import {
   DRIVE_FILES_ENDPOINT,
   DRIVE_FOLDER_MIME,
+  DRIVE_UPLOAD_ENDPOINT,
   JPEG_MIME,
 } from './config.js';
 
@@ -394,6 +395,42 @@ export async function createFolder(name, parentId, { token, fetchImpl, signal })
   }
 
   return result.id;
+}
+
+/*
+ * 画像をそのまま（変換せずに）アップロードする。
+ *
+ * OCR の一時ドキュメントと違い、**これは利用者の資産として残るファイル**
+ * である（§FR-07）。したがって:
+ *   - 変換しない（mimeType に Google ドキュメントを指定しない）
+ *   - 親フォルダを必ず指定する。マイドライブ直下に散らかさない
+ *   - 共有設定は付けない（§FR-07。permissions は触らない）
+ *
+ * 戻り値: { id, webViewLink }
+ */
+export async function uploadFile(metadata, blob, { token, fetchImpl, signal }) {
+  const boundary = createBoundary();
+  const body = buildMultipartBody(metadata, blob, boundary);
+
+  const params = new URLSearchParams({
+    uploadType: 'multipart',
+    fields: 'id,webViewLink',
+  });
+
+  const result = await driveFetchJson(`${DRIVE_UPLOAD_ENDPOINT}?${params}`, {
+    token,
+    fetchImpl,
+    signal,
+    method: 'POST',
+    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body,
+  });
+
+  if (!result?.id) {
+    throw new DriveError(DriveErrorCode.UNKNOWN, 0, 'upload_id_missing');
+  }
+
+  return { id: result.id, webViewLink: String(result.webViewLink ?? '') };
 }
 
 export async function deleteFile(fileId, { token, fetchImpl, signal }) {
