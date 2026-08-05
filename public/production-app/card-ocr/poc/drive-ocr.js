@@ -53,7 +53,7 @@ export const MAX_OCR_ATTEMPTS = 3;
  *
  * **消し忘れたものを後から識別できる名前にする。** 孤児回収はこの接頭辞で探す。
  */
-export const TEMP_DOC_PREFIX = 'card-ocr-temp-';
+export const TEMP_DOC_PREFIX = 'card-ocr-poc-temp-';
 
 export const OcrErrorCode = {
   EMPTY: 'OCR_EMPTY',
