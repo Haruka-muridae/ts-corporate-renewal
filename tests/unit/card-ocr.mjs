@@ -830,6 +830,43 @@ try {
       && htmlSource.includes('プロダクト改善')
       && htmlSource.includes('復旧の義務'),
   );
+
+  {
+    /* 「ご利用の前に」の折りたたみ（§5.3・§10.1）。 */
+    check(
+      '**ネイティブの <details> を使う（ARIA で作り直さない）**',
+      /<details id="co-notice"[^>]*>/.test(htmlSource) && /<summary id="co-notice-title"/.test(htmlSource),
+    );
+    check(
+      '**初回は開いた状態（HTML に open がある）**',
+      /<details id="co-notice"[^>]*\sopen>/.test(htmlSource),
+    );
+    check(
+      '**閉じていても見出しは残る（summary は details の中）**',
+      htmlSource.indexOf('<summary id="co-notice-title"') > htmlSource.indexOf('<details id="co-notice"'),
+    );
+    check(
+      '前に閉じていたときだけ畳む',
+      /getItem\(NOTICE_STATE_KEY\) === 'closed'/.test(appSource)
+        && /\['co-notice'\]\.open = false/.test(appSource),
+    );
+    check(
+      '開閉を記憶する',
+      /addEventListener\('toggle', rememberNoticeState\)/.test(appSource),
+    );
+    check(
+      '**記憶するのは UI の状態だけ（名刺の内容を入れない）**',
+      /setItem\(NOTICE_STATE_KEY, 'closed'\)/.test(appSource),
+    );
+    check(
+      '開き直したら記録を消す（初回と同じ状態へ戻す）',
+      /removeItem\(NOTICE_STATE_KEY\)/.test(appSource),
+    );
+    check(
+      '保存領域が使えなくても壊れない',
+      /function restoreNoticeState\(\)[\s\S]{0,400}catch/.test(appSource),
+    );
+  }
   check(
     'インラインの <script> を置いていない（CSP と整合）',
     !/<script(?![^>]*\ssrc=)[^>]*>/.test(htmlSource),
