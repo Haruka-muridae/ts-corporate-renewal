@@ -161,9 +161,26 @@
           <button id="co-reset" type="button" class="auth-button auth-button--ghost">選び直す</button>
         </div>
 
-        <p id="co-capture-note" class="co-guidance-text">
-          読み取り（OCRと項目の振り分け）は次の段階で実装します。
-          現在は撮影・前処理までを行います。
+      </section>
+
+      <!--
+        読み取り（Drive OCR。§8.1 ステージ2）。
+        **読み取った本文はここに出さない。** 第三者の個人情報であり、
+        画面に出す必要がない。出すのは文字数だけ。
+      -->
+      <section id="co-ocr" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">読み取り</h2>
+
+        <dl class="co-status">
+          <dt class="co-status-label">Googleドライブの文字認識</dt>
+          <dd id="co-ocr-state" class="co-status-value" data-ok="pending">読み取っています…</dd>
+        </dl>
+
+        <dl id="co-ocr-sides" class="co-status"></dl>
+
+        <p id="co-ocr-note" class="co-guidance-text">
+          項目の振り分け（会社名・氏名など）は次の段階で実装します。
+          現在は文字の読み取りまでを行います。
         </p>
       </section>
 

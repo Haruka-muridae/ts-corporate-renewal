@@ -43,6 +43,13 @@ import { describeDriveError } from './drive-api.js';
 import { StorageNotice, ensureStorage } from './drive-storage.js';
 import { spreadsheetUrl } from './sheets.js';
 
+import {
+  collectOrphanTempDocs,
+  describeOcrError,
+  joinSides,
+  ocrBothSides,
+} from './drive-ocr.js';
+
 import { describeCaptureError, shrinkToJpeg } from './capture.js';
 import {
   CaptureStep,
@@ -73,6 +80,7 @@ for (const id of [
   'co-front-field', 'co-front-input', 'co-back-field', 'co-back-input',
   'co-ask-back', 'co-skip-back', 'co-want-back',
   'co-previews', 'co-start-actions', 'co-start', 'co-reset',
+  'co-ocr', 'co-ocr-state', 'co-ocr-sides', 'co-ocr-note',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -92,6 +100,13 @@ let provisioning = false;
 let capture = createCaptureState();
 /* 前処理の実行中。処理が終わる前に次を選ばせない。 */
 let processing = false;
+/* OCR の実行中。二重送信を防ぐ。 */
+let reading = false;
+/*
+ * 読み取ったテキスト。**メモリにしか持たない**（§FR-21）。
+ * 画面にも本文は出さない（下の renderOcr を参照）。
+ */
+let ocrText = '';
 
 /* ---------- 表示の道具（innerHTML を使わない） ---------- */
 
@@ -261,6 +276,9 @@ async function prepareStorage() {
     /* 保存先が用意できてから撮影へ進ませる（§8.1 ステージ0 → 1）。 */
     el['co-capture'].hidden = false;
     renderCapture();
+
+    /* 掃除は撮影を出したあとに回す。待たせる理由がない。 */
+    void collectOrphans();
   } catch (error) {
     storage = null;
     el['co-storage-state'].textContent = '確認できませんでした';
@@ -339,10 +357,126 @@ function renderCapture() {
   el['co-ask-back'].hidden = step !== CaptureStep.ASK_BACK;
   el['co-start-actions'].hidden = step !== CaptureStep.READY;
 
-  /* 読み取りの実装は次のPR。押せる形だけ用意しておく。 */
-  el['co-start'].disabled = true;
+  el['co-start'].disabled = step !== CaptureStep.READY || reading;
 
   renderPreviews();
+}
+
+/* ---------- 読み取り（Drive OCR。§8.1 ステージ2） ---------- */
+
+/*
+ * 面ごとの結果を出す。
+ *
+ * **読み取った本文を画面に出さない。** 名刺は第三者の個人情報で、
+ * 画面に出す必要が無い。出すのは「何文字読めたか」だけにする。
+ * 項目に振り分けたものは PR6 の確認画面で見せる。
+ */
+function renderOcr(result) {
+  const target = el['co-ocr-sides'];
+  target.replaceChildren();
+
+  const rows = [
+    { label: '表面', value: `${result.front.text.trim().length}文字`, ok: true },
+  ];
+
+  if (result.back) {
+    rows.push({ label: '裏面', value: `${result.back.text.trim().length}文字`, ok: true });
+  } else if (result.backError) {
+    const described = describeOcrError(result.backError);
+    rows.push({ label: '裏面', value: `読み取れませんでした（${described.errorCode}）`, ok: false });
+  }
+
+  if (result.front.attempts > 1) {
+    rows.push({ label: '表面の再試行', value: `${result.front.attempts}回目で成功`, ok: true });
+  }
+
+  /*
+   * 結合後の長さ。**この文字列がそのまま Gemini へ渡る**（PR6）。
+   * §FR-11 の入力上限（2,000文字）に収まっているかを、ここで見られる
+   * ようにしておく。
+   */
+  rows.push({ label: 'Geminiへ渡すテキスト', value: `${ocrText.length}文字`, ok: true });
+
+  if (!result.deleted) {
+    rows.push({ label: '一時ファイル', value: '消し切れませんでした（次回の起動で回収します）', ok: false });
+  }
+
+  for (const row of rows) {
+    const term = document.createElement('dt');
+    term.className = 'co-status-label';
+    term.textContent = row.label;
+
+    const value = document.createElement('dd');
+    value.className = 'co-status-value';
+    value.dataset.ok = row.ok ? 'yes' : 'no';
+    value.textContent = row.value;
+
+    target.append(term, value);
+  }
+}
+
+async function readCard() {
+  if (reading || currentStep(capture) !== CaptureStep.READY) {
+    return;
+  }
+
+  reading = true;
+  el['co-start'].disabled = true;
+  el['co-ocr'].hidden = false;
+  el['co-ocr-state'].textContent = '文字を読み取っています…';
+  el['co-ocr-state'].dataset.ok = 'pending';
+  el['co-ocr-sides'].replaceChildren();
+  clearMessage();
+
+  try {
+    const result = await ocrBothSides({
+      token: getCachedAccessToken(),
+      front: capture.front.blob,
+      back: capture.back?.blob ?? null,
+      /* 一時ドキュメントは保存先の中に作る（§FR-08 の1）。 */
+      parentId: storage?.appFolderId ?? null,
+    });
+
+    ocrText = joinSides(result.front.text, result.back?.text ?? '');
+
+    el['co-ocr-state'].textContent = '読み取りました';
+    el['co-ocr-state'].dataset.ok = 'yes';
+    renderOcr(result);
+
+    if (result.backError) {
+      /* 裏面は補助。全体を失敗にしないが、黙っても進めない（§FR-08 の7）。 */
+      showMessage('裏面は読み取れませんでした。表面の内容だけで進みます。', 'info');
+    }
+  } catch (error) {
+    ocrText = '';
+    el['co-ocr-state'].textContent = '読み取れませんでした';
+    el['co-ocr-state'].dataset.ok = 'no';
+
+    const described = describeOcrError(error);
+    showMessage(`${described.text}（${described.errorCode}）`, 'error');
+  } finally {
+    reading = false;
+    renderCapture();
+  }
+}
+
+/*
+ * 消し損ねた一時ドキュメントを回収する（§8.1 ステージ0 の5）。
+ *
+ * **失敗しても起動を止めない。** 掃除であって、本筋の処理ではない。
+ */
+async function collectOrphans() {
+  try {
+    const result = await collectOrphanTempDocs({ token: getCachedAccessToken() });
+
+    if (result.found > 0) {
+      showMessage(
+        `前回消し切れなかった一時ファイルを${result.deleted}件（${result.found}件中）回収しました。`,
+      );
+    }
+  } catch {
+    /* 掃除の失敗は利用者に見せない。次回また試す。 */
+  }
 }
 
 /*
@@ -365,6 +499,9 @@ async function acceptFile(side, file, rotation = 0) {
     capture = side === 'front'
       ? setFront(capture, { ...image, source: file, rotation })
       : setBack(capture, { ...image, source: file, rotation });
+
+    /* 画像が変わったら、前の読み取り結果は別の名刺のものになる。 */
+    discardOcr();
   } catch (error) {
     const described = describeCaptureError(error);
     showMessage(`${described.text}（${described.errorCode}）`, 'error');
@@ -390,8 +527,21 @@ async function rotateSide(side) {
   await acceptFile(side, image.source, (image.rotation ?? 0) + 90);
 }
 
+/*
+ * 読み取り結果を捨てる。
+ *
+ * **画像を差し替えたら必ず呼ぶ。** 古いテキストを残すと、いま画面に
+ * 出ている画像とは別の名刺の内容を保存することになる。
+ */
+function discardOcr() {
+  ocrText = '';
+  el['co-ocr'].hidden = true;
+  el['co-ocr-sides'].replaceChildren();
+}
+
 function removeSide(side) {
   capture = side === 'front' ? clearAll() : clearBack(capture);
+  discardOcr();
   clearMessage();
   renderCapture();
 }
@@ -491,9 +641,12 @@ el['co-want-back'].addEventListener('click', () => {
 
 el['co-reset'].addEventListener('click', () => {
   capture = clearAll();
+  discardOcr();
   clearMessage();
   renderCapture();
 });
+
+el['co-start'].addEventListener('click', () => { void readCard(); });
 
 /*
  * 画面を離れるときにトークンを捨てる。
