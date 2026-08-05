@@ -880,6 +880,47 @@ try {
     /pagehide/.test(appSource) && /clearAccessToken/.test(appSource),
   );
 
+  {
+    /* 撮影の画面（SC-01 / SC-02）。 */
+    check(
+      '**表面と裏面の入力を1画面に並べない（既定で両方 hidden）**',
+      /id="co-front-field"[^>]*hidden/.test(htmlSource)
+        && /id="co-back-field"[^>]*hidden/.test(htmlSource),
+    );
+    check(
+      'accept は JPEG と PNG のみ',
+      (htmlSource.match(/accept="image\/jpeg,image\/png"/g) ?? []).length === 2,
+    );
+    check(
+      'カメラを優先する（capture="environment"）',
+      (htmlSource.match(/capture="environment"/g) ?? []).length === 2,
+    );
+    check(
+      '**「裏面なしで進む」を先に置く（多数派の操作を最短にする）**',
+      htmlSource.indexOf('co-skip-back') < htmlSource.indexOf('co-want-back'),
+    );
+    check(
+      '入力欄にラベルが付いている',
+      /for="co-front-input"/.test(htmlSource) && /for="co-back-input"/.test(htmlSource),
+    );
+    check(
+      'プレビューは JS が組み立てる（innerHTML を使わない）',
+      /id="co-previews"[^>]*>\s*<\/div>/.test(htmlSource),
+    );
+    check(
+      '**プレビューの代替テキストに名刺の中身を出さない**',
+      /alt = side === 'front' \? '表面のプレビュー'/.test(appSource),
+    );
+    check(
+      '同じファイルを選び直せるよう入力欄を空へ戻す',
+      /\['co-front-input'\]\.value = ''/.test(appSource),
+    );
+    check(
+      '**回転は元の画像から作り直す（劣化を積み上げない）**',
+      /acceptFile\(side, image\.source/.test(appSource),
+    );
+  }
+
   /* ================================================================ */
   section('台帳へ書く値の無害化（sanitize.js / FR-18）');
 
@@ -1627,12 +1668,246 @@ try {
   }
 
   /* ================================================================ */
+  section('画像の前処理（capture.js / §8.2・FR-05）');
+
+  const capture = await import('../../public/production-app/card-ocr/capture.js');
+
+  {
+    /* §8.2 と §20 の数値。**ここを緩めない。** */
+    check('上限は 1.5MB', capture.MAX_BYTES === 1.5 * 1024 * 1024);
+    check('長辺の上限は 2000（§20）', capture.MAX_EDGE === 2000);
+    check('**長辺は 1600 を下回らない（§8.2）**', capture.MIN_EDGE === 1600);
+    check('**品質は 0.75 を下回らない（§8.2）**', capture.MIN_QUALITY === 0.75);
+    check('品質の上限は 0.85', capture.MAX_QUALITY === 0.85);
+
+    check(
+      '圧縮の手順が下限を割らない',
+      capture.COMPRESSION_STEPS.every(
+        (step) => step.maxEdge >= capture.MIN_EDGE && step.quality >= capture.MIN_QUALITY,
+      ),
+    );
+    check(
+      '**品質を先に落とし、寸法は後で落とす**',
+      capture.COMPRESSION_STEPS[0].maxEdge === capture.MAX_EDGE
+        && capture.COMPRESSION_STEPS[1].maxEdge === capture.MAX_EDGE
+        && capture.COMPRESSION_STEPS[1].quality < capture.COMPRESSION_STEPS[0].quality,
+    );
+    check('最初の段は最大品質', capture.COMPRESSION_STEPS[0].quality === capture.MAX_QUALITY);
+    check(
+      '最後の段は下限',
+      capture.COMPRESSION_STEPS.at(-1).maxEdge === capture.MIN_EDGE
+        && capture.COMPRESSION_STEPS.at(-1).quality === capture.MIN_QUALITY,
+    );
+    check(
+      'accept は JPEG と PNG のみ',
+      capture.ACCEPT_ATTRIBUTE === 'image/jpeg,image/png',
+      capture.ACCEPT_ATTRIBUTE,
+    );
+  }
+
+  {
+    /* 受け入れの判定。 */
+    check('JPEG は通す', capture.checkFile({ type: 'image/jpeg', name: 'a.jpg' }) === null);
+    check('PNG は通す', capture.checkFile({ type: 'image/png', name: 'a.png' }) === null);
+    check(
+      'GIF は弾く',
+      capture.checkFile({ type: 'image/gif', name: 'a.gif' }) === capture.CaptureErrorCode.NOT_SUPPORTED,
+    );
+    check('ファイルが無ければ NO_FILE', capture.checkFile(null) === capture.CaptureErrorCode.NO_FILE);
+
+    check(
+      'HEIC を種別で見分ける',
+      capture.checkFile({ type: 'image/heic', name: 'a.heic' }) === capture.CaptureErrorCode.HEIC,
+    );
+    check(
+      '**type が空でも拡張子で HEIC を見分ける（iOS Safari 対策）**',
+      capture.checkFile({ type: '', name: 'IMG_0001.HEIC' }) === capture.CaptureErrorCode.HEIC,
+    );
+    check(
+      'HEIF も同じ扱い',
+      capture.checkFile({ type: '', name: 'a.heif' }) === capture.CaptureErrorCode.HEIC,
+    );
+    check(
+      '**type が空でも HEIC でなければ通す（iOS Safari が空で渡す）**',
+      capture.checkFile({ type: '', name: 'IMG_0001.JPG' }) === null,
+    );
+  }
+
+  {
+    /* 案内。§15 のコードに収める。 */
+    const allowed = new Set(['IMG-001', 'IMG-002', 'IMG-003']);
+
+    for (const code of Object.values(capture.CaptureErrorCode)) {
+      const described = capture.describeCaptureError(new capture.CaptureError(code, 'd'));
+      check(`${code} の errorCode が §15 の範囲`, allowed.has(described.errorCode), described.errorCode);
+      check(`${code} に文言がある`, described.text.length > 0);
+    }
+
+    const heic = capture.describeCaptureError(new capture.CaptureError(capture.CaptureErrorCode.HEIC));
+    check(
+      '**HEIC は解決する道まで案内する**',
+      heic.text.includes('撮り直す') && heic.text.includes('互換性優先'),
+      heic.text,
+    );
+
+    const large = capture.describeCaptureError(new capture.CaptureError(capture.CaptureErrorCode.TOO_LARGE));
+    check('容量超過は IMG-002', large.errorCode === 'IMG-002');
+    check('撮り直しを案内する', large.text.includes('撮り直して'));
+
+    check(
+      'CaptureError でない例外も握りつぶさない',
+      capture.describeCaptureError(new TypeError('boom')).detail.includes('boom'),
+    );
+  }
+
+  {
+    /* 寸法。 */
+    check('長辺が上限以下ならそのまま', JSON.stringify(capture.fitSize(1200, 800, 2000)) === '{"width":1200,"height":800}');
+    check('横長を縮める', JSON.stringify(capture.fitSize(4000, 2000, 2000)) === '{"width":2000,"height":1000}');
+    check('縦長を縮める', JSON.stringify(capture.fitSize(2000, 4000, 2000)) === '{"width":1000,"height":2000}');
+    check('**元より大きく引き伸ばさない**', capture.fitSize(800, 600, 2000).width === 800);
+    check('0 でも壊れない', capture.fitSize(0, 0, 2000).width === 0);
+
+    check('回転は90度単位に丸める', capture.normalizeRotation(100) === 90);
+    check('360 は 0', capture.normalizeRotation(360) === 0);
+    check('負の回転も正へ', capture.normalizeRotation(-90) === 270);
+    check('数値でなければ 0', capture.normalizeRotation('x') === 0);
+
+    check(
+      '90度で縦横が入れ替わる',
+      JSON.stringify(capture.rotatedSize(2000, 1000, 90)) === '{"width":1000,"height":2000}',
+    );
+    check(
+      '180度では入れ替わらない',
+      JSON.stringify(capture.rotatedSize(2000, 1000, 180)) === '{"width":2000,"height":1000}',
+    );
+  }
+
+  {
+    /* ファイル名（§FR-07）。 */
+    const at = new Date(2026, 7, 4, 9, 5, 3);
+
+    check(
+      '日時＋会社名＋氏名＋面',
+      capture.buildImageFileName({ at, companyName: 'サンプル商事', fullName: '見本 太郎', side: 'front' })
+        === '20260804_090503_サンプル商事_見本 太郎_front.jpg',
+      capture.buildImageFileName({ at, companyName: 'サンプル商事', fullName: '見本 太郎', side: 'front' }),
+    );
+    check(
+      '**表面にも接尾辞を必ず付ける（v3.1）**',
+      capture.buildImageFileName({ at, companyName: 'X', fullName: 'Y' }).endsWith('_front.jpg'),
+    );
+    check(
+      '裏面は _back',
+      capture.buildImageFileName({ at, companyName: 'X', fullName: 'Y', side: 'back' }).endsWith('_back.jpg'),
+    );
+    check(
+      '会社名も氏名も無ければ UNCLASSIFIED',
+      capture.buildImageFileName({ at, fallbackId: 'abc123' }) === '20260804_090503_UNCLASSIFIED_abc123_front.jpg',
+      capture.buildImageFileName({ at, fallbackId: 'abc123' }),
+    );
+    check(
+      '使えない記号を落とす',
+      !capture.buildImageFileName({ at, companyName: 'A/B:C*', fullName: 'D' }).includes('/'),
+    );
+    check(
+      '一時IDも無ければ unknown',
+      capture.buildImageFileName({ at }).includes('UNCLASSIFIED_unknown'),
+    );
+
+    const ym = capture.yearMonthPath(at);
+    check('年月フォルダは 2026 / 08', ym.year === '2026' && ym.month === '08');
+  }
+
+  /* ================================================================ */
+  section('両面の撮影フロー（capture-flow.js / FR-03・FR-04）');
+
+  const flow = await import('../../public/production-app/card-ocr/capture-flow.js');
+
+  {
+    const empty = flow.createCaptureState();
+
+    check('最初は表面を撮る', flow.currentStep(empty) === flow.CaptureStep.FRONT);
+    check('表面も裏面も持たない', empty.front === null && empty.back === null);
+    check(
+      '**裏面の回答は未回答（null）で始まる**',
+      empty.wantsBack === null,
+    );
+
+    const withFront = flow.setFront(empty, { dataUrl: 'x' });
+    check('表面を入れると裏面を尋ねる', flow.currentStep(withFront) === flow.CaptureStep.ASK_BACK);
+    check('元の状態を書き換えない', empty.front === null);
+
+    const skipped = flow.skipBack(withFront);
+    check('「裏面なし」で準備完了', flow.currentStep(skipped) === flow.CaptureStep.READY);
+    check('has_back は false', flow.hasBack(skipped) === false);
+
+    const wanted = flow.wantBack(withFront);
+    check('「裏面も読む」で裏面の撮影へ', flow.currentStep(wanted) === flow.CaptureStep.BACK);
+
+    const withBack = flow.setBack(wanted, { dataUrl: 'y' });
+    check('裏面を入れると準備完了', flow.currentStep(withBack) === flow.CaptureStep.READY);
+    check('has_back は true', flow.hasBack(withBack) === true);
+
+    check(
+      '裏面を直接入れても「裏面あり」になる',
+      flow.setBack(withFront, { dataUrl: 'y' }).wantsBack === true,
+    );
+  }
+
+  {
+    /* 取り消し。 */
+    const both = flow.setBack(flow.wantBack(flow.setFront(flow.createCaptureState(), { dataUrl: 'x' })), { dataUrl: 'y' });
+
+    const backCleared = flow.clearBack(both);
+    check('裏面を取り消すと画像が消える', backCleared.back === null);
+    check(
+      '**回答も戻す（「裏面なしで進む」を選び直せる）**',
+      backCleared.wantsBack === null && flow.currentStep(backCleared) === flow.CaptureStep.ASK_BACK,
+    );
+    check('表面は残る', backCleared.front !== null);
+
+    const allCleared = flow.clearAll();
+    check(
+      '**表面を取り消すと裏面も捨てる**',
+      allCleared.front === null && allCleared.back === null,
+    );
+    check('最初の状態に戻る', flow.currentStep(allCleared) === flow.CaptureStep.FRONT);
+  }
+
+  {
+    /* 表面だけ差し替えても、裏面の回答は保つ（§FR-04）。 */
+    const skipped = flow.skipBack(flow.setFront(flow.createCaptureState(), { dataUrl: 'x' }));
+    const replaced = flow.setFront(skipped, { dataUrl: 'x2' });
+
+    check(
+      '**表面を撮り直しても裏面の回答をやり直させない**',
+      replaced.wantsBack === false && flow.currentStep(replaced) === flow.CaptureStep.READY,
+    );
+  }
+
+  {
+    /* 画面の言葉。 */
+    for (const step of Object.values(flow.CaptureStep)) {
+      const described = flow.describeStep(step);
+      check(`${step}: 見出しがある`, described.title.length > 0);
+      check(`${step}: 説明がある`, described.text.length > 0);
+    }
+
+    check(
+      '裏面を尋ねる文で、不要な場合の判断材料を示す',
+      flow.describeStep(flow.CaptureStep.ASK_BACK).text.includes('空白'),
+    );
+  }
+
+  /* ================================================================ */
   section('ソース検査（守るべき制約）');
 
   const FILES = [
     'config.js', 'gis-loader.js', 'drive-auth.js', 'drive-api.js',
     'prerequisites.js', 'sanitize.js', 'hash.js', 'schema.js',
-    'sheets.js', 'drive-storage.js', 'app.js',
+    'sheets.js', 'drive-storage.js', 'capture.js', 'capture-flow.js',
+    'app.js',
   ];
   const sources = [];
 
