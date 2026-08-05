@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TSAMビジネス&amp;フレンド交流会 | TSアセットマネジメント合同会社</title>
-  <meta name="description" content="新たな出会いを求めている方のための交流会です。渋谷のカフェ&amp;バーを会場に、肩肘張らない雰囲気で開催します。参加費、割引制度、キャンセルポリシー、お申し込み方法をご確認いただけます。">
+  <meta name="description" content="渋谷のカフェ&amp;バーで開催する交流会です。仕事のつながりを探す方も、業界を越えた友人がほしい方も。参加費・お申し込みはこちらから。">
 
   <!-- TODO: 公開URLの確定後に canonical を追加 -->
   <!-- TODO: 公開URLの確定後に og:url を追加 -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="TSAMビジネス&amp;フレンド交流会 | TSアセットマネジメント合同会社">
-  <meta property="og:description" content="新たな出会いを求めている方のための交流会です。渋谷のカフェ&amp;バーを会場に、肩肘張らない雰囲気で開催します。">
+  <meta property="og:description" content="渋谷のカフェ&amp;バーで開催する交流会です。仕事のつながりを探す方も、業界を越えた友人がほしい方も。">
   <meta property="og:locale" content="ja_JP">
   <!-- TODO: OGP画像の確定後に og:image を追加 -->
   <meta name="twitter:card" content="summary_large_image">
@@ -32,15 +32,16 @@
   -->
   <style>
 :root{
-  --bg:#f7f4ec;
-  --card:#fffdf8;
-  --ink:#26332c;
-  --ink-soft:#5a655e;
-  --green:#1d3a2f;
-  --green-deep:#152b23;
-  --green-tint:#e7ebe2;
-  --clay:#b05a3c;
-  --line:#e4ddcd;
+  --bg:#ffffff;
+  --card:#ffffff;
+  --ink:#1e293b;
+  --ink-soft:#64748b;
+  --green:#166534;
+  --green-deep:#14532d;
+  --green-tint:#dcfce7;
+  --sky:#38bdf8;
+  --sky-deep:#0284c7;
+  --line:#e2e8f0;
   --serif:"Noto Serif JP","Hiragino Mincho ProN",serif;
   --sans:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif;
   --en:"Cormorant Garamond","Noto Serif JP",serif;
@@ -59,15 +60,13 @@ body{
 }
 [hidden]{display:none !important}
 a{color:var(--green)}
-a:focus-visible,button:focus-visible{outline:3px solid #7fa08e;outline-offset:2px;border-radius:4px}
+a:focus-visible,button:focus-visible{outline:3px solid #4ade80;outline-offset:2px;border-radius:4px}
 h1,h2,h3{text-wrap:balance}
 p,li,dd{overflow-wrap:break-word;text-wrap:pretty}
 @supports (word-break:auto-phrase){
   .hero-lead,.prose p,.list li,.outline-list dd,.apply-note,.apply-lead{word-break:auto-phrase}
 }
 .nowrap{white-space:nowrap}
-/* 文単位で折り返す：文のかたまりごとに改行され、幅が足りる場合は同じ行に並ぶ */
-.s{display:inline-block;max-width:100%}
 .skip-link{position:absolute;left:-9999px;top:0;background:var(--green);color:#fff;padding:.6em 1.2em;z-index:100;border-radius:0 0 8px 0}
 .skip-link:focus{left:0}
 .visually-hidden{position:absolute;overflow:hidden;clip-path:inset(50%);width:1px;height:1px;white-space:nowrap}
@@ -134,26 +133,26 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 /* ===== Breadcrumb ===== */
 .breadcrumb{font-size:.78rem;color:var(--ink-soft);padding:14px 0 0}
 .breadcrumb__list{list-style:none;display:flex;flex-wrap:wrap;gap:.6em}
-.breadcrumb__list li+li::before{content:"›";margin-right:.6em;color:#b9b2a0}
+.breadcrumb__list li+li::before{content:"›";margin-right:.6em;color:#94a3b8}
 .breadcrumb__list a{color:var(--ink-soft);text-decoration:none}
 .breadcrumb__list a:hover{color:var(--green)}
-.breadcrumb__list [aria-current="page"]{color:var(--green);font-weight:700}
+.breadcrumb__list [aria-current="page"]{color:var(--ink);font-weight:700}
 
 /* ===== Hero ===== */
 .event-hero{padding:26px 0 64px}
 .hero-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:40px;align-items:start;margin-top:26px}
-.event-hero__label{
-  font-family:var(--en);color:var(--clay);letter-spacing:.34em;
-  font-size:.86rem;text-transform:uppercase;margin-bottom:14px;
-}
 .event-hero__title{
   font-family:var(--serif);
   font-size:clamp(1.7rem,4.2vw,2.7rem);
   font-weight:700;letter-spacing:.06em;line-height:1.55;
-  color:var(--green);margin-bottom:22px;
+  color:var(--ink);margin-bottom:22px;
 }
 .event-hero__title .kp{display:inline-block}
-.hero-lead{color:var(--ink-soft);max-width:34em}
+@media (max-width:600px){
+  .event-hero__title .kp{display:block}
+}
+.hero-lead{color:var(--ink-soft);max-width:34em;font-size:1.02rem;line-height:2.1}
+.hero-lead__line{display:block}
 
 /* 申込カード */
 .apply-card{
@@ -178,10 +177,14 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
   background:var(--green-tint);color:var(--green);
   font-size:.78rem;font-weight:700;letter-spacing:.14em;
 }
-.event-status[data-event-status="open"] .event-status__badge{background:var(--clay);color:#fff}
+.event-status[data-event-status="open"] .event-status__badge{background:var(--sky-deep);color:#fff}
 .event-status[data-event-status="full"] .event-status__badge,
 .event-status[data-event-status="closed"] .event-status__badge{background:var(--green);color:#fff}
 .event-status__text{color:var(--ink-soft)}
+.event-status__image{display:none;width:min(230px,85%);height:auto;margin:0 auto}
+.event-status[data-event-status="preparing"] .event-status__badge,
+.event-status[data-event-status="preparing"] .event-status__text{display:none}
+.event-status[data-event-status="preparing"] .event-status__image{display:block}
 
 .btn{
   display:inline-block;
@@ -192,7 +195,7 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 }
 .btn--primary{background:var(--green);color:#fff}
 .btn--primary:hover{background:var(--green-deep)}
-.btn[disabled]{background:#a9b4ab;color:#fff;cursor:not-allowed}
+.btn[disabled]{background:#94a3b8;color:#fff;cursor:not-allowed}
 .apply-card .btn{display:block;width:100%}
 .apply-note{font-size:.8rem;color:var(--ink-soft);margin-top:12px;line-height:1.7}
 .apply-card__price{margin-top:20px;padding-top:20px;border-top:1px dashed var(--line)}
@@ -201,19 +204,14 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 .apply-card__price .tax{font-size:.8rem;color:var(--ink-soft)}
 .discount-badge{
   display:inline-block;margin-top:10px;
-  background:var(--clay);color:#fff;font-size:.8rem;font-weight:700;
+  background:var(--sky-deep);color:#fff;font-size:.8rem;font-weight:700;
   letter-spacing:.14em;padding:.3em 1.1em;border-radius:5px;
 }
 .apply-card__price .range{font-size:.78rem;color:var(--ink-soft);margin-top:8px}
 
 /* ===== Sections ===== */
 .section{padding:60px 0}
-.section-alt{background:linear-gradient(180deg,rgba(29,58,47,.035),rgba(29,58,47,0))}
 .section-heading{text-align:center;margin-bottom:40px}
-.section-label{
-  font-family:var(--en);color:var(--clay);letter-spacing:.3em;
-  font-size:.8rem;text-transform:uppercase;display:block;margin-bottom:8px;
-}
 .section-heading h2{
   font-family:var(--serif);font-size:clamp(1.3rem,2.6vw,1.7rem);
   font-weight:700;letter-spacing:.16em;color:var(--ink);
@@ -224,6 +222,12 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
   width:54px;height:2px;background:var(--green);
 }
 .section-heading__lead{max-width:760px;margin:26px auto 0;text-align:left}
+.price-intro{max-width:760px;margin:26px auto 0;text-align:left}
+.price-intro p{margin-bottom:1.15em}
+.price-intro p:last-child{margin-bottom:0}
+.price-intro__main{font-size:1.02rem}
+.price-intro__main strong{font-family:var(--serif);font-size:1.3em;color:var(--ink);letter-spacing:.02em}
+.price-intro__note{font-size:.92rem;color:var(--ink-soft)}
 
 /* 開催概要 */
 .outline-card{
@@ -234,11 +238,11 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 .outline-list{margin:0}
 .outline-row{
   display:grid;grid-template-columns:9em 1fr;gap:24px;align-items:baseline;
-  padding:16px 8px;border-bottom:1px solid #efe9db;
+  padding:16px 8px;border-bottom:1px solid #eceef1;
 }
 .outline-row:last-child{border-bottom:none}
 .outline-row dt{
-  font-weight:700;color:var(--green);letter-spacing:.08em;
+  font-weight:700;color:var(--ink);letter-spacing:.08em;
   font-family:var(--serif);font-size:.95rem;
 }
 .outline-row dd{font-size:.95rem}
@@ -258,7 +262,7 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 .note-card--titled{margin-top:26px}
 .note-card h3{
   font-family:var(--serif);font-size:1rem;font-weight:700;
-  letter-spacing:.1em;color:var(--green);margin-bottom:14px;
+  letter-spacing:.1em;color:var(--ink);margin-bottom:14px;
   display:flex;align-items:center;gap:.6em;
 }
 .note-card h3::before{content:"";width:10px;height:10px;background:var(--green);border-radius:2px;flex:none}
@@ -266,45 +270,38 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 .list li{position:relative;padding-left:1.5em;margin-bottom:.9em}
 .list li::before{
   content:"";position:absolute;left:.2em;top:.85em;
-  width:6px;height:6px;border-radius:50%;background:var(--clay);
+  width:6px;height:6px;border-radius:50%;background:var(--sky);
 }
 .list li:last-child{margin-bottom:0}
-.list strong{color:var(--green)}
+.list strong{color:var(--ink)}
 .policy-note{margin-top:22px;text-align:center;font-size:.92rem}
 
 /* お申し込み */
-.event-apply{background:var(--green);color:#f2f0e8}
-.event-apply .section-label{color:#d8a58c}
-.event-apply .section-heading h2{color:#fff}
-.event-apply .section-heading h2::after{background:#d8a58c}
-.apply-lead{max-width:640px;margin:0 auto;color:#dfe4dc;text-align:center}
+.apply-lead{max-width:640px;margin:0 auto;color:var(--ink-soft);text-align:center}
 .apply-cta__action{margin-top:28px;text-align:center}
 .apply-cta__action .btn{width:100%;max-width:360px}
-.event-apply .btn--primary{background:#c96a45}
-.event-apply .btn--primary:hover{background:var(--clay)}
-.event-apply .btn[disabled]{background:#8b988f;color:#fff}
-.event-apply .apply-note{color:#c8d0c6;text-align:center}
+.event-apply .apply-note{text-align:center}
 .apply-links{
   list-style:none;display:flex;justify-content:center;flex-wrap:wrap;
   gap:.4em 2.4em;margin:26px auto 0;padding-top:22px;max-width:760px;
-  border-top:1px solid rgba(255,255,255,.18);font-size:.88rem;
+  border-top:1px solid var(--line);font-size:.88rem;
 }
-.apply-links a{color:#dfe4dc;text-decoration:underline;text-underline-offset:4px}
-.apply-links a:hover{color:#fff}
+.apply-links a{color:var(--green);text-decoration:underline;text-underline-offset:4px}
+.apply-links a:hover{color:var(--green-deep)}
 
 /* ===== Footer ===== */
-.site-footer{background:var(--green-deep);color:#dfe4dc;padding:56px 0 30px;font-size:.85rem}
+.site-footer{background:var(--green-deep);color:#dcfce7;padding:56px 0 30px;font-size:.85rem}
 .site-footer__main{display:grid;grid-template-columns:1.2fr 1fr;gap:40px;margin-bottom:40px}
 .site-footer__name{font-family:var(--serif);font-weight:700;font-size:1.05rem;letter-spacing:.1em;color:#fff}
-.site-footer__name-en{font-family:var(--en);font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;color:#9db0a4;margin:4px 0 16px}
-.site-footer__address{font-style:normal;line-height:1.8;color:#b9c4bb}
-.site-footer__address a{color:#b9c4bb;text-decoration:none}
+.site-footer__name-en{font-family:var(--en);font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;color:#86b79a;margin:4px 0 16px}
+.site-footer__address{font-style:normal;line-height:1.8;color:#bbf7d0}
+.site-footer__address a{color:#bbf7d0;text-decoration:none}
 .site-footer__address a:hover{color:#fff}
 .footer-nav__list{list-style:none;columns:2;gap:32px}
-.footer-nav__list a{display:block;color:#c7d1c8;text-decoration:none;padding:.35em 0;letter-spacing:.06em}
+.footer-nav__list a{display:block;color:#bbf7d0;text-decoration:none;padding:.35em 0;letter-spacing:.06em}
 .footer-nav__list a:hover{color:#fff}
 .site-footer__bottom{border-top:1px solid rgba(255,255,255,.14);padding-top:22px;text-align:center}
-.site-footer__bottom small{font-size:.75rem;letter-spacing:.08em;color:#9db0a4}
+.site-footer__bottom small{font-size:.75rem;letter-spacing:.08em;color:#86b79a}
 
 /* ページトップへ（script.js が is-visible を付与） */
 .pagetop{
@@ -377,9 +374,8 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 
         <div class="hero-grid">
           <div class="event-hero__inner">
-            <p class="event-hero__label" lang="en">Networking Event</p>
-            <h1 id="event-title" class="event-hero__title"><span class="kp">TSAMビジネス&amp;フレンド</span><span class="kp">交流会</span></h1>
-            <p class="hero-lead"><span class="s">新たな出会いを求めている方のための交流会です。</span><span class="s">ビジネスパートナーや仕事のつながりを探している方も、業界を越えた友人づくりをしたい方も歓迎します。</span><span class="s">渋谷のカフェ&amp;バーを会場に、肩肘張らない雰囲気で開催します。</span></p>
+            <h1 id="event-title" class="event-hero__title"><span class="kp">TSAM</span><span class="kp">ビジネス&amp;フレンド</span><span class="kp">交流会</span></h1>
+            <p class="hero-lead"><span class="hero-lead__line">仕事のつながりを探す方も——</span><span class="hero-lead__line">業界を超えた友人が欲しい方も——</span><span class="hero-lead__line">渋谷のバーで、力を抜いて過ごす90分です。</span></p>
           </div>
 
           <aside class="apply-card" aria-label="参加申し込み">
@@ -391,8 +387,10 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
               "full"（申込状況による受付終了）/ "closed"（受付期間の終了）の
               いずれかに書き換えると、
               バッジの文言と申込ボタンの状態がまとめて切り替わる（script.js）。
+              "preparing" のときはバッジ・文言の代わりに status-preparing.png を表示する（CSS制御）。
             -->
             <p class="event-status" id="event-status" data-event-status="open">
+              <img class="event-status__image" src="status-preparing.png" alt="ちょっと待っててね！準備中">
               <span class="event-status__badge" id="event-status-badge">準備中</span>
               <span class="event-status__text" id="event-status-text">お申し込みの受付開始までお待ちください。</span>
             </p>
@@ -413,10 +411,9 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
       </div>
     </section>
 
-    <section class="section section-alt event-outline" aria-labelledby="outline-title">
+    <section class="section event-outline" aria-labelledby="outline-title">
       <div class="wrap">
         <header class="section-heading reveal">
-          <p class="section-label" lang="en">Outline</p>
           <h2 id="outline-title">開催概要</h2>
         </header>
 
@@ -446,7 +443,11 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
             </div>
             <div class="outline-row">
               <dt>参加費</dt>
-              <dd>通常価格 <span class="nowrap">11,000円（税込）</span>／割引適用後 <span class="nowrap">3,300円〜11,000円（税込）</span>（下記「参加費と割引制度」を参照）</dd>
+              <dd><span class="nowrap">11,000円（税込）</span>・割引あり（下記「<a href="#price-title">参加費と割引制度</a>」を参照）</dd>
+            </div>
+            <div class="outline-row">
+              <dt>当日の名札</dt>
+              <dd>氏名・会社名・業種・職種・立場を記載し、他の参加者に表示されます（年齢は記載しません）。</dd>
             </div>
             <div class="outline-row">
               <dt>主催</dt>
@@ -460,66 +461,50 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
     <section class="section event-price" aria-labelledby="price-title">
       <div class="wrap">
         <header class="section-heading reveal">
-          <p class="section-label" lang="en">Price</p>
           <h2 id="price-title">参加費と割引制度</h2>
-          <p class="section-heading__lead"><span class="s">通常価格は<span class="nowrap">11,000円（税込）</span>です。</span><span class="s">お申し込みフォームでご入力いただく業種・職種・立場・年齢区分に応じて割引を自動で計算し、お支払い金額は<span class="nowrap">3,300円〜11,000円（税込）</span>の範囲で決まります。</span><span class="s">適用後の金額は、決済へお進みいただく前の確認画面でご確認いただけます。</span></p>
+          <div class="price-intro">
+            <p class="price-intro__main">通常価格：<strong><span class="nowrap">11,000円（税込）</span></strong></p>
+            <p class="price-intro__note">※ただし、お申し込みフォームで入力いただく業種・職種・立場・年齢区分に応じて割引が適用されます。</p>
+            <p>お支払い金額は<span class="nowrap">3,300円〜11,000円（税込）</span>の間で決まります。<br>適用後の金額は、決済前の確認画面でご確認いただけます。</p>
+          </div>
         </header>
 
         <div class="note-card note-card--titled reveal">
           <h3>参加費に関するご注意</h3>
           <ul class="list">
-            <li><span class="s">業種・職種・立場・年齢はすべて自己申告です。</span><span class="s">証明書のご提出は不要です。</span></li>
-            <li><span class="s">過去に主催者から出入り禁止・参加をお断りする通知を受けた方は、お申し込みフォームでその旨をご申告いただきます。</span><span class="s">ご申告いただいた場合の参加費は<span class="nowrap">55,000円（税込）</span>となり、割引は適用されません。</span></li>
-            <li><span class="s">お支払いは、クレジットカードまたはPayPayによるオンライン決済のみとなります。</span><span class="s">当日現金でのお支払いは承っておりません。</span></li>
-            <li><span class="s">申込状況により、予告なく受付を終了する場合があります。</span></li>
+            <li>割引の判定はすべて自己申告です。証明書のご提出は不要です。</li>
+            <li>お支払いはクレジットカードまたはPayPayのオンライン決済のみです。当日の現金払いはできません。</li>
+            <li>過去に主催者から参加をお断りする通知を受けた方は、フォームでその旨をご申告ください。その場合の参加費は<span class="nowrap">55,000円（税込・割引適用なし）</span>です。</li>
           </ul>
         </div>
       </div>
     </section>
 
-    <section class="section section-alt event-policy" aria-labelledby="policy-title">
+    <section class="section event-policy" aria-labelledby="policy-title">
       <div class="wrap">
         <header class="section-heading reveal">
-          <p class="section-label" lang="en">Policy</p>
           <h2 id="policy-title">キャンセルポリシー</h2>
         </header>
 
         <div class="note-card reveal">
           <ul class="list">
-            <li><span class="s"><strong>参加者ご都合によるキャンセル・返金は、一切お受けしておりません。</strong></span><span class="s">ご欠席、遅刻、途中退出の場合も返金はいたしません。</span></li>
-            <li><span class="s">参加権を第三者へお譲りいただくことは可能です。</span><span class="s">期限はなく、開催前であればいつでも承ります。</span><span class="s">ご希望の場合は<a href="../index.html#contact">お問い合わせ</a>よりご連絡ください。</span><span class="s">主催者が申込者情報を書き換え、参加確定メールを譲渡先へ再送いたします。</span><span class="s">受付番号は変更されません。</span></li>
-            <li><span class="s">譲渡にともなうお支払い金額の再計算は行いません。</span><span class="s">差額の徴収・返金はいたしません。</span></li>
-            <li><span class="s">領収書は決済者（譲渡元）宛のまま発行されます。</span><span class="s">譲渡先名義の領収書は発行いたしません。</span></li>
-            <li><span class="s">主催者都合による中止、二重決済、システム不具合の場合に限り、主催者から返金の対応をいたします。</span></li>
+            <li><strong>参加者ご都合によるキャンセル・返金はお受けしておりません。</strong><br>欠席・遅刻・途中退出の場合も同様です。</li>
+            <li>参加権の譲渡は開催前まで可能です。<br><a href="../index.html#contact">お問い合わせ</a>よりご連絡ください（金額の再計算や差額の精算、譲渡先名義の領収書発行は行いません）。</li>
+            <li>主催者都合による中止、二重決済、システム不具合の場合は返金いたします。</li>
           </ul>
         </div>
-        <p class="policy-note reveal">お支払い後の取り扱いの詳細は<a href="legal.html">特定商取引法に基づく表記</a>をご確認ください。</p>
-      </div>
-    </section>
-
-    <section class="section event-privacy" aria-labelledby="privacy-title">
-      <div class="wrap">
-        <header class="section-heading reveal">
-          <p class="section-label" lang="en">Notice</p>
-          <h2 id="privacy-title">当日の名札について</h2>
-        </header>
-
-        <div class="note-card reveal">
-          <p><span class="s">当日は、参加者の皆さまに名札を着用いただきます。</span><span class="s">名札には、氏名・会社名・業種・職種・立場を記載します。</span><span class="s">年齢は記載いたしません。</span></p>
-          <p><span class="s">お申し込み時に、上記の項目が当日の名札に記載され、他の参加者に表示されることへご同意いただきます。</span></p>
-        </div>
+        <p class="policy-note reveal">詳細は<a href="legal.html">特定商取引法に基づく表記</a>をご確認ください。</p>
       </div>
     </section>
 
     <section class="section event-apply" aria-labelledby="apply-title">
       <div class="wrap">
         <header class="section-heading reveal">
-          <p class="section-label" lang="en">Entry</p>
           <h2 id="apply-title">お申し込み</h2>
         </header>
 
         <div class="reveal">
-          <p class="apply-lead"><span class="s">お申し込みフォームで必要事項をご入力いただくと、割引を適用した金額を確認画面で表示します。</span><span class="s">金額をご確認のうえ、決済へお進みください。</span><span class="s">お申し込みは、開催当日の開始時刻まで受け付けます。</span><span class="s">申込状況により、予告なく受付を終了する場合があります。</span></p>
+          <p class="apply-lead">割引適用後の金額は、フォーム入力後の確認画面でお確かめいただけます。受付は開催当日の開始時刻まで（申込状況により早く締め切る場合があります）。</p>
 
           <!--
             script.js が data-event-status を見てこのボタンの有効/無効と
