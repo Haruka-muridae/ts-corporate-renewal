@@ -921,6 +921,40 @@ try {
     );
   }
 
+  {
+    /* 読み取りの画面（§8.1 ステージ2）。 */
+    check(
+      '読み取りの結果欄は既定で隠してある',
+      /id="co-ocr"[^>]*hidden/.test(htmlSource),
+    );
+    check(
+      '**読み取った本文を画面へ出していない（文字数だけ）**',
+      /文字`/.test(appSource) && !/textContent = ocrText/.test(appSource),
+    );
+    check(
+      '**読み取った本文を localStorage へ書いていない**',
+      !/setItem\([^)]*ocrText/.test(appSource),
+    );
+    check('二重送信を防いでいる', /if \(reading \|\|/.test(appSource));
+    check(
+      '**画像を差し替えたら古い読み取り結果を捨てる**',
+      (appSource.match(/discardOcr\(\)/g) ?? []).length >= 3,
+      String((appSource.match(/discardOcr\(\)/g) ?? []).length),
+    );
+    check(
+      '一時ドキュメントは保存先の中に作る（FR-08 の1）',
+      /parentId: storage\?\.appFolderId/.test(appSource),
+    );
+    check(
+      '起動時に孤児を回収する（ステージ0 の5）',
+      /void collectOrphans\(\)/.test(appSource),
+    );
+    check(
+      '**裏面が読めなかったことを黙って進めない（FR-08 の7）**',
+      /裏面は読み取れませんでした/.test(appSource),
+    );
+  }
+
   /* ================================================================ */
   section('台帳へ書く値の無害化（sanitize.js / FR-18）');
 
@@ -1901,13 +1935,303 @@ try {
   }
 
   /* ================================================================ */
+  section('Drive OCR（drive-ocr.js / FR-08）');
+
+  const ocr = await import('../../public/production-app/card-ocr/drive-ocr.js');
+
+  /*
+   * 面ごとに返すテキストを変えられるスタブ。
+   *
+   * front / back は試行順の配列。空文字を混ぜると再試行の挙動を確かめられる。
+   * **fetch は必ずスタブする。実APIへ通信しない。**
+   */
+  function makeSideAwareStub({ front = ['表面のテキスト'], back = ['裏面のテキスト'], deleteOk = true, backUploadFails = false } = {}) {
+    const uploads = [];
+    const deletes = [];
+    const sideOf = new Map();
+    const seen = { front: 0, back: 0 };
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      const method = options.method ?? 'GET';
+
+      if (text.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
+        /* metadata は multipart 本文の中にある。Blob から読む。 */
+        const bodyText = await options.body.text();
+        const side = /card-ocr-temp-back-/.test(bodyText) ? 'back' : 'front';
+
+        if (side === 'back' && backUploadFails) {
+          return { ok: false, status: 500, json: async () => ({}) };
+        }
+
+        seen[side] += 1;
+        const id = `${side}-${seen[side]}`;
+        sideOf.set(id, side);
+        uploads.push({ side, id, bodyText });
+
+        return { ok: true, status: 200, json: async () => ({ id }) };
+      }
+
+      if (text.includes('/export?')) {
+        const id = decodeURIComponent(/files\/([^/]+)\/export/.exec(text)?.[1] ?? '');
+        const side = sideOf.get(id) ?? 'front';
+        const list = side === 'back' ? back : front;
+        const index = Number(id.split('-')[1] ?? 1) - 1;
+
+        return { ok: true, status: 200, text: async () => (list[index] ?? '') };
+      }
+
+      if (method === 'DELETE') {
+        deletes.push(decodeURIComponent(/files\/([^?]+)$/.exec(text)?.[1] ?? ''));
+        return deleteOk
+          ? { ok: true, status: 204, json: async () => ({}) }
+          : { ok: false, status: 500, json: async () => ({}) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ files: [] }) };
+    };
+
+    return { impl, uploads, deletes };
+  }
+
+  {
+    /* 定数と文言。 */
+    check('OCR言語は ja（FR-08 の5）', ocr.OCR_LANGUAGE === 'ja');
+    check('空のときの再試行は最大3回（FR-08 の3）', ocr.MAX_OCR_ATTEMPTS === 3);
+    check(
+      '**一時ドキュメントの接頭辞が検証ページと違う**',
+      ocr.TEMP_DOC_PREFIX === 'card-ocr-temp-' && !ocr.TEMP_DOC_PREFIX.includes('poc'),
+      ocr.TEMP_DOC_PREFIX,
+    );
+    check(
+      '一時ドキュメント名に面が入る（表裏を同時に走らせるため）',
+      ocr.buildTempDocName('back', 1, 2) === 'card-ocr-temp-back-1-2',
+      ocr.buildTempDocName('back', 1, 2),
+    );
+
+    const empty = ocr.describeOcrError(new ocr.OcrError(ocr.OcrErrorCode.EMPTY, 'x'));
+    check('空は OCR-002', empty.errorCode === 'OCR-002');
+    check('それ以外は OCR-001', ocr.describeOcrError(new Error('x')).errorCode === 'OCR-001');
+    check('OcrError でない例外も握りつぶさない', ocr.describeOcrError(new TypeError('boom')).detail.includes('boom'));
+  }
+
+  {
+    /* 1枚の読み取り。upload → export → delete。 */
+    const stub = makeSideAwareStub();
+    const result = await ocr.ocrImage({
+      token: 'T', blob: new Blob(['x'], { type: 'image/jpeg' }), fetchImpl: stub.impl, parentId: 'FOLDER',
+    });
+
+    check('テキストを返す', result.text === '表面のテキスト');
+    check('1回で成功', result.attempts === 1);
+    check('一時ドキュメントを消した', result.deleted === true && stub.deletes.length === 1);
+
+    check(
+      '**保存先フォルダの中に作る（FR-08 の1）**',
+      stub.uploads[0].bodyText.includes('"parents":["FOLDER"]'),
+    );
+    check(
+      'Google ドキュメントへ変換する（＝OCRが走る）',
+      stub.uploads[0].bodyText.includes('application/vnd.google-apps.document'),
+    );
+  }
+
+  {
+    /* 空なら最大3回やり直す。**やり直すたびに一時ドキュメントを消す。** */
+    const stub = makeSideAwareStub({ front: ['', '', '3回目のテキスト'] });
+    const result = await ocr.ocrImage({ token: 'T', blob: new Blob(['x']), fetchImpl: stub.impl });
+
+    check('3回目で成功する', result.text === '3回目のテキスト' && result.attempts === 3);
+    check('**毎回の一時ドキュメントを消している**', stub.deletes.length === 3, String(stub.deletes.length));
+  }
+
+  {
+    /* 3回とも空なら OCR-002。 */
+    const stub = makeSideAwareStub({ front: ['', '', ''] });
+
+    let caught = null;
+    try {
+      await ocr.ocrImage({ token: 'T', blob: new Blob(['x']), fetchImpl: stub.impl });
+    } catch (error) { caught = error; }
+
+    check('3回とも空なら投げる', caught?.code === ocr.OcrErrorCode.EMPTY);
+    check('画面表示は OCR-002', ocr.describeOcrError(caught).errorCode === 'OCR-002');
+    check('**失敗しても一時ドキュメントは全部消す**', stub.deletes.length === 3);
+    check('空白だけも空とみなす', true);
+  }
+
+  {
+    /* 空白だけのテキストも「空」として扱う。 */
+    const stub = makeSideAwareStub({ front: ['   \n  ', 'ちゃんとしたテキスト'] });
+    const result = await ocr.ocrImage({ token: 'T', blob: new Blob(['x']), fetchImpl: stub.impl });
+
+    check('空白だけならやり直す', result.attempts === 2);
+  }
+
+  {
+    /* エクスポートが失敗しても削除する（finally）。 */
+    const stub = makeSideAwareStub();
+    let deleted = 0;
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+
+      if (text.includes('/export?')) {
+        return { ok: false, status: 500, json: async () => ({}) };
+      }
+
+      if ((options.method ?? 'GET') === 'DELETE') {
+        deleted += 1;
+        return { ok: true, status: 204, json: async () => ({}) };
+      }
+
+      return stub.impl(url, options);
+    };
+
+    let caught = null;
+    try {
+      await ocr.ocrImage({ token: 'T', blob: new Blob(['x']), fetchImpl: impl });
+    } catch (error) { caught = error; }
+
+    check('エクスポート失敗は投げ返す', caught !== null);
+    check('**エクスポートが失敗しても削除する（finally）**', deleted === 1);
+  }
+
+  {
+    /* 削除に失敗しても全体は失敗にしない。 */
+    const stub = makeSideAwareStub({ deleteOk: false });
+    const result = await ocr.ocrImage({ token: 'T', blob: new Blob(['x']), fetchImpl: stub.impl });
+
+    check('削除失敗でも読み取りは成功', result.text === '表面のテキスト');
+    check('消せなかったことを返す', result.deleted === false);
+  }
+
+  {
+    /* 両面。並列で走らせ、両方の結果を返す。 */
+    const stub = makeSideAwareStub();
+    const result = await ocr.ocrBothSides({
+      token: 'T',
+      front: new Blob(['f']),
+      back: new Blob(['b']),
+      fetchImpl: stub.impl,
+    });
+
+    check('表面を読む', result.front.text === '表面のテキスト');
+    check('裏面を読む', result.back.text === '裏面のテキスト');
+    check('裏面のエラーは無い', result.backError === null);
+    check('両面ぶん消した', stub.deletes.length === 2);
+    check('面ごとに名前を分けている', stub.uploads.map((u) => u.side).sort().join(',') === 'back,front');
+  }
+
+  {
+    /* 裏面が無ければ表面だけ。 */
+    const stub = makeSideAwareStub();
+    const result = await ocr.ocrBothSides({ token: 'T', front: new Blob(['f']), fetchImpl: stub.impl });
+
+    check('裏面は null', result.back === null);
+    check('裏面のエラーも無い', result.backError === null);
+    check('一時ドキュメントは1つだけ', stub.deletes.length === 1);
+  }
+
+  {
+    /*
+     * **裏面が失敗しても全体を失敗にしない（FR-08 の7）。**
+     * 裏面は補助である。
+     */
+    const stub = makeSideAwareStub({ back: ['', '', ''] });
+    const result = await ocr.ocrBothSides({
+      token: 'T', front: new Blob(['f']), back: new Blob(['b']), fetchImpl: stub.impl,
+    });
+
+    check('**表面の結果は返る**', result.front.text === '表面のテキスト');
+    check('裏面は null', result.back === null);
+    check('**裏面の失敗を握って伝える**', result.backError?.code === ocr.OcrErrorCode.EMPTY);
+  }
+
+  {
+    /* 裏面の通信が落ちた場合も同じ。 */
+    const stub = makeSideAwareStub({ backUploadFails: true });
+    const result = await ocr.ocrBothSides({
+      token: 'T', front: new Blob(['f']), back: new Blob(['b']), fetchImpl: stub.impl,
+    });
+
+    check('表面は成功する', result.front.text === '表面のテキスト');
+    check('裏面の失敗を握る', result.backError !== null);
+  }
+
+  {
+    /* **表面の失敗は全体の失敗。** */
+    const stub = makeSideAwareStub({ front: ['', '', ''] });
+
+    let caught = null;
+    try {
+      await ocr.ocrBothSides({
+        token: 'T', front: new Blob(['f']), back: new Blob(['b']), fetchImpl: stub.impl,
+      });
+    } catch (error) { caught = error; }
+
+    check('**表面が読めなければ全体を失敗にする**', caught?.code === ocr.OcrErrorCode.EMPTY);
+  }
+
+  {
+    /* 表裏の結合。面の区切りを明示する。 */
+    check('裏面が無ければ表面だけ', ocr.joinSides('おもて') === 'おもて');
+    check('空白だけの裏面も無いものとして扱う', ocr.joinSides('おもて', '  ') === 'おもて');
+    check(
+      '**面の区切りを明示する（Gemini に1回で渡すため）**',
+      ocr.joinSides('おもて', 'うら') === '【表面】\nおもて\n\n【裏面】\nうら',
+      JSON.stringify(ocr.joinSides('おもて', 'うら')),
+    );
+    check('null でも壊れない', ocr.joinSides(null, null) === '');
+  }
+
+  {
+    /* 孤児回収。**接頭辞で始まるものだけを消す。** */
+    const deletedIds = [];
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+
+      if ((options.method ?? 'GET') === 'DELETE') {
+        deletedIds.push(decodeURIComponent(/files\/([^?]+)$/.exec(text)?.[1] ?? ''));
+        return { ok: true, status: 204, json: async () => ({}) };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          files: [
+            { id: 'a', name: `${ocr.TEMP_DOC_PREFIX}front-1-1` },
+            { id: 'b', name: `${ocr.TEMP_DOC_PREFIX}back-1-1` },
+            { id: 'c', name: '利用者の大切な資料' },
+            /* 検証ページ（poc/）のもの。**消さない。** */
+            { id: 'd', name: 'card-ocr-poc-temp-front-1-1' },
+          ],
+        }),
+      };
+    };
+
+    const result = await ocr.collectOrphanTempDocs({ token: 'T', fetchImpl: impl });
+
+    check('孤児を2件見つける', result.found === 2, String(result.found));
+    check('2件とも削除する', result.deleted === 2);
+    check('**利用者のファイルを消さない**', !deletedIds.includes('c'));
+    check(
+      '**検証ページの一時ファイルを消さない（接頭辞が違う）**',
+      !deletedIds.includes('d'),
+      deletedIds.join(','),
+    );
+  }
+
+  /* ================================================================ */
   section('ソース検査（守るべき制約）');
 
   const FILES = [
     'config.js', 'gis-loader.js', 'drive-auth.js', 'drive-api.js',
     'prerequisites.js', 'sanitize.js', 'hash.js', 'schema.js',
     'sheets.js', 'drive-storage.js', 'capture.js', 'capture-flow.js',
-    'app.js',
+    'drive-ocr.js', 'app.js',
   ];
   const sources = [];
 
