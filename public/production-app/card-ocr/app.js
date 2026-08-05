@@ -50,6 +50,10 @@ import {
   ocrBothSides,
 } from './drive-ocr.js';
 
+import { classifyCardText, describeGeminiError } from './gemini.js';
+import { extractByPattern, prepareForGemini } from './extract.js';
+import { VALUE_FIELDS, fieldsNeedingReview, mergeExtraction } from './merge.js';
+
 import { describeCaptureError, shrinkToJpeg } from './capture.js';
 import {
   CaptureStep,
@@ -81,6 +85,7 @@ for (const id of [
   'co-ask-back', 'co-skip-back', 'co-want-back',
   'co-previews', 'co-start-actions', 'co-start', 'co-reset',
   'co-ocr', 'co-ocr-state', 'co-ocr-sides', 'co-ocr-note',
+  'co-fields', 'co-fields-state', 'co-fields-list', 'co-fields-notes',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -107,6 +112,24 @@ let reading = false;
  * 画面にも本文は出さない（下の renderOcr を参照）。
  */
 let ocrText = '';
+/* 突き合わせた結果（merge.js）。null は「まだ分類していない」。 */
+let merged = null;
+
+/* 画面に出す項目名。台帳の見出しとは別に、ここで日本語にする。 */
+const FIELD_LABELS = Object.freeze({
+  companyName: '会社名',
+  departmentName: '部署名',
+  jobTitle: '役職',
+  fullName: '氏名',
+  fullNameKana: '氏名カナ',
+  postalCode: '郵便番号',
+  address: '住所',
+  phone: '電話番号',
+  mobile: '携帯番号',
+  fax: 'FAX',
+  email: 'メールアドレス',
+  url: 'URL',
+});
 
 /* ---------- 表示の道具（innerHTML を使わない） ---------- */
 
@@ -447,6 +470,9 @@ async function readCard() {
       /* 裏面は補助。全体を失敗にしないが、黙っても進めない（§FR-08 の7）。 */
       showMessage('裏面は読み取れませんでした。表面の内容だけで進みます。', 'info');
     }
+
+    /* 続けて項目へ振り分ける（ステージ2 → 3）。 */
+    await classifyCard();
   } catch (error) {
     ocrText = '';
     el['co-ocr-state'].textContent = '読み取れませんでした';
@@ -457,6 +483,119 @@ async function readCard() {
   } finally {
     reading = false;
     renderCapture();
+  }
+}
+
+/* ---------- 項目への振り分け（§8.1 ステージ3・4） ---------- */
+
+/*
+ * 振り分けた結果を出す。
+ *
+ * **値をそのまま出す。** ここは利用者自身の画面で、利用者自身が
+ * 撮った名刺である。確かめられなければ登録の可否を判断できない。
+ * 修正と候補選択はフェーズ3（SC-04）で足す。
+ */
+function renderFields() {
+  const target = el['co-fields-list'];
+  target.replaceChildren();
+
+  const review = new Set(fieldsNeedingReview(merged));
+
+  for (const field of VALUE_FIELDS) {
+    const value = merged.values[field] ?? '';
+
+    const term = document.createElement('dt');
+    term.className = 'co-status-label';
+    term.textContent = FIELD_LABELS[field] ?? field;
+
+    const cell = document.createElement('dd');
+    cell.className = 'co-field-value';
+    cell.dataset.review = review.has(field) ? 'yes' : 'no';
+    cell.textContent = value === '' ? '（なし）' : value;
+
+    if (review.has(field)) {
+      const mark = document.createElement('span');
+      mark.className = 'co-review-mark';
+      mark.textContent = ' 要確認';
+      cell.append(mark);
+    }
+
+    target.append(term, cell);
+  }
+
+  /* 由来の記録。どこから来た値かを追えるようにする（§FR-15 の5）。 */
+  const notes = [];
+
+  if (merged.fromBackFields.length > 0) {
+    notes.push(`裏面から補った項目: ${merged.fromBackFields.join('、')}`);
+  }
+
+  if (merged.patternFilled.length > 0) {
+    notes.push(`書式から補った項目: ${merged.patternFilled.join('、')}`);
+  }
+
+  if (merged.reclassified.length > 0) {
+    notes.push(`電話番号の種別を整えました（${merged.reclassified.join('、')}）`);
+  }
+
+  if (merged.conflicts.length > 0) {
+    notes.push(`表と裏で値が違った項目: ${merged.conflicts.join('、')}`);
+  }
+
+  const list = el['co-fields-notes'];
+  list.replaceChildren();
+
+  for (const note of notes) {
+    const item = document.createElement('li');
+    item.textContent = note;
+    list.append(item);
+  }
+
+  list.hidden = notes.length === 0;
+}
+
+/*
+ * 読み取ったテキストを項目へ振り分ける。
+ *
+ * **Gemini の呼び出しは1名刺につき1回**（§FR-11、§20）。
+ * 両面ぶんを結合したテキストをそのまま渡す。
+ */
+async function classifyCard() {
+  el['co-fields'].hidden = false;
+  el['co-fields-state'].textContent = '項目へ振り分けています…';
+  el['co-fields-state'].dataset.ok = 'pending';
+
+  /*
+   * キーはここで初めて取り出す。画面の描画には要らないので、
+   * 使う直前まで持たない（keystore-spec-v1.md §2）。
+   */
+  const apiKey = KeyStore.get(PROVIDERS.gemini);
+  const text = prepareForGemini(ocrText);
+
+  try {
+    const result = await classifyCardText(text, { apiKey });
+
+    merged = mergeExtraction(result, extractByPattern(text));
+
+    el['co-fields-state'].textContent = '振り分けました';
+    el['co-fields-state'].dataset.ok = 'yes';
+    renderFields();
+  } catch (error) {
+    merged = null;
+    el['co-fields-state'].textContent = '振り分けできませんでした';
+    el['co-fields-state'].dataset.ok = 'no';
+
+    const described = describeGeminiError(error);
+
+    /*
+     * **detail まで出す。** 「不明なエラー」だけの画面は、利用者にも
+     * こちらにも役に立たない（フェーズ0で SYS-999 の切り分けに
+     * 何時間もかかった。計画 §7-5-2）。
+     */
+    showMessage(
+      `${described.text}（${described.errorCode}）${described.detail ? ` / ${described.detail}` : ''}`,
+      'error',
+    );
   }
 }
 
@@ -535,8 +674,13 @@ async function rotateSide(side) {
  */
 function discardOcr() {
   ocrText = '';
+  merged = null;
   el['co-ocr'].hidden = true;
   el['co-ocr-sides'].replaceChildren();
+  el['co-fields'].hidden = true;
+  el['co-fields-list'].replaceChildren();
+  el['co-fields-notes'].replaceChildren();
+  el['co-fields-notes'].hidden = true;
 }
 
 function removeSide(side) {
