@@ -312,3 +312,11 @@
     width: 100%;
   }
 }
+
+/* 「その他」は複数行になりうる。 */
+textarea.co-field-input {
+  resize: vertical;
+  min-height: 5rem;
+  font-family: inherit;
+  line-height: 1.6;
+}

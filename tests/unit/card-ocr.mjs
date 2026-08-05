@@ -1063,6 +1063,14 @@ try {
       '**保存するのは入力欄の値（振り分け結果をそのまま使わない）**',
       /querySelector\(`\[data-field="\$\{field\}"\]`\)\?\.value/.test(appSource),
     );
+    check(
+      '**複数行の項目は textarea にする（一部しか見えず消しやすい、を防ぐ）**',
+      /createElement\(multiline \? 'textarea' : 'input'\)/.test(appSource),
+    );
+    check(
+      'その他に画面の名前を付けている',
+      /otherInformation: 'その他/.test(appSource),
+    );
     check('登録の二重送信を防いでいる', /if \(registering \|\|/.test(appSource));
     check(
       '**書き込み停止中は登録させない**',
@@ -1212,6 +1220,27 @@ try {
         && !headers.includes('drive_file_url')
         && !headers.includes('image_hash'),
     );
+
+    /* v3.5: その他。 */
+    check('その他の列がある', headers.includes('その他'));
+    check(
+      '**その他は右端にある（既存シートを altered にしないため）**',
+      headers.at(-1) === 'その他',
+      headers.at(-1),
+    );
+
+    {
+      /*
+       * 既存の利用者のシート（その他が無い26列）が、書き込み停止に
+       * ならず「不足分を足す」で済むこと。**ここが崩れると全利用者の
+       * シートが止まる。**
+       */
+      const oldHeader = headers.slice(0, -1);
+      const verdict = schema.verifyHeader(oldHeader);
+
+      check('**旧いシートは upgrade（altered にしない）**', verdict.status === 'upgrade', verdict.status);
+      check('足りないのはその他だけ', verdict.missing.map((c) => c.header).join(',') === 'その他');
+    }
     check(
       'FR-12 の主要5項目に対応する列がある',
       ['会社名', '氏名', '役職', 'メールアドレス', '電話番号'].every((h) => headers.includes(h)),
@@ -2473,7 +2502,7 @@ try {
   const prompt = await import('../../public/production-app/card-ocr/prompt.js');
 
   {
-    check('版が PoC と違う', prompt.PROMPT_VERSION === 'card-ocr-2', prompt.PROMPT_VERSION);
+    check('版が PoC と違う', prompt.PROMPT_VERSION === 'card-ocr-3', prompt.PROMPT_VERSION);
     check('スキーマの type は大文字', prompt.CARD_SCHEMA.type === 'OBJECT');
     check(
       '**小文字の type が残っていない（400 の原因）**',
@@ -2485,6 +2514,34 @@ try {
       check(`v3.1 の ${field} がある`, prompt.CARD_SCHEMA.properties[field]?.type === 'ARRAY');
       check(`${field} が必須項目に入っている`, prompt.CARD_SCHEMA.required.includes(field));
     }
+
+    /* v3.5: その他（FR-12 の otherInformation）。 */
+    check(
+      '**otherInformation を配列で受ける**',
+      prompt.CARD_SCHEMA.properties.otherInformation?.type === 'ARRAY',
+    );
+    check('otherInformation が必須項目に入っている', prompt.CARD_SCHEMA.required.includes('otherInformation'));
+    check(
+      '**捨てないよう指示している**',
+      prompt.SYSTEM_INSTRUCTION.includes('otherInformation へ入れること')
+        && prompt.SYSTEM_INSTRUCTION.includes('捨てないこと'),
+    );
+    check(
+      '1つの内容につき1要素にするよう指示している',
+      prompt.SYSTEM_INSTRUCTION.includes('1つの内容につき1要素'),
+    );
+    check(
+      '他の項目と重複させないよう指示している',
+      prompt.SYSTEM_INSTRUCTION.includes('重ねて入れないこと'),
+    );
+    check(
+      '**要約・省略を禁じている（事業内容の長文をそのまま拾う）**',
+      prompt.SYSTEM_INSTRUCTION.includes('要約も省略もしない'),
+    );
+    check(
+      '**その他は表面優先の対象外だと明記している（裏面ぶんを失わない）**',
+      prompt.SYSTEM_INSTRUCTION.includes('表面優先の対象外'),
+    );
 
     check(
       '推測を禁じる指示が先頭にある',
@@ -2519,7 +2576,7 @@ try {
     check('履歴を持たせない（1名刺1リクエスト）', request.contents.length === 1);
     check('JSON で返させる', request.generationConfig.responseMimeType === 'application/json');
     check('温度は0（分類であって創作ではない）', request.generationConfig.temperature === 0);
-    check('出力上限は400トークン', request.generationConfig.maxOutputTokens === 400);
+    check('出力上限は700トークン（otherInformation のぶん引き上げ）', request.generationConfig.maxOutputTokens === 700);
   }
 
   /* ================================================================ */
@@ -2532,6 +2589,7 @@ try {
     fullName: '見本 太郎',
     email: 'taro@example.com',
     phone: '03-1234-5678',
+    otherInformation: [],
     uncertainFields: [],
     fromBackFields: [],
     conflicts: [],
@@ -2701,6 +2759,39 @@ try {
     check(
       '正規表現が担当するのは形の決まった項目だけ',
       !merge.PATTERN_FIELDS.includes('companyName') && !merge.PATTERN_FIELDS.includes('fullName'),
+    );
+  }
+
+  {
+    /* v3.5: その他。配列を改行でつなぐ。 */
+    check('otherInformation が台帳の項目に入っている', merge.VALUE_FIELDS.includes('otherInformation'));
+    check('複数行の項目として扱う', merge.MULTILINE_FIELDS.includes('otherInformation'));
+
+    const result = merge.mergeExtraction(
+      { ...AI_OK, otherInformation: ['宅地建物取引士', 'X: @sample', '創業50年'] },
+      {},
+    );
+
+    check(
+      '**改行でつなぐ（つなぐ側をこちらに寄せる）**',
+      result.values.otherInformation === '宅地建物取引士\nX: @sample\n創業50年',
+      JSON.stringify(result.values.otherInformation),
+    );
+    check(
+      '空の要素は落とす（台帳に空行を作らない）',
+      merge.mergeExtraction({ ...AI_OK, otherInformation: ['a', '', '  ', 'b'] }, {}).values.otherInformation === 'a\nb',
+    );
+    check(
+      '無ければ空文字',
+      merge.mergeExtraction({ ...AI_OK, otherInformation: [] }, {}).values.otherInformation === '',
+    );
+    check(
+      '配列でなくても壊れない',
+      merge.mergeExtraction({ ...AI_OK, otherInformation: 'x' }, {}).values.otherInformation === '',
+    );
+    check(
+      '**正規表現の対象にしない（文脈の要る項目）**',
+      !merge.PATTERN_FIELDS.includes('otherInformation'),
     );
   }
 
