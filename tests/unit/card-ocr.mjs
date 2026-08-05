@@ -2587,6 +2587,159 @@ try {
   }
 
   /* ================================================================ */
+  section('測定モード（measure/ / 計画 §7）');
+
+  const measure = await import('../../public/production-app/card-ocr/measure/measurement.js');
+
+  {
+    /* 50枚と15枚を混ぜないための列。 */
+    check('種類の列がある（front / both）', measure.CSV_COLUMNS.includes('side_mode'));
+    check('区分の列がある', measure.CSV_COLUMNS.includes('category'));
+    check(
+      '所要時間の内訳がある（§13.1）',
+      ['total_ms', 'ocr_ms', 'gemini_ms'].every((c) => measure.CSV_COLUMNS.includes(c)),
+    );
+    check(
+      'v3.1 の由来の列がある',
+      ['has_back', 'fromBackFields', 'conflicts', 'pattern_filled', 'reclassified']
+        .every((c) => measure.CSV_COLUMNS.includes(c)),
+    );
+    check(
+      '**正解列は空で出す（画面から入力させない）**',
+      ['expected_companyName', 'expected_fullName', 'expected_jobTitle',
+        'expected_email', 'expected_phone'].every((c) => measure.CSV_COLUMNS.includes(c)),
+    );
+    check('429 を状態として持つ', measure.MeasureStatus.RATE_LIMITED === 'rate_limited');
+    check('列名が重複していない', new Set(measure.CSV_COLUMNS).size === measure.CSV_COLUMNS.length);
+  }
+
+  {
+    /* 行の組み立て。列の定義と過不足なく一致すること。 */
+    const row = measure.buildRow({
+      no: 1,
+      fileName: '01.jpg',
+      category: '日英併記',
+      sideMode: 'both',
+      status: measure.MeasureStatus.OK,
+      recordedAt: '2026-08-04T00:00:00.000Z',
+      totalMs: 17900,
+      hasBack: true,
+      fields: { companyName: '株式会社サンプル商事', jobTitle: '執行役員 AI人材育成責任者' },
+      merged: { fromBackFields: ['postalCode', 'address'], conflicts: [], patternFilled: ['email'] },
+    });
+
+    check(
+      '**行の鍵が列の定義と一致する**',
+      Object.keys(row).sort().join(',') === [...measure.CSV_COLUMNS].sort().join(','),
+      Object.keys(row).filter((k) => !measure.CSV_COLUMNS.includes(k)).join(','),
+    );
+    check('種類を記録する', row.side_mode === 'both');
+    check('裏面の有無を記録する', row.has_back === 'TRUE');
+    check('裏面から補った項目を空白区切りで入れる', row.fromBackFields === 'postalCode address');
+    check(
+      '**役職は全文を入れる（後半が落ちていないか見るため）**',
+      row.jobTitle === '執行役員 AI人材育成責任者',
+    );
+    check('正解列は空', row.expected_jobTitle === '');
+    check('未指定は空文字', row.gemini_ms === '');
+  }
+
+  {
+    /* CSV。表計算ソフトで開いても壊れない・評価されない。 */
+    check('通常の値はそのまま', measure.csvEscape('株式会社サンプル') === '株式会社サンプル');
+    check(
+      '**数式は無害化する（表計算ソフトで開いた瞬間に評価させない）**',
+      measure.csvEscape('=1+1') === "'=1+1",
+      measure.csvEscape('=1+1'),
+    );
+    check(
+      '数式かつカンマを含む値は、無害化したうえで引用する',
+      measure.csvEscape('=A1,B2') === '"\'=A1,B2"',
+      measure.csvEscape('=A1,B2'),
+    );
+    check('カンマを含む値は引用する', measure.csvEscape('a,b') === '"a,b"');
+    check('改行を含む値は引用する', measure.csvEscape('a\nb') === '"a\nb"');
+
+    const blob = measure.buildCsvBlob([]);
+    const head = new Uint8Array(await blob.arrayBuffer()).slice(0, 3);
+
+    check(
+      'CSV に BOM を付ける（Excel の文字化け対策）',
+      head[0] === 0xEF && head[1] === 0xBB && head[2] === 0xBF,
+    );
+    check(
+      'ファイル名に日時が入る',
+      /^card-ocr-measure-\d{8}-\d{4}\.csv$/.test(measure.buildCsvFileName(new Date(2026, 7, 4, 9, 5))),
+    );
+  }
+
+  {
+    /* 集計。 */
+    const make = (status, totalMs) => measure.buildRow({
+      no: 1, fileName: 'x', status, recordedAt: '', totalMs,
+    });
+
+    const summary = measure.summarize([
+      make(measure.MeasureStatus.OK, 10000),
+      make(measure.MeasureStatus.OK, 20000),
+      make(measure.MeasureStatus.OK, 30000),
+      make(measure.MeasureStatus.RATE_LIMITED, null),
+      make(measure.MeasureStatus.ERROR, null),
+    ]);
+
+    check('総数を数える', summary.total === 5);
+    check('成功数を数える', summary.ok === 3);
+    check('429 を分けて数える', summary.rateLimited === 1);
+    check('中央値は成功分から求める', summary.medianMs === 20000, String(summary.medianMs));
+    check('空でも壊れない', measure.summarize([]).medianMs === null);
+  }
+
+  {
+    /* 進行状況には個人情報を入れない。 */
+    const source = await readFile(new URL('measure/measurement.js', APP_DIR), 'utf8');
+    const pageSource = await readFile(new URL('measure/measure.js', APP_DIR), 'utf8');
+
+    check(
+      '**測定結果をドライブへ上げていない（CSVはダウンロードのみ）**',
+      !/googleapis\.com|uploadType/i.test(source),
+    );
+    check(
+      '**抽出結果を localStorage へ保存していない（§FR-21）**',
+      !/setItem\([^)]*rows|setItem\([^)]*fields/.test(source),
+    );
+    /*
+     * 「使っていない」の検査は、実際の呼び出し形にだけ一致させる。
+     * 語そのものを禁じると、禁止理由を説明したコメントまで引っかかる。
+     */
+    check(
+      '**台帳へ書いていない（測定は登録ではない）**',
+      !/appendRow\(|ensureStorage\(/.test(pageSource),
+    );
+    check(
+      '**本番のモジュールを使っている（自前の複製を持たない）**',
+      /from '\.\.\/drive-ocr\.js'/.test(pageSource)
+        && /from '\.\.\/gemini\.js'/.test(pageSource)
+        && /from '\.\.\/merge\.js'/.test(pageSource),
+    );
+    check(
+      'CSV を保存せずに閉じるのを止めている',
+      /beforeunload/.test(pageSource),
+    );
+    check(
+      'テスト環境（apps/）から import していない',
+      !/from\s+['"][^'"]*\/apps\//.test(source) && !/from\s+['"][^'"]*\/apps\//.test(pageSource),
+    );
+  }
+
+  {
+    /* 検証用PoC が消えていること。 */
+    const entries = await readdir(APP_DIR);
+
+    check('**poc/ を撤去した（計画 §3-3）**', !entries.includes('poc'), entries.join(','));
+    check('measure/ がある', entries.includes('measure'));
+  }
+
+  /* ================================================================ */
   section('ソース検査（守るべき制約）');
 
   const FILES = [

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>名刺OCR 測定｜TSAM AI</title>
+
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!-- 本体と同じ CSP。**ここだけ緩めないこと。** -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="stylesheet" href="../../../css/style.css">
+<link rel="stylesheet" href="../../../auth/auth.css">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <p id="mo-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="mo-content" hidden>
+
+      <header class="co-header">
+        <h1 class="co-title">名刺OCR 測定</h1>
+        <p class="co-lead">
+          精度と所要時間を測るための画面です。<strong>フェーズ2の測定が終わったら撤去します。</strong>
+        </p>
+      </header>
+
+      <section class="co-panel co-panel--guidance">
+        <h2 class="co-panel-title">測る前に</h2>
+        <ul class="co-notice-list">
+          <li><strong>CSVを保存せずに閉じると、その回の結果は失われます。</strong>名刺の中身は端末にも保存しません（§FR-21）。</li>
+          <li>台帳への保存は行いません。読み取りと振り分けだけを行い、結果はCSVに出します。</li>
+          <li><strong>CSVはドライブにもリポジトリにも置かないでください。</strong>第三者の個人情報です。</li>
+          <li>測定が終わったら、保存先ごと破棄してください（計画 §6-5）。</li>
+        </ul>
+      </section>
+
+      <section id="mo-setup" class="co-panel">
+        <h2 class="co-panel-title">測定の設定</h2>
+
+        <div class="co-field">
+          <label class="co-field-label" for="mo-side-mode">測定の種類</label>
+          <select id="mo-side-mode" class="co-field-input">
+            <option value="front">表面のみ（50枚。§16.2 の判定）</option>
+            <option value="both">両面（15枚。統合規則の確認）</option>
+          </select>
+        </div>
+
+        <div class="co-field">
+          <label class="co-field-label" for="mo-category">区分（CSVの category 列に入ります）</label>
+          <input id="mo-category" class="co-field-input" type="text"
+                 placeholder="例: 日英併記 / 縦書き / 英語のみ">
+        </div>
+
+        <dl class="co-status">
+          <dt class="co-status-label">次の通し番号</dt>
+          <dd id="mo-next-no" class="co-status-value" data-ok="yes">1</dd>
+          <dt class="co-status-label">この回で測った枚数</dt>
+          <dd id="mo-count" class="co-status-value" data-ok="yes">0</dd>
+          <dt class="co-status-label">429（レート上限）</dt>
+          <dd id="mo-rate" class="co-status-value" data-ok="yes">0回</dd>
+        </dl>
+
+        <div class="co-actions">
+          <button id="mo-connect" type="button" class="auth-button">Googleと連携する</button>
+          <button id="mo-download" type="button" class="auth-button auth-button--ghost" disabled>CSVを保存する</button>
+          <button id="mo-reset" type="button" class="auth-button auth-button--ghost">進行状況を消す</button>
+        </div>
+      </section>
+
+      <section id="mo-run" class="co-panel" hidden>
+        <h2 class="co-panel-title">1枚ずつ測る</h2>
+
+        <div class="co-field">
+          <label class="co-field-label" for="mo-front">表面の画像</label>
+          <input id="mo-front" class="co-field-input" type="file" accept="image/jpeg,image/png">
+        </div>
+
+        <div id="mo-back-field" class="co-field" hidden>
+          <label class="co-field-label" for="mo-back">裏面の画像</label>
+          <input id="mo-back" class="co-field-input" type="file" accept="image/jpeg,image/png">
+        </div>
+
+        <div class="co-actions">
+          <button id="mo-start" type="button" class="auth-button" disabled>この1枚を測る</button>
+        </div>
+
+        <dl id="mo-result" class="co-status"></dl>
+      </section>
+
+      <p id="mo-message" class="auth-message" role="status" aria-live="polite" tabindex="-1" hidden></p>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./measure.js"></script>
+
+</body>
+</html>

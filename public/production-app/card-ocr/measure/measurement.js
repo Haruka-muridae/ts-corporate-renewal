@@ -1,5 +1,19 @@
 /*
- * 精度・所要時間の測定（フェーズ0計画 §7、要件定義書 §16.2 / §13.1）。
+ * 精度・所要時間の測定（計画 §7、要件定義書 §16.2 / §13.1）。
+ *
+ * ==================================================================
+ * 検証用PoC から移した（2026-08-04）
+ * ==================================================================
+ * もとは poc/measurement.js。PoC は Drive と Gemini の自前の複製を
+ * 持っていたため、
+ * **測っていたのは PoC の実装であって本番の実装ではなかった。**
+ *
+ * このページは本番の capture / drive-ocr / gemini / merge を
+ * そのまま import する。したがってここで出る数字は、
+ * **利用者が使うのと同じ経路の数字**である。
+ *
+ * 測定が終わったらこのフォルダごと削除する（計画 §3-3）。
+ * ==================================================================
  *
  * ==================================================================
  * 抽出結果をブラウザに保存しない
@@ -24,7 +38,7 @@
  * ==================================================================
  */
 
-import { escapeCellText } from './sanitize.js';
+import { escapeCellText } from '../sanitize.js';
 
 /* 進行状況の保存キー。**個人情報を入れないこと。** */
 export const SESSION_STORAGE_KEY = 'tsam-card-ocr-measure-session';
@@ -38,6 +52,10 @@ export const SESSION_STORAGE_KEY = 'tsam-card-ocr-measure-session';
 export const CSV_COLUMNS = Object.freeze([
   'no',
   'file_name',
+  /* 測定の内訳（計画 §7-2）。日英併記・縦書きなどの区分を手で入れる。 */
+  'category',
+  /* front（表面のみ）/ both（両面）。**50枚と15枚を混ぜないための目印。** */
+  'side_mode',
   'status',
   'error_code',
   'error_detail',
@@ -47,6 +65,10 @@ export const CSV_COLUMNS = Object.freeze([
   'gemini_ms',
   'ocr_chars',
   'ocr_attempts',
+  /* v3.1: 裏面の状況。 */
+  'has_back',
+  'back_ocr_chars',
+  'back_error_code',
   'companyName',
   'departmentName',
   'jobTitle',
@@ -60,6 +82,11 @@ export const CSV_COLUMNS = Object.freeze([
   'email',
   'url',
   'uncertainFields',
+  /* v3.1: 由来の記録。fromBackFields の一致率を見る（§18 フェーズ2）。 */
+  'fromBackFields',
+  'conflicts',
+  'pattern_filled',
+  'reclassified',
   'expected_companyName',
   'expected_fullName',
   'expected_jobTitle',
@@ -165,6 +192,8 @@ export function recordRateLimit(session, { no, at }) {
 export function buildRow({
   no,
   fileName,
+  category = '',
+  sideMode = 'front',
   status,
   errorCode = '',
   errorDetail = '',
@@ -174,13 +203,20 @@ export function buildRow({
   geminiMs = null,
   ocrChars = null,
   ocrAttempts = null,
+  hasBack = false,
+  backOcrChars = null,
+  backErrorCode = '',
   fields = null,
+  merged = null,
 }) {
   const field = (key) => String(fields?.[key] ?? '');
+  const joined = (key) => (Array.isArray(merged?.[key]) ? merged[key].join(' ') : '');
 
   return {
     no,
     file_name: fileName,
+    category,
+    side_mode: sideMode,
     status,
     error_code: errorCode,
     error_detail: errorDetail,
@@ -190,6 +226,9 @@ export function buildRow({
     gemini_ms: geminiMs ?? '',
     ocr_chars: ocrChars ?? '',
     ocr_attempts: ocrAttempts ?? '',
+    has_back: hasBack ? 'TRUE' : '',
+    back_ocr_chars: backOcrChars ?? '',
+    back_error_code: backErrorCode,
     companyName: field('companyName'),
     departmentName: field('departmentName'),
     jobTitle: field('jobTitle'),
@@ -202,9 +241,11 @@ export function buildRow({
     fax: field('fax'),
     email: field('email'),
     url: field('url'),
-    uncertainFields: Array.isArray(fields?.uncertainFields)
-      ? fields.uncertainFields.join(' ')
-      : '',
+    uncertainFields: joined('uncertainFields'),
+    fromBackFields: joined('fromBackFields'),
+    conflicts: joined('conflicts'),
+    pattern_filled: joined('patternFilled'),
+    reclassified: joined('reclassified'),
     /* 正解列は空。測定後に表計算ソフトで書き込む。 */
     expected_companyName: '',
     expected_fullName: '',
