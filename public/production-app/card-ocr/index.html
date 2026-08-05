@@ -179,8 +179,27 @@
         <dl id="co-ocr-sides" class="co-status"></dl>
 
         <p id="co-ocr-note" class="co-guidance-text">
-          項目の振り分け（会社名・氏名など）は次の段階で実装します。
-          現在は文字の読み取りまでを行います。
+          読み取った本文は画面に出しません。項目へ振り分けたものを下に表示します。
+        </p>
+      </section>
+
+      <!-- 項目への振り分け（§8.1 ステージ3・4）。 -->
+      <section id="co-fields" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">読み取り結果</h2>
+
+        <dl class="co-status">
+          <dt class="co-status-label">項目への振り分け</dt>
+          <dd id="co-fields-state" class="co-status-value" data-ok="pending">振り分けています…</dd>
+        </dl>
+
+        <dl id="co-fields-list" class="co-fields"></dl>
+
+        <!-- 値の由来。どこから来たかを追えるようにする（§FR-15 の5）。 -->
+        <ul id="co-fields-notes" class="co-notice-list" hidden></ul>
+
+        <p class="co-guidance-text">
+          修正・候補の選択・重複の確認・保存は次の段階で実装します。
+          現在は振り分けまでを行います。
         </p>
       </section>
 

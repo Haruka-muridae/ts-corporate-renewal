@@ -185,6 +185,43 @@
   flex: 1 1 auto;
 }
 
+/* ---------- 読み取り結果（§8.1 ステージ3・4） ---------- */
+
+.co-fields {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 0.5rem 1rem;
+  margin: 1rem 0 0;
+  align-items: baseline;
+}
+
+.co-field-value {
+  margin: 0;
+  word-break: break-all;
+}
+
+/* 空欄と要確認は色だけで示さない。語でも示す。 */
+.co-field-value[data-review='yes'] {
+  color: #7a4b00;
+  font-weight: 700;
+}
+
+.co-review-mark {
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+@media (max-width: 26rem) {
+  .co-fields {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+
+  .co-field-value {
+    margin-bottom: 0.5rem;
+  }
+}
+
 @media (max-width: 26rem) {
   .co-status {
     grid-template-columns: 1fr;

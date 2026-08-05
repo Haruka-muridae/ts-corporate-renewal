@@ -100,6 +100,26 @@ export function isClientIdConfigured(clientId = GOOGLE_CLIENT_ID) {
 export const DRIVE_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 export const DRIVE_UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/drive/v3/files';
 export const SHEETS_ENDPOINT = 'https://sheets.googleapis.com/v4/spreadsheets';
+export const GEMINI_HOST = 'generativelanguage.googleapis.com';
+export const GEMINI_ENDPOINT_BASE = `https://${GEMINI_HOST}/v1beta/models`;
+
+/* ================================================================
+ * Gemini のモデル（§FR-11、§20 で確定）
+ * ================================================================
+ *
+ * フェーズ0で当初の主モデル gemini-3.5-flash-lite に 503（混雑）が続き、
+ * 入れ替えたところ同じキー・同じリクエストで6/6成功した（計画 §7-5-2）。
+ * **実測で通ったほうを主に置く。**
+ *
+ * 両モデルとも実在することは確認済み。したがってフォールバックが働く
+ * 場面は「**主モデルが廃止されたとき**」であり、混雑時の退避ではない。
+ * 退避の是非は §20 の要判断として残っている。
+ */
+export const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
+export const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+
+/* 出力の上限（§FR-11）。無料枠キーのクォータを無駄に減らさない。 */
+export const MAX_OUTPUT_TOKENS = 400;
 
 /* ================================================================
  * 保存構造（要件定義書 §FR-07）

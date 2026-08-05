@@ -860,8 +860,17 @@ try {
   check('guardPage() を通している', appSource.includes('guardPage'));
   check('画面の深さを 2 に設定している', appSource.includes('setScreenDepth(2)'));
   check(
-    '**キーは has() だけを見て、値を読み出していない**',
-    appSource.includes('KeyStore.has(PROVIDERS.gemini)') && !/KeyStore\.get\(/.test(appSource),
+    '前提の判別では has() だけを見る（値を読まない）',
+    /hasGeminiKey: keyStoreAvailable && KeyStore\.has\(PROVIDERS\.gemini\)/.test(appSource),
+  );
+  check(
+    '**キーの取り出しは1か所だけ（実際に Gemini を呼ぶ直前）**',
+    (appSource.match(/KeyStore\.get\(/g) ?? []).length === 1,
+    String((appSource.match(/KeyStore\.get\(/g) ?? []).length),
+  );
+  check(
+    '**取り出したキーを画面にもログにも出さない**',
+    !/textContent\s*=\s*apiKey/.test(appSource) && !/console\./.test(appSource),
   );
   check(
     'KeyStore へ書き込んでいない',
@@ -2225,13 +2234,367 @@ try {
   }
 
   /* ================================================================ */
+  section('正規化と事前抽出（extract.js / FR-09・FR-10）');
+
+  const extract = await import('../../public/production-app/card-ocr/extract.js');
+
+  {
+    check('全角英数を半角へ揃える（NFKC）', extract.normalizeText('ＡＢＣ１２３') === 'ABC123');
+    check('前後の空白を落とす', extract.normalizeText('  あ  \n  い  ') === 'あ\nい');
+    check('空行を落とす', extract.normalizeText('あ\n\n\nい') === 'あ\nい');
+    check(
+      '**重複行を落とす（表裏で同じ行が多い）**',
+      extract.normalizeText('あ\nい\nあ') === 'あ\nい',
+    );
+    check('連続する空白は1つへ', extract.normalizeText('あ   い') === 'あ い');
+    check('null でも壊れない', extract.normalizeText(null) === '');
+  }
+
+  {
+    /* 事前抽出。**形が決まっているものだけ。** */
+    const text = [
+      '株式会社サンプル商事',
+      '〒100-0001 東京都千代田区千代田1-1-1',
+      'TEL: 03-1234-5678  FAX: 03-1234-5679',
+      'MOBILE: 090-1234-5678',
+      'taro.mihon@example.com',
+      'https://example.com',
+    ].join('\n');
+
+    const found = extract.extractByPattern(text);
+
+    check('メールを拾う', found.email[0] === 'taro.mihon@example.com');
+    check('URLを拾う', found.url[0] === 'https://example.com');
+    check('郵便番号を拾う（〒は落とす）', found.postalCode[0] === '100-0001', found.postalCode.join(','));
+    check('固定電話を拾う', found.phone[0] === '03-1234-5678', found.phone.join(','));
+    check('FAX を拾う', found.fax[0] === '03-1234-5679', found.fax.join(','));
+    check('携帯を拾う', found.mobile[0] === '090-1234-5678', found.mobile.join(','));
+
+    check(
+      '**同じ番号を2つの種別へ入れない**',
+      found.phone.every((value) => !found.mobile.includes(value)),
+    );
+    check(
+      '会社名・氏名は拾わない（Gemini の担当）',
+      !('companyName' in found) && !('fullName' in found),
+    );
+  }
+
+  {
+    /* 番号の形が種別を決める。**ラベルより優先する。** */
+    check('090 は携帯', extract.isMobileNumber('090-1234-5678'));
+    check('080 は携帯', extract.isMobileNumber('080-1234-5678'));
+    check('070 は携帯', extract.isMobileNumber('07012345678'));
+    check('03 は携帯ではない', !extract.isMobileNumber('03-1234-5678'));
+    check('+81 90 も携帯として扱う', extract.isMobileNumber('+81-90-1234-5678'));
+    check('桁が足りなければ携帯ではない', !extract.isMobileNumber('090-1234'));
+
+    check('+81 を 0 に読み替える', extract.normalizePhoneDigits('+81-90-1234-5678') === '09012345678');
+    check('記号を落とす', extract.normalizePhoneDigits('(03) 1234-5678') === '0312345678');
+
+    const labeled = extract.extractByPattern('TEL: 090-1111-2222');
+    check(
+      '**「TEL」と書かれていても 090 は携帯にする**',
+      labeled.mobile[0] === '090-1111-2222' && labeled.phone.length === 0,
+      JSON.stringify(labeled),
+    );
+
+    {
+      /*
+       * **1行に TEL と FAX が並ぶ名刺は珍しくない。**
+       * 行に1つの種別を割り当てると、両方が同じ種別になる。
+       */
+      const oneLine = extract.extractByPattern('TEL: 03-1111-2222  FAX: 03-3333-4444');
+
+      check(
+        '**同じ行の TEL と FAX を取り違えない**',
+        oneLine.phone[0] === '03-1111-2222' && oneLine.fax[0] === '03-3333-4444',
+        JSON.stringify(oneLine),
+      );
+    }
+
+    check('FAX ラベルを読む', extract.labelKindOf('FAX: 03-1-1') === 'fax');
+    check('携帯ラベルを読む', extract.labelKindOf('携帯 090-1-1') === 'mobile');
+    check('ラベルが無ければ null', extract.labelKindOf('東京都千代田区') === null);
+  }
+
+  {
+    /* 数字の並びを拾いすぎない。 */
+    const found = extract.extractByPattern('登録番号 T1234567890123\n1-2-3 サンプルビル 5F');
+
+    check(
+      '**区切りの無い数字の並びを電話番号にしない**',
+      found.phone.length === 0 && found.mobile.length === 0,
+      JSON.stringify(found),
+    );
+  }
+
+  {
+    /* 上限に収める。**抽出済み項目を含む行を優先して残す。** */
+    const filler = Array.from({ length: 60 }, (_, i) => `どうでもよい行${i}`).join('\n');
+    const text = `${filler}\ntaro@example.com\n03-1234-5678`;
+
+    const short = extract.truncateForGemini(text, 200);
+
+    check('上限に収まる', short.length <= 200, String(short.length));
+    check(
+      '**メールの行を残す（頭から機械的に切らない）**',
+      short.includes('taro@example.com'),
+      short.slice(0, 80),
+    );
+    check('電話の行も残す', short.includes('03-1234-5678'));
+    check('元の並び順を保つ', short.indexOf('taro@example.com') < short.indexOf('03-1234-5678'));
+
+    check('上限以内ならそのまま', extract.truncateForGemini('短い', 200) === '短い');
+    check('上限の既定は2000（§FR-09）', extract.MAX_GEMINI_INPUT_LENGTH === 2000);
+  }
+
+  /* ================================================================ */
+  section('プロンプトと構造化出力（prompt.js / FR-12・FR-13）');
+
+  const prompt = await import('../../public/production-app/card-ocr/prompt.js');
+
+  {
+    check('版が PoC と違う', prompt.PROMPT_VERSION === 'card-ocr-2', prompt.PROMPT_VERSION);
+    check('スキーマの type は大文字', prompt.CARD_SCHEMA.type === 'OBJECT');
+    check(
+      '**小文字の type が残っていない（400 の原因）**',
+      !/"type"\s*:\s*"[a-z]/.test(JSON.stringify(prompt.CARD_SCHEMA)),
+    );
+    check('confidence を持たせていない', !('confidence' in prompt.CARD_SCHEMA.properties));
+
+    for (const field of ['fromBackFields', 'conflicts']) {
+      check(`v3.1 の ${field} がある`, prompt.CARD_SCHEMA.properties[field]?.type === 'ARRAY');
+      check(`${field} が必須項目に入っている`, prompt.CARD_SCHEMA.required.includes(field));
+    }
+
+    check(
+      '推測を禁じる指示が先頭にある',
+      prompt.SYSTEM_INSTRUCTION.includes('補わない') && prompt.SYSTEM_INSTRUCTION.includes('推測しない'),
+    );
+    check(
+      '行順が原稿と一致しない前提が入っている',
+      prompt.SYSTEM_INSTRUCTION.includes('行の順序は原稿と一致しない'),
+    );
+    check(
+      '**同じ番号を phone と mobile の両方に入れないよう指示している（課題3）**',
+      prompt.SYSTEM_INSTRUCTION.includes('両方に入れないこと'),
+    );
+    check(
+      '**日英併記は日本語を採るよう指示している（課題4）**',
+      prompt.SYSTEM_INSTRUCTION.includes('日本語のほうを採ること'),
+    );
+    check(
+      '表面優先の統合を指示している（v3.1）',
+      prompt.SYSTEM_INSTRUCTION.includes('表面の値を優先'),
+    );
+    check(
+      '**別表記を食い違いと呼ばないよう指示している**',
+      prompt.SYSTEM_INSTRUCTION.includes('食い違いではない'),
+    );
+    check(
+      '片面が空でも続けるよう指示している（FR-08 の10）',
+      prompt.SYSTEM_INSTRUCTION.includes('片面が空でも'),
+    );
+
+    const request = prompt.buildGeminiRequest('テスト');
+    check('履歴を持たせない（1名刺1リクエスト）', request.contents.length === 1);
+    check('JSON で返させる', request.generationConfig.responseMimeType === 'application/json');
+    check('温度は0（分類であって創作ではない）', request.generationConfig.temperature === 0);
+    check('出力上限は400トークン', request.generationConfig.maxOutputTokens === 400);
+  }
+
+  /* ================================================================ */
+  section('Gemini 呼び出し（gemini.js / FR-11）');
+
+  const gemini = await import('../../public/production-app/card-ocr/gemini.js');
+
+  const AI_OK = {
+    companyName: '株式会社サンプル商事',
+    fullName: '見本 太郎',
+    email: 'taro@example.com',
+    phone: '03-1234-5678',
+    uncertainFields: [],
+    fromBackFields: [],
+    conflicts: [],
+  };
+
+  function geminiResponse(body, status = 200) {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+    };
+  }
+
+  function okPayload(result) {
+    return { candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] } }] };
+  }
+
+  {
+    const calls = [];
+    const impl = async (url, options) => {
+      calls.push({ url: String(url), options });
+      return geminiResponse(okPayload(AI_OK));
+    };
+
+    const KEY = 'AIzaTESTKEY_not_a_real_key_0000000000';
+    const result = await gemini.classifyCardText('テキスト', { apiKey: KEY, fetchImpl: impl });
+
+    check('分類結果を返す', result.fullName === '見本 太郎');
+    check('1回だけ呼ぶ', calls.length === 1);
+    check('送信先は Gemini のみ', new URL(calls[0].url).host === gemini.GEMINI_HOST);
+    check('**キーはヘッダーで送る**', calls[0].options.headers['x-goog-api-key'] === KEY);
+    check('**キーが URL に出ない**', !calls[0].url.includes(KEY));
+    check('**キーが本文に出ない**', !String(calls[0].options.body).includes(KEY));
+    check('**画像を送らない**', !String(calls[0].options.body).includes('inlineData'));
+    check('主モデルを使う', calls[0].url.includes(gemini.DEFAULT_MODEL));
+  }
+
+  {
+    /* 必須項目の検査。v3.1 の2項目を含む。 */
+    for (const field of ['fromBackFields', 'conflicts']) {
+      const broken = { ...AI_OK };
+      delete broken[field];
+
+      let caught = null;
+      try { gemini.assertRequiredFields(broken); } catch (error) { caught = error; }
+
+      check(`${field} が無ければ AI-004`, caught?.code === gemini.GeminiErrorCode.MISSING_FIELDS);
+    }
+
+    let caught = null;
+    try {
+      gemini.assertRequiredFields({ ...AI_OK, fromBackFields: 'email' });
+    } catch (error) { caught = error; }
+
+    check('**配列でなければ弾く**', caught?.detail === 'fromBackFields_not_array', caught?.detail);
+  }
+
+  {
+    /* 404 のときだけフォールバック。429・503 では再試行しない。 */
+    const models = [];
+    const impl = async (url) => {
+      models.push(String(url));
+      return models.length === 1
+        ? geminiResponse({ error: { status: 'NOT_FOUND' } }, 404)
+        : geminiResponse(okPayload(AI_OK));
+    };
+
+    await gemini.classifyCardText('t', { apiKey: 'k', fetchImpl: impl });
+
+    check('404 でフォールバックする', models.length === 2);
+    check('2回目はフォールバックモデル', models[1].includes(gemini.FALLBACK_MODEL));
+
+    for (const status of [429, 503, 400]) {
+      const tried = [];
+      const failing = async (url) => {
+        tried.push(String(url));
+        return geminiResponse({ error: { status: 'X', message: 'y' } }, status);
+      };
+
+      let caught = null;
+      try {
+        await gemini.classifyCardText('t', { apiKey: 'k', fetchImpl: failing });
+      } catch (error) { caught = error; }
+
+      check(`**${status} では再試行しない**`, tried.length === 1, String(tried.length));
+      check(`${status} の detail に原因が入る`, String(caught?.detail).includes(String(status)));
+    }
+  }
+
+  /* ================================================================ */
+  section('突き合わせ（merge.js / FR-10・FR-14）');
+
+  const merge = await import('../../public/production-app/card-ocr/merge.js');
+
+  {
+    /* 空欄だけを埋める。**上書きしない。** */
+    const result = merge.mergeExtraction(
+      { ...AI_OK, email: '', url: '', postalCode: '' },
+      { email: ['found@example.com'], url: ['https://example.com'], postalCode: ['100-0001'] },
+    );
+
+    check('空欄を埋める', result.values.email === 'found@example.com');
+    check('埋めたことを記録する', result.patternFilled.includes('email'));
+
+    const kept = merge.mergeExtraction(
+      { ...AI_OK, email: 'ai@example.com' },
+      { email: ['pattern@example.com'] },
+    );
+
+    check('**Gemini の値を上書きしない**', kept.values.email === 'ai@example.com');
+    check('上書きしていないので記録もしない', !kept.patternFilled.includes('email'));
+  }
+
+  {
+    /* 課題3。**同じ番号が両方に入っていたら直す。** */
+    const both = merge.mergeExtraction(
+      { ...AI_OK, phone: '090-1234-5678', mobile: '090-1234-5678' },
+      {},
+    );
+
+    check('**重複した番号を phone から消す**', both.values.phone === '');
+    check('携帯側に残す', both.values.mobile === '090-1234-5678');
+    check('直したことを記録する', both.reclassified.length > 0);
+
+    const misplaced = merge.mergeExtraction({ ...AI_OK, phone: '090-1111-2222', mobile: '' }, {});
+    check('**携帯番号が phone にあれば mobile へ移す**', misplaced.values.mobile === '090-1111-2222');
+    check('phone は空になる', misplaced.values.phone === '');
+
+    const fixed = merge.mergeExtraction({ ...AI_OK, phone: '03-1234-5678', mobile: '03-1234-5678' }, {});
+    check('固定電話の重複は mobile 側を空ける', fixed.values.mobile === '' && fixed.values.phone === '03-1234-5678');
+
+    const normal = merge.mergeExtraction(
+      { ...AI_OK, phone: '03-1234-5678', mobile: '090-1234-5678' },
+      {},
+    );
+    check('正しく分かれていれば触らない', normal.values.phone === '03-1234-5678' && normal.values.mobile === '090-1234-5678');
+    check('直していなければ記録も空', normal.reclassified.length === 0);
+  }
+
+  {
+    /* 申告はそのまま通す。 */
+    const result = merge.mergeExtraction(
+      { ...AI_OK, uncertainFields: ['jobTitle'], fromBackFields: ['email'], conflicts: ['companyName'] },
+      {},
+    );
+
+    check('uncertainFields を通す', result.uncertainFields.join(',') === 'jobTitle');
+    check('fromBackFields を通す', result.fromBackFields.join(',') === 'email');
+    check('conflicts を通す', result.conflicts.join(',') === 'companyName');
+    check('配列でなければ空にする', merge.mergeExtraction({ conflicts: 'x' }, {}).conflicts.length === 0);
+
+    check(
+      '**要確認は重複を除く**',
+      merge.fieldsNeedingReview({ uncertainFields: ['a', 'b'], conflicts: ['b'] }).join(',') === 'a,b',
+    );
+  }
+
+  {
+    /* 台帳の項目だけを返す。余計な鍵を通さない。 */
+    const result = merge.mergeExtraction({ ...AI_OK, somethingElse: 'x' }, {});
+
+    check('VALUE_FIELDS だけを返す', !('somethingElse' in result.values));
+    check(
+      'すべての項目が文字列',
+      Object.values(result.values).every((value) => typeof value === 'string'),
+    );
+    check(
+      '正規表現が担当するのは形の決まった項目だけ',
+      !merge.PATTERN_FIELDS.includes('companyName') && !merge.PATTERN_FIELDS.includes('fullName'),
+    );
+  }
+
+  /* ================================================================ */
   section('ソース検査（守るべき制約）');
 
   const FILES = [
     'config.js', 'gis-loader.js', 'drive-auth.js', 'drive-api.js',
     'prerequisites.js', 'sanitize.js', 'hash.js', 'schema.js',
     'sheets.js', 'drive-storage.js', 'capture.js', 'capture-flow.js',
-    'drive-ocr.js', 'app.js',
+    'drive-ocr.js', 'extract.js', 'prompt.js', 'gemini.js', 'merge.js',
+    'app.js',
   ];
   const sources = [];
 
