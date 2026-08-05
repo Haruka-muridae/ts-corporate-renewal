@@ -75,7 +75,7 @@ setScreenDepth(2);
 const el = {};
 
 for (const id of [
-  'co-loading', 'co-content', 'co-status', 'co-notice',
+  'co-loading', 'co-content', 'co-status',
   'co-guidance', 'co-guidance-title', 'co-guidance-text',
   'co-login-link', 'co-portal-link', 'co-connect',
   'co-ready', 'co-disconnect', 'co-message',
@@ -136,52 +136,6 @@ const FIELD_LABELS = Object.freeze({
   email: 'メールアドレス',
   url: 'URL',
 });
-
-/* ---------- 「ご利用の前に」の開閉（§5.3・§10.1） ---------- */
-
-/*
- * 開閉の記憶。
- *
- * ==================================================================
- * これは §FR-21 に触れない
- * ==================================================================
- * §FR-21 が localStorage へ書くことを禁じているのは
- * 「**未登録の画像・抽出結果**」である。ここに入るのは
- * `'closed'` という4文字だけで、名刺の内容は一切含まない。
- *
- * 保存先のIDキャッシュ（STORAGE_KEYS）と同じ性質のもので、
- * 消えても困らない。消えれば「初回」に戻り、案内がもう一度開くだけ
- * である。**倒れる方向が安全な側**になっている。
- * ==================================================================
- */
-const NOTICE_STATE_KEY = 'tsam-card-ocr-notice-closed';
-
-function restoreNoticeState() {
-  try {
-    /*
-     * **記録が無ければ開いたまま。** HTML に open を付けてあるので、
-     * ここで何もしなければ初回は開いている（§10.1「初回利用時は
-     * 明示事項の案内を表示する」）。
-     */
-    if (globalThis.localStorage?.getItem(NOTICE_STATE_KEY) === 'closed') {
-      el['co-notice'].open = false;
-    }
-  } catch {
-    /* 保存領域が使えない環境では、毎回開く。案内は多いほうが安全。 */
-  }
-}
-
-function rememberNoticeState() {
-  try {
-    if (el['co-notice'].open) {
-      globalThis.localStorage?.removeItem(NOTICE_STATE_KEY);
-    } else {
-      globalThis.localStorage?.setItem(NOTICE_STATE_KEY, 'closed');
-    }
-  } catch {
-    /* 覚えられなくても開閉そのものは動く。次回また開くだけ。 */
-  }
-}
 
 /* ---------- 表示の道具（innerHTML を使わない） ---------- */
 
@@ -938,12 +892,6 @@ async function start() {
 
   signedIn = true;
 
-  /*
-   * 前に閉じていたら畳む。**開くほうは何もしない**（HTML で開いている）。
-   * 中身を出すより先に呼び、開いてから畳む動きを見せない。
-   */
-  restoreNoticeState();
-
   el['co-loading'].hidden = true;
   el['co-content'].hidden = false;
 
@@ -989,8 +937,6 @@ el['co-start'].addEventListener('click', () => { void readCard(); });
 el['co-register'].addEventListener('click', () => { void register(); });
 el['co-register-anyway'].addEventListener('click', () => { void register({ skipDuplicateCheck: true }); });
 el['co-next'].addEventListener('click', startNext);
-
-el['co-notice'].addEventListener('toggle', rememberNoticeState);
 
 el['co-duplicate-cancel'].addEventListener('click', () => {
   el['co-duplicate'].hidden = true;

@@ -832,39 +832,29 @@ try {
   );
 
   {
-    /* 「ご利用の前に」の折りたたみ（§5.3・§10.1）。 */
+    /*
+     * 「ご利用の前に」の折りたたみ（§5.3 の注記・§10.1）。
+     * **常時表示・既定は閉・任意で開。**
+     */
     check(
       '**ネイティブの <details> を使う（ARIA で作り直さない）**',
       /<details id="co-notice"[^>]*>/.test(htmlSource) && /<summary id="co-notice-title"/.test(htmlSource),
     );
     check(
-      '**初回は開いた状態（HTML に open がある）**',
-      /<details id="co-notice"[^>]*\sopen>/.test(htmlSource),
+      '**既定は閉（open を付けない）**',
+      !/<details id="co-notice"[^>]*\sopen[\s>]/.test(htmlSource),
     );
     check(
       '**閉じていても見出しは残る（summary は details の中）**',
       htmlSource.indexOf('<summary id="co-notice-title"') > htmlSource.indexOf('<details id="co-notice"'),
     );
     check(
-      '前に閉じていたときだけ畳む',
-      /getItem\(NOTICE_STATE_KEY\) === 'closed'/.test(appSource)
-        && /\['co-notice'\]\.open = false/.test(appSource),
+      '**開閉に JavaScript を使わない（最小実装）**',
+      !/co-notice/.test(appSource),
     );
     check(
-      '開閉を記憶する',
-      /addEventListener\('toggle', rememberNoticeState\)/.test(appSource),
-    );
-    check(
-      '**記憶するのは UI の状態だけ（名刺の内容を入れない）**',
-      /setItem\(NOTICE_STATE_KEY, 'closed'\)/.test(appSource),
-    );
-    check(
-      '開き直したら記録を消す（初回と同じ状態へ戻す）',
-      /removeItem\(NOTICE_STATE_KEY\)/.test(appSource),
-    );
-    check(
-      '保存領域が使えなくても壊れない',
-      /function restoreNoticeState\(\)[\s\S]{0,400}catch/.test(appSource),
+      '**開閉の状態を localStorage へ記録しない**',
+      !/notice/i.test(appSource) || !/setItem/.test(appSource.match(/notice[\s\S]{0,200}/i)?.[0] ?? ''),
     );
   }
   check(
