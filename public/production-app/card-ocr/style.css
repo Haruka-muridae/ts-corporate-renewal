@@ -37,6 +37,40 @@
   background: #f6f9fd;
 }
 
+/*
+ * 「ご利用の前に」の見出し。**閉じていても常に見える。**
+ *
+ * 開閉の印（▶）はブラウザが付ける。自前で作らないので、
+ * 利用者が使い慣れた見た目のままになる。
+ */
+.co-notice-summary {
+  /* 押しやすさ。指で触る前提（§10.2）。 */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* 閉じているときは、下の余白が要らない。 */
+.co-panel--notice:not([open]) {
+  padding-bottom: 0.5rem;
+}
+
+.co-panel--notice:not([open]) .co-notice-summary {
+  min-height: 40px;
+}
+
+.co-notice-summary:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
+.co-panel--notice[open] .co-notice-summary {
+  margin-bottom: 0.75rem;
+}
+
 /* 誘導は1画面に1つだけ。目立たせる。 */
 .co-panel--guidance {
   border-color: #c8a34a;
