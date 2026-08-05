@@ -2636,6 +2636,67 @@ try {
   }
 
   {
+    /* 会社名＋氏名の重複（FR-17）。**撮り直しても拾える。** */
+    const existing = [
+      { companyName: '株式会社サンプル商事', fullName: '見本 太郎' },
+      { companyName: 'Luminous', fullName: 'Hanako Rei' },
+    ];
+
+    check(
+      '**同じ会社の同じ氏名なら重複**',
+      register.findAttributeDuplicate(
+        { companyName: '株式会社サンプル商事', fullName: '見本 太郎' }, existing,
+      ).found,
+    );
+    check(
+      '種別を返す',
+      register.findAttributeDuplicate(
+        { companyName: '株式会社サンプル商事', fullName: '見本 太郎' }, existing,
+      ).kind === 'attribute',
+    );
+    check(
+      '空白の有無は無視する',
+      register.findAttributeDuplicate(
+        { companyName: '株式会社 サンプル商事', fullName: '見本太郎' }, existing,
+      ).found,
+    );
+    check(
+      '大文字小文字は無視する',
+      register.findAttributeDuplicate({ companyName: 'LUMINOUS', fullName: 'hanako rei' }, existing).found,
+    );
+    check(
+      '会社が違えば別人',
+      !register.findAttributeDuplicate({ companyName: '別会社', fullName: '見本 太郎' }, existing).found,
+    );
+    check(
+      '氏名が違えば別人',
+      !register.findAttributeDuplicate({ companyName: '株式会社サンプル商事', fullName: '別人' }, existing).found,
+    );
+
+    check(
+      '**会社名だけでは判定しない**',
+      !register.findAttributeDuplicate({ companyName: '株式会社サンプル商事', fullName: '' }, existing).found,
+    );
+    check(
+      '**氏名だけでは判定しない**',
+      !register.findAttributeDuplicate({ companyName: '', fullName: '見本 太郎' }, existing).found,
+    );
+    check(
+      '既存側も両方揃っていなければ比べない',
+      !register.findAttributeDuplicate(
+        { companyName: 'A', fullName: 'B' }, [{ companyName: 'A', fullName: '' }],
+      ).found,
+    );
+    check('既存が空でも壊れない', !register.findAttributeDuplicate({ companyName: 'A', fullName: 'B' }, []).found);
+    check('引数が無くても壊れない', !register.findAttributeDuplicate({}, []).found);
+
+    check(
+      '**「株式会社」と「(株)」は別物として扱う（寄せない）**',
+      !register.findAttributeDuplicate({ companyName: '(株)サンプル商事', fullName: '見本 太郎' }, existing).found,
+    );
+  }
+
+  {
     /* 記録用の値。 */
     const id = register.buildRecordId();
     check('record_id を作る', typeof id === 'string' && id.length >= 16, id);
@@ -2802,6 +2863,51 @@ try {
     });
 
     check('**「それでも登録する」を選べる**', forced.registered === true);
+  }
+
+  {
+    /*
+     * 会社名＋氏名が一致した場合。**画像は別物でも止める。**
+     * 同じ名刺を撮り直したときに二重登録させないための判定である。
+     */
+    const calls = [];
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      calls.push({ url: text, method: options.method ?? 'GET' });
+
+      if (text.includes('/values/')) {
+        const range = decodeURIComponent(text);
+        /* 会社名は12列目(L)、氏名は7列目(G)。列文字で見分ける。 */
+        if (/!C2:C$/.test(range)) {
+          return { ok: true, status: 200, json: async () => ({ values: [['株式会社サンプル商事']] }) };
+        }
+
+        if (/!F2:F$/.test(range)) {
+          return { ok: true, status: 200, json: async () => ({ values: [['見本 太郎']] }) };
+        }
+
+        return { ok: true, status: 200, json: async () => ({ values: [] }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ id: 'X' }) };
+    };
+
+    const result = await register.registerCard({
+      values: { companyName: '株式会社サンプル商事', fullName: '見本 太郎' },
+      /* 既存とは別の画像。ハッシュは一致しない。 */
+      frontBlob: new Blob(['まったく別の画像'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: impl,
+    });
+
+    check('**画像が違っても、会社名＋氏名が同じなら止める**', result.registered === false);
+    check('種別は attribute', result.duplicate.kind === 'attribute', String(result.duplicate.kind));
+    check(
+      '止めたときは画像を上げない',
+      !calls.some((c) => c.url.startsWith('https://www.googleapis.com/upload/')),
+    );
   }
 
   /* ================================================================ */

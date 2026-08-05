@@ -1,7 +1,7 @@
 /*
  * 確定保存（§FR-07・FR-19・§11.2、§8.1 ステージ5）。
  *
- *   1. 同一画像の重複を見る（最小限。ハッシュのみ）
+ *   1. 重複を見る（同一画像のハッシュ → 会社名＋氏名）
  *   2. 表面・裏面の画像を images/YYYY/MM へ上げる
  *   3. 台帳へ1行追記する
  *
@@ -36,13 +36,19 @@
 import { APP_VERSION, JPEG_MIME, TABS } from './config.js';
 import { uploadFile } from './drive-api.js';
 import { resolveMonthFolder } from './drive-storage.js';
-import { DATA_COLUMNS, buildDataRow, buildDuplicateKey, headersOf } from './schema.js';
+import {
+  DATA_COLUMNS,
+  buildDataRow,
+  buildDuplicateKey,
+  buildNameKey,
+  headersOf,
+} from './schema.js';
 import { appendRow, readColumn, spreadsheetUrl } from './sheets.js';
 import { buildImageFileName, yearMonthPath } from './capture.js';
 import { hashBothSides } from './hash.js';
 import { PROMPT_VERSION } from './prompt.js';
 
-/* ---------- 重複（最小限。§FR-06・FR-19） ---------- */
+/* ---------- 重複（§FR-06・FR-17・FR-19） ---------- */
 
 /*
  * 台帳の中に同じ画像のハッシュがあるか。
@@ -52,8 +58,8 @@ import { PROMPT_VERSION } from './prompt.js';
  * そのために、新しい2つのハッシュを既存の2列すべてと突き合わせる。
  *
  * ここで見るのは**同一ファイルの再送だけ**である。同じ名刺を撮り直した
- * 場合は別のハッシュになるので拾えない。属性による判定（FR-17）は
- * 後回しにした（今は最小限でよいという判断）。
+ * 場合は別のハッシュになるので拾えない。それは下の
+ * findAttributeDuplicate（会社名＋氏名）が受け持つ。
  */
 export function findHashDuplicate({ front, back }, existingHashes = []) {
   const known = new Set(existingHashes.filter((value) => typeof value === 'string' && value !== ''));
@@ -69,16 +75,59 @@ export function findHashDuplicate({ front, back }, existingHashes = []) {
   return { found: false, side: null };
 }
 
-/* 台帳のハッシュ2列を読む。列の位置は定義から求める。 */
-export async function readKnownHashes(spreadsheetId, options) {
-  const headers = headersOf(DATA_COLUMNS);
+/*
+ * 会社名と氏名が既に登録されているか（FR-17）。
+ *
+ * **同じ名刺を撮り直すとハッシュは変わる。** それでも同じ人の名刺なら
+ * 二重に登録したくない、という要望に応える判定である。
+ *
+ * **会社名と氏名の両方が埋まっているときだけ見る**（buildNameKey）。
+ * 片方だけで同一と判断すると、同姓の別会社や、社名しか読めなかった
+ * 名刺どうしを同じものと見なしてしまう。
+ *
+ * 一致は「大文字小文字と空白を無視した完全一致」だけである。
+ * 「株式会社」と「(株)」は別物として扱う。**表記の寄せ方を増やすほど、
+ * 別人を同一人物と判定する危険が増える**ためで、迷ったら拾わない側に置く。
+ */
+export function findAttributeDuplicate(candidate, existingPairs = []) {
+  const key = buildNameKey(candidate);
 
-  const columns = await Promise.all(
-    ['front_image_hash', 'back_image_hash']
-      .map((name) => readColumn(spreadsheetId, TABS.data, headers.indexOf(name), options)),
+  if (key === '') {
+    return { found: false, kind: null };
+  }
+
+  const known = new Set(
+    existingPairs
+      .map((pair) => buildNameKey(pair))
+      .filter((value) => value !== ''),
   );
 
-  return columns.flat();
+  return known.has(key)
+    ? { found: true, kind: 'attribute', side: null }
+    : { found: false, kind: null };
+}
+
+/* 台帳から、重複判定に使う列を読む。列の位置は定義から求める。 */
+export async function readKnownKeys(spreadsheetId, options) {
+  const headers = headersOf(DATA_COLUMNS);
+  const at = (name) => readColumn(spreadsheetId, TABS.data, headers.indexOf(name), options);
+
+  const [frontHashes, backHashes, companies, names] = await Promise.all([
+    at('front_image_hash'),
+    at('back_image_hash'),
+    at('会社名'),
+    at('氏名'),
+  ]);
+
+  /* 行の並びは同じなので、位置で組にできる。 */
+  const rowCount = Math.max(companies.length, names.length);
+  const pairs = [];
+
+  for (let index = 0; index < rowCount; index += 1) {
+    pairs.push({ companyName: companies[index] ?? '', fullName: names[index] ?? '' });
+  }
+
+  return { hashes: [...frontHashes, ...backHashes], pairs };
 }
 
 /* ---------- 1件ぶんの値 ---------- */
@@ -188,11 +237,22 @@ export async function registerCard({
   const hashes = await hashBothSides({ front: frontBlob, back: backBlob });
 
   if (!skipDuplicateCheck) {
-    const known = await readKnownHashes(storage.spreadsheetId, options);
-    const duplicate = findHashDuplicate(hashes, known);
+    const known = await readKnownKeys(storage.spreadsheetId, options);
 
-    if (duplicate.found) {
-      return { registered: false, duplicate, recordId: null };
+    /*
+     * **画像の一致を先に見る。** 同じファイルの再送は確実に重複であり、
+     * 会社名・氏名の一致より根拠が強い。案内の文言も変えられる。
+     */
+    const byHash = findHashDuplicate(hashes, known.hashes);
+
+    if (byHash.found) {
+      return { registered: false, duplicate: { ...byHash, kind: 'image' }, recordId: null };
+    }
+
+    const byAttribute = findAttributeDuplicate(values, known.pairs);
+
+    if (byAttribute.found) {
+      return { registered: false, duplicate: byAttribute, recordId: null };
     }
   }
 

@@ -88,7 +88,8 @@ for (const id of [
   'co-ocr', 'co-ocr-state', 'co-ocr-sides', 'co-ocr-note',
   'co-fields', 'co-fields-state', 'co-fields-list', 'co-fields-notes',
   'co-register', 'co-saved', 'co-saved-list', 'co-saved-sheet', 'co-next',
-  'co-duplicate', 'co-duplicate-text', 'co-register-anyway', 'co-duplicate-cancel',
+  'co-duplicate', 'co-duplicate-title', 'co-duplicate-text',
+  'co-register-anyway', 'co-duplicate-cancel',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -658,6 +659,18 @@ function renderSaved(result) {
   el['co-saved-sheet'].href = result.sheetUrl;
 }
 
+/* 重複の理由を、利用者が次に何をすればよいか分かる言葉にする。 */
+function describeDuplicate(duplicate) {
+  if (duplicate.kind === 'attribute') {
+    return '会社名と氏名が、すでに登録されている行と同じです。'
+      + '名刺を作り直された場合や、同姓同名の別の方の場合は、そのまま登録して構いません。';
+  }
+
+  return duplicate.side === 'back'
+    ? '裏面の画像が、すでに登録されている画像と同じです。表と裏を取り違えていないかご確認ください。'
+    : '表面の画像が、すでに登録されている画像と同じです。同じ写真をもう一度登録しようとしています。';
+}
+
 async function register({ skipDuplicateCheck = false } = {}) {
   if (registering || !merged || !storage?.writable) {
     return;
@@ -681,10 +694,18 @@ async function register({ skipDuplicateCheck = false } = {}) {
     });
 
     if (!result.registered) {
-      /* 止めるのではなく、選ばせる（§FR-19。DUP-001）。 */
-      el['co-duplicate-text'].textContent = result.duplicate.side === 'back'
-        ? '裏面の画像が、すでに登録されている画像と同じです。'
-        : '表面の画像が、すでに登録されている画像と同じです。';
+      /*
+       * 止めるのではなく、選ばせる（§FR-19。DUP-001 / DUP-002）。
+       *
+       * **理由を分けて出す。** 「同じ画像」と「同じ会社の同じ人」では、
+       * 利用者が次に取る行動が違う。前者は撮り直しの取り違え、
+       * 後者は名刺の作り直しや部署異動でありうる。
+       */
+      el['co-duplicate-title'].textContent = result.duplicate.kind === 'attribute'
+        ? '同じ会社の同じ方が、すでに登録されています'
+        : '同じ画像が、すでに登録されています';
+
+      el['co-duplicate-text'].textContent = describeDuplicate(result.duplicate);
       el['co-duplicate'].hidden = false;
       showMessage('');
       return;
