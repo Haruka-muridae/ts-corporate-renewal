@@ -229,7 +229,7 @@ export function extractJson(payload) {
 export function assertRequiredFields(result) {
   const required = [
     'companyName', 'fullName', 'email', 'phone',
-    'uncertainFields', 'fromBackFields', 'conflicts',
+    'otherInformation', 'uncertainFields', 'fromBackFields', 'conflicts',
   ];
 
   const missing = required.filter((key) => !(key in result));
@@ -238,7 +238,7 @@ export function assertRequiredFields(result) {
     throw new GeminiError(GeminiErrorCode.MISSING_FIELDS, 0, missing.join(','));
   }
 
-  for (const key of ['uncertainFields', 'fromBackFields', 'conflicts']) {
+  for (const key of ['otherInformation', 'uncertainFields', 'fromBackFields', 'conflicts']) {
     if (!Array.isArray(result[key])) {
       throw new GeminiError(GeminiErrorCode.MISSING_FIELDS, 0, `${key}_not_array`);
     }

@@ -38,7 +38,17 @@ export const PATTERN_FIELDS = Object.freeze([
 export const VALUE_FIELDS = Object.freeze([
   'companyName', 'departmentName', 'jobTitle', 'fullName', 'fullNameKana',
   'postalCode', 'address', 'phone', 'mobile', 'fax', 'email', 'url',
+  /* v3.5: どの項目にも入らなかった読み取り内容。 */
+  'otherInformation',
 ]);
+
+/*
+ * 複数行になりうる項目（画面では textarea、台帳では改行入りのセル）。
+ *
+ * Gemini は配列で返す。**つなぐ側をこちらに寄せる**ことで、
+ * 画面・台帳・編集後の読み戻しが同じ形（改行区切りの文字列）で揃う。
+ */
+export const MULTILINE_FIELDS = Object.freeze(['otherInformation']);
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -124,6 +134,19 @@ export function mergeExtraction(aiResult = {}, patterns = {}) {
   const values = {};
 
   for (const field of VALUE_FIELDS) {
+    /*
+     * 配列で返る項目は改行でつなぐ。
+     * **空の要素は落とす。** モデルが空文字を混ぜることがあり、
+     * そのままだと台帳のセルに空行が並ぶ。
+     */
+    if (MULTILINE_FIELDS.includes(field)) {
+      values[field] = list(aiResult[field])
+        .map((item) => item.trim())
+        .filter((item) => item !== '')
+        .join('\n');
+      continue;
+    }
+
     values[field] = text(aiResult[field]);
   }
 

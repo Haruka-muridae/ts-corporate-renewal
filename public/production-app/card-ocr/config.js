@@ -118,8 +118,14 @@ export const GEMINI_ENDPOINT_BASE = `https://${GEMINI_HOST}/v1beta/models`;
 export const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 export const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 
-/* 出力の上限（§FR-11）。無料枠キーのクォータを無駄に減らさない。 */
-export const MAX_OUTPUT_TOKENS = 400;
+/*
+ * 出力の上限（§FR-11）。無料枠キーのクォータを無駄に減らさない。
+ *
+ * v3.5 で 400 → 700 にした。otherInformation（どの項目にも入らなかった
+ * 読み取り内容）が加わり、400 では途中で切れて JSON が壊れうるため。
+ * **切れると AI-003 になり、その名刺は登録できない。**
+ */
+export const MAX_OUTPUT_TOKENS = 700;
 
 /* ================================================================
  * 保存構造（要件定義書 §FR-07）
@@ -154,7 +160,7 @@ export const TABS = Object.freeze({
  * **列の構成を変えたら上げること。** 行を見たときに、どの構成で
  * 書かれたのかが分かるようにするための値である。
  */
-export const APP_VERSION = 'card-ocr-1.0';
+export const APP_VERSION = 'card-ocr-1.1';
 
 /* ================================================================
  * キャッシュの保存キー（localStorage）

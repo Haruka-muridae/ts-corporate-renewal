@@ -53,7 +53,12 @@ import {
 import { classifyCardText, describeGeminiError } from './gemini.js';
 import { registerCard } from './register.js';
 import { extractByPattern, prepareForGemini } from './extract.js';
-import { VALUE_FIELDS, fieldsNeedingReview, mergeExtraction } from './merge.js';
+import {
+  MULTILINE_FIELDS,
+  VALUE_FIELDS,
+  fieldsNeedingReview,
+  mergeExtraction,
+} from './merge.js';
 
 import { describeCaptureError, shrinkToJpeg } from './capture.js';
 import {
@@ -137,6 +142,7 @@ const FIELD_LABELS = Object.freeze({
   fax: 'FAX',
   email: 'メールアドレス',
   url: 'URL',
+  otherInformation: 'その他（どの項目にも入らなかった内容）',
 });
 
 /* ---------- 「準備」の折りたたみ ---------- */
@@ -620,11 +626,22 @@ function renderFields() {
     /*
      * **入力欄にする。** 読み取りは必ず外すので、直せない画面は使えない
      * （§FR-15）。保存されるのはここに見えている値である。
+     *
+     * 複数行になりうる項目（その他）は textarea にする。1行の input だと
+     * **入っている内容の一部しか見えず、消してしまいやすい。**
      */
-    const input = document.createElement('input');
+    const multiline = MULTILINE_FIELDS.includes(field);
+    const input = document.createElement(multiline ? 'textarea' : 'input');
+
     input.id = `co-input-${field}`;
     input.className = 'co-field-input';
-    input.type = 'text';
+
+    if (multiline) {
+      input.rows = 4;
+    } else {
+      input.type = 'text';
+    }
+
     input.value = merged.values[field] ?? '';
     input.dataset.field = field;
     input.dataset.review = review.has(field) ? 'yes' : 'no';

@@ -11,7 +11,7 @@
  *   - **両面に対応した**（fromBackFields / conflicts、表面優先の統合）
  *   - **同じ番号を phone と mobile の両方へ入れない**よう明記（課題3）
  *   - **日英併記は日本語を採る**よう明記（課題4）
- *   - 版を card-ocr-2 にした
+ *   - 版を card-ocr-3 にした（v3.5 で otherInformation を追加）
  * ==================================================================
  */
 
@@ -19,9 +19,12 @@
  * プロンプトの版。**台帳の prompt_version 列に入る**（§11.2）。
  *
  * 変えたら必ず上げること。あとから「この行はどの指示で作られたのか」を
- * たどれなくなる。PoC が poc-1 で、課題3・4 を直したこれが 2 にあたる。
+ * たどれなくなる。PoC が poc-1、課題3・4 を直したものが 2、
+ * otherInformation を足したこれが 3 にあたる。
  */
-export const PROMPT_VERSION = 'card-ocr-2';
+import { MAX_OUTPUT_TOKENS } from './config.js';
+
+export const PROMPT_VERSION = 'card-ocr-3';
 
 /*
  * 構造化出力の定義。
@@ -49,6 +52,14 @@ export const CARD_SCHEMA = Object.freeze({
     fax: { type: 'STRING' },
     email: { type: 'STRING' },
     url: { type: 'STRING' },
+    /*
+     * v3.5: どの項目にも入らなかった読み取り内容の受け皿。
+     *
+     * **配列で受ける。** 1つの文字列で返させると、モデルが勝手に
+     * 順番や区切りを決めることになる。台帳や画面へ出すときに
+     * 改行でつなぐのは、こちら側の仕事にする（merge.js）。
+     */
+    otherInformation: { type: 'ARRAY', items: { type: 'STRING' } },
     uncertainFields: { type: 'ARRAY', items: { type: 'STRING' } },
     /* v3.1: 裏面から採った項目名。台帳の back_filled_fields に入る。 */
     fromBackFields: { type: 'ARRAY', items: { type: 'STRING' } },
@@ -60,6 +71,7 @@ export const CARD_SCHEMA = Object.freeze({
     'fullName',
     'email',
     'phone',
+    'otherInformation',
     'uncertainFields',
     'fromBackFields',
     'conflicts',
@@ -116,16 +128,36 @@ export const SYSTEM_INSTRUCTION = [
   '8. 装飾的な表記と正式名称が両方ある場合、**正式名称を採ること。**',
   '   例: ロゴの英字表記より、法人格を含む社名を優先する。',
   '',
+  /*
+   * v3.5。読み取れたのに行き先が無い内容を捨てさせない。
+   * 「該当が無ければ空にする」（指示1）と衝突しないよう、
+   * **otherInformation は例外だと明記する。**
+   */
+  '9. **どの項目にも該当しない読み取り内容は、otherInformation へ入れること。**',
+  '   捨てないこと。例: 保有資格、2つ目以降の肩書、SNSのIDやアカウント名、',
+  '   標語やキャッチコピー、事業内容の記載、営業時間、支店名。',
+  '   - **1つの内容につき1要素**にすること。まとめて1つの文字列にしないこと。',
+  '   - 他の項目へ入れた内容を、重ねて入れないこと。',
+  '   - 長い文章はそのまま入れること。要約も省略もしないこと。',
+  '   - 該当が無ければ空配列にすること。',
+  '',
   '両面の名刺について:',
-  '9. 入力に「【表面】」「【裏面】」の見出しがある場合、両面ぶんが入っている。',
-  '   **表面の値を優先すること。** 裏面は、表面で空になった項目を',
-  '   埋めるためだけに使うこと。',
-  '10. 裏面から採った項目名を fromBackFields へ入れること。',
+  '10. 入力に「【表面】」「【裏面】」の見出しがある場合、両面ぶんが入っている。',
+  '    **表面の値を優先すること。** 裏面は、表面で空になった項目を',
+  '    埋めるためだけに使うこと。',
+  '11. 裏面から採った項目名を fromBackFields へ入れること。',
   '    表面だけで決まった項目は入れないこと。',
-  '11. 表面と裏面で値が食い違った項目名を conflicts へ入れること。',
+  '12. 表面と裏面で値が食い違った項目名を conflicts へ入れること。',
   '    **同じ内容の別表記（日本語と英語、旧字と新字）は食い違いではない。**',
   '    食い違いが無ければ空配列にすること。',
-  '12. 片面が空でも、もう片面に文字があれば処理を続けること。',
+  '13. 片面が空でも、もう片面に文字があれば処理を続けること。',
+  /*
+   * otherInformation だけは「表面優先」の対象外。
+   * 上書きの対象ではなく、集めるものだからである。
+   */
+  '14. **otherInformation は表面優先の対象外。** 表面と裏面の両方から',
+  '    集めること。裏面にしか無い内容（事業内容、地図の説明、資格など）を',
+  '    落とさないこと。同じ内容が両面にあるときは1つにまとめること。',
 ].join('\n');
 
 /*
@@ -136,9 +168,12 @@ export const SYSTEM_INSTRUCTION = [
  * 「株式会社サンプル商事」と「Sample Trading Co., Ltd.」が別の値として
  * 競合する。1回で両方を見せれば、同じ会社の別表記だと判断できる。
  *
- * 出力上限は既定400トークン。無料枠キーのクォータを無駄に減らさないため。
+ * 出力上限は config.js の MAX_OUTPUT_TOKENS。無料枠キーのクォータを
+ * 無駄に減らさないため小さく取るが、**足りないと JSON が途中で切れて
+ * その名刺は登録できなくなる**（AI-003）。v3.5 で otherInformation を
+ * 足したぶん引き上げてある。
  */
-export function buildGeminiRequest(text, { maxOutputTokens = 400 } = {}) {
+export function buildGeminiRequest(text, { maxOutputTokens = MAX_OUTPUT_TOKENS } = {}) {
   return {
     systemInstruction: {
       parts: [{ text: SYSTEM_INSTRUCTION }],
