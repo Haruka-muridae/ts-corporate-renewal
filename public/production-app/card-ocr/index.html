@@ -80,7 +80,26 @@
         見出しは閉じていても常に見えるので、いつでも開ける。
         ==================================================================
       -->
-      <details id="co-notice" class="co-panel co-panel--notice">
+      <!--
+        ==================================================================
+        親アコーディオン「準備」
+        ==================================================================
+        ご利用の前に／準備の状況／保存先 をまとめる。
+        **すべて正常なら親ごと畳む。** 準備が済んだ利用者が開いたとき、
+        最初に見えるのが撮影の欄になるようにするため。
+
+        **`open` を最初から付けてある。** JavaScript が動く前は開いており、
+        畳むのは「すべて正常」と分かったときだけ（app.js）。逆にすると、
+        JS が失敗したときに準備の状態が見えないまま残る。
+
+        **誘導（co-guidance）はこの中に入れない。** 畳まれて気づかない、
+        を作らないため、親の外に置いて常に見えるようにしてある。
+        ==================================================================
+      -->
+      <details id="co-prep" class="co-panel co-prep" open>
+        <summary id="co-prep-summary" class="co-panel-title co-prep-summary">準備</summary>
+
+      <details id="co-notice" class="co-panel co-sub co-panel--notice">
         <summary id="co-notice-title" class="co-notice-summary">ご利用の前に</summary>
         <ul class="co-notice-list">
           <li>名刺データと画像は<strong>あなたのGoogleドライブにのみ</strong>保存されます。当社は受信も保管も閲覧もしません。</li>
@@ -93,10 +112,36 @@
       </details>
 
       <!-- 前提の一覧（SC-00）。誘導とは別に、3つとも状態を見せる。 -->
-      <section class="co-panel" aria-labelledby="co-status-title">
-        <h2 id="co-status-title" class="co-panel-title">準備の状況</h2>
+      <details id="co-status-panel" class="co-panel co-sub" open>
+        <summary id="co-status-summary" class="co-sub-summary">準備の状況</summary>
         <dl id="co-status" class="co-status"></dl>
-      </section>
+      </details>
+
+      <!-- 保存先の用意（§8.1 ステージ0）。連携後にだけ出す。 -->
+      <details id="co-storage" class="co-panel co-sub" aria-live="polite" open hidden>
+        <summary id="co-storage-summary" class="co-sub-summary">保存先</summary>
+
+        <dl class="co-status">
+          <dt class="co-status-label">マイドライブ／TSAM AI／名刺データ</dt>
+          <dd id="co-storage-state" class="co-status-value" data-ok="pending">確認しています…</dd>
+        </dl>
+
+        <ul id="co-storage-notices" class="co-notice-list" hidden></ul>
+
+        <div class="co-actions">
+          <a id="co-sheet-link" class="auth-button auth-button--ghost"
+             href="#" target="_blank" rel="noopener noreferrer" hidden>名刺管理シートを開く</a>
+        </div>
+      </details>
+
+      <!-- 準備が整ったときだけ出す。 -->
+      <div id="co-ready" class="co-panel co-sub" hidden>
+        <p class="co-guidance-text">Googleドライブと連携しています。</p>
+        <button id="co-disconnect" type="button" class="auth-button auth-button--ghost">連携を解除する</button>
+      </div>
+
+      </details>
+      <!-- ／親アコーディオン「準備」ここまで -->
 
       <!--
         誘導。**該当するものだけを1つ出す**（要件定義書 §10.1）。

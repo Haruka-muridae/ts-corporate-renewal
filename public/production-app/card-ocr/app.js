@@ -76,6 +76,8 @@ const el = {};
 
 for (const id of [
   'co-loading', 'co-content', 'co-status',
+  'co-prep', 'co-prep-summary', 'co-status-panel', 'co-status-summary',
+  'co-storage-summary',
   'co-guidance', 'co-guidance-title', 'co-guidance-text',
   'co-login-link', 'co-portal-link', 'co-connect',
   'co-ready', 'co-disconnect', 'co-message',
@@ -137,6 +139,66 @@ const FIELD_LABELS = Object.freeze({
   url: 'URL',
 });
 
+/* ---------- 「準備」の折りたたみ ---------- */
+
+/*
+ * ==================================================================
+ * 畳むのは「すべて正常」と分かったときだけ
+ * ==================================================================
+ * 準備の状況・保存先は、**問題があるときにこそ見えていないと困る**。
+ * そこで既定を「開く」にし、正常だと確かめられた場合だけ畳む。
+ *
+ * この向きにしておくと、判定を書き忘れた経路や、JavaScript が途中で
+ * 落ちた場合でも、**畳まれたまま残ることがない。**
+ * 「畳まれていて気づかない」を作らないための取り決めである。
+ *
+ * 誘導（co-guidance）は親の外に置いてあるので、ここでは触らない。
+ * ==================================================================
+ */
+function setPanelOpen(id, open) {
+  el[id].open = open;
+}
+
+/* 見出しに状態を添える。閉じていても何が起きているか分かるように。 */
+function setSummary(id, base, detail) {
+  el[id].textContent = detail ? `${base} — ${detail}` : base;
+}
+
+/*
+ * 3つの前提の見た目を決める。
+ *
+ * すべて完了なら畳み、1つでも欠けていれば開く（SC-00 の動作は変えない。
+ * 誘導そのものは render() が親の外へ出す）。
+ */
+function applyStatusPanel(allReady) {
+  setSummary('co-status-summary', '準備の状況', allReady ? 'すべて完了' : '未完了があります');
+  setPanelOpen('co-status-panel', !allReady);
+}
+
+/*
+ * 保存先の見た目を決める。
+ *
+ * **異常のときは必ず開く。** 作成直後も開く（初めて作られたことは
+ * 知らせる価値がある。§5.3 の最後の項）。
+ */
+function applyStoragePanel({ label, ok, hasNotices }) {
+  setSummary('co-storage-summary', '保存先', label);
+  setPanelOpen('co-storage', !ok || hasNotices);
+}
+
+/*
+ * 親をどうするか。
+ *
+ * **中のどれかが開いていれば、親も開く。** 中で警告を出しているのに
+ * 親が畳まれていては意味がない。
+ */
+function applyPrepPanel() {
+  const anyOpen = el['co-status-panel'].open || (!el['co-storage'].hidden && el['co-storage'].open);
+
+  setSummary('co-prep-summary', '準備', anyOpen ? '確認が必要です' : 'すべて完了');
+  setPanelOpen('co-prep', anyOpen);
+}
+
 /* ---------- 表示の道具（innerHTML を使わない） ---------- */
 
 function showMessage(text, kind = 'info') {
@@ -197,9 +259,12 @@ function render() {
   el['co-portal-link'].hidden = true;
   el['co-connect'].hidden = true;
 
+  applyStatusPanel(state === Prerequisite.READY);
+
   if (state === Prerequisite.READY) {
     el['co-guidance'].hidden = true;
     el['co-ready'].hidden = false;
+    applyPrepPanel();
     return state;
   }
 
@@ -207,6 +272,12 @@ function render() {
   storage = null;
   el['co-storage'].hidden = true;
   el['co-ready'].hidden = true;
+
+  /*
+   * **前提が欠けたら親を開く。** トークンが切れた場面がここに当たる。
+   * 誘導は親の外に出るが、状況の一覧も一緒に見せる。
+   */
+  applyPrepPanel();
   el['co-guidance'].hidden = false;
   el['co-guidance-title'].textContent = described.title;
   el['co-guidance-text'].textContent = described.text;
@@ -282,6 +353,10 @@ async function prepareStorage() {
   el['co-sheet-link'].hidden = true;
   renderNotices([]);
 
+  /* 確認中は開いておく。終わってから畳むか決める。 */
+  applyStoragePanel({ label: '確認しています…', ok: false, hasNotices: false });
+  applyPrepPanel();
+
   try {
     storage = await ensureStorage({ token: getCachedAccessToken() });
 
@@ -291,13 +366,23 @@ async function prepareStorage() {
       el['co-storage-state'].textContent = '書き込みを停止しています';
       el['co-storage-state'].dataset.ok = 'no';
       el['co-capture'].hidden = true;
+
+      /* **異常。開いたままにする。** */
+      applyStoragePanel({ label: '書き込みを停止しています', ok: false, hasNotices: true });
+      applyPrepPanel();
       return;
     }
 
-    el['co-storage-state'].textContent = storage.steps.spreadsheet === 'created'
-      ? '作成しました'
-      : '確認しました';
+    const label = storage.steps.spreadsheet === 'created' ? '作成しました' : '確認しました';
+
+    el['co-storage-state'].textContent = label;
     el['co-storage-state'].dataset.ok = 'yes';
+
+    /*
+     * 作成・作り直し・タブの補修などが起きた回は開く（§5.3 の最後の項）。
+     * **何も起きていない回だけ畳む。**
+     */
+    applyStoragePanel({ label, ok: true, hasNotices: storage.notices.length > 0 });
 
     el['co-sheet-link'].href = spreadsheetUrl(storage.spreadsheetId);
     el['co-sheet-link'].hidden = false;
@@ -313,10 +398,19 @@ async function prepareStorage() {
     el['co-storage-state'].textContent = '確認できませんでした';
     el['co-storage-state'].dataset.ok = 'no';
 
+    /* **失敗。開いたままにする。** */
+    applyStoragePanel({ label: '確認できませんでした', ok: false, hasNotices: true });
+
     const described = describeDriveError(error);
     showMessage(`${described.text}（${described.errorCode}）`, 'error');
   } finally {
     provisioning = false;
+
+    /*
+     * **最後に必ず親を決め直す。** どの経路を通っても、中の状態と
+     * 親の開閉が食い違わないようにする。
+     */
+    applyPrepPanel();
   }
 }
 
