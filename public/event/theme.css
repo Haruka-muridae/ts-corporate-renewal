@@ -2,7 +2,7 @@
  * 申込フロー（/event/apply/ 以降）専用のテーマ上書き。
  *
  * 静的ページ（/event/ と /event/legal.html）のデザイン刷新に合わせて、
- * クリーム地 × 深緑 × テラコッタ・明朝見出しのトーンへ揃える。
+ * 白地 × 緑 × 水色（/potenitas/ と同じ配色）・明朝見出しのトーンへ揃える。
  *
  * 読み込みは app/event/apply/layout.tsx のみ。
  * 管理画面（/event/admin/ 配下）には読み込ませない。業務ツールのため対象外。
@@ -19,28 +19,28 @@
 :root {
   /* ---- ベースカラー（public/css/style.css の :root を上書き） ---- */
 
-  /* メイン色。ネイビー → 深緑。変数名は navy のまま（既存CSSの参照を壊さないため）。 */
-  --color-navy: #1d3a2f;        /* #0f2747 → #1d3a2f */
-  --color-navy-dark: #152b23;   /* #091a30 → #152b23 */
-  --color-navy-light: #3d5a4c;  /* #29496f → #3d5a4c（見出し補助・番号・トグル文言に使われる中間色） */
+  /* メイン色。ネイビー → 緑（/potenitas/ の POTEN と同じ）。変数名は navy のまま（既存CSSの参照を壊さないため）。 */
+  --color-navy: #166534;        /* #0f2747 → #166534 */
+  --color-navy-dark: #14532d;   /* #091a30 → #14532d */
+  --color-navy-light: #15803d;  /* #29496f → #15803d（見出し補助・番号・トグル文言に使われる中間色） */
 
-  /* アクセント。ゴールド → テラコッタ。 */
-  --color-gold: #b05a3c;        /* #c99a2e → #b05a3c */
-  --color-gold-dark: #8f4830;   /* #a97816 → #8f4830（フォーカスリング・ホバー） */
-  --color-gold-text: #8f4830;   /* #7f5b14 → #8f4830（薄地に載る文字色。#b05a3c より暗くしてコントラストを確保） */
-  --color-gold-light: #e0c3b4;  /* #e7d29c → #e0c3b4（罫線・タグ枠に使う淡いテラコッタ） */
+  /* アクセント。ゴールド → 水色（/potenitas/ の ITAS と同じ）。 */
+  --color-gold: #0284c7;        /* #c99a2e → #0284c7 */
+  --color-gold-dark: #0369a1;   /* #a97816 → #0369a1（フォーカスリング・ホバー） */
+  --color-gold-text: #0369a1;   /* #7f5b14 → #0369a1（薄地に載る文字色。#38bdf8 より暗くしてコントラストを確保） */
+  --color-gold-light: #bae6fd;  /* #e7d29c → #bae6fd（罫線・タグ枠に使う淡い水色） */
 
-  /* 地色。 */
-  --color-white: #fffdf8;       /* #ffffff → #fffdf8（カード地・入力欄地・濃色上の文字色） */
-  --color-off-white: #f7f4ec;   /* #f8f7f3 → #f7f4ec（ページ地・ヒーロー地） */
+  /* 地色。すべて白で統一。カード・入力欄は罫線と影で区別する。 */
+  --color-white: #ffffff;       /* カード地・入力欄地・濃色上の文字色 */
+  --color-off-white: #ffffff;   /* #f8f7f3 → #ffffff（ページ地・ヒーロー地） */
 
   /* 文字色。 */
-  --color-text: #26332c;        /* #20242a → #26332c */
-  --color-text-muted: #5a655e;  /* #6b7078 → #5a655e */
+  --color-text: #1e293b;        /* #20242a → #1e293b */
+  --color-text-muted: #64748b;  /* #6b7078 → #64748b */
 
   /* 罫線。 */
-  --color-border: #e4ddcd;         /* #ddd8cc → #e4ddcd */
-  --color-border-strong: #cfc6b2;  /* #c8c1b1 → #cfc6b2 */
+  --color-border: #e2e8f0;         /* #ddd8cc → #e2e8f0 */
+  --color-border-strong: #cbd5e1;  /* #c8c1b1 → #cbd5e1 */
 
   /*
    * --c-main / --c-accent / --c-bg などのレガシー別名は
@@ -59,13 +59,11 @@
 }
 
 /*
- * ページ地をクリームにする。
- * style.css の body は background-color: var(--c-bg)（= --color-white = カード地）のため、
- * 変数の付け替えだけでは「ページ地 = カード地」になり、入力欄やカードが地に埋もれる。
- * 静的ページと同じ「クリーム地の上に生成りのカード」に揃えるため、ここだけ地色を差し替える。
+ * ページ地。静的ページに合わせて全面白。
+ * カード・入力欄は背景色ではなく罫線（--color-border）と影で区別する。
  */
 body {
-  background-color: var(--color-off-white);  /* var(--c-bg)（#ffffff相当） → #f7f4ec */
+  background-color: var(--color-off-white);  /* = #ffffff */
 }
 
 /*
@@ -120,30 +118,30 @@ h3 {
  * 変数の付け替えでは追従しないため、この2箇所だけ上書きする。
  */
 .site-header {
-  border-bottom-color: var(--color-border);            /* rgba(201,154,46,.48) → #e4ddcd */
-  background-color: var(--color-off-white);            /* rgba(255,255,255,.96) → #f7f4ec */
+  border-bottom-color: var(--color-border);            /* rgba(201,154,46,.48) → #e2e8f0 */
+  background-color: var(--color-off-white);            /* rgba(255,255,255,.96) → #ffffff */
 }
 
 .site-header.is-scrolled {
-  border-bottom-color: var(--color-gold);              /* #c99a2e → #b05a3c（変数経由だが明示） */
-  box-shadow: 0 4px 18px rgba(29, 58, 47, 0.08);       /* rgba(15,39,71,.06) → 深緑の影 */
+  border-bottom-color: var(--color-gold);              /* #c99a2e → #0284c7（変数経由だが明示） */
+  box-shadow: 0 4px 18px rgba(22, 101, 52, 0.08);      /* rgba(15,39,71,.06) → 緑の影 */
 }
 
 /*
  * ボタンの影。style.css の .btn はネイビーの影が直接指定されている。
  */
 .btn {
-  box-shadow: 0 4px 12px rgba(29, 58, 47, 0.08);       /* rgba(15,39,71,.06) → 深緑の影 */
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.08);      /* rgba(15,39,71,.06) → 緑の影 */
 }
 
 @media (hover: hover) {
   .btn--primary:hover {
-    box-shadow: 0 6px 16px rgba(29, 58, 47, 0.12);     /* rgba(15,39,71,.1) → 深緑の影 */
+    box-shadow: 0 6px 16px rgba(22, 101, 52, 0.12);    /* rgba(15,39,71,.1) → 緑の影 */
   }
 }
 
 /*
- * フッター上端の罫線。変数経由でテラコッタになるが、2px は静的ページより太いため細くする。
+ * フッター上端の罫線。変数経由で水色になるが、2px は静的ページより太いため細くする。
  */
 .site-footer {
   border-top-width: 1px;  /* 2px → 1px */

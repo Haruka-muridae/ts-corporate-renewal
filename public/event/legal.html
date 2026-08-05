@@ -31,15 +31,16 @@
   -->
   <style>
 :root{
-  --bg:#f7f4ec;
-  --card:#fffdf8;
-  --ink:#26332c;
-  --ink-soft:#5a655e;
-  --green:#1d3a2f;
-  --green-deep:#152b23;
-  --green-tint:#e7ebe2;
-  --clay:#b05a3c;
-  --line:#e4ddcd;
+  --bg:#ffffff;
+  --card:#ffffff;
+  --ink:#1e293b;
+  --ink-soft:#64748b;
+  --green:#166534;
+  --green-deep:#14532d;
+  --green-tint:#dcfce7;
+  --sky:#38bdf8;
+  --sky-deep:#0284c7;
+  --line:#e2e8f0;
   --serif:"Noto Serif JP","Hiragino Mincho ProN",serif;
   --sans:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif;
   --en:"Cormorant Garamond","Noto Serif JP",serif;
@@ -58,15 +59,13 @@ body{
 }
 [hidden]{display:none !important}
 a{color:var(--green)}
-a:focus-visible,button:focus-visible{outline:3px solid #7fa08e;outline-offset:2px;border-radius:4px}
+a:focus-visible,button:focus-visible{outline:3px solid #4ade80;outline-offset:2px;border-radius:4px}
 h1,h2,h3{text-wrap:balance}
 p,li,dd{overflow-wrap:break-word;text-wrap:pretty}
 @supports (word-break:auto-phrase){
   .hero-lead,.legal-list dd,.legal-back{word-break:auto-phrase}
 }
 .nowrap{white-space:nowrap}
-/* 文単位で折り返す：文のかたまりごとに改行され、幅が足りる場合は同じ行に並ぶ */
-.s{display:inline-block;max-width:100%}
 .skip-link{position:absolute;left:-9999px;top:0;background:var(--green);color:#fff;padding:.6em 1.2em;z-index:100;border-radius:0 0 8px 0}
 .skip-link:focus{left:0}
 .visually-hidden{position:absolute;overflow:hidden;clip-path:inset(50%);width:1px;height:1px;white-space:nowrap}
@@ -126,23 +125,23 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 /* ===== Breadcrumb ===== */
 .breadcrumb{font-size:.78rem;color:var(--ink-soft);padding:14px 0 0}
 .breadcrumb__list{list-style:none;display:flex;flex-wrap:wrap;gap:.6em}
-.breadcrumb__list li+li::before{content:"›";margin-right:.6em;color:#b9b2a0}
+.breadcrumb__list li+li::before{content:"›";margin-right:.6em;color:#94a3b8}
 .breadcrumb__list a{color:var(--ink-soft);text-decoration:none}
 .breadcrumb__list a:hover{color:var(--green)}
-.breadcrumb__list [aria-current="page"]{color:var(--green);font-weight:700}
+.breadcrumb__list [aria-current="page"]{color:var(--ink);font-weight:700}
 
 /* ===== Hero ===== */
 .event-hero{padding:26px 0 48px}
 .event-hero__inner{margin-top:26px;max-width:760px}
 .event-hero__label{
-  font-family:var(--en);color:var(--clay);letter-spacing:.34em;
+  font-family:var(--en);color:var(--sky-deep);letter-spacing:.34em;
   font-size:.86rem;text-transform:uppercase;margin-bottom:14px;
 }
 .event-hero__title{
   font-family:var(--serif);
   font-size:clamp(1.5rem,3.4vw,2.2rem);
   font-weight:700;letter-spacing:.06em;line-height:1.55;
-  color:var(--green);margin-bottom:20px;
+  color:var(--ink);margin-bottom:20px;
 }
 .hero-lead{color:var(--ink-soft)}
 
@@ -156,11 +155,11 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 .legal-list{margin:0}
 .legal-list__row{
   display:grid;grid-template-columns:220px 1fr;gap:24px;
-  padding:18px 4px;border-bottom:1px solid #efe9db;
+  padding:18px 4px;border-bottom:1px solid #eceef1;
 }
 .legal-list__row:last-child{border-bottom:none}
 .legal-list__row dt{
-  font-weight:700;color:var(--green);letter-spacing:.06em;
+  font-weight:700;color:var(--ink);letter-spacing:.06em;
   font-family:var(--serif);font-size:.92rem;
 }
 .legal-list__row dd{font-size:.95rem}
@@ -170,7 +169,7 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 .legal-list__row dd li{position:relative;padding-left:1.4em;margin-bottom:.8em}
 .legal-list__row dd li::before{
   content:"";position:absolute;left:.15em;top:.85em;
-  width:6px;height:6px;border-radius:50%;background:var(--clay);
+  width:6px;height:6px;border-radius:50%;background:var(--sky);
 }
 .legal-list__row dd li:last-child{margin-bottom:0}
 @media (max-width:700px){
@@ -181,18 +180,18 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
 .legal-back a{text-decoration:underline;text-underline-offset:4px}
 
 /* ===== Footer ===== */
-.site-footer{background:var(--green-deep);color:#dfe4dc;padding:56px 0 30px;font-size:.85rem}
+.site-footer{background:var(--green-deep);color:#dcfce7;padding:56px 0 30px;font-size:.85rem}
 .site-footer__main{display:grid;grid-template-columns:1.2fr 1fr;gap:40px;margin-bottom:40px}
 .site-footer__name{font-family:var(--serif);font-weight:700;font-size:1.05rem;letter-spacing:.1em;color:#fff}
-.site-footer__name-en{font-family:var(--en);font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;color:#9db0a4;margin:4px 0 16px}
-.site-footer__address{font-style:normal;line-height:1.8;color:#b9c4bb}
-.site-footer__address a{color:#b9c4bb;text-decoration:none}
+.site-footer__name-en{font-family:var(--en);font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;color:#86b79a;margin:4px 0 16px}
+.site-footer__address{font-style:normal;line-height:1.8;color:#bbf7d0}
+.site-footer__address a{color:#bbf7d0;text-decoration:none}
 .site-footer__address a:hover{color:#fff}
 .footer-nav__list{list-style:none;columns:2;gap:32px}
-.footer-nav__list a{display:block;color:#c7d1c8;text-decoration:none;padding:.35em 0;letter-spacing:.06em}
+.footer-nav__list a{display:block;color:#bbf7d0;text-decoration:none;padding:.35em 0;letter-spacing:.06em}
 .footer-nav__list a:hover{color:#fff}
 .site-footer__bottom{border-top:1px solid rgba(255,255,255,.14);padding-top:22px;text-align:center}
-.site-footer__bottom small{font-size:.75rem;letter-spacing:.08em;color:#9db0a4}
+.site-footer__bottom small{font-size:.75rem;letter-spacing:.08em;color:#86b79a}
 
 /* ページトップへ（script.js が is-visible を付与） */
 .pagetop{
