@@ -162,13 +162,40 @@ export function missingTabs(existingTitles, required) {
  * その場合は同姓同名の別人を同一視しうるので、
  * **確定ではなく「候補」として扱う**（DUP-002）。
  */
+/* 比較のための正規化。表記ゆれ（大文字小文字・空白）を吸収する。 */
+export function normalizeForCompare(value) {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+/*
+ * 会社名＋氏名のキー（FR-17 の属性ベース判定）。
+ *
+ * **buildDuplicateKey とは別に作る。** あちらはメールがあればメールを
+ * 返すので、「メールは違うが同じ会社の同じ人」を拾えない。
+ * 同じ名刺を撮り直した場合はハッシュが変わるため、こちらで拾う。
+ *
+ * **会社名と氏名の両方が埋まっているときだけキーを作る。**
+ * 片方だけで同一人物と判断すると、同姓の別会社や、社名しか読めなかった
+ * 名刺どうしを同じものと見なしてしまう。
+ */
+export function buildNameKey({ companyName = '', fullName = '' } = {}) {
+  const company = normalizeForCompare(companyName);
+  const name = normalizeForCompare(fullName);
+
+  if (company === '' || name === '') {
+    return '';
+  }
+
+  return `${company}/${name}`;
+}
+
 export function buildDuplicateKey({
   email = '',
   mobile = '',
   companyName = '',
   fullName = '',
 } = {}) {
-  const normalize = (value) => String(value ?? '').trim().toLowerCase().replace(/\s+/g, '');
+  const normalize = normalizeForCompare;
 
   const normalizedEmail = normalize(email);
 

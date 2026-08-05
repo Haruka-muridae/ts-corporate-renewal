@@ -964,6 +964,35 @@ try {
     );
   }
 
+  {
+    /* 確認・修正と登録（SC-04 / SC-06）。 */
+    check(
+      '項目を入力欄にしている（直せない画面にしない）',
+      /input\.type = 'text'/.test(appSource) && /dataset\.field = field/.test(appSource),
+    );
+    check(
+      '**保存するのは入力欄の値（振り分け結果をそのまま使わない）**',
+      /querySelector\(`\[data-field="\$\{field\}"\]`\)\?\.value/.test(appSource),
+    );
+    check('登録の二重送信を防いでいる', /if \(registering \|\|/.test(appSource));
+    check(
+      '**書き込み停止中は登録させない**',
+      /!storage\?\.writable/.test(appSource),
+    );
+    check(
+      '重複でも「それでも登録する」を選べる',
+      /skipDuplicateCheck: true/.test(appSource),
+    );
+    check(
+      '登録の結果欄と重複の欄は既定で隠してある',
+      /id="co-saved"[^>]*hidden/.test(htmlSource) && /id="co-duplicate"[^>]*hidden/.test(htmlSource),
+    );
+    check(
+      '次の名刺へ進むと画像も読み取り結果も捨てる',
+      /function startNext\(\)[\s\S]{0,200}clearAll\(\)[\s\S]{0,120}discardOcr\(\)/.test(appSource),
+    );
+  }
+
   /* ================================================================ */
   section('台帳へ書く値の無害化（sanitize.js / FR-18）');
 
@@ -2587,6 +2616,301 @@ try {
   }
 
   /* ================================================================ */
+  section('確定保存（register.js / FR-07・FR-19・§11.2）');
+
+  const register = await import('../../public/production-app/card-ocr/register.js');
+
+  {
+    /* 重複（最小限。ハッシュのみ）。 */
+    const known = ['aaa', 'bbb'];
+
+    check('表面が一致すれば重複', register.findHashDuplicate({ front: 'aaa' }, known).found);
+    check('側を返す', register.findHashDuplicate({ front: 'aaa' }, known).side === 'front');
+    check(
+      '**表裏を入れ替えて撮った場合も拾う（FR-06）**',
+      register.findHashDuplicate({ front: 'zzz', back: 'aaa' }, known).side === 'back',
+    );
+    check('一致しなければ重複ではない', !register.findHashDuplicate({ front: 'zzz' }, known).found);
+    check('空のハッシュで誤検出しない', !register.findHashDuplicate({ front: '', back: '' }, ['']).found);
+    check('既存が空でも壊れない', !register.findHashDuplicate({ front: 'a' }, []).found);
+  }
+
+  {
+    /* 会社名＋氏名の重複（FR-17）。**撮り直しても拾える。** */
+    const existing = [
+      { companyName: '株式会社サンプル商事', fullName: '見本 太郎' },
+      { companyName: 'Luminous', fullName: 'Hanako Rei' },
+    ];
+
+    check(
+      '**同じ会社の同じ氏名なら重複**',
+      register.findAttributeDuplicate(
+        { companyName: '株式会社サンプル商事', fullName: '見本 太郎' }, existing,
+      ).found,
+    );
+    check(
+      '種別を返す',
+      register.findAttributeDuplicate(
+        { companyName: '株式会社サンプル商事', fullName: '見本 太郎' }, existing,
+      ).kind === 'attribute',
+    );
+    check(
+      '空白の有無は無視する',
+      register.findAttributeDuplicate(
+        { companyName: '株式会社 サンプル商事', fullName: '見本太郎' }, existing,
+      ).found,
+    );
+    check(
+      '大文字小文字は無視する',
+      register.findAttributeDuplicate({ companyName: 'LUMINOUS', fullName: 'hanako rei' }, existing).found,
+    );
+    check(
+      '会社が違えば別人',
+      !register.findAttributeDuplicate({ companyName: '別会社', fullName: '見本 太郎' }, existing).found,
+    );
+    check(
+      '氏名が違えば別人',
+      !register.findAttributeDuplicate({ companyName: '株式会社サンプル商事', fullName: '別人' }, existing).found,
+    );
+
+    check(
+      '**会社名だけでは判定しない**',
+      !register.findAttributeDuplicate({ companyName: '株式会社サンプル商事', fullName: '' }, existing).found,
+    );
+    check(
+      '**氏名だけでは判定しない**',
+      !register.findAttributeDuplicate({ companyName: '', fullName: '見本 太郎' }, existing).found,
+    );
+    check(
+      '既存側も両方揃っていなければ比べない',
+      !register.findAttributeDuplicate(
+        { companyName: 'A', fullName: 'B' }, [{ companyName: 'A', fullName: '' }],
+      ).found,
+    );
+    check('既存が空でも壊れない', !register.findAttributeDuplicate({ companyName: 'A', fullName: 'B' }, []).found);
+    check('引数が無くても壊れない', !register.findAttributeDuplicate({}, []).found);
+
+    check(
+      '**「株式会社」と「(株)」は別物として扱う（寄せない）**',
+      !register.findAttributeDuplicate({ companyName: '(株)サンプル商事', fullName: '見本 太郎' }, existing).found,
+    );
+  }
+
+  {
+    /* 記録用の値。 */
+    const id = register.buildRecordId();
+    check('record_id を作る', typeof id === 'string' && id.length >= 16, id);
+    check('毎回変わる', register.buildRecordId() !== id);
+
+    check(
+      '登録日時は人が読める形',
+      register.formatRegisteredAt(new Date(2026, 7, 5, 9, 5, 3)) === '2026-08-05 09:05:03',
+      register.formatRegisteredAt(new Date(2026, 7, 5, 9, 5, 3)),
+    );
+
+    const record = register.buildRecord({
+      values: { companyName: '株式会社サンプル商事', fullName: '見本 太郎', email: 'a@example.com' },
+      merged: { fromBackFields: ['address'] },
+      hashes: { front: 'h1', back: 'h2' },
+      front: { id: 'F', webViewLink: 'https://drive.google.com/file/d/F/view' },
+      back: { id: 'B', webViewLink: 'https://drive.google.com/file/d/B/view' },
+      at: new Date(2026, 7, 5),
+    });
+
+    check('版を記録する', record.appVersion !== '' && record.promptVersion !== '');
+    check('裏面があれば has_back', record.hasBack === true);
+    check('裏面から補った項目を残す', record.backFilledFields.join(',') === 'address');
+    check('面ごとのハッシュを入れる', record.frontImageHash === 'h1' && record.backImageHash === 'h2');
+    check('重複判定キーを作る', record.duplicateKey === 'email:a@example.com');
+    check(
+      '**画面で直された値をそのまま使う（作り直さない）**',
+      record.companyName === '株式会社サンプル商事',
+    );
+
+    const noBack = register.buildRecord({ values: {}, hashes: {}, front: { id: 'F' } });
+    check('裏面が無ければ has_back は false', noBack.hasBack === false);
+    check('裏面の列は空', noBack.backFileId === '' && noBack.backImageHash === '');
+
+    /* 台帳の行にしたとき、列の数と一致すること。 */
+    const row = schema.buildDataRow(record);
+    check('行の長さが列の定義と一致する', row.length === schema.DATA_COLUMNS.length);
+  }
+
+  {
+    /* 保存の流れ。**画像を先に上げ、台帳は最後。** */
+    const calls = [];
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      const method = options.method ?? 'GET';
+      calls.push({ url: text, method });
+
+      if (text.includes('/values/') && text.includes(':append')) {
+        return { ok: true, status: 200, json: async () => ({ updates: { updatedRange: 'A2' } }) };
+      }
+
+      if (text.includes('/values/')) {
+        /* 既存のハッシュ列。空で返す。 */
+        return { ok: true, status: 200, json: async () => ({ values: [] }) };
+      }
+
+      if (text.startsWith('https://www.googleapis.com/upload/')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: 'IMG', webViewLink: 'https://drive.google.com/file/d/IMG/view' }),
+        };
+      }
+
+      if (text.includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [{ id: 'MONTH' }] }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ id: 'X' }) };
+    };
+
+    const result = await register.registerCard({
+      values: { companyName: 'A', fullName: 'B' },
+      merged: { fromBackFields: [] },
+      frontBlob: new Blob(['front'], { type: 'image/jpeg' }),
+      backBlob: null,
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: impl,
+      at: new Date(2026, 7, 5),
+    });
+
+    check('登録できる', result.registered === true);
+    check('管理IDを返す', typeof result.recordId === 'string' && result.recordId.length > 0);
+    check('シートのURLを返す', result.sheetUrl.includes('SHEET'));
+
+    const uploadIndex = calls.findIndex((c) => c.url.startsWith('https://www.googleapis.com/upload/'));
+    const appendIndex = calls.findIndex((c) => c.url.includes(':append'));
+
+    check('画像を上げている', uploadIndex >= 0);
+    check('台帳へ追記している', appendIndex >= 0);
+    check(
+      '**画像を先に上げ、台帳は最後に書く**',
+      uploadIndex < appendIndex,
+      `upload=${uploadIndex} append=${appendIndex}`,
+    );
+    check(
+      '追記は USER_ENTERED（HYPERLINK のため）',
+      calls[appendIndex].url.includes('valueInputOption=USER_ENTERED'),
+    );
+  }
+
+  {
+    /* 重複が見つかったら、台帳へ書かずに止める。 */
+    const calls = [];
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      calls.push({ url: text, method: options.method ?? 'GET' });
+
+      if (text.includes('/values/')) {
+        /* 既存のハッシュ列に、これから登録する画像と同じ値がある。 */
+        const digest = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+        return { ok: true, status: 200, json: async () => ({ values: [[digest]] }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ id: 'X' }) };
+    };
+
+    const result = await register.registerCard({
+      values: { companyName: 'A' },
+      frontBlob: new Blob(['abc'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: impl,
+    });
+
+    check('重複なら登録しない', result.registered === false);
+    check('重複であることを返す', result.duplicate.found === true);
+    check(
+      '**重複のときは画像も上げない**',
+      !calls.some((c) => c.url.startsWith('https://www.googleapis.com/upload/')),
+    );
+    check(
+      '**重複のときは台帳へ書かない**',
+      !calls.some((c) => c.url.includes(':append')),
+    );
+
+    /* 利用者が「それでも登録する」を選んだ場合。 */
+    const forced = await register.registerCard({
+      values: { companyName: 'A' },
+      frontBlob: new Blob(['abc'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: async (url) => {
+        const text = String(url);
+
+        if (text.includes(':append')) {
+          return { ok: true, status: 200, json: async () => ({ updates: {} }) };
+        }
+
+        if (text.startsWith('https://www.googleapis.com/upload/')) {
+          return { ok: true, status: 200, json: async () => ({ id: 'IMG', webViewLink: '' }) };
+        }
+
+        if (text.includes('q=')) {
+          return { ok: true, status: 200, json: async () => ({ files: [{ id: 'M' }] }) };
+        }
+
+        return { ok: true, status: 200, json: async () => ({ id: 'X' }) };
+      },
+      skipDuplicateCheck: true,
+    });
+
+    check('**「それでも登録する」を選べる**', forced.registered === true);
+  }
+
+  {
+    /*
+     * 会社名＋氏名が一致した場合。**画像は別物でも止める。**
+     * 同じ名刺を撮り直したときに二重登録させないための判定である。
+     */
+    const calls = [];
+
+    const impl = async (url, options = {}) => {
+      const text = String(url);
+      calls.push({ url: text, method: options.method ?? 'GET' });
+
+      if (text.includes('/values/')) {
+        const range = decodeURIComponent(text);
+        /* 会社名は12列目(L)、氏名は7列目(G)。列文字で見分ける。 */
+        if (/!C2:C$/.test(range)) {
+          return { ok: true, status: 200, json: async () => ({ values: [['株式会社サンプル商事']] }) };
+        }
+
+        if (/!F2:F$/.test(range)) {
+          return { ok: true, status: 200, json: async () => ({ values: [['見本 太郎']] }) };
+        }
+
+        return { ok: true, status: 200, json: async () => ({ values: [] }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ id: 'X' }) };
+    };
+
+    const result = await register.registerCard({
+      values: { companyName: '株式会社サンプル商事', fullName: '見本 太郎' },
+      /* 既存とは別の画像。ハッシュは一致しない。 */
+      frontBlob: new Blob(['まったく別の画像'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: impl,
+    });
+
+    check('**画像が違っても、会社名＋氏名が同じなら止める**', result.registered === false);
+    check('種別は attribute', result.duplicate.kind === 'attribute', String(result.duplicate.kind));
+    check(
+      '止めたときは画像を上げない',
+      !calls.some((c) => c.url.startsWith('https://www.googleapis.com/upload/')),
+    );
+  }
+
+  /* ================================================================ */
   section('測定モード（measure/ / 計画 §7）');
 
   const measure = await import('../../public/production-app/card-ocr/measure/measurement.js');
@@ -2747,7 +3071,7 @@ try {
     'prerequisites.js', 'sanitize.js', 'hash.js', 'schema.js',
     'sheets.js', 'drive-storage.js', 'capture.js', 'capture-flow.js',
     'drive-ocr.js', 'extract.js', 'prompt.js', 'gemini.js', 'merge.js',
-    'app.js',
+    'register.js', 'app.js',
   ];
   const sources = [];
 

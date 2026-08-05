@@ -51,6 +51,7 @@ import {
 } from './drive-ocr.js';
 
 import { classifyCardText, describeGeminiError } from './gemini.js';
+import { registerCard } from './register.js';
 import { extractByPattern, prepareForGemini } from './extract.js';
 import { VALUE_FIELDS, fieldsNeedingReview, mergeExtraction } from './merge.js';
 
@@ -86,6 +87,9 @@ for (const id of [
   'co-previews', 'co-start-actions', 'co-start', 'co-reset',
   'co-ocr', 'co-ocr-state', 'co-ocr-sides', 'co-ocr-note',
   'co-fields', 'co-fields-state', 'co-fields-list', 'co-fields-notes',
+  'co-register', 'co-saved', 'co-saved-list', 'co-saved-sheet', 'co-next',
+  'co-duplicate', 'co-duplicate-title', 'co-duplicate-text',
+  'co-register-anyway', 'co-duplicate-cancel',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -114,6 +118,8 @@ let reading = false;
 let ocrText = '';
 /* 突き合わせた結果（merge.js）。null は「まだ分類していない」。 */
 let merged = null;
+/* 登録の実行中。二重送信を防ぐ。 */
+let registering = false;
 
 /* 画面に出す項目名。台帳の見出しとは別に、ここで日本語にする。 */
 const FIELD_LABELS = Object.freeze({
@@ -502,25 +508,35 @@ function renderFields() {
   const review = new Set(fieldsNeedingReview(merged));
 
   for (const field of VALUE_FIELDS) {
-    const value = merged.values[field] ?? '';
+    const row = document.createElement('div');
+    row.className = 'co-field-row';
 
-    const term = document.createElement('dt');
-    term.className = 'co-status-label';
-    term.textContent = FIELD_LABELS[field] ?? field;
-
-    const cell = document.createElement('dd');
-    cell.className = 'co-field-value';
-    cell.dataset.review = review.has(field) ? 'yes' : 'no';
-    cell.textContent = value === '' ? '（なし）' : value;
+    const label = document.createElement('label');
+    label.className = 'co-field-label';
+    label.setAttribute('for', `co-input-${field}`);
+    label.textContent = FIELD_LABELS[field] ?? field;
 
     if (review.has(field)) {
       const mark = document.createElement('span');
       mark.className = 'co-review-mark';
       mark.textContent = ' 要確認';
-      cell.append(mark);
+      label.append(mark);
     }
 
-    target.append(term, cell);
+    /*
+     * **入力欄にする。** 読み取りは必ず外すので、直せない画面は使えない
+     * （§FR-15）。保存されるのはここに見えている値である。
+     */
+    const input = document.createElement('input');
+    input.id = `co-input-${field}`;
+    input.className = 'co-field-input';
+    input.type = 'text';
+    input.value = merged.values[field] ?? '';
+    input.dataset.field = field;
+    input.dataset.review = review.has(field) ? 'yes' : 'no';
+
+    row.append(label, input);
+    target.append(row);
   }
 
   /* 由来の記録。どこから来た値かを追えるようにする（§FR-15 の5）。 */
@@ -597,6 +613,132 @@ async function classifyCard() {
       'error',
     );
   }
+}
+
+/* ---------- 確定保存（§8.1 ステージ5） ---------- */
+
+/*
+ * 画面の入力欄から値を読む。
+ *
+ * **merged.values ではなく、入力欄を読む。** 利用者が直した値が
+ * 保存されなければ、直せる画面にした意味がない。
+ */
+function readEditedValues() {
+  const values = {};
+
+  for (const field of VALUE_FIELDS) {
+    values[field] = el['co-fields-list'].querySelector(`[data-field="${field}"]`)?.value ?? '';
+  }
+
+  return values;
+}
+
+function renderSaved(result) {
+  const target = el['co-saved-list'];
+  target.replaceChildren();
+
+  const rows = [
+    ['管理ID', result.recordId],
+    ['表面の画像', result.front ? '保存しました' : '保存していません'],
+    ['裏面の画像', result.back ? '保存しました' : '（裏面なし）'],
+  ];
+
+  for (const [label, value] of rows) {
+    const term = document.createElement('dt');
+    term.className = 'co-status-label';
+    term.textContent = label;
+
+    const cell = document.createElement('dd');
+    cell.className = 'co-status-value';
+    cell.dataset.ok = 'yes';
+    cell.textContent = value;
+
+    target.append(term, cell);
+  }
+
+  el['co-saved-sheet'].href = result.sheetUrl;
+}
+
+/* 重複の理由を、利用者が次に何をすればよいか分かる言葉にする。 */
+function describeDuplicate(duplicate) {
+  if (duplicate.kind === 'attribute') {
+    return '会社名と氏名が、すでに登録されている行と同じです。'
+      + '名刺を作り直された場合や、同姓同名の別の方の場合は、そのまま登録して構いません。';
+  }
+
+  return duplicate.side === 'back'
+    ? '裏面の画像が、すでに登録されている画像と同じです。表と裏を取り違えていないかご確認ください。'
+    : '表面の画像が、すでに登録されている画像と同じです。同じ写真をもう一度登録しようとしています。';
+}
+
+async function register({ skipDuplicateCheck = false } = {}) {
+  if (registering || !merged || !storage?.writable) {
+    return;
+  }
+
+  registering = true;
+  el['co-register'].disabled = true;
+  el['co-register-anyway'].disabled = true;
+  el['co-duplicate'].hidden = true;
+  showMessage('登録しています…');
+
+  try {
+    const result = await registerCard({
+      values: readEditedValues(),
+      merged,
+      frontBlob: capture.front.blob,
+      backBlob: capture.back?.blob ?? null,
+      storage,
+      token: getCachedAccessToken(),
+      skipDuplicateCheck,
+    });
+
+    if (!result.registered) {
+      /*
+       * 止めるのではなく、選ばせる（§FR-19。DUP-001 / DUP-002）。
+       *
+       * **理由を分けて出す。** 「同じ画像」と「同じ会社の同じ人」では、
+       * 利用者が次に取る行動が違う。前者は撮り直しの取り違え、
+       * 後者は名刺の作り直しや部署異動でありうる。
+       */
+      el['co-duplicate-title'].textContent = result.duplicate.kind === 'attribute'
+        ? '同じ会社の同じ方が、すでに登録されています'
+        : '同じ画像が、すでに登録されています';
+
+      el['co-duplicate-text'].textContent = describeDuplicate(result.duplicate);
+      el['co-duplicate'].hidden = false;
+      showMessage('');
+      return;
+    }
+
+    renderSaved(result);
+    el['co-fields'].hidden = true;
+    el['co-capture'].hidden = true;
+    el['co-ocr'].hidden = true;
+    el['co-saved'].hidden = false;
+    showMessage('');
+  } catch (error) {
+    const described = describeDriveError(error);
+    showMessage(
+      `登録できませんでした（${described.errorCode}）${described.detail ? ` / ${described.detail}` : ''}`,
+      'error',
+    );
+  } finally {
+    registering = false;
+    el['co-register'].disabled = false;
+    el['co-register-anyway'].disabled = false;
+  }
+}
+
+/* 次の名刺へ。**画像も読み取り結果も捨てる。** */
+function startNext() {
+  capture = clearAll();
+  discardOcr();
+  el['co-saved'].hidden = true;
+  el['co-duplicate'].hidden = true;
+  el['co-capture'].hidden = false;
+  clearMessage();
+  renderCapture();
 }
 
 /*
@@ -681,6 +823,7 @@ function discardOcr() {
   el['co-fields-list'].replaceChildren();
   el['co-fields-notes'].replaceChildren();
   el['co-fields-notes'].hidden = true;
+  el['co-duplicate'].hidden = true;
 }
 
 function removeSide(side) {
@@ -791,6 +934,13 @@ el['co-reset'].addEventListener('click', () => {
 });
 
 el['co-start'].addEventListener('click', () => { void readCard(); });
+el['co-register'].addEventListener('click', () => { void register(); });
+el['co-register-anyway'].addEventListener('click', () => { void register({ skipDuplicateCheck: true }); });
+el['co-next'].addEventListener('click', startNext);
+
+el['co-duplicate-cancel'].addEventListener('click', () => {
+  el['co-duplicate'].hidden = true;
+});
 
 /*
  * 画面を離れるときにトークンを捨てる。
