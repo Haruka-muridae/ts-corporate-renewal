@@ -65,16 +65,46 @@ x-powered-by: Next.js
 Cloudflare の Versions に `Manually deployed / Wrangler by architect` と記録されている。
 **Git 連携も自動ビルドも設定されていない。**
 
-### この設定は「後から起こした」ものである
+### この設定は「後から起こした」ものである（突き合わせ済み・2026-08-07）
 
 移行時（2026-08-06）のデプロイは**別マシン**から行われ、そのときの `wrangler.jsonc` /
 `open-next.config.ts` はリポジトリに入っていなかった。このPC上を調査したが、
 設定ファイル・コマンド履歴・wrangler の痕跡は一切見つからなかった
 （Node.js 自体、同日14:07に初めてインストールされている）。
 
-いま入っている [wrangler.jsonc](../wrangler.jsonc) と [open-next.config.ts](../open-next.config.ts) は、
-**稼働中の Worker の設定を推定して書き起こしたもの**である。一致している保証はない。
-初回デプロイ前に §3 の突き合わせを必ず行うこと。
+そのため [wrangler.jsonc](../wrangler.jsonc) は当初**推定**で書き起こしたものだった。
+2026-08-07 に `wrangler versions view` と Cloudflare API で実物を取得し、突き合わせた結果、
+**推定と実物が4点で食い違っていた。** 現在の `wrangler.jsonc` は実測に合わせてある。
+
+| 項目 | 推定していた値 | 実物 | 影響 |
+| --- | --- | --- | --- |
+| `compatibility_date` | 2025-03-25 | **2026-08-05** | 1年以上の巻き戻しになるところだった |
+| `compatibility_flags` | nodejs_compat, global_fetch_strictly_public | **nodejs_compat のみ** | 使っていないフラグを足すところだった |
+| `vars` | 記載なし | **4件あり** | **deploy で消え、メール送信元とベースURLが失われるところだった** |
+| `observability` | 記載なし | **有効** | ログ収集が止まるところだった |
+
+`routes`（Custom Domain）とバインディング無しは推定どおりだった。
+
+**`vars` の欠落がいちばん危なかった。** `wrangler deploy` は、設定に無い平文の環境変数を
+Worker から削除する（シークレットは保持される）。推定のまま出していれば、
+`MAIL_FROM` と `NEXT_PUBLIC_BASE_URL` が消えて交流会申込のメールとURL生成が壊れていた。
+
+#### 突き合わせに使ったコマンド
+
+```bash
+npx wrangler versions list                        # 現行版ID（＝切り戻し先）
+npx wrangler versions view <version-id>           # compatibility_date / flags / bindings / secrets
+npx wrangler secret list                          # シークレット名の一覧（値は出ない）
+npx wrangler deploy --dry-run                     # 設定の検証。本番に触れない
+```
+
+ルートの形式（Custom Domain か Route か）は CLI から直接は見えないため、API で確認した。
+トークンは `~/.config/.wrangler/config/default.toml` の `oauth_token`。
+
+```bash
+GET /accounts/{account_id}/workers/domains?service=ts-corporate-renewal   # → 1件（Custom Domain）
+GET /zones/{zone_id}/workers/routes                                       # → 空（Route は無し）
+```
 
 ---
 
@@ -121,19 +151,17 @@ Windows から出す場合は、デプロイ後の確認（§5）を省略しな
 
 ### 初回だけ（稼働中の Worker との突き合わせ）
 
-- [ ] **トリガーの形式**。ダッシュボード → Workers & Pages → `ts-corporate-renewal` →
-      Settings → Domains & Routes を見る。
-      `tsam-ai.com` が **Custom Domain** か **Route** かを確認し、
-      [wrangler.jsonc](../wrangler.jsonc) の `routes` を実態に合わせる。
+**2026-08-07 に消化済み。** 結果は §1 の表にある。以下は再現手順として残す
+（Worker を作り直したときや、別の Worker を扱うときに再度行う）。
+
+- [x] **トリガーの形式** → **Custom Domain**（`tsam-ai.com` 1件、ゾーンの Route は0件）。
       **形式が違うまま deploy すると、トリガーが二重に付くおそれがある。**
-- [ ] **compatibility_date**。同じ画面か `npx wrangler versions list` で稼働中の値を見て、
-      `wrangler.jsonc` を合わせる。**下げると挙動が変わりうる。**
-- [ ] **バインディング**。稼働中の版が R2（増分キャッシュ）・サービスバインディング・
-      画像最適化を使っていないか確認する。使っているなら `wrangler.jsonc` の
-      該当箇所を有効化してから deploy する（コメントアウトしてある）。
-- [ ] **環境変数・シークレット**。`npx wrangler secret list` で確認する。
-      交流会申込アプリは Stripe・Supabase・Gmail のキーを使う。
-      **設定漏れがあると、デプロイ後に決済とメールが止まる。**
+- [x] **compatibility_date** → **2026-08-05**。**下げると挙動が変わりうる。**
+- [x] **バインディング** → R2・サービスバインディング・画像最適化はいずれも**未使用**。
+      `wrangler.jsonc` でコメントアウトしたままでよい。
+      使っていないのに有効化すると、実体が無く deploy が落ちる。
+- [x] **環境変数・シークレット** → シークレット8件（Stripe 2・Supabase 3・Google 3）が揃っている。
+      **平文の環境変数4件は `wrangler.jsonc` の `vars` に写した。ここから消すと Worker からも消える。**
 
 ### 毎回
 

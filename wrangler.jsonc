@@ -2,34 +2,35 @@
  * Cloudflare Workers の設定（OpenNext 経由で Next.js を動かす）。
  *
  * ------------------------------------------------------------------
- * この設定は「後から起こした」ものである
+ * 稼働中の Worker と突き合わせ済み（2026-08-07）
  * ------------------------------------------------------------------
  * 2026-08-06 に Vercel から Cloudflare へ移行した際、デプロイは別マシンから
- * wrangler で手動実行された（Cloudflare の Versions に
- * `Manually deployed / Wrangler by architect` として記録されている）。
- * そのときの設定ファイルはこのリポジトリに入っておらず、内容も不明である。
+ * wrangler で手動実行され、そのときの設定ファイルはリポジトリに無かった。
+ * 当初この設定は**推定**で書き起こしたものだったが、2026-08-07 に
+ * Cloudflare API と `wrangler versions view` で実物を取得し、以下を実測に合わせた。
+ * 突き合わせの結果、**推定と実物が4点で食い違っていた**。
  *
- * **したがって、この設定が現在動いている Worker の設定と一致している保証はない。**
- * このファイルで初めてデプロイする前に、下の「デプロイ前に確認すること」を
- * 必ず消化すること。詳細は docs/deployment-cloudflare.md にある。
+ * | 項目 | 推定していた値 | 実物 |
+ * | --- | --- | --- |
+ * | compatibility_date | 2025-03-25 | **2026-08-05** |
+ * | compatibility_flags | nodejs_compat, global_fetch_strictly_public | **nodejs_compat のみ** |
+ * | vars | 記載なし | **4件あり**（下記） |
+ * | observability | 記載なし | **有効** |
+ *
+ * routes（Custom Domain）とバインディング無しは推定どおりだった。
+ *
  * ------------------------------------------------------------------
- *
+ * 変更するときの注意
  * ------------------------------------------------------------------
- * デプロイ前に確認すること
- * ------------------------------------------------------------------
- * 1. routes … 現在の Worker が「Custom Domain」で tsam-ai.com に
- *    ぶら下がっているのか、ゾーンの「Route」なのかをダッシュボードで確認する。
- *    形式が違うまま deploy すると、**トリガーが二重に付く**おそれがある。
- *    下では Custom Domain を仮に置いてある。Route だった場合は
- *    コメントしてあるほうへ差し替える。
- *
- * 2. compatibility_date … 稼働中の版と揃える。
- *    ダッシュボードの Settings、または `npx wrangler versions view` で見られる。
- *    ここで下げると挙動が変わる可能性がある。
- *
- * 3. R2 / サービスバインディング / 画像最適化 … 下でコメントアウトしてある。
- *    稼働中の版がこれらを使っているなら、有効化してから deploy する。
- *    使っていないのに有効化すると、バケット未作成で deploy が落ちる。
+ * - **vars は消さない。** wrangler deploy は、この設定に無い平文の環境変数を
+ *   Worker から削除する（シークレットは保持される）。うっかり消すと
+ *   交流会申込アプリのメール送信元とベースURLが失われる。
+ * - compatibility_date を**下げない**。挙動が変わりうる。
+ * - compatibility_flags を足さない。とくに global_fetch_strictly_public は
+ *   OpenNext のテンプレートにあるが、**稼働中の Worker では使っていない**。
+ *   1日以上これで正常稼働している以上、足すほうが変更である。
+ * - R2 / サービスバインディング / 画像最適化 … 下でコメントアウトしてある。
+ *   実物も未使用だった。使っていないのに有効化すると、実体が無く deploy が落ちる。
  * ------------------------------------------------------------------
  */
 {
@@ -46,25 +47,60 @@
 	},
 
 	/*
+	 * 稼働中の値をそのまま写している（2026-08-07 実測）。
 	 * nodejs_compat … Next.js のサーバー側が Node API を使うため必須。
-	 * global_fetch_strictly_public … OpenNext のテンプレートが指定している。
-	 *   Worker 内からの fetch を公開インターネット扱いにし、
-	 *   同一 Worker への自己参照を意図せず内部呼び出しにしないためのもの。
+	 * OpenNext のテンプレートにある global_fetch_strictly_public は、
+	 * 実物に入っていなかったので**足していない**（上の注意を参照）。
 	 */
-	"compatibility_date": "2025-03-25",
-	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"compatibility_date": "2026-08-05",
+	"compatibility_flags": ["nodejs_compat"],
 
 	/*
-	 * 公開先。**この形式が現状と合っているか、上の 1 を必ず確認すること。**
-	 *
-	 * ゾーンの Route だった場合はこちらへ差し替える:
-	 *   "routes": [
-	 *     { "pattern": "tsam-ai.com/*", "zone_name": "tsam-ai.com" }
-	 *   ]
+	 * 公開先。実測で Custom Domain だった（2026-08-07）。
+	 *   GET /accounts/{id}/workers/domains?service=ts-corporate-renewal
+	 *     → hostname tsam-ai.com / enabled true が1件
+	 *   GET /zones/{zone}/workers/routes
+	 *     → 空。ゾーンの Route は使っていない
+	 * したがって下の形が正しい。Route 形式へ書き換えると**トリガーが二重に付く**。
 	 */
 	"routes": [
 		{ "pattern": "tsam-ai.com", "custom_domain": true }
-	]
+	],
+
+	/*
+	 * 平文の環境変数。**稼働中の Worker にある4件をそのまま写したもの。**
+	 * ここから消すと、次の deploy で Worker からも消える。
+	 *
+	 * シークレット（STRIPE_SECRET_KEY・SUPABASE_SERVICE_ROLE_KEY・
+	 * GMAIL_REFRESH_TOKEN など8件）は wrangler が保持するため、ここには書かない。
+	 * **書いてはいけない。** 値がリポジトリに入ってしまう。
+	 */
+	"vars": {
+		"MAIL_FROM": "TSアセットマネジメント合同会社 <architect@potenitas.com>",
+		"NEXT_PUBLIC_BASE_URL": "https://tsam-ai.com/event",
+		"NEXT_PUBLIC_DEPLOY_ENV": "production",
+		"NEXT_PUBLIC_SITE_URL": "https://tsam-ai.com"
+	},
+
+	/*
+	 * 稼働中の設定を写したもの。書かずに deploy すると無効化されるおそれがある。
+	 * traces は実物どおり無効。
+	 */
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"invocation_logs": true,
+			"persist": true
+		},
+		"traces": {
+			"enabled": false,
+			"head_sampling_rate": 1,
+			"persist": true
+		}
+	}
 
 	/*
 	 * ------------------------------------------------------------------
