@@ -429,6 +429,29 @@ try {
       api.describeDriveError(new TypeError('boom')).detail.includes('boom'),
     );
 
+    /*
+     * **DRV-001 は7つの内部コードの受け皿。**
+     * 表示コードだけでは切り分けられないので、内部コードと
+     * HTTPステータスを添えられるようにする。
+     */
+    {
+      const described = api.describeDriveError(
+        new api.DriveError(api.DriveErrorCode.BAD_REQUEST, 400, 'HTTP 400 badRequest: x'),
+      );
+
+      check('**内部コードを返す**', described.code === api.DriveErrorCode.BAD_REQUEST);
+      check('**HTTPステータスを返す**', described.status === 400);
+
+      const collapsed = Object.values(api.DriveErrorCode)
+        .filter((code) => api.describeDriveError(new api.DriveError(code)).errorCode === 'DRV-001');
+
+      check(
+        'DRV-001 に集約される内部コードが複数ある（だから detail が要る）',
+        collapsed.length >= 5,
+        String(collapsed.length),
+      );
+    }
+
     check(
       '容量不足とレート制限で案内が違う',
       api.describeDriveError(new api.DriveError(api.DriveErrorCode.STORAGE_FULL)).text
@@ -442,6 +465,34 @@ try {
       'errors[0].reason を読む',
       api.extractReason({ error: { errors: [{ reason: 'userRateLimitExceeded' }] } }) === 'userRateLimitExceeded',
     );
+
+    {
+      /*
+       * **原因の要約。** サーバーが「どの権限が足りないか」まで書いて
+       * いるので、読み捨てない。
+       */
+      const body = {
+        error: {
+          errors: [{ reason: 'insufficientPermissions' }],
+          message: 'The granted scopes do not give access to this resource.',
+        },
+      };
+
+      check(
+        '**ステータス・reason・message を1行にまとめる**',
+        api.summarizeErrorBody(body, 403)
+          === 'HTTP 403 insufficientPermissions: The granted scopes do not give access to this resource.',
+        api.summarizeErrorBody(body, 403),
+      );
+      check(
+        '本文が読めなくてもステータスは出す',
+        api.summarizeErrorBody(null, 400) === 'HTTP 400',
+      );
+      check(
+        '長すぎる本文は切り詰める（画面を壊さない）',
+        api.summarizeErrorBody({ error: { message: 'あ'.repeat(500) } }, 500).length <= 300,
+      );
+    }
     check(
       'errors が無ければ status を読む',
       api.extractReason({ error: { status: 'PERMISSION_DENIED' } }) === 'PERMISSION_DENIED',
@@ -553,7 +604,11 @@ try {
 
     check('403 のレート制限を RATE_LIMITED にする', caught?.code === api.DriveErrorCode.RATE_LIMITED, caught?.code);
     check('ステータスを保持する', caught?.status === 403);
-    check('reason を detail に残す', caught?.detail === 'userRateLimitExceeded');
+    check(
+      '**detail に HTTPステータスと reason の両方を入れる**',
+      caught?.detail === 'HTTP 403 userRateLimitExceeded',
+      caught?.detail,
+    );
     check(
       '例外にトークンを含めない',
       !String(caught?.message).includes('ya29-secret-token')
@@ -945,6 +1000,30 @@ try {
       internal.filter((href) => href.includes('apps/')).join(', '),
     );
   }
+
+  {
+    /* ID の重複が無いこと（PR #32 で作り込んだ不具合の再発防止）。 */
+    const ids = [...htmlSource.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+    const duplicated = ids.filter((id, index) => ids.indexOf(id) !== index);
+
+    check(
+      '**同じ id の要素が2つ無い（getElementById が別物を掴む）**',
+      duplicated.length === 0,
+      [...new Set(duplicated)].join(', '),
+    );
+  }
+
+  check(
+    '**ドライブの失敗に内部コードと原因の要約を添える（DRV-001 だけを出さない）**',
+    /function formatDriveError/.test(appSource)
+      && /described\.code/.test(appSource)
+      && /described\.detail/.test(appSource),
+  );
+  check(
+    '**ドライブの失敗をすべて同じ形で出す（出し忘れを作らない）**',
+    (appSource.match(/formatDriveError\(error\)/g) ?? []).length >= 2
+      && !/describeDriveError\(error\);\s*\n\s*showMessage/.test(appSource),
+  );
 
   check('guardPage() を通している', appSource.includes('guardPage'));
   check('画面の深さを 2 に設定している', appSource.includes('setScreenDepth(2)'));

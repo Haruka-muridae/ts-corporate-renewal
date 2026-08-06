@@ -217,6 +217,32 @@ function clearMessage() {
   showMessage('');
 }
 
+/*
+ * ドライブの失敗を、切り分けられる形の文にする。
+ *
+ * ==================================================================
+ * DRV-001 だけを出さない
+ * ==================================================================
+ * §15 のコードは7つの内部コード（FORBIDDEN / BAD_REQUEST /
+ * RATE_LIMITED / SERVER_ERROR / STORAGE_FULL / NETWORK / UNKNOWN）を
+ * DRV-001 に集約している。**「DRV-001」とだけ出す画面では、
+ * 待てばよいのか、設定を直すのか、こちらの不具合なのかが分からない。**
+ *
+ * そこで **内部コードと、サーバーが返した理由（HTTPステータス込み）を
+ * 必ず添える。** 表示コードは §15 のまま増やさない。
+ * ==================================================================
+ */
+function formatDriveError(error) {
+  const described = describeDriveError(error);
+  const parts = [`${described.text}（${described.errorCode} / ${described.code}）`];
+
+  if (described.detail) {
+    parts.push(described.detail);
+  }
+
+  return parts.join(' / ');
+}
+
 function renderStatus(list) {
   const target = el['co-status'];
   target.replaceChildren();
@@ -407,8 +433,7 @@ async function prepareStorage() {
     /* **失敗。開いたままにする。** */
     applyStoragePanel({ label: '確認できませんでした', ok: false, hasNotices: true });
 
-    const described = describeDriveError(error);
-    showMessage(`${described.text}（${described.errorCode}）`, 'error');
+    showMessage(formatDriveError(error), 'error');
   } finally {
     provisioning = false;
 
@@ -829,11 +854,7 @@ async function register({ skipDuplicateCheck = false } = {}) {
     el['co-saved'].hidden = false;
     showMessage('');
   } catch (error) {
-    const described = describeDriveError(error);
-    showMessage(
-      `登録できませんでした（${described.errorCode}）${described.detail ? ` / ${described.detail}` : ''}`,
-      'error',
-    );
+    showMessage(`登録できませんでした: ${formatDriveError(error)}`, 'error');
   } finally {
     registering = false;
     el['co-register'].disabled = false;
