@@ -99,6 +99,15 @@ export declare function findPublishedEvent(
   config: SupabaseConfig,
 ): Promise<EventRow | null>;
 
+/**
+ * 支払済みの申込件数。定員判定に使う。
+ * status='paid' のみを数える（awaiting は席として扱わない）。
+ */
+export declare function countPaidApplications(
+  config: SupabaseConfig,
+  eventId: string,
+): Promise<number>;
+
 export declare function findEventById(
   config: SupabaseConfig,
   eventId: string,

@@ -1,7 +1,8 @@
 import { requireAdmin } from "@/lib/event/admin-session";
 import { toAdminRow } from "@/lib/event/admin-view.mjs";
+import { resolveCapacityStatus } from "@/lib/event/capacity.mjs";
 import { supabaseConfig } from "@/lib/event/config.mjs";
-import { listApplications } from "@/lib/event/db.mjs";
+import { findPublishedEvent, listApplications } from "@/lib/event/db.mjs";
 
 import { logout } from "./actions";
 
@@ -17,10 +18,22 @@ export const dynamic = "force-dynamic";
 export default async function AdminListPage() {
   const admin = await requireAdmin();
 
-  const applications = await listApplications(supabaseConfig());
+  const config = supabaseConfig();
+
+  /*
+   * 一覧は公開中のイベントに絞る。定員は イベントごとの値なので、
+   * 全イベントを混ぜて数えると「支払済み / 定員」が合わなくなる。
+   * 公開中のイベントが無いときだけ、従来どおり全件を出す。
+   */
+  const event = await findPublishedEvent(config);
+  const applications = await listApplications(config, { eventId: event?.id ?? null });
   const rows = applications.map(toAdminRow);
 
   const paidCount = rows.filter((row) => row.statusKey === "paid").length;
+  const capacity = resolveCapacityStatus({
+    capacity: event?.capacity ?? null,
+    paidCount,
+  });
   const total = rows
     .filter((row) => row.statusKey === "paid")
     .reduce((sum, row) => sum + Number(row.finalPrice || 0), 0);
@@ -42,10 +55,33 @@ export default async function AdminListPage() {
       </header>
 
       <div className="admin__body">
+        {/*
+          定員の状態。超過は返金対応が要るため、ちょうど（full）より強く出す。
+          申込フローは支払済みが定員に達した時点で自動的に止まっている。
+        */}
+        {capacity.state === "over" ? (
+          <p className="admin-notice" role="alert">
+            <span className="admin-flag">定員超過</span> 支払済み{" "}
+            <strong>{capacity.paidCount}</strong> 件に対して定員は{" "}
+            <strong>{capacity.capacity}</strong> 名です（
+            <strong>{capacity.over}</strong> 件の超過）。
+            申込フローは停止済みです。超過分は Stripe
+            ダッシュボードから返金してください。返金すると席は自動的に空きます。
+          </p>
+        ) : capacity.state === "full" ? (
+          <p className="admin-notice" role="status">
+            定員 <strong>{capacity.capacity}</strong> 名に達したため、申込フローを停止しました。
+            静的ページ（/event/）の <code>data-event-status</code> を{" "}
+            <code>&quot;full&quot;</code> に切り替えてデプロイしてください。
+          </p>
+        ) : null}
+
         <div className="admin__summary">
           <p>
             全 <strong>{rows.length}</strong> 件／支払済み{" "}
-            <strong>{paidCount}</strong> 件／支払済みの合計{" "}
+            <strong>{paidCount}</strong>
+            {capacity.state === "none" ? " 件" : ` / ${capacity.capacity} 名`}
+            ／支払済みの合計{" "}
             <strong>{new Intl.NumberFormat("ja-JP").format(total)}円</strong>
           </p>
 
