@@ -2,14 +2,21 @@
 
 実装仕様書8章のスキーマ。SQLは `supabase/migrations/` に置いてある。
 
-**適用済み**。プロジェクト `tsam-event`（東京リージョン / ref `ixxxlmfhrtommsfiumlz`）に
-Supabase CLI で適用してある。以降のスキーマ変更もマイグレーションで管理する。
+**全件適用済み**（2026-08-06 に `supabase migration list` で確認）。
+プロジェクト `tsam-event`（東京リージョン / ref `ixxxlmfhrtommsfiumlz`）に Supabase CLI で
+適用してある。以降のスキーマ変更もマイグレーションで管理する。
 
-| ファイル | 内容 |
-| --- | --- |
-| `supabase/migrations/20260731000000_event_app_init.sql` | 表・型・制約・トリガー・RLSの作成 |
-| `supabase/migrations/20260731000100_seed_first_event.sql` | 初回イベント1件の登録 |
-| `supabase/migrations/20260731000200_grant_service_role.sql` | service_role への権限付与 |
+| ファイル | 内容 | 適用状況 |
+| --- | --- | --- |
+| `20260731000000_event_app_init.sql` | 表・型・制約・トリガー・RLSの作成 | 適用済み |
+| `20260731000100_seed_first_event.sql` | 初回イベント1件の登録 | 適用済み |
+| `20260731000200_grant_service_role.sql` | service_role への権限付与 | 適用済み |
+| `20260731000300_receipt_number.sql` | 受付番号を採番するDB関数 | 適用済み |
+| `20260731000400_event_end_at.sql` | 開催の終了時刻の列を追加 | 適用済み |
+| `20260806000000_event_capacity.sql` | 初回イベントの定員を30に設定 | 適用済み |
+
+適用状況はリポジトリからは分からない。追加したときは、このファイルに行を足し、
+`supabase migration list` で突き合わせた結果を書くこと。
 
 ## 1. Supabase側の状態
 
@@ -26,6 +33,10 @@ Supabase CLI で適用してある。以降のスキーマ変更もマイグレ�
 
 Supabase CLI で適用する。ダッシュボードのSQL Editorに貼り付ける運用はしない
 （適用履歴が残らず、環境間で食い違うため）。
+
+**使い分け**: 表・関数・既定値など「環境を作り直したら必要になるもの」はマイグレーション
+（CLI）で入れ、`is_published` の切り替えのように「その回かぎりの運用操作」だけを
+ダッシュボードで行う。定員（`capacity`）は前者に含めている。
 
 ```bash
 export SUPABASE_ACCESS_TOKEN=<個人アクセストークン>
@@ -126,6 +137,12 @@ Webhook を二重に受け取っても再発行されないことは、`webhook_
 
 `null` にしておくと定員なしとして扱い、止めない。定員を設けない回はこれまでどおり
 `null` のままでよい。
+
+**`0` や負数、小数を入れても定員なしに倒れる**（`lib/event/capacity.mjs` の `isSoldOut`）。
+満席扱いにすると受付が丸ごと止まり、しかも原因が分かりにくいためそう決めてある。
+つまり **`capacity = 0` で受付を閉じることはできない**。閉じたいときは `apply_end_at`
+（受付期間）を過ぎた時刻に更新すること。設定ミスは管理画面で気づける
+（定員なしのときは「支払済み N 件」とだけ出て、「/ 30 名」が出ない）。
 
 判定は「支払済み（`applications.status = 'paid'`）の件数 >= `capacity`」。
 決済待ち（`awaiting`）は席として数えない。詳しくは下の「定員に達したときの運用」を参照。
