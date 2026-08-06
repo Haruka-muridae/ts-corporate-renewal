@@ -192,13 +192,20 @@ clasp deploy --deploymentId <既存のデプロイID> --description "v2"
 
 ### 静的サイト
 
-`main` を1つ前のコミットへ戻す（revert コミットを作る）。
+**急ぐときは Vercel の Deployments 画面から、直前の正常な本番デプロイを
+本番へ昇格させます。**リポジトリを触らずに戻せます。
+
+コード側を直すときは、`main` を1つ前のコミットへ戻します（revert コミットを作る）。
 **force push は行わないでください。**
 
 ```bash
 git revert <コミットハッシュ>
 git push origin main
 ```
+
+> デプロイを戻しても、**Supabase のデータと環境変数は戻りません。**
+> スキーマを変えるマイグレーションを適用したあとにコードだけ戻すと、
+> 食い違ったまま動くことになります。
 
 ### Apps Script
 
@@ -255,13 +262,13 @@ Stripe / Supabase / Gmail の値は **Vercel の環境変数にだけ**置きま
 
 本番認証系と `/apps/` は、次の点で完全に分かれています。
 
-| | `/apps/`（テスト環境） | 本番認証系 |
-| --- | --- | --- |
-| 認証 | Supabase（未接続）＋ダミー | Apps Script + スプレッドシート |
-| セッションキー | `tsam-ai-session` | `tsam-auth-session` |
-| Apps Script | `gas/`（お気に入り用） | `gas-auth/`（認証用） |
-| 共通JS | `public/apps/shared/` | `public/auth/` |
-| テスト | `public/apps/tests/` | `tests/` |
+| | `/apps/`（テスト環境） | 本番認証系 | 交流会申込アプリ |
+| --- | --- | --- | --- |
+| 認証 | Supabase（未接続）＋ダミー | Apps Script + スプレッドシート | Supabase Auth（管理画面のみ） |
+| セッションキー | `tsam-ai-session` | `tsam-auth-session` | Cookie `tsam-event-admin` |
+| バックエンド | Apps Script（このリポジトリには無い） | `gas-auth/` | Next.js サーバー（`app/event/`） |
+| 共通JS | `public/apps/shared/` | `public/auth/` | `lib/event/` |
+| テスト | `public/apps/tests/` | `tests/` | `tests/`（`event-*`） |
 
 セッションの保存キーが違うため、片方にログインしても
 もう片方には影響しません。
@@ -274,10 +281,16 @@ Stripe / Supabase / Gmail の値は **Vercel の環境変数にだけ**置きま
 
 | 確認先 | 見るもの |
 | --- | --- |
-| `TSAM AI 認証ログ` → `system_error_logs` | Webhook の失敗、メール送信の失敗 |
+| Vercel → Deployments | ビルドの失敗（失敗したデプロイは本番へ出ません） |
+| Vercel → Logs（Functions） | サーバーアクション・Webhook の実行時エラー |
+| Stripe ダッシュボード → Webhook | 配信の失敗。決済は成立するのに「支払済み」にならない場合はここ |
+| Supabase → `webhook_events` | 処理できなかったイベント |
+| `TSAM AI 認証ログ` → `system_error_logs` | 本番認証系の Webhook の失敗、メール送信の失敗 |
 | `TSAM AI ユーザー管理` → `stripe_events` | `processing_status` が `failed` の行 |
-| Stripe ダッシュボード → Webhook | 配信の失敗 |
 | Apps Script → 実行数 | エラー率の上昇 |
 
 Apps Script の実行が失敗した場合、
 プロジェクト所有者宛にGoogleから通知メールが届きます。
+
+症状からの切り分け表は
+[docs/production-cutover.md](docs/production-cutover.md) の末尾にあります。

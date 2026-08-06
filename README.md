@@ -123,12 +123,37 @@ TSアセットマネジメント合同会社の静的なコーポレートサイ
 | --- | --- | --- |
 | 認証 | Supabase（未接続）＋ダミー | Apps Script + スプレッドシート |
 | セッションキー | `tsam-ai-session` | `tsam-auth-session` |
-| Apps Script | `gas/` | `gas-auth/` |
+| Apps Script | このリポジトリには含まない | `gas-auth/` |
 | 共通JS | `public/apps/shared/` | `public/auth/` |
 | テスト | `public/apps/tests/` | `tests/` |
 
 > `public/apps/AUTH_SETUP.md` は `/apps/` の Google ログイン用です。
 > 本番認証系の手順はルートの [AUTH_SETUP.md](./AUTH_SETUP.md) を参照してください。
+
+## 交流会申込アプリ（`/event/`）
+
+詳細ページ（`public/event/index.html`）は静的HTMLのままで、申込・決済・管理画面が
+Next.jsのルートです。2026年8月1日に本番受付を開始しました。
+
+| 層 | 使用技術 |
+| --- | --- |
+| 画面・サーバー処理 | Next.js（App Router、サーバーアクション。`app/event/`） |
+| ロジック | `lib/event/`（`.mjs` ＋ 型定義 `.d.mts`。外部SDKを使わず fetch で REST を叩く） |
+| データベース | Supabase（プロジェクト `tsam-event`。`supabase/migrations/`） |
+| 決済 | Stripe Checkout ＋ Webhook |
+| 参加確定メール | Gmail API |
+
+| 文書 | 内容 |
+| --- | --- |
+| [docs/vercel-migration.md](docs/vercel-migration.md) | 1リポジトリで静的サイトとNext.jsを同居させる構成、環境変数、Webhookのエンドポイント |
+| [docs/event-app-database.md](docs/event-app-database.md) | Supabaseのスキーマ、マイグレーションの適用、権限設計 |
+| [docs/event-admin.md](docs/event-admin.md) | 管理画面 |
+| [docs/production-cutover.md](docs/production-cutover.md) | 本番切替の実施記録、受付の開始と停止、切り分け表 |
+| [docs/event-acceptance.md](docs/event-acceptance.md) | 受入条件の判定結果 |
+
+**受付を止めるときは、Supabase の `events.is_published` を `false` にするのが先です**
+（即時。サーバー側の受付判定はこちら）。`public/event/index.html` の
+`data-event-status` は表示を合わせるための操作で、デプロイに1〜2分かかります。
 
 ## 実装済みセクション
 
@@ -216,17 +241,13 @@ Chrome DevToolsのLighthouseで次を確認します。
 
 ## 未確定事項
 
-- canonical URL
-- `og:url`
 - OGP画像と`og:image`
-- favicon
-- 利用規約・プライバシーポリシーの公開URL
 
 未確定値は推測せず、TODOコメントを維持しています。
 
-利用規約とプライバシーポリシーは、ログイン画面と料金プラン画面に
-項目として表示していますが、公開URLが未確定のためリンクにしていません
-（「準備中」と明示）。URLが確定したら、次の箇所をリンクへ差し替えてください。
+公開URLは`https://tsam-ai.com/`で確定しました。`public/index.html`には
+canonicalと`og:url`のTODOコメントが残っているため、確定した値へ差し替える作業が残っています。
+favicon は設定済みです。
 
-- [login/index.html](login/index.html)
-- [pricing/index.html](pricing/index.html)
+利用規約・プライバシーポリシーは、ログイン画面と料金プラン画面から
+`/legal/` へリンク済みです（「準備中」ではありません）。

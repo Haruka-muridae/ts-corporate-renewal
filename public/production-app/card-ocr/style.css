@@ -1,0 +1,322 @@
+/*
+ * 名刺OCRアプリの見た目。
+ *
+ * 共通の色と部品は css/style.css と auth/auth.css を読み込んだうえで、
+ * 足りない分だけをここに書く（要件定義書 §10.2「Portal・ログイン画面との
+ * 視覚的一貫性」）。
+ *
+ * スマートフォン優先。押しやすさのため、操作要素は 44px 以上を確保する。
+ */
+
+.co-header {
+  margin-bottom: 1.75rem;
+}
+
+.co-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.co-lead {
+  margin: 0;
+  color: #4a5568;
+  line-height: 1.7;
+}
+
+.co-panel {
+  border: 1px solid #d9dee5;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  background: #fff;
+}
+
+.co-panel--notice {
+  border-color: #b9c6d8;
+  background: #f6f9fd;
+}
+
+/* ---------- 「準備」の親アコーディオン ---------- */
+
+.co-prep-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin: 0;
+}
+
+.co-prep[open] > .co-prep-summary {
+  margin-bottom: 1rem;
+}
+
+/* 中の小見出しは、親より一段控えめにする。 */
+.co-sub {
+  margin-bottom: 0.75rem;
+  background: #fbfcfd;
+}
+
+.co-prep > .co-sub:last-of-type {
+  margin-bottom: 0;
+}
+
+.co-sub-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.co-sub[open] > .co-sub-summary {
+  margin-bottom: 0.75rem;
+}
+
+.co-prep-summary:focus-visible,
+.co-sub-summary:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
+/*
+ * 「ご利用の前に」の見出し。**閉じていても常に見える。**
+ *
+ * 開閉の印（▶）はブラウザが付ける。自前で作らないので、
+ * 利用者が使い慣れた見た目のままになる。
+ */
+.co-notice-summary {
+  /* 押しやすさ。指で触る前提（§10.2）。 */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* 閉じているときは、下の余白が要らない。 */
+.co-panel--notice:not([open]) {
+  padding-bottom: 0.5rem;
+}
+
+.co-panel--notice:not([open]) .co-notice-summary {
+  min-height: 40px;
+}
+
+.co-notice-summary:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
+.co-panel--notice[open] .co-notice-summary {
+  margin-bottom: 0.75rem;
+}
+
+/* 誘導は1画面に1つだけ。目立たせる。 */
+.co-panel--guidance {
+  border-color: #c8a34a;
+  background: #fdfaf1;
+}
+
+.co-panel-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.875rem;
+}
+
+.co-notice-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.8;
+  color: #37414f;
+}
+
+.co-notice-list li + li {
+  margin-top: 0.5rem;
+}
+
+/* 準備の状況。狭い画面では縦に積む。 */
+.co-status {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  margin: 0;
+  align-items: baseline;
+}
+
+.co-status-label {
+  margin: 0;
+  color: #4a5568;
+}
+
+.co-status-value {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* 記号ではなく色と語で示す。色だけに意味を持たせない。 */
+.co-status-value[data-ok='yes'] {
+  color: #1f6f43;
+}
+
+.co-status-value[data-ok='no'] {
+  color: #8a5a00;
+}
+
+.co-status-value[data-ok='pending'] {
+  color: #4a5568;
+  font-weight: 400;
+}
+
+/* 保存先の案内。作り直しなど、見落とされると困るものが入る。 */
+#co-storage-notices {
+  margin-top: 0.875rem;
+  color: #7a4b00;
+}
+
+#co-storage-notices li[data-notice='SCHEMA_ALTERED'],
+#co-storage-notices li[data-notice='RECREATED'] {
+  font-weight: 700;
+}
+
+.co-guidance-text {
+  margin: 0 0 1rem;
+  line-height: 1.8;
+  color: #37414f;
+}
+
+.co-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.co-actions .auth-button {
+  min-height: 44px;
+}
+
+/* ---------- 撮影（SC-01 / SC-02） ---------- */
+
+.co-field {
+  margin-bottom: 1rem;
+}
+
+.co-field-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-weight: 700;
+}
+
+/* ファイル選択は押しやすさを優先する。 */
+.co-field-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem;
+  border: 1px solid #c3ccd8;
+  border-radius: 0.375rem;
+  background: #fff;
+}
+
+.co-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0 0;
+}
+
+.co-preview {
+  flex: 1 1 14rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid #d9dee5;
+  border-radius: 0.375rem;
+  background: #fbfcfd;
+}
+
+.co-preview-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.25rem;
+  background: #eef2f7;
+}
+
+.co-preview-caption {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.co-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.co-preview-actions .auth-button {
+  min-height: 44px;
+  flex: 1 1 auto;
+}
+
+/* ---------- 読み取り結果（§8.1 ステージ3・4） ---------- */
+
+.co-fields {
+  margin: 1rem 0 1.25rem;
+}
+
+.co-field-row {
+  margin-bottom: 0.75rem;
+}
+
+/* 要確認は色だけで示さない。「要確認」の語も添える。 */
+.co-field-row .co-review-mark {
+  color: #7a4b00;
+}
+
+.co-field-row .co-field-input[data-review='yes'] {
+  border-color: #c8a34a;
+  background: #fdfaf1;
+}
+
+.co-review-mark {
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+@media (max-width: 26rem) {
+  .co-fields {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+
+  .co-field-value {
+    margin-bottom: 0.5rem;
+  }
+}
+
+@media (max-width: 26rem) {
+  .co-status {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .co-status-value {
+    text-align: left;
+    margin-bottom: 0.5rem;
+  }
+
+  .co-actions .auth-button {
+    width: 100%;
+  }
+}
+
+/* 「その他」は複数行になりうる。 */
+textarea.co-field-input {
+  resize: vertical;
+  min-height: 5rem;
+  font-family: inherit;
+  line-height: 1.6;
+}

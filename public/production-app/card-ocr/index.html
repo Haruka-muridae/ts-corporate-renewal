@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>名刺OCR｜TSAM AI</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy（フェーズ0 の残項目15）
+  ==================================================================
+  next.config.ts の headers() ではなく meta で宣言する。
+  next.config.ts は public/ 全体の配信に効くため、このアプリのために
+  触ると本体サイトを巻き込む。領収書OCRが meta 方式で成立している。
+
+  script-src に accounts.google.com が入っているのは Google Identity
+  Services のためで、これは認可そのものの提供元である。
+  **ここへ他のホストを足さないこと。**
+
+  connect-src は要件定義書 §12 の3系統に、TSAM AI 認証系（Apps Script）を
+  加えたもの。script.googleusercontent.com は Apps Script が
+  リダイレクト先に使うため必要。
+
+  img-src の blob: は、選んだ画像をプレビューするため（フェーズ2で使う）。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../css/style.css">
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <!--
+      guardPage() が利用者を返すまで中身を出さない。
+      hidden を外すのは app.js だけ。
+    -->
+    <p id="co-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="co-content" hidden>
+
+      <header class="co-header">
+        <h1 class="co-title">名刺OCR</h1>
+        <p class="co-lead">
+          名刺の画像から項目を読み取り、<strong>あなた自身のGoogleドライブ</strong>に保存します。
+        </p>
+      </header>
+
+      <!--
+        利用上の明示事項（要件定義書 §5.3）。
+
+        ==================================================================
+        なぜ <details> なのか
+        ==================================================================
+        開閉は JavaScript を書かずに済ませる。ブラウザの標準の要素なので、
+        キーボード操作も読み上げも初めから効く。ARIA でボタンを作り直すと、
+        同じ動きを自分で書き直すことになる（AGENTS.md「ARIA をネイティブ
+        要素の代替にしない」）。
+
+        **常に閉じた状態で始まる。** `open` は付けない。JavaScript も
+        書かない（開閉の記憶もしない）。要件定義書 §5.3 の注記のとおり、
+        **常時表示・既定は閉・任意で開**という解釈で実装している。
+
+        見出しは閉じていても常に見えるので、いつでも開ける。
+        ==================================================================
+      -->
+      <!--
+        ==================================================================
+        親アコーディオン「準備」
+        ==================================================================
+        ご利用の前に／準備の状況／保存先 をまとめる。
+        **すべて正常なら親ごと畳む。** 準備が済んだ利用者が開いたとき、
+        最初に見えるのが撮影の欄になるようにするため。
+
+        **`open` を最初から付けてある。** JavaScript が動く前は開いており、
+        畳むのは「すべて正常」と分かったときだけ（app.js）。逆にすると、
+        JS が失敗したときに準備の状態が見えないまま残る。
+
+        **誘導（co-guidance）はこの中に入れない。** 畳まれて気づかない、
+        を作らないため、親の外に置いて常に見えるようにしてある。
+        ==================================================================
+      -->
+      <details id="co-prep" class="co-panel co-prep" open>
+        <summary id="co-prep-summary" class="co-panel-title co-prep-summary">準備</summary>
+
+      <details id="co-notice" class="co-panel co-sub co-panel--notice">
+        <summary id="co-notice-title" class="co-notice-summary">ご利用の前に</summary>
+        <ul class="co-notice-list">
+          <li>名刺データと画像は<strong>あなたのGoogleドライブにのみ</strong>保存されます。当社は受信も保管も閲覧もしません。</li>
+          <li>バックアップ・整理・削除・共有設定・容量の管理は、あなた自身で行ってください。当社は復旧の義務を負いません。</li>
+          <li>Gemini APIの利用費（有料キーの場合）は、あなたに課金されます。</li>
+          <li><strong>無料枠のキーでは、送信したテキストがGoogleのプロダクト改善に使われる場合があります。</strong>名刺は第三者の個人情報のため、業務でお使いの場合は有料区分のキーをおすすめします。</li>
+          <li>名刺情報（第三者の個人情報）の取り扱いに関する法令の遵守は、データを保有するあなたの責任で行ってください。</li>
+          <li>保存フォルダやスプレッドシートを削除・移動された場合、次回起動時に新しい保存先を作ります。過去データとの連続性は保証しません。</li>
+        </ul>
+      </details>
+
+      <!-- 前提の一覧（SC-00）。誘導とは別に、3つとも状態を見せる。 -->
+      <details id="co-status-panel" class="co-panel co-sub" open>
+        <summary id="co-status-summary" class="co-sub-summary">準備の状況</summary>
+        <dl id="co-status" class="co-status"></dl>
+      </details>
+
+      <!-- 保存先の用意（§8.1 ステージ0）。連携後にだけ出す。 -->
+      <details id="co-storage" class="co-panel co-sub" aria-live="polite" open hidden>
+        <summary id="co-storage-summary" class="co-sub-summary">保存先</summary>
+
+        <dl class="co-status">
+          <dt class="co-status-label">マイドライブ／TSAM AI／名刺データ</dt>
+          <dd id="co-storage-state" class="co-status-value" data-ok="pending">確認しています…</dd>
+        </dl>
+
+        <ul id="co-storage-notices" class="co-notice-list" hidden></ul>
+
+        <div class="co-actions">
+          <a id="co-sheet-link" class="auth-button auth-button--ghost"
+             href="#" target="_blank" rel="noopener noreferrer" hidden>名刺管理シートを開く</a>
+        </div>
+      </details>
+
+      <!-- 準備が整ったときだけ出す。 -->
+      <div id="co-ready" class="co-panel co-sub" hidden>
+        <p class="co-guidance-text">Googleドライブと連携しています。</p>
+        <button id="co-disconnect" type="button" class="auth-button auth-button--ghost">連携を解除する</button>
+      </div>
+
+      </details>
+      <!-- ／親アコーディオン「準備」ここまで -->
+
+      <!--
+        誘導。**該当するものだけを1つ出す**（要件定義書 §10.1）。
+        中身は app.js が textContent で組み立てる（innerHTML を使わない）。
+      -->
+      <section id="co-guidance" class="co-panel co-panel--guidance" aria-live="polite" hidden>
+        <h2 id="co-guidance-title" class="co-panel-title"></h2>
+        <p id="co-guidance-text" class="co-guidance-text"></p>
+
+        <div class="co-actions">
+          <a id="co-login-link" class="auth-button" href="../../login/" hidden>ログインする</a>
+          <a id="co-portal-link" class="auth-button" href="../../portal/" hidden>ポータルでキーを設定する</a>
+          <button id="co-connect" type="button" class="auth-button" hidden>Googleと連携する</button>
+        </div>
+      </section>
+
+      <!-- 準備が整ったときだけ出す。 -->
+      <section id="co-ready" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">Googleドライブと連携しました</h2>
+        <button id="co-disconnect" type="button" class="auth-button auth-button--ghost">連携を解除する</button>
+      </section>
+
+      <!-- 保存先の用意（§8.1 ステージ0）。連携後にだけ出す。 -->
+      <section id="co-storage" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">保存先</h2>
+
+        <dl class="co-status">
+          <dt class="co-status-label">マイドライブ／TSAM AI／名刺データ</dt>
+          <dd id="co-storage-state" class="co-status-value" data-ok="pending">確認しています…</dd>
+        </dl>
+
+        <ul id="co-storage-notices" class="co-notice-list" hidden></ul>
+
+        <div class="co-actions">
+          <a id="co-sheet-link" class="auth-button auth-button--ghost"
+             href="#" target="_blank" rel="noopener noreferrer" hidden>名刺管理シートを開く</a>
+        </div>
+
+      </section>
+
+      <!--
+        名刺の撮影・選択（SC-01 / SC-02）。
+        **表面と裏面を1画面に並べない**（§FR-03）。
+        いま撮る面だけを出し、順に進む。
+      -->
+      <section id="co-capture" class="co-panel" aria-live="polite" hidden>
+        <h2 id="co-capture-title" class="co-panel-title"></h2>
+        <p id="co-capture-text" class="co-guidance-text"></p>
+
+        <!-- 面ごとの入力。表示するのは片方だけ。 -->
+        <div id="co-front-field" class="co-field" hidden>
+          <label class="co-field-label" for="co-front-input">表面の画像</label>
+          <input id="co-front-input" class="co-field-input" type="file"
+                 accept="image/jpeg,image/png" capture="environment">
+        </div>
+
+        <div id="co-back-field" class="co-field" hidden>
+          <label class="co-field-label" for="co-back-input">裏面の画像</label>
+          <input id="co-back-input" class="co-field-input" type="file"
+                 accept="image/jpeg,image/png" capture="environment">
+        </div>
+
+        <!-- 裏面を撮るかどうか。「なしで進む」を先に置く（多数派のため）。 -->
+        <div id="co-ask-back" class="co-actions" hidden>
+          <button id="co-skip-back" type="button" class="auth-button">裏面なしで進む</button>
+          <button id="co-want-back" type="button" class="auth-button auth-button--ghost">裏面も読み取る</button>
+        </div>
+
+        <!-- プレビュー（§FR-04）。面ごとに取り消し・回転できる。 -->
+        <div id="co-previews" class="co-previews"></div>
+
+        <div id="co-start-actions" class="co-actions" hidden>
+          <button id="co-start" type="button" class="auth-button" disabled>読み取りを開始する</button>
+          <button id="co-reset" type="button" class="auth-button auth-button--ghost">選び直す</button>
+        </div>
+
+      </section>
+
+      <!--
+        読み取り（Drive OCR。§8.1 ステージ2）。
+        **読み取った本文はここに出さない。** 第三者の個人情報であり、
+        画面に出す必要がない。出すのは文字数だけ。
+      -->
+      <section id="co-ocr" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">読み取り</h2>
+
+        <dl class="co-status">
+          <dt class="co-status-label">Googleドライブの文字認識</dt>
+          <dd id="co-ocr-state" class="co-status-value" data-ok="pending">読み取っています…</dd>
+        </dl>
+
+        <dl id="co-ocr-sides" class="co-status"></dl>
+
+        <p id="co-ocr-note" class="co-guidance-text">
+          読み取った本文は画面に出しません。項目へ振り分けたものを下に表示します。
+        </p>
+      </section>
+
+      <!-- 項目への振り分け（§8.1 ステージ3・4）。 -->
+      <section id="co-fields" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">読み取り結果</h2>
+
+        <dl class="co-status">
+          <dt class="co-status-label">項目への振り分け</dt>
+          <dd id="co-fields-state" class="co-status-value" data-ok="pending">振り分けています…</dd>
+        </dl>
+
+        <!--
+          確認・修正（SC-04）。入力欄は JS が組み立てる。
+          **保存されるのは、この欄に見えている値**である。
+        -->
+        <div id="co-fields-list" class="co-fields"></div>
+
+        <!-- 値の由来。どこから来たかを追えるようにする（§FR-15 の5）。 -->
+        <ul id="co-fields-notes" class="co-notice-list" hidden></ul>
+
+        <div class="co-actions">
+          <button id="co-register" type="button" class="auth-button">この内容で登録する</button>
+        </div>
+
+        <p class="co-guidance-text">
+          登録すると、画像はあなたのドライブの
+          <code>TSAM AI／名刺データ／images</code> に、内容は
+          <code>名刺管理</code> シートに1行として保存されます。
+        </p>
+      </section>
+
+      <!-- 登録の結果（SC-06）。 -->
+      <section id="co-saved" class="co-panel" aria-live="polite" hidden>
+        <h2 class="co-panel-title">登録しました</h2>
+        <dl id="co-saved-list" class="co-status"></dl>
+
+        <div class="co-actions">
+          <a id="co-saved-sheet" class="auth-button auth-button--ghost"
+             href="#" target="_blank" rel="noopener noreferrer">名刺管理シートを開く</a>
+          <button id="co-next" type="button" class="auth-button">次の名刺を登録する</button>
+        </div>
+      </section>
+
+      <!-- 同じ画像が既に登録されていたとき（DUP-001）。 -->
+      <section id="co-duplicate" class="co-panel co-panel--guidance" aria-live="polite" hidden>
+        <h2 id="co-duplicate-title" class="co-panel-title"></h2>
+        <p id="co-duplicate-text" class="co-guidance-text"></p>
+
+        <div class="co-actions">
+          <button id="co-register-anyway" type="button" class="auth-button auth-button--ghost">それでも登録する</button>
+          <button id="co-duplicate-cancel" type="button" class="auth-button">やめる</button>
+        </div>
+      </section>
+
+      <p id="co-message" class="auth-message" role="status" aria-live="polite" tabindex="-1" hidden></p>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+
+</body>
+</html>

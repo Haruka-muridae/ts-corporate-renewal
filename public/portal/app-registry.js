@@ -17,8 +17,19 @@
  * href の2通り
  * ------------------------------------------------------------------
  * サイト内 … **ルートからの相対パス。先頭に '/' を付けないこと。**
- *            '/production-app/…' のようなサイト内絶対パスにすると、
- *            プロジェクトPages配信で404になる。
+ *            portal.js はサイト内のリンクを `rootPath() + href` で組み立てる。
+ *            先頭に '/' があると、その連結結果がスラッシュ2つになる。
+ *
+ *              'production-app/example/'
+ *                → '../production-app/example/'
+ *                → https://tsam-ai.com/production-app/example/
+ *              '/production-app/example/'
+ *                → '..//production-app/example/'
+ *                → https://tsam-ai.com//production-app/example/   ← 別のURL
+ *
+ *            auth/ 配下は screenPath() / rootPath() で相対リンクに
+ *            統一してある。1か所だけ絶対パスを混ぜると、深さの指定
+ *            （setScreenDepth）が効かなくなる。
  * サイト外 … `https://` で始まる絶対URL。別タブで開き、
  *            rel="noopener noreferrer" が自動で付く。
  *
@@ -97,5 +108,22 @@ export const APP_REGISTRY = Object.freeze([
     name: '電子契約書作成アプリ',
     href: 'https://haruka-muridae.github.io/ai-personal-lp/',
     icon: 'http://localhost:8000/apps/assets/icons/contract-creator.svg',
+  }),
+
+  /*
+   * ここから下は実物。上の3件（仮データ）と違い、実際に動くアプリを指す。
+   *
+   * id は配置データ（tsam-app-layout の order）が指す先なので、
+   * **あとから変えないこと**（apps-grid-spec-v1.md §4-c）。
+   * アプリIDと同じ文字列にしてある（receipt-ocr-v2.md §2）。
+   *
+   * icon は文字1字。画像URLにすると読み込み失敗のフォールバックに
+   * 頼ることになるため、実物には確実に出る文字を置く。
+   */
+  Object.freeze({
+    id: 'receipt-ocr',
+    name: '領収書スキャナ',
+    href: 'production-app/receipt-ocr/',
+    icon: '領',
   }),
 ]);
