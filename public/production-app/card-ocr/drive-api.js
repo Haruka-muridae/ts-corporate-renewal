@@ -79,11 +79,16 @@ export class DriveError extends Error {
 export function describeDriveError(error) {
   const isKnown = error instanceof DriveError;
   const code = isKnown ? error.code : DriveErrorCode.UNKNOWN;
+  const status = isKnown ? Number(error.status ?? 0) : 0;
   const detail = isKnown
     ? String(error.detail ?? '')
     : `${error?.name ?? 'Error'}: ${error?.message ?? String(error)}`;
 
-  const described = (text, errorCode) => ({ text, errorCode, detail });
+  /*
+   * **内部コードも返す。** DRV-001 は7つの内部コードの受け皿なので、
+   * 画面へ出すときにどれだったのかを添えられるようにする。
+   */
+  const described = (text, errorCode) => ({ text, errorCode, detail, status, code });
 
   switch (code) {
     case DriveErrorCode.UNAUTHORIZED:
@@ -107,6 +112,10 @@ export function describeDriveError(error) {
   }
 }
 
+/*
+ * 分類に使う識別子（`insufficientPermissions` など）を取り出す。
+ * **これは分類のためだけ。** 画面へ出すのは下の summarizeErrorBody。
+ */
 export function extractReason(body) {
   const error = body?.error;
 
@@ -119,6 +128,49 @@ export function extractReason(body) {
   }
 
   return String(error.status ?? '');
+}
+
+/*
+ * 原因の要約を作る。**画面とCSVへ出すのはこの値である。**
+ *
+ * ==================================================================
+ * DRV-001 だけでは切り分けられない
+ * ==================================================================
+ * §15 のコードは7つの内部コードを DRV-001 に集約している。表示コードを
+ * 増やせない（仕様書が実装の正）以上、**どこが違ったのかは detail で
+ * 伝えるしかない。**
+ *
+ * Gemini 側で同じ問題があり、SYS-999 の切り分けに何時間もかかった
+ * （フェーズ0計画 §7-5-2）。領収書OCRにも同種の欠陥がある
+ * （docs/receipt-ocr-findings-20260804.md #5）。同じ形にしない。
+ *
+ * **HTTPステータスを必ず入れる。** reason だけだと 403 なのか 400 なのかが
+ * 分からず、対処（待つ／設定を直す／こちらの不具合）を選べない。
+ * Drive の error.message には「どの権限が足りないか」まで書かれている。
+ * ==================================================================
+ */
+export function summarizeErrorBody(body, status) {
+  const error = body?.error;
+  const parts = [];
+
+  const reason = extractReason(body);
+
+  if (reason !== '') {
+    parts.push(reason);
+  }
+
+  if (typeof error?.message === 'string' && error.message !== '') {
+    parts.push(error.message);
+  }
+
+  if (parts.length === 0) {
+    return `HTTP ${status}`;
+  }
+
+  const text = `HTTP ${status} ${parts.join(': ')}`;
+
+  /* 長すぎると画面が壊れる。頭を切る。トークンは本文に出ない。 */
+  return text.length > 300 ? `${text.slice(0, 297)}…` : text;
 }
 
 /*
@@ -240,13 +292,18 @@ export async function driveRequest(url, {
   }
 
   if (!response.ok) {
+    /*
+     * **エラー応答の本文を読んでから投げる。** 読み捨てると、
+     * 「どの権限が足りないか」をサーバーが教えてくれているのに
+     * 画面には DRV-001 しか出ない。
+     */
     const errorBody = await readJsonSafely(response);
     const reason = extractReason(errorBody);
 
     throw new DriveError(
       mapHttpErrorToCode(response.status, reason),
       response.status,
-      reason || null,
+      summarizeErrorBody(errorBody, response.status),
     );
   }
 
