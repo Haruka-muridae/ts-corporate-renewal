@@ -336,6 +336,15 @@ export async function inspectSpreadsheet(spreadsheetId, { token, fetchImpl, sign
     return { writable: false, notices: [...notices] };
   }
 
+  /*
+   * **グリッドの幅を渡す。** 既定のシートは26列しかなく、27列目へ
+   * 書こうとすると Sheets が 400 で弾く（sheets.js の ensureColumnCount）。
+   * タブを作り直した直後は幅が変わっているので、取り直す。
+   */
+  const dataTab = (lacking.length > 0
+    ? (await getStructure(spreadsheetId, { token, fetchImpl, signal })).tabs
+    : structure.tabs).find((tab) => tab.title === TABS.data);
+
   if (verdict.status === 'empty') {
     await writeHeader(spreadsheetId, TABS.data, TAB_COLUMNS[TABS.data], { token, fetchImpl, signal });
   } else if (verdict.status === 'upgrade') {
@@ -344,7 +353,13 @@ export async function inspectSpreadsheet(spreadsheetId, { token, fetchImpl, sign
       TABS.data,
       header.length,
       verdict.missing,
-      { token, fetchImpl, signal },
+      {
+        token,
+        fetchImpl,
+        signal,
+        sheetId: dataTab?.sheetId ?? null,
+        currentColumnCount: dataTab?.columnCount ?? 0,
+      },
     );
     notices.add(StorageNotice.SCHEMA_UPGRADED);
   }

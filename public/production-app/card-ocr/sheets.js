@@ -59,6 +59,19 @@ export const TAB_COLUMNS = Object.freeze({
 export const TAB_ORDER = Object.freeze([TABS.data, TABS.history]);
 
 /*
+ * タブを作るときに確保する列数。
+ *
+ * **Sheets の既定は26列。** 列定義がそれを超えると、見出しを書いた
+ * 瞬間に「exceeds grid limits」で 400 になる。作る時点で足りるだけ
+ * 確保しておけば、そのあとの書き込みは素直に通る。
+ *
+ * 26 を下回らせないのは、利用者が見慣れた幅を狭めないため。
+ */
+export function gridWidthFor(tabTitle) {
+  return Math.max(26, (TAB_COLUMNS[tabTitle] ?? []).length);
+}
+
+/*
  * 0起点の列番号を A1 記法の列名にする（0 → A、25 → Z、26 → AA）。
  *
  * 列は26を超えうる（§11.2 の v3.1 で面ごとに分けたため）。
@@ -110,7 +123,17 @@ export async function createSpreadsheet(parentFolderId, { token, fetchImpl, sign
         locale: 'ja_JP',
         timeZone: 'Asia/Tokyo',
       },
-      sheets: TAB_ORDER.map((title) => ({ properties: { title } })),
+      /*
+       * **列数を明示する。** 既定は26列で、27列目（その他）へ見出しを
+       * 書いた瞬間に 400 になる。作るときに広げておけば、そのあとの
+       * 書き込みは素直に通る。
+       */
+      sheets: TAB_ORDER.map((title) => ({
+        properties: {
+          title,
+          gridProperties: { columnCount: gridWidthFor(title) },
+        },
+      })),
     }),
   });
 
@@ -142,7 +165,14 @@ export async function createSpreadsheet(parentFolderId, { token, fetchImpl, sign
 
 /* タブの一覧。健全性の確認に使う。 */
 export async function getStructure(spreadsheetId, { token, fetchImpl, signal } = {}) {
-  const params = new URLSearchParams({ fields: 'sheets(properties(sheetId,title))' });
+  /*
+   * **列数（gridProperties.columnCount）も取る。**
+   * Sheets はグリッドの外側へ書けない。列を足す前に、いまの幅を
+   * 知っておく必要がある（下の ensureColumnCount）。
+   */
+  const params = new URLSearchParams({
+    fields: 'sheets(properties(sheetId,title,gridProperties(columnCount,rowCount)))',
+  });
 
   const result = await driveFetchJson(sheetsUrl(spreadsheetId, '', params), {
     token,
@@ -156,6 +186,8 @@ export async function getStructure(spreadsheetId, { token, fetchImpl, signal } =
     tabs: sheets.map((sheet) => ({
       title: String(sheet?.properties?.title ?? ''),
       sheetId: sheet?.properties?.sheetId ?? null,
+      columnCount: Number(sheet?.properties?.gridProperties?.columnCount ?? 0),
+      rowCount: Number(sheet?.properties?.gridProperties?.rowCount ?? 0),
     })),
   };
 }
@@ -216,20 +248,75 @@ export async function writeHeader(spreadsheetId, tabTitle, columns, { token, fet
 }
 
 /*
+ * グリッドの幅を広げる。
+ *
+ * ==================================================================
+ * Sheets はグリッドの外へ書けない
+ * ==================================================================
+ * 既定のシートは26列（Z列まで）しかない。27列目（AA）へ
+ * `values.update` すると、**400 で弾かれる。**
+ *
+ *   Range ('名刺データ'!AA1) exceeds grid limits. Max columns: 26
+ *
+ * 実際に本番で起きた（v3.5 で「その他」を足したとき）。
+ * **書く前に、まずグリッドそのものを広げる。**
+ *
+ * テストのスタブがこの検査をしていなかったため、通ってしまっていた。
+ * いまはスタブ側でも範囲を検査している。
+ * ==================================================================
+ */
+export async function ensureColumnCount(spreadsheetId, sheetId, needed, { token, fetchImpl, signal } = {}) {
+  /*
+   * sheetId が分からないときは広げようがない。**黙って進めない。**
+   * 呼び出し側が getStructure から渡す。
+   */
+  if (sheetId === null || sheetId === undefined) {
+    throw new DriveError(DriveErrorCode.BAD_REQUEST, 0, 'sheet_id_unknown_cannot_expand_grid');
+  }
+
+  await driveFetchJson(sheetsUrl(spreadsheetId, ':batchUpdate'), {
+    token,
+    fetchImpl,
+    signal,
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      requests: [{
+        appendDimension: { sheetId, dimension: 'COLUMNS', length: needed },
+      }],
+    }),
+  });
+}
+
+/*
  * 足りない列を**右端へ足す**（既存の列には触れない）。
  *
  * 触れないのは、利用者がすでに入れた値を動かさないため。
  * 列の意味は位置で決まるので、途中へ挿入すると既存の行がずれる。
+ *
+ * **書く前にグリッドを広げる。** currentColumnCount より右へ書く場合、
+ * 先に列を足さないと 400 になる（上の ensureColumnCount）。
  */
 export async function appendMissingColumns(
   spreadsheetId,
   tabTitle,
   existingCount,
   missingColumns,
-  { token, fetchImpl, signal } = {},
+  { token, fetchImpl, signal, sheetId = null, currentColumnCount = 0 } = {},
 ) {
   if (!Array.isArray(missingColumns) || missingColumns.length === 0) {
     return;
+  }
+
+  const lastColumnNeeded = existingCount + missingColumns.length;
+
+  if (currentColumnCount > 0 && lastColumnNeeded > currentColumnCount) {
+    await ensureColumnCount(
+      spreadsheetId,
+      sheetId,
+      lastColumnNeeded - currentColumnCount,
+      { token, fetchImpl, signal },
+    );
   }
 
   const start = `${columnLetter(existingCount)}1`;
@@ -292,7 +379,12 @@ export async function addTabs(spreadsheetId, titles, { token, fetchImpl, signal 
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({
-      requests: titles.map((title) => ({ addSheet: { properties: { title } } })),
+      /* 作り直すタブにも列数を明示する（作成時と同じ理由）。 */
+      requests: titles.map((title) => ({
+        addSheet: {
+          properties: { title, gridProperties: { columnCount: gridWidthFor(title) } },
+        },
+      })),
     }),
   });
 }
