@@ -1,0 +1,91 @@
+/*
+ * Cloudflare Workers の設定（OpenNext 経由で Next.js を動かす）。
+ *
+ * ------------------------------------------------------------------
+ * この設定は「後から起こした」ものである
+ * ------------------------------------------------------------------
+ * 2026-08-06 に Vercel から Cloudflare へ移行した際、デプロイは別マシンから
+ * wrangler で手動実行された（Cloudflare の Versions に
+ * `Manually deployed / Wrangler by architect` として記録されている）。
+ * そのときの設定ファイルはこのリポジトリに入っておらず、内容も不明である。
+ *
+ * **したがって、この設定が現在動いている Worker の設定と一致している保証はない。**
+ * このファイルで初めてデプロイする前に、下の「デプロイ前に確認すること」を
+ * 必ず消化すること。詳細は docs/deployment-cloudflare.md にある。
+ * ------------------------------------------------------------------
+ *
+ * ------------------------------------------------------------------
+ * デプロイ前に確認すること
+ * ------------------------------------------------------------------
+ * 1. routes … 現在の Worker が「Custom Domain」で tsam-ai.com に
+ *    ぶら下がっているのか、ゾーンの「Route」なのかをダッシュボードで確認する。
+ *    形式が違うまま deploy すると、**トリガーが二重に付く**おそれがある。
+ *    下では Custom Domain を仮に置いてある。Route だった場合は
+ *    コメントしてあるほうへ差し替える。
+ *
+ * 2. compatibility_date … 稼働中の版と揃える。
+ *    ダッシュボードの Settings、または `npx wrangler versions view` で見られる。
+ *    ここで下げると挙動が変わる可能性がある。
+ *
+ * 3. R2 / サービスバインディング / 画像最適化 … 下でコメントアウトしてある。
+ *    稼働中の版がこれらを使っているなら、有効化してから deploy する。
+ *    使っていないのに有効化すると、バケット未作成で deploy が落ちる。
+ * ------------------------------------------------------------------
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+
+	"name": "ts-corporate-renewal",
+	"account_id": "4a71eb14d3889124d4afedd48c1458d8",
+
+	/* OpenNext が生成する Worker 本体と静的アセット。手で作るものではない。 */
+	"main": ".open-next/worker.js",
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+
+	/*
+	 * nodejs_compat … Next.js のサーバー側が Node API を使うため必須。
+	 * global_fetch_strictly_public … OpenNext のテンプレートが指定している。
+	 *   Worker 内からの fetch を公開インターネット扱いにし、
+	 *   同一 Worker への自己参照を意図せず内部呼び出しにしないためのもの。
+	 */
+	"compatibility_date": "2025-03-25",
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+	/*
+	 * 公開先。**この形式が現状と合っているか、上の 1 を必ず確認すること。**
+	 *
+	 * ゾーンの Route だった場合はこちらへ差し替える:
+	 *   "routes": [
+	 *     { "pattern": "tsam-ai.com/*", "zone_name": "tsam-ai.com" }
+	 *   ]
+	 */
+	"routes": [
+		{ "pattern": "tsam-ai.com", "custom_domain": true }
+	]
+
+	/*
+	 * ------------------------------------------------------------------
+	 * 以下は OpenNext の既定テンプレートにある任意設定。既定では使わない。
+	 * ------------------------------------------------------------------
+	 * 有効化するときは、**先に Cloudflare 側で実体を作ること。**
+	 * 作らずに deploy すると失敗する。
+	 *
+	 * "services": [
+	 *   // 自己参照。ISR のキャッシュ再検証に使う。service は name と同じにする
+	 *   { "binding": "WORKER_SELF_REFERENCE", "service": "ts-corporate-renewal" }
+	 * ],
+	 * "r2_buckets": [
+	 *   // 増分キャッシュ（ISR）用。事前に bucket を作る必要がある
+	 *   { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "ts-corporate-renewal-opennext-cache" }
+	 * ],
+	 * "images": { "binding": "IMAGES" }
+	 *
+	 * このサイトは public/ の静的ファイルが大半で、サーバー側で動くのは
+	 * 交流会申込（app/event/）だけ。ISR も next/image も使っていないため、
+	 * 無しで成立する。必要になった時点で有効化すること。
+	 * ------------------------------------------------------------------
+	 */
+}

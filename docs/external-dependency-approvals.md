@@ -17,6 +17,36 @@
 | --- | --- | --- | --- | --- |
 | Google Identity Services（GIS） | `https://accounts.google.com/gsi/client`（Google本体） | `public/production-app/card-ocr/`（名刺OCRアプリ） | Drive / Sheets API を呼ぶための OAuth トークン取得（トークンモデル） | 2026-08-03 |
 | `@playwright/test` | npm（devDependency） | `tests/e2e/` のみ | ブラウザ録音アプリの E2E（実マイク入力・OPFS・メモリ計測） | 2026-08-06 |
+| `@opennextjs/cloudflare` / `wrangler` | npm（devDependency） | ビルドとデプロイのみ | 本番配信（Cloudflare Workers）に必要。**既に本番で使われている構成を、設定ごとリポジトリへ入れたもの** | 2026-08-06 |
+
+### 1-3. OpenNext（Cloudflare）と wrangler
+
+**承認の範囲**: ビルドとデプロイに限る。**devDependency であり、配信物には入らない。**
+
+**なぜ必要か**: これは新しい依存の追加ではなく、**既成事実の追認**である。
+2026-08-06 に Vercel から Cloudflare へ移行した際、デプロイは別マシンから wrangler で
+手動実行された（Cloudflare の Versions に `Manually deployed / Wrangler by architect`）。
+そのときの設定はリポジトリに入っておらず、**このリポジトリだけでは本番を再現できない
+状態になっていた。** 別のマシンや別の担当者がデプロイできず、切り戻しもできない。
+
+| 追加したもの | 版 | 役割 |
+| --- | --- | --- |
+| `@opennextjs/cloudflare` | 1.20.2 | `next build` の出力を Workers 用へ変換する |
+| `wrangler` | 4.119.0 | Cloudflare へのデプロイ・ロールバック・状態確認 |
+| `wrangler.jsonc` | — | Worker 名・アカウント・ルート・互換性フラグ |
+| `open-next.config.ts` | — | 変換の設定 |
+
+**版の選定**: `@opennextjs/cloudflare@1.20.2` の peer は `next: ">=15.5.21 <16 || >=16.2.11"` で、
+このリポジトリの `next@16.2.11` とちょうど一致する。`wrangler` は同 peer の `^4.86.0` を満たす。
+
+**制約**:
+
+- **配信物には入らない。** `.open-next/` はビルド成果物で、`.gitignore` で除外している。
+- `wrangler.jsonc` に**トークンを書かない。** 認証は `wrangler login` が別途持つ。
+  アカウントIDは秘密ではない（公開しても操作はできない）。
+- **この設定が稼働中の Worker と一致している保証はない。** 移行時の設定が不明なため、
+  最初のデプロイ前にダッシュボードとの突き合わせが要る
+  （[deployment-cloudflare.md](./deployment-cloudflare.md) の「デプロイ前チェック」）。
 
 ### 1-2. Playwright（ブラウザ録音アプリの E2E）
 
