@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ブラウザ録音｜TSAM AI</title>
+
+<!--
+  検索避け。ログインが要る画面であり、内容を索引させる意味がない。
+-->
+<meta name="robots" content="noindex, nofollow">
+
+<!--
+  第三者CDNを読まない。
+  script-src の accounts.google.com は Google Identity Services のためで、
+  これは認可そのものの提供元である。ここへ他のホストを足さないこと。
+
+  worker-src … 逐次エンコード用の Worker と AudioWorklet を自前で持つため 'self'。
+  media-src blob: … 停止後のプレビュー再生（§FR-05）が blob: URL を使う。
+  connect-src … Google API と当社の認証系（Apps Script）に限る。
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'">
+
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!--
+  guardPage() が利用者を返すまで中身を出さない（§FR-01）。
+  hidden を外すのは app.js だけ。
+-->
+<main id="vr-main" class="vr-main" hidden>
+
+  <header class="vr-header">
+    <h1 class="vr-title">ブラウザ録音</h1>
+    <p class="vr-lead">
+      この画面だけで録音し、MP3 としてあなたの Google ドライブへ保存します。
+      録音とMP3変換は端末内で完結し、当社のサーバーを経由しません。
+    </p>
+  </header>
+
+  <!-- 利用の準備（§7: Google連携ボタン・連携アカウント・保存先フォルダ）。 -->
+  <section class="vr-panel">
+    <h2 class="vr-panel__title">利用の準備</h2>
+    <ol class="vr-steps">
+      <li class="vr-step">
+        <span class="vr-step__label">TSAM AI ログイン</span>
+        <span class="vr-step__state" id="vr-state-auth">確認しています…</span>
+      </li>
+      <li class="vr-step">
+        <span class="vr-step__label">Google ドライブとの連携</span>
+        <span class="vr-step__state" id="vr-state-oauth">未連携</span>
+        <button type="button" id="vr-connect" class="auth-button vr-button--small">連携する</button>
+      </li>
+      <li class="vr-step">
+        <span class="vr-step__label">保存先</span>
+        <span class="vr-step__state" id="vr-state-folder">未確認</span>
+      </li>
+      <li class="vr-step">
+        <span class="vr-step__label">端末の録音環境</span>
+        <span class="vr-step__state" id="vr-state-device">確認しています…</span>
+      </li>
+    </ol>
+    <p class="vr-note" id="vr-device-reason" hidden></p>
+  </section>
+
+  <!-- 録音（§FR-04）。 -->
+  <section class="vr-panel" id="vr-record-panel">
+    <h2 class="vr-panel__title">録音</h2>
+
+    <p class="vr-timer">
+      <span class="vr-timer__value" id="vr-time">00:00:00</span>
+      <span class="vr-timer__limit" id="vr-limit">上限 01:30:00</span>
+    </p>
+
+    <!-- 色だけに頼らず、必ず文言でも状態を示す。読み上げは #vr-message が担う。 -->
+    <p class="vr-indicator" id="vr-indicator" data-state="idle" aria-hidden="true">
+      <span class="vr-indicator__dot"></span>
+      <span id="vr-indicator-label">待機中</span>
+    </p>
+
+    <div class="vr-facts">
+      <div class="vr-fact">
+        <span class="vr-fact__label">推定ファイルサイズ</span>
+        <span class="vr-fact__value" id="vr-size">0.0 MB</span>
+      </div>
+      <div class="vr-fact">
+        <span class="vr-fact__label">端末の推定空き容量</span>
+        <span class="vr-fact__value" id="vr-free">確認中…</span>
+      </div>
+    </div>
+
+    <div class="vr-actions">
+      <button type="button" id="vr-start" class="auth-button" disabled>録音開始</button>
+      <button type="button" id="vr-stop" class="auth-button auth-button--ghost" hidden>録音停止</button>
+    </div>
+
+    <p class="vr-warn">
+      <strong>録音中はこのページを表示したままにしてください。</strong>
+      画面ロックやアプリの切り替えで録音が停止する場合があります。停止した場合も、その時点までは保存できます。
+      録音中の音声は端末内のブラウザ用ストレージへ一時保存され、保存または破棄のあとに削除されます。
+    </p>
+  </section>
+
+  <!-- 停止後：プレビューと保存（§FR-05 / §FR-07 / §FR-08）。 -->
+  <section class="vr-panel" id="vr-save-panel" hidden>
+    <h2 class="vr-panel__title">録音の確認と保存</h2>
+
+    <audio class="vr-player" id="vr-player" controls preload="metadata"></audio>
+    <p class="vr-note" id="vr-recorded-meta"></p>
+
+    <label class="vr-field">
+      <span class="vr-field__label" id="vr-name-label">ファイル名</span>
+      <input type="text" id="vr-name" class="vr-input" autocomplete="off" spellcheck="false"
+             aria-describedby="vr-name-help">
+    </label>
+    <p class="vr-note" id="vr-name-help">
+      未入力のときは初期値を使います。拡張子が無ければ <code>.mp3</code> を付けます。
+      同じ名前が保存先にある場合は <code>_2</code>、<code>_3</code>… を付けます。
+    </p>
+
+    <p class="vr-note" id="vr-save-folder"></p>
+
+    <!--
+      保存できない理由（未連携など）はここに出す。
+      共有の #vr-message を使うと、自動停止の理由を上書きしてしまう。
+    -->
+    <p class="vr-note vr-note--hint" id="vr-save-hint" role="status" hidden></p>
+
+    <div class="vr-actions">
+      <button type="button" id="vr-save" class="auth-button">Google Driveに保存</button>
+      <button type="button" id="vr-discard" class="auth-button auth-button--ghost">破棄</button>
+    </div>
+  </section>
+
+  <!-- 保存の進捗（§FR-08）。数値は progressbar が読み上げる。 -->
+  <section class="vr-panel" id="vr-progress-panel" hidden>
+    <h2 class="vr-panel__title" id="vr-progress-title">保存しています</h2>
+    <div class="vr-progress" role="progressbar" id="vr-progress"
+         aria-labelledby="vr-progress-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <span class="vr-progress__bar" id="vr-progress-bar" aria-hidden="true"></span>
+    </div>
+    <p class="vr-note" id="vr-progress-text" aria-hidden="true">0%</p>
+  </section>
+
+  <!-- 保存結果（§FR-08）。リンクは app.js が createElement で組み立てる。 -->
+  <section class="vr-panel vr-panel--done" id="vr-result-panel" hidden>
+    <h2 class="vr-panel__title">保存しました</h2>
+    <dl class="vr-meta">
+      <div class="vr-meta__row">
+        <dt class="vr-meta__key">ファイル名</dt>
+        <dd class="vr-meta__value" id="vr-result-name"></dd>
+      </div>
+      <div class="vr-meta__row">
+        <dt class="vr-meta__key">保存先</dt>
+        <dd class="vr-meta__value" id="vr-result-folder"></dd>
+      </div>
+      <div class="vr-meta__row">
+        <dt class="vr-meta__key">Drive のファイル</dt>
+        <dd class="vr-meta__value" id="vr-result-link"></dd>
+      </div>
+    </dl>
+    <div class="vr-actions">
+      <button type="button" id="vr-again" class="auth-button">新しい録音</button>
+    </div>
+  </section>
+
+  <!-- 状態とエラー（§9）。 -->
+  <p class="vr-message" id="vr-message" role="status" aria-live="polite" hidden></p>
+  <p class="vr-message vr-message--error" id="vr-error" role="alert" hidden></p>
+  <div class="vr-actions" id="vr-retry-actions" hidden></div>
+
+  <noscript>
+    <p class="vr-message vr-message--error">このアプリの利用にはJavaScriptが必要です。</p>
+  </noscript>
+
+  <!--
+    同梱ライブラリの表示（LGPL-3.0）。
+    lamejs を配信物に含めている以上、利用者が辿れる場所に置く必要がある。
+    リンクを外さないこと。
+  -->
+  <footer class="vr-footer">
+    <p class="vr-note">
+      <a href="../../portal/">ポータルへ戻る</a>
+    </p>
+    <p class="vr-note">
+      MP3への変換に、オープンソースのライブラリ lamejs（LGPL-3.0）を利用しています。
+      <a href="vendor/NOTICE-lamejs.txt">第三者ライブラリの表示（NOTICE）</a>
+      ／
+      <a href="vendor/LICENSE-lamejs.txt">ライセンス全文</a>
+    </p>
+  </footer>
+
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

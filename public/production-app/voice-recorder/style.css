@@ -1,0 +1,355 @@
+/*
+ * ブラウザ録音アプリの見た目。
+ * 共通の色と部品は auth/auth.css を読み込んでから、ここで足りない分だけ足す。
+ *
+ * 状態を色だけで示さない。録音中かどうかは必ず文言でも出す
+ * （.vr-indicator の中に「録音中」「待機中」のテキストがある）。
+ */
+
+.vr-main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+.vr-header {
+  margin-bottom: 2rem;
+}
+
+.vr-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.vr-lead {
+  margin: 0;
+  color: #4a5568;
+  line-height: 1.7;
+}
+
+.vr-panel {
+  border: 1px solid #d9dee5;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  background: #fff;
+}
+
+.vr-panel--done {
+  border-color: #9fc6a4;
+  background: #f4faf5;
+}
+
+.vr-panel__title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.875rem;
+}
+
+.vr-note {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: #4a5568;
+  line-height: 1.7;
+}
+
+/* 操作できない理由の案内。色だけでなく位置でも「保存ボタンの説明」と分かるようにする。 */
+.vr-note--hint {
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid #b9c6d8;
+  background: #f6f9fd;
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+.vr-note code {
+  font-size: 0.9em;
+  background: #eef1f5;
+  border-radius: 0.2rem;
+  padding: 0.05em 0.3em;
+}
+
+/* ---------- 準備の状態 ---------- */
+
+.vr-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vr-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.vr-step:last-child {
+  border-bottom: 0;
+}
+
+.vr-step__label {
+  flex: 1 1 10rem;
+  font-size: 0.9375rem;
+}
+
+.vr-step__state {
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.vr-step__state[data-kind='ok'] {
+  color: #1f7a3d;
+  font-weight: 700;
+}
+
+.vr-step__state[data-kind='error'] {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+/*
+ * 小さいボタン。
+ * auth.css には .auth-button と .auth-button--ghost しか無い
+ * （receipt-ocr の index.html にある .auth-button--small は未定義のまま効いていない）。
+ * 共通CSSを本アプリの都合で増やさず、ここに自前で持つ。
+ */
+.vr-button--small {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8125rem;
+}
+
+/* ---------- 録音 ---------- */
+
+.vr-timer {
+  margin: 0 0 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.vr-timer__value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.vr-timer__limit {
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.vr-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  background: #eef1f5;
+  color: #4a5568;
+}
+
+.vr-indicator__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.vr-indicator[data-state='recording'] {
+  background: #fdecea;
+  color: #b3261e;
+}
+
+.vr-indicator[data-state='recording'] .vr-indicator__dot {
+  animation: vr-blink 1.4s ease-in-out infinite;
+}
+
+.vr-indicator[data-state='stopped'] {
+  background: #eaf3ff;
+  color: #1a4f8a;
+}
+
+@keyframes vr-blink {
+  50% { opacity: 0.25; }
+}
+
+/* 動きを減らす設定では点滅させない。文言と色で状態は伝わる。 */
+@media (prefers-reduced-motion: reduce) {
+  .vr-indicator[data-state='recording'] .vr-indicator__dot {
+    animation: none;
+  }
+}
+
+.vr-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.vr-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.vr-fact__label {
+  font-size: 0.8125rem;
+  color: #4a5568;
+}
+
+.vr-fact__value {
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.vr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.vr-warn {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-radius: 0.375rem;
+  background: #fff9e6;
+  border: 1px solid #e8d9a0;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: #5c4a10;
+}
+
+/* ---------- 保存 ---------- */
+
+.vr-player {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.vr-field {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.vr-field__label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.vr-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #b8c0cc;
+  border-radius: 0.375rem;
+  font: inherit;
+}
+
+.vr-progress {
+  height: 0.6rem;
+  border-radius: 999px;
+  background: #eef1f5;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.vr-progress__bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #1a4f8a;
+  transition: width 0.2s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vr-progress__bar {
+    transition: none;
+  }
+}
+
+.vr-meta {
+  margin: 0 0 1rem;
+}
+
+.vr-meta__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  padding: 0.4rem 0;
+}
+
+.vr-meta__key {
+  flex: 0 0 8rem;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.vr-meta__value {
+  margin: 0;
+  flex: 1 1 12rem;
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 状態とエラー ---------- */
+
+.vr-message {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  background: #eef1f5;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.vr-message--error {
+  background: #fdecea;
+  border: 1px solid #f2b8b5;
+  color: #7d1a15;
+}
+
+/* ---------- 同梱ライブラリの表示 ---------- */
+
+.vr-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e3e7ed;
+}
+
+.vr-footer .vr-note {
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+/* ---------- 狭い画面 ---------- */
+
+@media (max-width: 30rem) {
+  .vr-main {
+    padding: 1.25rem 0.875rem 3rem;
+  }
+
+  .vr-timer__value {
+    font-size: 2rem;
+  }
+
+  .vr-actions .auth-button {
+    flex: 1 1 100%;
+  }
+
+  .vr-meta__key {
+    flex: 0 0 100%;
+  }
+}

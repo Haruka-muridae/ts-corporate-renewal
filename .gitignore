@@ -26,3 +26,11 @@ supabase/.branches/
 apps/*/picker-key.local.js
 public/apps/*/picker-key.local.js
 .vercel
+
+# Playwright（E2E）の実行成果物。レポート・トレース・動画・ソークの記録。
+# テスト本体は追跡するが、走らせた結果は残さない。
+tests/e2e/.report/
+tests/e2e/.artifacts/
+
+# Playwright がブラウザを置く場所（既定は ~/.cache だが、環境変数で変えた場合の保険）。
+.playwright/

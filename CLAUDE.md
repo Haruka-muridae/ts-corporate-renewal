@@ -79,6 +79,15 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 - `lp-draft/` はリニューアル版LPのルートを退避したもの（`/`・`/legal` などが現行サイトと衝突するため）。`components/` `content/` `types/` `lib/seo.ts` `lib/metadata.ts` `lib/jsonld.ts` はこの退避版が参照しているだけで、稼働中の交流会アプリは使っていない。`potenitas-lp/` も別系統の静的LP。
 - `labs/`（未作成）は TSAM AI と無関係な同居プロジェクト用。共通資産を参照させない・本体から触らないという境界が [docs/repository-structure.md](docs/repository-structure.md) で宣言されている。
 
+## ブラウザ録音アプリ（`public/production-app/voice-recorder/`）
+
+- **正式な要件は [docs/requirements/mvp-requirements.md](docs/requirements/mvp-requirements.md)。** 実装・修正時は必ず同文書の §5〜§10 に準拠する。要件と矛盾する実装判断が必要になったときは、**勝手に進めず必ず確認を取る**（判断した内容は §14 の変更履歴へ残す）。
+- **バックエンドを持たない。** 要件書 v1.1 はサーバー側 MP3 変換とAPI 8本を前提にしていたが、Vercel の関数では 90分・約86MB の受信と FFmpeg 実行が成立しないため、v1.2 でブラウザ完結へ改めた。**「APIを足せば解決する」と考える前に §14 を読むこと。**
+- **`public/apps/voice-recorder/`（テスト環境）から import しない。** 長時間録音の実装はそこから**複製**してある（[docs/repository-structure.md](docs/repository-structure.md) §1）。テスト環境側を直しても本番には反映されないし、その逆もない。
+- **保存先フォルダ名は「マイドライブ ＞ TSAM AI ＞ Voice Recorder」。** 音声文字起こしアプリが同じ場所を読みに来るため、名前を変えると両方を同時に変える必要がある。フォルダは**IDで固定登録せず、名前から解決して無ければ作成する**（`drive.file` スコープでは、アプリが作成していないフォルダへ書き込めないため）。
+- **OAuth スコープは `drive.file` のみ。増やさない。** アクセストークンはメモリ上だけで保持し、localStorage / sessionStorage / Cookie / URL / ログのいずれにも書かない（`receipt-ocr` と同じ方針）。クライアントIDは公開値で、実質的な防御は Google Cloud 側の「承認済みの JavaScript 生成元」。
+- **アクセス制御はクライアント側ガード（`guardPage()`）が主。** 静的配信のため HTML と JS の取得自体は防げない（[SECURITY_NOTES.md](SECURITY_NOTES.md)）。Drive のデータを守っているのは OAuth であって、このガードではない。
+
 ## 仕様書が実装の正
 
 - [docs/specs/](docs/specs/) の仕様書は**実装の正**。コードと食い違う場合、既定ではコードのほうが間違いとみなす。乖離を見つけたら黙って放置せず、仕様書と実装のどちらを直すか決めて**両方が揃った状態**にする。判断できない場合は実装せずに報告する。参照はセクション番号（§n）で行い、行番号は使わない。各仕様書には「採用しなかった提案とその理由」の節があるので、仕様変更の提案前に読む。

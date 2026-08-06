@@ -26,6 +26,9 @@
     "test:auth-system": "node tests/run.mjs",
     "test:auth-system:unit": "node tests/run.mjs unit",
     "test:auth-system:browser": "node tests/run.mjs browser",
+    "test:e2e": "playwright test --project=voice-recorder",
+    "test:e2e:soak": "playwright test --project=voice-recorder-soak",
+    "test:e2e:soak90": "playwright test --project=voice-recorder-soak90",
     "check:vendor": "node public/apps/vendor/check-updates.mjs"
   },
   "dependencies": {
@@ -34,6 +37,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
