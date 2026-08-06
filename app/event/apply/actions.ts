@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { validateApplicationInput } from "@/lib/event/application-input.mjs";
+import { SOLD_OUT_MESSAGE, isEventSoldOut } from "@/lib/event/capacity.mjs";
 import { baseUrl, stripeSecretKey, supabaseConfig } from "@/lib/event/config.mjs";
 import {
   attachCheckoutSession,
@@ -94,6 +95,15 @@ export async function submitApplication(
     return { errors: { form: "お申し込みの受付は終了しました。" }, values: kept };
   }
 
+  /*
+   * 定員に達していたら、申込を保存せずここで止める。
+   * 決済まで進んでから断るより早い段階で気づける。
+   * 最終的な防波堤は startCheckout 側（表示や保存を経ずに送られても効く）。
+   */
+  if (await isEventSoldOut(config, event)) {
+    return { errors: { form: SOLD_OUT_MESSAGE }, values: kept };
+  }
+
   const application = await insertApplication(config, {
     ...result.value,
     eventId: event.id,
@@ -143,6 +153,18 @@ export async function startCheckout(formData: FormData): Promise<void> {
   const event = await findEventById(config, application.event_id);
 
   if (event === null) {
+    redirect("/event/apply/");
+  }
+
+  /*
+   * 定員の最終確認。ここが防波堤になる。
+   *
+   * 申込ページの表示と submitApplication でも見ているが、どちらも通り抜ける
+   * 経路がある（満席になる前に開いたままのタブ、確認画面のURLを直接開く、
+   * このサーバーアクションへの再送）。Session を作る直前にもう一度見て、
+   * 満席なら作らずに申込ページへ戻す（申込ページが満席の案内を出す）。
+   */
+  if (await isEventSoldOut(config, event)) {
     redirect("/event/apply/");
   }
 
