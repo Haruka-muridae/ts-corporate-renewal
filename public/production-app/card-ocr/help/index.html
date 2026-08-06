@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>名刺OCR ヘルプ｜TSAM AI</title>
+
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  本体と同じ CSP。**ここだけ緩めない。**
+  このページは外部と通信しないが、揃えておくほうが読み手に分かりやすい。
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="stylesheet" href="../../../css/style.css">
+<link rel="stylesheet" href="../../../auth/auth.css">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <p id="ch-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="ch-content" hidden>
+
+      <header class="co-header">
+        <h1 class="co-title">名刺OCR ヘルプ</h1>
+        <p class="co-lead"><a href="../">名刺OCRへ戻る</a></p>
+      </header>
+
+      <section class="co-panel">
+        <h2 class="co-panel-title">このアプリでできること</h2>
+        <p class="co-guidance-text">
+          名刺の写真から、会社名・氏名・連絡先などを読み取り、<strong>あなた自身のGoogleドライブ</strong>に保存します。
+          表面だけでも、裏面と2枚でも登録できます。
+        </p>
+        <p class="co-guidance-text">保存先は次のとおりです。</p>
+        <pre class="ch-tree">マイドライブ
+└─ TSAM AI
+   └─ 名刺データ
+      ├─ 名刺管理（スプレッドシート）
+      └─ images（保存した画像）</pre>
+      </section>
+
+      <!--
+        §5.3 の明示事項。**ここは開いたまま置く。**
+        本体の画面では折りたたんでいるが（§5.3 の注記）、
+        ヘルプはそれを確実に届けるために用意した場所である。
+        ここでも畳むと、担い手がどこにも無くなる。
+      -->
+      <section class="co-panel co-panel--notice">
+        <h2 class="co-panel-title">大切なこと</h2>
+        <ul class="co-notice-list">
+          <li>名刺データと画像は、<strong>あなたのGoogleドライブにのみ</strong>保存されます。当社は受信も保管も閲覧もしません。</li>
+          <li>バックアップ・整理・削除・共有設定・容量の管理は、<strong>あなた自身で</strong>行ってください。当社は復旧の義務を負いません。</li>
+          <li>Gemini APIの利用費（有料キーの場合）は、<strong>あなたに課金されます</strong>。</li>
+          <li><strong>無料枠のキーでは、送信したテキストがGoogleのプロダクト改善に使われる場合があります。</strong>名刺は第三者の個人情報ですので、業務でお使いの場合は<strong>有料区分のキーをおすすめします</strong>。</li>
+          <li>名刺情報（第三者の個人情報）の取り扱いに関する法令の遵守は、データを保有する<strong>あなたの責任</strong>で行ってください。</li>
+          <li>保存フォルダやスプレッドシートを削除・移動された場合、次回起動時に新しい保存先を作ります。<strong>過去データとの連続性は保証しません。</strong></li>
+        </ul>
+      </section>
+
+      <section class="co-panel">
+        <h2 class="co-panel-title">読み取った内容を直す</h2>
+        <p class="co-guidance-text">
+          登録の前に、すべての項目を画面で直せます。<strong>保存されるのは、画面に見えている内容です。</strong>
+        </p>
+        <p class="co-guidance-text">
+          「要確認」と付いた項目は、読み取りに自信がないか、表と裏で内容が違ったものです。とくにご確認ください。
+        </p>
+        <p class="co-guidance-text">
+          どの項目にも当てはまらなかった内容（資格、2つ目の肩書、SNS、標語など）は「その他」に入ります。
+          不要であれば消してから登録してください。
+        </p>
+      </section>
+
+      <section class="co-panel">
+        <h2 class="co-panel-title">保存したデータを消すには</h2>
+        <p class="co-guidance-text">
+          <strong>このアプリに削除の機能はありません。</strong>データはあなたのドライブにあるので、ドライブ側で消していただきます。
+        </p>
+
+        <dl class="co-status">
+          <dt class="co-status-label">1件だけ</dt>
+          <dd class="co-status-value" data-ok="yes">「名刺管理」シートのその行を削除します。画像も消す場合は images フォルダから該当ファイルを削除します</dd>
+          <dt class="co-status-label">すべて</dt>
+          <dd class="co-status-value" data-ok="yes">「TSAM AI／名刺データ」フォルダごとゴミ箱へ入れます</dd>
+        </dl>
+
+        <p class="co-guidance-text">
+          <strong>フォルダごと消すと、次にアプリを開いたとき新しい保存先が作られます。</strong>過去のデータは戻りません。
+        </p>
+        <p class="co-guidance-text">
+          シートの行を消しても、画像はドライブに残ります。画像も消したい場合は別途削除してください
+          （行の <code>front_file_url</code> 列のリンクから開けます）。
+        </p>
+      </section>
+
+      <section class="co-panel">
+        <h2 class="co-panel-title">Googleとの連携を解除するには</h2>
+        <p class="co-guidance-text"><strong>2段階あります。</strong>どちらか一方だけでは残ります。</p>
+
+        <h3 class="ch-subtitle">1. アプリの画面から</h3>
+        <p class="co-guidance-text">
+          「準備」→「Googleドライブと連携しています」→「連携を解除する」。
+          この操作で、ブラウザが持っている接続の権限がその場で消えます。
+          アプリを閉じるだけでも消えます（権限をブラウザの中にしか置いていないため）。
+        </p>
+
+        <h3 class="ch-subtitle">2. Googleアカウント側から</h3>
+        <p class="co-guidance-text">
+          上の操作は、Googleアカウントに登録された「アプリの許可」までは消しません。完全に外すには次を行ってください。
+        </p>
+        <pre class="ch-tree">Googleアカウント → セキュリティ
+→ サードパーティ製アプリとの連携
+→ 該当のアプリを選ぶ → アクセス権を削除</pre>
+        <p class="co-guidance-text">
+          <strong>アクセス権を削除しても、保存済みのデータは消えません。</strong>
+          データを消す場合は、上の「保存したデータを消すには」を行ってください。
+        </p>
+      </section>
+
+      <section class="co-panel">
+        <h2 class="co-panel-title">APIキーについて</h2>
+        <p class="co-guidance-text">
+          このアプリは、<strong>あなたのGemini APIキー</strong>を使って読み取りを行います。
+        </p>
+        <ul class="co-notice-list">
+          <li>キーは<a href="../../../portal/">ポータル</a>の「APIキー」から保存します</li>
+          <li>キーは<strong>お使いの端末の中にだけ</strong>保存され、当社のサーバーへは送りません</li>
+          <li>キーを消すには、ポータルの同じ画面から削除します</li>
+        </ul>
+        <p class="co-guidance-text">
+          無料枠でも使えますが、上の「大切なこと」に書いたデータの扱いをご確認ください。
+        </p>
+      </section>
+
+      <section class="co-panel">
+        <h2 class="co-panel-title">うまくいかないとき</h2>
+        <dl class="co-status">
+          <dt class="co-status-label">Gemini APIキーが未設定です</dt>
+          <dd class="co-status-value" data-ok="no">ポータルでキーを保存し、アプリ一覧から開き直してください</dd>
+
+          <dt class="co-status-label">HEIC形式の写真は読み取れません</dt>
+          <dd class="co-status-value" data-ok="no">iPhoneの「設定 › カメラ › フォーマット」を「互換性優先」にするか、この画面のカメラで撮り直してください</dd>
+
+          <dt class="co-status-label">文字を読み取れませんでした</dt>
+          <dd class="co-status-value" data-ok="no">明るい場所で、名刺全体が入るように撮り直してください</dd>
+
+          <dt class="co-status-label">利用上限に達しています</dt>
+          <dd class="co-status-value" data-ok="no">無料枠の上限です。時間をおくか、有料区分のキーをご検討ください</dd>
+
+          <dt class="co-status-label">シートの見出しが変更されているため、書き込みを停止しました</dt>
+          <dd class="co-status-value" data-ok="no">「名刺管理」シートの1行目を元に戻すか、シート名を変えて新しく作らせてください</dd>
+
+          <dt class="co-status-label">同じ会社の同じ方が、すでに登録されています</dt>
+          <dd class="co-status-value" data-ok="no">名刺を作り直された場合や、同姓同名の別の方の場合は、そのまま登録して構いません</dd>
+        </dl>
+      </section>
+
+      <section class="co-panel">
+        <h2 class="co-panel-title">関連する文書</h2>
+        <ul class="co-notice-list">
+          <li><a href="../../../legal/terms/">利用規約</a></li>
+          <li><a href="../../../legal/privacy/">プライバシーポリシー</a></li>
+        </ul>
+        <!--
+          問い合わせ先は未確定。**推測で書かない**（AGENTS.md）。
+          確定したらここへ足す。
+        -->
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./help.js"></script>
+
+</body>
+</html>

@@ -3424,6 +3424,88 @@ try {
 
     check('**poc/ を撤去した（計画 §3-3）**', !entries.includes('poc'), entries.join(','));
     check('measure/ がある', entries.includes('measure'));
+    check('help/ がある', entries.includes('help'));
+  }
+
+  /* ================================================================ */
+  section('ヘルプ（help/ / §14.5 の対応事項1・2）');
+
+  {
+    const helpHtml = await readFile(new URL('help/index.html', APP_DIR), 'utf8');
+    const helpJs = await readFile(new URL('help/help.js', APP_DIR), 'utf8');
+
+    /*
+     * **§5.3 の6項目がすべて載っていること。**
+     * 画面の「ご利用の前に」は既定で畳まれているので、
+     * 確実に届ける役割はここが担う（§5.3 の注記）。
+     */
+    for (const [label, needle] of [
+      ['ドライブにのみ保存', 'あなたのGoogleドライブにのみ'],
+      ['復旧義務を負わない', '復旧の義務を負いません'],
+      ['利用費は利用者に課金', 'あなたに課金されます'],
+      ['**無料枠の開示**', 'プロダクト改善に使われる場合があります'],
+      ['**有料区分の推奨**', '有料区分のキーをおすすめします'],
+      ['法令遵守は利用者', 'あなたの責任'],
+      ['連続性を保証しない', '過去データとの連続性は保証しません'],
+    ]) {
+      check(`§5.3: ${label}`, helpHtml.includes(needle));
+    }
+
+    check(
+      '**ヘルプの明示事項は畳まない（details にしない）**',
+      !/<details[^>]*co-panel--notice/.test(helpHtml),
+    );
+
+    /* FR-22（削除）と FR-24（連携解除）。 */
+    check('削除の方法を書いている（FR-22）', helpHtml.includes('保存したデータを消すには'));
+    check(
+      '**アプリに削除機能が無いことを明記している**',
+      helpHtml.includes('このアプリに削除の機能はありません'),
+    );
+    check('連携解除の方法を書いている（FR-24）', helpHtml.includes('Googleとの連携を解除するには'));
+    check(
+      '**解除が2段階であることを明記している**',
+      helpHtml.includes('2段階あります'),
+    );
+    check(
+      '解除してもデータは消えないと明記している',
+      helpHtml.includes('保存済みのデータは消えません'),
+    );
+
+    check('guardPage() を通している', helpJs.includes('guardPage'));
+    check('画面の深さを 3 に設定している', helpJs.includes('setScreenDepth(3)'));
+    check(
+      '**ヘルプから外部へ通信していない**',
+      !/fetch\(|XMLHttpRequest/.test(helpJs),
+    );
+    check(
+      '本文は HTML に静的に書いてある（JS で組み立てない）',
+      !/innerHTML|createElement/.test(helpJs),
+    );
+
+    /* 本体からの導線。 */
+    check(
+      '**名刺OCRの画面から常に見える場所にヘルプへの導線がある**',
+      /href="\.\/help\/"/.test(htmlSource),
+    );
+
+    {
+      const hrefs = [...helpHtml.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+      const internal = hrefs.filter((href) => !/^https?:|^#/.test(href));
+
+      check(
+        'サイト内リンクの先頭に / を付けていない',
+        internal.every((href) => !href.startsWith('/')),
+        internal.filter((href) => href.startsWith('/')).join(', '),
+      );
+      check('規約とプライバシーポリシーへ繋いでいる', helpHtml.includes('legal/terms/') && helpHtml.includes('legal/privacy/'));
+    }
+
+    check('検索避けを入れている', /name="robots"\s+content="noindex/.test(helpHtml));
+    check(
+      '本体と同じ CSP を宣言している',
+      helpHtml.includes("default-src 'self'") && helpHtml.includes("object-src 'none'"),
+    );
   }
 
   /* ================================================================ */
