@@ -126,4 +126,10 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/receipt-ocr/',
     icon: '領',
   }),
+  Object.freeze({
+    id: 'card-ocr',
+    name: '名刺OCR',
+    href: 'production-app/card-ocr/',
+    icon: '名',
+  }),
 ]);
