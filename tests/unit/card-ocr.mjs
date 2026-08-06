@@ -1546,6 +1546,19 @@ try {
       '**タブを2つ作る（名刺データ / 変更履歴）**',
       createBody.sheets.map((s) => s.properties.title).join(',') === '名刺データ,変更履歴',
     );
+    check(
+      '**作るときに列数を確保する（既定26列では27列目に書けない）**',
+      createBody.sheets[0].properties.gridProperties.columnCount >= schema.DATA_COLUMNS.length,
+      String(createBody.sheets[0].properties.gridProperties?.columnCount),
+    );
+    check(
+      '26列を下回らせない（見慣れた幅を狭めない）',
+      createBody.sheets.every((s) => s.properties.gridProperties.columnCount >= 26),
+    );
+    check(
+      '列数の計算は列定義から求める',
+      sheets.gridWidthFor('名刺データ') === Math.max(26, schema.DATA_COLUMNS.length),
+    );
     check('見出しを2タブぶん書く', calls.filter((c) => c.method === 'PUT').length === 2);
     check(
       '作成後にフォルダへ移す（spreadsheets.create は親を指定できない）',
@@ -1790,27 +1803,78 @@ try {
     installLocalStorage();
     const expected = schema.headersOf(schema.DATA_COLUMNS);
 
-    const makeImpl = (header) => async (url, options = {}) => {
-      const text = String(url);
+    /*
+     * ==================================================================
+     * スタブでも「グリッドの外は400」を再現する
+     * ==================================================================
+     * 実際の Sheets は、グリッドの外側の範囲を指定すると 400 で弾く。
+     *
+     *   Range ('名刺データ'!AA1) exceeds grid limits. Max columns: 26
+     *
+     * 以前のスタブはこれを検査していなかったため、v3.5 で27列目
+     * （その他）を足したときの不具合が**テストをすり抜けて本番で出た。**
+     * 同じ見落としを繰り返さないよう、スタブ側でも検査する。
+     * ==================================================================
+     */
+    const letterToIndex = (letters) => [...letters]
+      .reduce((acc, ch) => acc * 26 + (ch.charCodeAt(0) - 64), 0);
 
-      if (text.includes('/values/') && (options.method ?? 'GET') === 'GET') {
-        return { ok: true, status: 200, json: async () => ({ values: [header] }) };
-      }
+    const makeImpl = (header, { columnCount = 26 } = {}) => {
+      let grid = columnCount;
 
-      if (text.includes('fields=sheets')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            sheets: [
-              { properties: { sheetId: 0, title: '名刺データ' } },
-              { properties: { sheetId: 1, title: '変更履歴' } },
-            ],
-          }),
-        };
-      }
+      return async (url, options = {}) => {
+        const text = decodeURIComponent(String(url));
 
-      return { ok: true, status: 200, json: async () => ({}) };
+        if (text.includes(':batchUpdate')) {
+          const requests = JSON.parse(options.body).requests ?? [];
+
+          for (const request of requests) {
+            if (request.appendDimension?.dimension === 'COLUMNS') {
+              grid += Number(request.appendDimension.length ?? 0);
+            }
+          }
+
+          return { ok: true, status: 200, json: async () => ({}) };
+        }
+
+        if (text.includes('/values/')) {
+          const range = /!([A-Z]+)\d/.exec(text)?.[1];
+
+          if (range && letterToIndex(range) > grid) {
+            return {
+              ok: false,
+              status: 400,
+              json: async () => ({
+                error: {
+                  status: 'INVALID_ARGUMENT',
+                  message: `Range ('名刺データ'!${range}1) exceeds grid limits. Max rows: 1000, max columns: ${grid}`,
+                },
+              }),
+            };
+          }
+
+          if ((options.method ?? 'GET') === 'GET') {
+            return { ok: true, status: 200, json: async () => ({ values: [header] }) };
+          }
+
+          return { ok: true, status: 200, json: async () => ({}) };
+        }
+
+        if (text.includes('fields=sheets')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              sheets: [
+                { properties: { sheetId: 0, title: '名刺データ', gridProperties: { columnCount: grid, rowCount: 1000 } } },
+                { properties: { sheetId: 1, title: '変更履歴', gridProperties: { columnCount: 26, rowCount: 1000 } } },
+              ],
+            }),
+          };
+        }
+
+        return { ok: true, status: 200, json: async () => ({}) };
+      };
     };
 
     const ok = await storage.inspectSpreadsheet('S', { token: 'T', fetchImpl: makeImpl(expected) });
@@ -1825,6 +1889,46 @@ try {
     const upgraded = await storage.inspectSpreadsheet('S', { token: 'T', fetchImpl: makeImpl(expected.slice(0, 5)) });
     check('足りないだけなら足して続ける', upgraded.writable === true);
     check('足したことを伝える', upgraded.notices.includes(storage.StorageNotice.SCHEMA_UPGRADED));
+
+    {
+      /*
+       * **本番で実際に起きた形。** 26列の既存シートに27列目（その他）を
+       * 足す。グリッドを広げずに AA1 へ書くと 400 になる。
+       */
+      const impl = makeImpl(expected.slice(0, 26), { columnCount: 26 });
+      const result = await storage.inspectSpreadsheet('S', { token: 'T', fetchImpl: impl });
+
+      check(
+        '**26列のシートへ27列目を足せる（グリッドを広げてから書く）**',
+        result.writable === true,
+      );
+      check('列を足したことを伝える', result.notices.includes(storage.StorageNotice.SCHEMA_UPGRADED));
+    }
+
+    {
+      /* スタブが本当に 400 を返すことの確認（検査そのものの検査）。 */
+      const impl = makeImpl(expected, { columnCount: 26 });
+      let caught = null;
+
+      try {
+        await sheets.appendMissingColumns('S', '名刺データ', 26, [{ header: 'その他' }], {
+          token: 'T',
+          fetchImpl: impl,
+          /* わざとグリッドを広げない（sheetId も幅も渡さない）。 */
+        });
+      } catch (error) { caught = error; }
+
+      check(
+        '**広げずに27列目へ書くと 400 になる（スタブが実APIを再現している）**',
+        caught?.status === 400,
+        String(caught?.status),
+      );
+      check(
+        'エラー本文に理由が入る',
+        String(caught?.detail).includes('exceeds grid limits'),
+        caught?.detail,
+      );
+    }
 
     clearLocalStorage();
   }
