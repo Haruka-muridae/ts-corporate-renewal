@@ -1,0 +1,127 @@
+/*
+ * Cloudflare Workers の設定（OpenNext 経由で Next.js を動かす）。
+ *
+ * ------------------------------------------------------------------
+ * 稼働中の Worker と突き合わせ済み（2026-08-07）
+ * ------------------------------------------------------------------
+ * 2026-08-06 に Vercel から Cloudflare へ移行した際、デプロイは別マシンから
+ * wrangler で手動実行され、そのときの設定ファイルはリポジトリに無かった。
+ * 当初この設定は**推定**で書き起こしたものだったが、2026-08-07 に
+ * Cloudflare API と `wrangler versions view` で実物を取得し、以下を実測に合わせた。
+ * 突き合わせの結果、**推定と実物が4点で食い違っていた**。
+ *
+ * | 項目 | 推定していた値 | 実物 |
+ * | --- | --- | --- |
+ * | compatibility_date | 2025-03-25 | **2026-08-05** |
+ * | compatibility_flags | nodejs_compat, global_fetch_strictly_public | **nodejs_compat のみ** |
+ * | vars | 記載なし | **4件あり**（下記） |
+ * | observability | 記載なし | **有効** |
+ *
+ * routes（Custom Domain）とバインディング無しは推定どおりだった。
+ *
+ * ------------------------------------------------------------------
+ * 変更するときの注意
+ * ------------------------------------------------------------------
+ * - **vars は消さない。** wrangler deploy は、この設定に無い平文の環境変数を
+ *   Worker から削除する（シークレットは保持される）。うっかり消すと
+ *   交流会申込アプリのメール送信元とベースURLが失われる。
+ * - compatibility_date を**下げない**。挙動が変わりうる。
+ * - compatibility_flags を足さない。とくに global_fetch_strictly_public は
+ *   OpenNext のテンプレートにあるが、**稼働中の Worker では使っていない**。
+ *   1日以上これで正常稼働している以上、足すほうが変更である。
+ * - R2 / サービスバインディング / 画像最適化 … 下でコメントアウトしてある。
+ *   実物も未使用だった。使っていないのに有効化すると、実体が無く deploy が落ちる。
+ * ------------------------------------------------------------------
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+
+	"name": "ts-corporate-renewal",
+	"account_id": "4a71eb14d3889124d4afedd48c1458d8",
+
+	/* OpenNext が生成する Worker 本体と静的アセット。手で作るものではない。 */
+	"main": ".open-next/worker.js",
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+
+	/*
+	 * 稼働中の値をそのまま写している（2026-08-07 実測）。
+	 * nodejs_compat … Next.js のサーバー側が Node API を使うため必須。
+	 * OpenNext のテンプレートにある global_fetch_strictly_public は、
+	 * 実物に入っていなかったので**足していない**（上の注意を参照）。
+	 */
+	"compatibility_date": "2026-08-05",
+	"compatibility_flags": ["nodejs_compat"],
+
+	/*
+	 * 公開先。実測で Custom Domain だった（2026-08-07）。
+	 *   GET /accounts/{id}/workers/domains?service=ts-corporate-renewal
+	 *     → hostname tsam-ai.com / enabled true が1件
+	 *   GET /zones/{zone}/workers/routes
+	 *     → 空。ゾーンの Route は使っていない
+	 * したがって下の形が正しい。Route 形式へ書き換えると**トリガーが二重に付く**。
+	 */
+	"routes": [
+		{ "pattern": "tsam-ai.com", "custom_domain": true }
+	],
+
+	/*
+	 * 平文の環境変数。**稼働中の Worker にある4件をそのまま写したもの。**
+	 * ここから消すと、次の deploy で Worker からも消える。
+	 *
+	 * シークレット（STRIPE_SECRET_KEY・SUPABASE_SERVICE_ROLE_KEY・
+	 * GMAIL_REFRESH_TOKEN など8件）は wrangler が保持するため、ここには書かない。
+	 * **書いてはいけない。** 値がリポジトリに入ってしまう。
+	 */
+	"vars": {
+		"MAIL_FROM": "TSアセットマネジメント合同会社 <architect@potenitas.com>",
+		"NEXT_PUBLIC_BASE_URL": "https://tsam-ai.com/event",
+		"NEXT_PUBLIC_DEPLOY_ENV": "production",
+		"NEXT_PUBLIC_SITE_URL": "https://tsam-ai.com"
+	},
+
+	/*
+	 * 稼働中の設定を写したもの。書かずに deploy すると無効化されるおそれがある。
+	 * traces は実物どおり無効。
+	 */
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"invocation_logs": true,
+			"persist": true
+		},
+		"traces": {
+			"enabled": false,
+			"head_sampling_rate": 1,
+			"persist": true
+		}
+	}
+
+	/*
+	 * ------------------------------------------------------------------
+	 * 以下は OpenNext の既定テンプレートにある任意設定。既定では使わない。
+	 * ------------------------------------------------------------------
+	 * 有効化するときは、**先に Cloudflare 側で実体を作ること。**
+	 * 作らずに deploy すると失敗する。
+	 *
+	 * "services": [
+	 *   // 自己参照。ISR のキャッシュ再検証に使う。service は name と同じにする
+	 *   { "binding": "WORKER_SELF_REFERENCE", "service": "ts-corporate-renewal" }
+	 * ],
+	 * "r2_buckets": [
+	 *   // 増分キャッシュ（ISR）用。事前に bucket を作る必要がある
+	 *   { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "ts-corporate-renewal-opennext-cache" }
+	 * ],
+	 * "images": { "binding": "IMAGES" }
+	 *
+	 * このサイトは public/ の静的ファイルが大半で、サーバー側で動くのは
+	 * 交流会申込（app/event/）だけ。ISR も next/image も使っていないため、
+	 * 無しで成立する。必要になった時点で有効化すること。
+	 * ------------------------------------------------------------------
+	 */
+}

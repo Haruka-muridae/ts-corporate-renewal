@@ -16,6 +16,58 @@
 | 依存 | 配信元 | 対象範囲 | 用途 | 承認日 |
 | --- | --- | --- | --- | --- |
 | Google Identity Services（GIS） | `https://accounts.google.com/gsi/client`（Google本体） | `public/production-app/card-ocr/`（名刺OCRアプリ） | Drive / Sheets API を呼ぶための OAuth トークン取得（トークンモデル） | 2026-08-03 |
+| `@playwright/test` | npm（devDependency） | `tests/e2e/` のみ | ブラウザ録音アプリの E2E（実マイク入力・OPFS・メモリ計測） | 2026-08-06 |
+| `@opennextjs/cloudflare` / `wrangler` | npm（devDependency） | ビルドとデプロイのみ | 本番配信（Cloudflare Workers）に必要。**既に本番で使われている構成を、設定ごとリポジトリへ入れたもの** | 2026-08-06 |
+
+### 1-3. OpenNext（Cloudflare）と wrangler
+
+**承認の範囲**: ビルドとデプロイに限る。**devDependency であり、配信物には入らない。**
+
+**なぜ必要か**: これは新しい依存の追加ではなく、**既成事実の追認**である。
+2026-08-06 に Vercel から Cloudflare へ移行した際、デプロイは別マシンから wrangler で
+手動実行された（Cloudflare の Versions に `Manually deployed / Wrangler by architect`）。
+そのときの設定はリポジトリに入っておらず、**このリポジトリだけでは本番を再現できない
+状態になっていた。** 別のマシンや別の担当者がデプロイできず、切り戻しもできない。
+
+| 追加したもの | 版 | 役割 |
+| --- | --- | --- |
+| `@opennextjs/cloudflare` | 1.20.2 | `next build` の出力を Workers 用へ変換する |
+| `wrangler` | 4.119.0 | Cloudflare へのデプロイ・ロールバック・状態確認 |
+| `wrangler.jsonc` | — | Worker 名・アカウント・ルート・互換性フラグ |
+| `open-next.config.ts` | — | 変換の設定 |
+
+**版の選定**: `@opennextjs/cloudflare@1.20.2` の peer は `next: ">=15.5.21 <16 || >=16.2.11"` で、
+このリポジトリの `next@16.2.11` とちょうど一致する。`wrangler` は同 peer の `^4.86.0` を満たす。
+
+**制約**:
+
+- **配信物には入らない。** `.open-next/` はビルド成果物で、`.gitignore` で除外している。
+- `wrangler.jsonc` に**トークンを書かない。** 認証は `wrangler login` が別途持つ。
+  アカウントIDは秘密ではない（公開しても操作はできない）。
+- **この設定が稼働中の Worker と一致している保証はない。** 移行時の設定が不明なため、
+  最初のデプロイ前にダッシュボードとの突き合わせが要る
+  （[deployment-cloudflare.md](./deployment-cloudflare.md) の「デプロイ前チェック」）。
+
+### 1-2. Playwright（ブラウザ録音アプリの E2E）
+
+**承認の範囲**: `tests/e2e/` の自動テストに限る。**devDependency であり、配信物には入らない。**
+
+**なぜ必要か**: 録音アプリの中核（マイク入力 → AudioWorklet → Worker で逐次MP3化 → OPFS）は、
+実ブラウザでしか動かない。既存の2つのランナー（[tests/run.mjs](../tests/run.mjs) /
+[public/apps/tests/run.mjs](../public/apps/tests/run.mjs)）は Node 上でスイートを実行する方式で、
+Chrome を起動する browser スイートも DOM の確認までしかできない。
+「30分録音してメモリが増えないこと」（要件書 §8.2）は実測でしか示せない。
+
+**既存のランナーは変更していない。** `npm test` の内容も従来どおりで、
+E2E は `npm run test:e2e`、30分ソークは `npm run test:e2e:soak` で明示的に実行する。
+
+**制約**:
+
+- `channel: 'chromium'` を使う。Playwright 既定の headless shell にはメディアデバイスが無く、
+  偽デバイスのフラグを渡しても `getUserMedia` が `NotSupportedError` になる。
+- テストは本物の Apps Script を叩かない。認証系の応答は `page.route` で差し替える
+  （叩けば本番のセッション表に行が増え、ネットワークの都合で落ちるようになる）。
+- 実行成果物（`tests/e2e/.report/` `tests/e2e/.artifacts/`）は追跡しない。
 
 ### 1-1. Google Identity Services（名刺OCRアプリ）
 

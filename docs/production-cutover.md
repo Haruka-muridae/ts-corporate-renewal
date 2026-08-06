@@ -1,5 +1,55 @@
 # 本番切替チェックリスト
 
+> ## ⚠️ この文書は現行構成を記していない
+>
+> **これは 2026-08-01 に行った「GitHub Pages → Vercel」切替の記録である。**
+> その後さらに移行が起きており、**現在は Cloudflare（OpenNext）で配信されている。**
+>
+> 実環境の応答ヘッダーで確認した根拠（2026-08-06）:
+>
+> ```
+> Server: cloudflare
+> CF-RAY: ...
+> CF-Cache-Status: HIT      ← Cloudflare のプロキシを通っている
+> x-opennext: 1             ← OpenNext。Vercel は出さない
+> x-powered-by: Next.js
+> （x-vercel-id / x-vercel-cache は、静的パス・Next.js ルート・404 のいずれにも無い）
+> ```
+>
+> したがって、この文書のうち **Vercel を前提にした記述（手順2・3、DNS の値
+> `76.76.21.21` / `cname.vercel-dns.com`、「プロキシを DNS only にする」）は、
+> 現在の状態と一致しない。** 実際、プロキシはオンになっている。
+>
+> ### **`main` へのマージは公開ではない**
+>
+> Vercel 時代は Git 連携による自動デプロイだったため、「`main` へマージ＝公開」だった。
+> **Cloudflare へ移行した現在、その関係は成立しない。**
+>
+> | | Vercel 時代 | 現在（Cloudflare） |
+> | --- | --- | --- |
+> | 公開の起点 | `main` への push（Git 連携で自動ビルド） | **`wrangler` の手動実行のみ** |
+> | `main` へのマージ | そのまま公開 | **公開されない。リポジトリが進むだけ** |
+> | GitHub Actions | （デプロイには不関与） | 同じく不関与。デプロイ用の workflow は無い |
+>
+> Cloudflare の Versions には `Manually deployed / Wrangler by architect` と記録されている。
+> Git 連携も自動ビルドも設定されていない。
+>
+> **したがって、公開したいときは誰かが明示的にデプロイする必要がある。**
+> マージしただけで本番が変わることはないが、裏を返せば
+> **マージしても本番は古いままになる**（意図せず放置されうる）。
+>
+> ### 切り戻しも Git ではない
+>
+> 公開が Git に紐づいていない以上、**`git revert` しても本番は戻らない。**
+> 戻す方法は次の2つで、どちらも Cloudflare 側の操作である。
+>
+> 1. **Cloudflare の Versions から Rollback**（最短。ビルド不要）
+> 2. **戻したいコミットを checkout して再デプロイ**（恒久的に直す場合）
+>
+> 手順は [deployment-cloudflare.md](./deployment-cloudflare.md) にある。
+> この文書の手順（Vercel 前提）で切り戻しやデプロイを行わないこと。
+> 関連: [DEPLOYMENT.md](../DEPLOYMENT.md) も Vercel 前提のままで、同じく陳腐化している。
+
 交流会申込アプリを本番公開するときの手順。**上から順に実行する。**
 
 すべての操作は事業者側で行う。各手順に「戻し方」を書いてある。

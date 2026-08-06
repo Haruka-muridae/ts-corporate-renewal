@@ -26,3 +26,24 @@ supabase/.branches/
 apps/*/picker-key.local.js
 public/apps/*/picker-key.local.js
 .vercel
+
+# Playwright（E2E）の実行成果物。レポート・トレース・動画・ソークの記録。
+# テスト本体は追跡するが、走らせた結果は残さない。
+tests/e2e/.report/
+tests/e2e/.artifacts/
+
+# Playwright がブラウザを置く場所（既定は ~/.cache だが、環境変数で変えた場合の保険）。
+.playwright/
+
+# OpenNext（Cloudflare）のビルド成果物とキャッシュ。
+# `npm run build:cf` が作る。中身は next build の出力を変換したもので、
+# デプロイのたびに作り直される。コミットしない。
+.open-next/
+
+# wrangler の作業用ディレクトリ（ローカルの state・ログ・一時ファイル）。
+.wrangler/
+
+# wrangler のローカル環境変数。**秘密が入るので絶対にコミットしない。**
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
