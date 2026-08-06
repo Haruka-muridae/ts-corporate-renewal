@@ -55,6 +55,7 @@
 | 文書 | 内容 |
 | --- | --- |
 | [card-ocr-phase0-plan.md](./card-ocr-phase0-plan.md) | 名刺OCRアプリのフェーズ0（方式検証PoC）の実行計画。テスト環境 `card-scanner` の監査結果、検証項目の仕分け、事業者側の作業手順 |
+| [card-ocr-terms-and-help-draft.md](./card-ocr-terms-and-help-draft.md) | 名刺OCRの利用規約への追加条項案とアプリ内ヘルプの文面案（§14.5）。**まだ公開されていない案**であり、法務確認の材料 |
 
 計画書は要件定義書の**下位**です。食い違う場合は要件定義書が正。
 
