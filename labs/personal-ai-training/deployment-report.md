@@ -167,17 +167,31 @@ GitHub 上では読める」とは書いているが、**GitHub Pages が今も�
 ブランチにある。`origin/main` にはまだ無い）。Cloudflare のダッシュボード上、
 稼働中の版はすべて `Manually deployed / Wrangler by architect` と記録されている。
 
-### さらに: `origin/main` からは `npm run deploy` を実行できない
+### `origin/main` からデプロイできるようになった（調査中に変化した）
 
-デプロイに必要な次の3点は、**未マージの `feat/voice-recorder` ブランチにしか無い。**
+調査を始めた時点では、デプロイに必要な次の3点が未マージの `feat/voice-recorder`
+ブランチにしか無く、`origin/main` からは `npm run deploy` を実行できなかった。
 
 - `package.json` の `deploy` / `build:cf` スクリプト
 - `wrangler.jsonc`（Worker 名・アカウント・ルート・`vars` 4件）
 - `open-next.config.ts`
 
-つまり `main` の内容を本番へ出すには、先に `feat/voice-recorder`（または同等の
-デプロイ構成）をマージする必要がある。**LP のマージだけでは、公開への経路が
-そもそも開通しない。**
+**この状態は本作業中に解消した。** 2026-08-07、オーナーが PR #41
+（`merge: ブラウザ完結の録音アプリと Cloudflare デプロイ構成`、コミット `2c417cc`）を
+`main` へマージしたため、現在は `main` に3点とも揃っている。
+
+したがって **`main` から `npm run deploy` を実行すれば公開できる状態にある。**
+ただし実行そのものは行っていない（§4 のとおりマージは公開ではなく、
+デプロイはオーナーの操作）。
+
+> **⚠️ この結果、次の `npm run deploy` は録音アプリと LP を同時に公開する。**
+> [REENTRY.md](../../REENTRY.md) 手順4 は「まず今と同じ内容を出して、本番が
+> 変わらないことを確かめる」検証デプロイを想定しているが、`main` には既に
+> 録音アプリと LP の両方が入っているため、**その検証デプロイの時点で両方が出る。**
+> 「本番が変わらないことを確かめる」という前提はもう成立しない。
+> LP は `noindex` かつどこからもリンクしていないため実害は小さいが、
+> 手順4のチェック項目（`/production-app/voice-recorder/` がまだ 404 のはず）は
+> 期待値が変わっている点に注意すること。
 
 ---
 
