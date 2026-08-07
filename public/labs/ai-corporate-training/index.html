@@ -121,8 +121,14 @@
   <section class="section hero" aria-labelledby="hero-title">
     <div class="container">
       <p class="eyebrow reveal">For Business / Online</p>
-      <h1 class="h-hero reveal" id="hero-title">社員全員を、<br class="br-lg">AIを使える人材に。</h1>
-      <p class="hero-lead reveal">月4回・各60分のオンライン研修。参加人数による追加料金はありません。チーム全体で、AIを業務で使える状態を目指します。</p>
+      <!--
+        br-lg と br-sp を並べているのは、両方が同時に出ないため（768px 以上で
+        br-lg、600px 以下で br-sp）。1つの br に両方の class を付けると、
+        効くほうが CSS の記述順で決まってしまい壊れやすい。
+        601〜767px は従来どおり自然折り返し。
+      -->
+      <h1 class="h-hero reveal" id="hero-title">社員全員を、<br class="br-lg"><br class="br-sp">AIを使える人材に。</h1>
+      <p class="hero-lead reveal">月4回・各60分のオンライン研修。<br class="br-sp">参加人数による追加料金はありません。<br class="br-sp">チーム全体で、AIを業務で使える状態を目指します。</p>
       <p class="hero-meta reveal">¥55,000/月(税込) ｜ 月4回 ｜ 各60分</p>
       <p class="reveal"><a class="btn" href="#apply">導入相談を予約する(無料・30分)</a></p>
     </div>
@@ -132,7 +138,7 @@
   <section class="section section--surface" aria-labelledby="concerns-title">
     <div class="container">
       <p class="eyebrow reveal">Concerns</p>
-      <h2 class="h-section reveal" id="concerns-title">「AIを使おう」と言うだけでは、<br class="br-lg">現場は変わらない。</h2>
+      <h2 class="h-section reveal" id="concerns-title">「AIを使おう」<br class="br-sp">と言うだけでは、<br class="br-lg"><br class="br-sp">現場は変わらない。</h2>
 
       <ul class="concern-list reveal">
         <li>AI活用を呼びかけたが、一部の社員しか使っていない</li>
@@ -153,7 +159,7 @@
     <div class="container">
       <p class="eyebrow reveal" id="value-eyebrow">Core Value</p>
       <p class="value-strike reveal"><s>「1日研修で教えて終わり」</s>ではなく、</p>
-      <p class="value-message reveal"><span class="em-primary">「週1回、使える状態まで続ける」</span><br class="br-lg">研修です。</p>
+      <p class="value-message reveal"><span class="em-primary">「週1回、<br class="br-sp">使える状態まで続ける」</span><br class="br-lg"><br class="br-sp">研修です。</p>
       <p class="value-note reveal">学んだ翌週に、現場で試した結果を持ち寄って質問できる。この繰り返しが、研修を「聞いた話」から「業務の習慣」に変えます。</p>
     </div>
   </section>
@@ -162,9 +168,9 @@
   <section class="section section--pale-blue" aria-labelledby="fixed-title">
     <div class="container">
       <p class="eyebrow reveal">Fixed Pricing</p>
-      <h2 class="h-section reveal" id="fixed-title">月額固定。<br class="br-lg">参加人数が増えても、料金は変わりません。</h2>
+      <h2 class="h-section reveal" id="fixed-title">月額固定。<br class="br-lg"><br class="br-sp">参加人数が増えても、<br class="br-sp">料金は変わりません。</h2>
 
-      <p class="pricing-body reveal">一般的な企業研修は「1人あたり◯円」の課金です。本プログラムは月額55,000円(税込)の固定制。オンライン会議に接続できる範囲なら、何名でもご参加いただけます。</p>
+      <p class="pricing-body reveal">一般的な企業研修は「1人あたり◯円」の課金です。<br class="br-sp">本プログラムは月額55,000円(税込)の固定制。<br class="br-sp">オンライン会議に接続できる範囲なら、<br class="br-sp">何名でもご参加いただけます。</p>
 
       <ul class="rate-list reveal">
         <li>10名の参加なら 1人あたり 月5,500円</li>
@@ -284,7 +290,8 @@
   <!-- 申込み -->
   <section class="section section--pale-blue apply" id="apply" aria-labelledby="apply-title">
     <div class="container">
-      <h2 class="h-section reveal" id="apply-title">まずは、貴社の状況を<br class="br-lg">お聞かせください。</h2>
+      <!-- ここだけ逆。601px 以上で折り、600px 以下は自然折り返しに任せる。 -->
+      <h2 class="h-section reveal" id="apply-title">まずは、貴社の状況を<br class="br-pc">お聞かせください。</h2>
       <p class="apply-lead reveal">導入相談(オンライン・30分)は無料です。</p>
       <!--
         リンク先は Google カレンダーの予約スケジュール（法人導入相談・30分）。
