@@ -6,27 +6,25 @@
 
 ## 公開状態
 
-> **`main` にマージ済み。ただし本番にはまだ出ていない。**
-> 申込みボタンが未接続で、`noindex` を入れてある。
-> **正式公開はオーナーの作業（下の残作業）が終わってから。**
+> **soft launch 済み。`noindex` のまま、申込みは「準備中」表示で公開している。**
+> **正式公開はフォーム完成後に改めて行う（下の残作業）。**
 
 | | 状態 |
 | --- | --- |
 | `main` へのマージ | **済**（2026-08-07） |
-| 本番への公開 | **未**。`npm run deploy` の手動実行が要る（[deployment-report.md](./deployment-report.md) §4） |
-| 公開後のURL | `https://tsam-ai.com/labs/personal-ai-training/` |
-| 検索インデックス | `noindex`。解除はオーナー作業 |
-| 申込みボタン | **未接続**（`href="#"`） |
+| 本番への公開 | **済**（2026-08-07・`npm run deploy`） |
+| URL | `https://tsam-ai.com/labs/personal-ai-training/` |
+| 検索インデックス | **`noindex`。** 解除はフォーム完成後 |
+| 申込み | **受付準備中。** 最終セクションに「申し込み受付は、現在準備中です。」と表示。CTAボタンは置いていない |
+| sitemap 登録 | **していない**（`noindex` 中のため） |
+
+申込みフォームが未完成のため、押せないボタンを置く代わりに文章で案内している。
+ヘッダーの「申し込む」と料金カードの「AIを使える自分をつくる」は `#apply` への
+ページ内アンカーのままで、**遷移先で準備中の案内が読める**構成になっている。
 
 **マージは公開ではない。** 本番は Cloudflare Workers が配信しており、Git 連携も
-自動ビルドも設定されていない。マージ直後に確認したところ、上記URLは 404 のままで、
-コーポレートサイト本体（`/` `/login/` `/portal/` `/apps/` `/event/`）の配信HTMLは
-マージ前と1バイトも変わっていない。
-
-> **⚠️ 次に誰かが `npm run deploy` を実行すると、この LP も同時に公開される。**
-> `main` には録音アプリ（PR #41）も入っているため、両方が同時に出る。
-> [REENTRY.md](../../REENTRY.md) 手順4 の「本番が変わらないことを確かめる検証デプロイ」は
-> 前提が変わっている点に注意。
+自動ビルドも設定されていない。公開は `npm run deploy` の手動実行でのみ起きる
+（[deployment-report.md](./deployment-report.md) §4）。
 
 ---
 
@@ -74,60 +72,73 @@ labs/personal-ai-training/
 | 2026-08-07 | **公開先は `tsam-ai.com` 配下。soft launch（noindex・CTA未接続）** | 配信ルートが `public/` であることを実測で確定させ、`public/labs/personal-ai-training/` へ移設した |
 | 2026-08-07 | **レポート類は `public/` の外に置く** | `public/` 配下の `.md` は配信されるため。指示書 rule 5 と同じ理由 |
 | 2026-08-07 | 淡色背景に直接置く補助テキスト3箇所は `--color-text` を使う | `--color-text-sub` は淡色背景で 4.44:1 と AA に 0.06 届かないため |
+| **2026-08-07** | **申込み受付は「準備中」表示にして soft launch** | フォームが未完成のため。押せないボタンを置くより、押せないことを文章で伝えるほうが誠実。`noindex` は維持し、sitemap にも載せない |
+| 2026-08-07 | **GitHub Pages を無効化** | `main` のルートを配信する設定が残っており、`README.md` や `docs/` が github.io で読める状態だった。`tsam-ai.com` の配信には使われていない |
 
 ---
 
-## オーナーしかできない残作業
+## オーナー残作業
 
-正式公開の前に、上から順に。
+### A. いつでもできる確認
 
-- [ ] **1. 申込みフォームのURLを用意し、`href="#"` を差し替える**
-
-  差し替えが必要なのは **1箇所だけ**。他の3つのボタンはページ内アンカー
-  （`#apply`）で、そのままでよい。
-
-  | 行 | 箇所 | 現在の `href` | 対応 |
-  | --- | --- | --- | --- |
-  | 241 | 申込みセクションの「マンツーマンAI学習を始める」 | `#` | **フォームURLへ差し替える** |
-  | 114 | ヘッダーの「申し込む」 | `#apply` | そのまま |
-  | 127 | Hero の「マンツーマンAI学習を始める」 | `#apply` | そのまま |
-  | 208 | 料金カードの「AIを使える自分をつくる」 | `#apply` | そのまま |
-
-  行番号は [public/labs/personal-ai-training/index.html](../../public/labs/personal-ai-training/index.html) のもの。
-  該当箇所の直上に TODO コメントを置いてある。
-
-- [ ] **2. `noindex` を外す**
-
-  `index.html` の `<meta name="robots" content="noindex">`（TODO コメントの直下）を
-  削除する。**1 が終わるまで外さないこと。** 申し込めないページを検索結果に出すことになる。
-
-- [ ] **3. ルート `sitemap.xml` へ登録するかを判断する**
-
-  今回は登録していない（`noindex` 中のため）。正式公開時に、この LP を
-  コーポレートサイトの sitemap に載せるかどうかを決める。
-  別サービスとして扱うなら載せない選択もある。
-
-- [ ] **4. スマートフォン実機で確認する**
+- [ ] **スマートフォン実機で確認する**
 
   375 / 768 / 1440px のスクリーンショットと横スクロール検査は自動で行ってあるが、
   実機のタッチ操作・フォント表示・`prefers-reduced-motion` の実挙動は確認していない。
 
-- [ ] **5. OGP画像の SNS シェアプレビューを確認する**
+- [ ] **OGP画像の SNS シェアプレビューを確認する**
 
-  `ogp.png` は生成済みだが、実際に X / Facebook / Slack でカードがどう出るかは
-  公開後でないと確認できない。**公開してからでよい。**
+  `ogp.png` は配信済み。X / Facebook / Slack にURLを貼って、カードの見え方を確かめる。
+  `noindex` はクローラ向けの指定で、**SNS の OGP 取得は妨げない。**
 
-- [ ] **6. `npm run deploy` を実行して公開する**
+### B. フォーム完成後の正式公開（この順に行う）
 
-  1〜3 が済んでから。手順は [docs/deployment-cloudflare.md](../../docs/deployment-cloudflare.md) §3〜§5。
-  録音アプリも同時に出る点に注意。
+- [ ] **① 準備中テキストを CTA ボタンへ戻し、フォームURLを設定する**
 
-### 判断だけ要るもの（LP とは別件）
+  [index.html](../../public/labs/personal-ai-training/index.html) の最終セクション
+  （`id="apply"`）にある次の1行を、
 
-- [ ] **GitHub Pages を無効化するか** — 調査中に、Pages が `main` のルートを配信する
-  設定のまま残っていることが分かった（最新ビルドは失敗中、`cname` は `null`）。
-  現に `https://haruka-muridae.github.io/ts-corporate-renewal/README.md` が読める。
-  詳細は [deployment-report.md](./deployment-report.md) §2。
+  ```html
+  <p class="apply-pending reveal">申し込み受付は、現在準備中です。</p>
+  ```
+
+  もとの CTA ボタンへ戻す（文言は変えない）。
+
+  ```html
+  <p class="reveal"><a class="btn" href="＜フォームのURL＞">マンツーマンAI学習を始める</a></p>
+  ```
+
+  該当箇所の直上に、同じ内容の HTML コメントを置いてある。
+  CSS の `.apply-pending` と `.apply .btn` は両方とも残してあるので、
+  **スタイルの追加は要らない。**
+
+  他の3つのボタン（ヘッダー・Hero・料金カード）は `#apply` へのページ内アンカーで、
+  **そのままでよい。**
+
+- [ ] **② `noindex` を外す**
+
+  `index.html` の `<meta name="robots" content="noindex">`（TODO コメントの直下）を
+  削除する。**① が終わるまで外さないこと。** 申し込めないページを検索結果に出すことになる。
+
+- [ ] **③ ルート `sitemap.xml` へ登録するかを判断する**
+
+  現在は登録していない。正式公開時に、この LP をコーポレートサイトの sitemap に
+  載せるかどうかを決める。別サービスとして扱うなら載せない選択もある。
+
+- [ ] **④ デプロイする**
+
+  ```powershell
+  npm run deploy
+  ```
+
+  手順は [docs/deployment-cloudflare.md](../../docs/deployment-cloudflare.md) §3〜§5、
+  または [REENTRY.md](../../REENTRY.md) 手順4。
+  **`main` の内容がまるごと出る**点に注意（LP 以外の変更も一緒に公開される）。
+
+- [ ] **⑤ 公開後、`href` とインデックスを確認する**
+
+  配信HTMLに `noindex` が無いこと、CTA のリンク先がフォームURLになっていること。
+  必要なら Search Console でインデックス登録を申請する。
 
 ---
 

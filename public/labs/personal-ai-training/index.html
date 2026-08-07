@@ -9,8 +9,8 @@
 
 <!--
   TODO: 申込フォームのURLを接続し、正式公開するときにこの1行を削除する。
-  いまは申込みボタンが href="#" のままで、辿り着いた人が申し込めないため、
-  検索結果に出さない。
+  いまは申込みの受付そのものが準備中で（最終セクションを参照）、
+  辿り着いた人が申し込めないため、検索結果に出さない。
 -->
 <meta name="robots" content="noindex">
 
@@ -237,8 +237,14 @@
   <section class="section section--pale-blue apply" id="apply" aria-labelledby="apply-title">
     <div class="container">
       <h2 class="h-section reveal" id="apply-title">AIを使える自分を、<br class="br-lg">ここからつくる。</h2>
-      <!-- TODO: 申込フォームのURLが決まったら href を差し替える。 -->
-      <p class="reveal"><a class="btn" href="#">マンツーマンAI学習を始める</a></p>
+      <!--
+        申込フォームが未完成のため、CTAボタンの代わりに準備中の案内を出している。
+        フォームのURLが決まったら、この p 要素を元のCTAボタンへ戻す
+        （class="reveal" の p の中に class="btn" のリンクを置き、リンク先を
+        フォームのURLにする。文言は「マンツーマンAI学習を始める」）。
+        ボタン風にしないのは、押せるように見えて押せない状態を作らないため。
+      -->
+      <p class="apply-pending reveal">申し込み受付は、現在準備中です。</p>
       <p class="apply-meta reveal">¥11,000/月 ｜ Online ｜ 2 × 60 min</p>
     </div>
   </section>

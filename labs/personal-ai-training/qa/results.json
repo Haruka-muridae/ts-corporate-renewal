@@ -551,12 +551,12 @@
       "pass": true
     },
     {
-      "sel": "a.btn",
-      "text": "マンツーマンAI学習を始める",
-      "size": 15,
-      "fg": "#FFFFFF",
-      "bg": "#245B8A",
-      "ratio": 7.15,
+      "sel": "p.apply-pending",
+      "text": "申し込み受付は、現在準備中です。",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
       "need": 4.5,
       "pass": true
     },
@@ -679,9 +679,9 @@
       "summary:AIにまったく詳しくなくても受講",
       "summary:受講に必要なものはありますか？",
       "summary:授業の内容は決まっていますか？",
-      "a:マンツーマンAI学習を始める",
       "body:パーソナルAIトレーニング\n  ",
-      "a:申し込む"
+      "a:申し込む",
+      "a:マンツーマンAI学習を始める"
     ],
     "summaryEnterOpens": true,
     "summaryEnterCloses": true,
