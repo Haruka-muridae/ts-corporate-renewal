@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ショート動画 台本メーカー ヘルプ｜TSAM AI</title>
+
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="stylesheet" href="../../../css/style.css">
+<link rel="stylesheet" href="../../../auth/auth.css">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <p id="sh-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="sh-content" hidden>
+
+      <header class="ss-header">
+        <h1 class="ss-title">ショート動画 台本メーカー ヘルプ</h1>
+        <p class="ss-lead"><a href="../">台本メーカーへ戻る</a></p>
+      </header>
+
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">このアプリでできること</h2>
+        <p class="ss-guidance-text">
+          動画のテーマを入れると、縦型ショート動画の<strong>台本</strong>（タイトルと、シーンごとのナレーション文）を作ります。
+          できた台本は、そのままコピーしたり、JSONで保存したりできます。
+        </p>
+        <p class="ss-guidance-text">
+          この台本から音声・字幕・縦型動画を作る工程は、次のフェーズで用意する予定です。
+        </p>
+      </section>
+
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">APIキーの扱い</h2>
+        <ul class="ss-help-list">
+          <li>台本の生成には、<strong>あなた自身の Gemini APIキー</strong>を使います。ポータルの「API設定」で一度だけ設定してください。</li>
+          <li>キーは<strong>この端末（ブラウザ）にのみ保存</strong>され、当社サーバーには送信されません。送信先は Google（Gemini）だけです。</li>
+          <li>キーの変更・削除はポータルの「API設定」から行えます。</li>
+        </ul>
+      </section>
+
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">無料枠と商用利用について</h2>
+        <ul class="ss-help-list">
+          <li><strong>無料枠のキーでは、送信したテキストが Google のプロダクト改善に使われる場合があります。</strong>機密のテーマは避けてください。</li>
+          <li>生成された台本を利用できる範囲・商用利用の可否は、<strong>Google（Gemini API）の利用規約をご自身でご確認ください</strong>。生成物の内容が正しいかどうかの確認も、利用者の責任で行ってください。</li>
+          <li>次フェーズで使う音声（VOICEVOX）を含む動画を公開する場合は、各キャラクターの規約に従い<strong>クレジット表記</strong>が必要です。</li>
+        </ul>
+      </section>
+
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">うまくいかないとき</h2>
+        <ul class="ss-help-list">
+          <li>「キーが設定されていません（KEY-001）」… ポータルの「API設定」でキーを設定してください。</li>
+          <li>「接続できませんでした（KEY-002）」… キーが正しいか、有効かをご確認ください。</li>
+          <li>「利用上限に達しています（AI-002）」… 無料枠の場合は時間をおいてお試しください。</li>
+          <li>「混雑しています」… Gemini 側が混んでいます。少し待って再度お試しください。</li>
+        </ul>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./help.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ショート動画 台本メーカー｜TSAM AI</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy
+  ==================================================================
+  next.config.ts の headers() ではなく meta で宣言する（名刺OCRと同じ）。
+  next.config.ts は public/ 全体に効くため、このアプリのために触ると
+  本体サイトを巻き込む。
+
+  connect-src の内訳:
+    - 'self'                              … 自分の JS / CSS
+    - generativelanguage.googleapis.com   … Gemini（台本生成）
+    - script.google.com /
+      script.googleusercontent.com        … TSAM AI 認証（guardPage の
+                                            セッション確認。Apps Script が
+                                            リダイレクト先に用いる）
+
+  **このアプリは Google OAuth（GIS）を使わない**ため、名刺OCRと違い
+  accounts.google.com は入れない。script-src は 'self' だけにする。
+  APIキーは KeyStore（localStorage）だけが扱い、外部へ送るのは Gemini のみ。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' http://127.0.0.1:3000 http://localhost:3000; connect-src 'self' https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com http://127.0.0.1:3000 http://localhost:3000; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../css/style.css">
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <!--
+      guardPage() が利用者を返すまで中身を出さない。
+      hidden を外すのは app.js だけ（名刺OCRと同じ約束）。
+    -->
+    <p id="ss-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="ss-content" hidden>
+
+      <header class="ss-header">
+        <h1 class="ss-title">ショート動画 台本メーカー</h1>
+        <p class="ss-lead">
+          テーマを入れると、縦型ショート動画の<strong>台本（タイトル＋シーンごとのナレーション）</strong>を作ります。
+        </p>
+        <p class="ss-lead"><a href="./help/">ヘルプ（データの扱い・APIキー・商用利用）</a></p>
+      </header>
+
+      <!-- 入力方法。AI生成か、既存台本の貼り付けか。貼り付けは Gemini キー不要。 -->
+      <div class="ss-panel ss-modebar">
+        <span id="ss-mode-label" class="ss-field-label">入力方法</span>
+        <div class="ss-segment" role="radiogroup" aria-labelledby="ss-mode-label">
+          <label class="ss-segment-option">
+            <input type="radio" name="ss-mode" value="ai" checked>
+            <span>AIで作る</span>
+          </label>
+          <label class="ss-segment-option">
+            <input type="radio" name="ss-mode" value="paste">
+            <span>台本を貼り付け</span>
+          </label>
+          <label class="ss-segment-option">
+            <input type="radio" name="ss-mode" value="segments">
+            <span>セグメント編集</span>
+          </label>
+        </div>
+      </div>
+
+      <!--
+        APIキー未設定・保存不可のときの案内。**該当するときだけ出す。**
+        文言は app.js が textContent で入れる（innerHTML を使わない）。
+      -->
+      <section id="ss-guidance" class="ss-panel ss-panel--guidance" aria-live="polite" hidden>
+        <h2 id="ss-guidance-title" class="ss-panel-title"></h2>
+        <p id="ss-guidance-text" class="ss-guidance-text"></p>
+        <div class="ss-actions">
+          <a id="ss-portal-link" class="auth-button" href="../../portal/" hidden>ポータルでキーを設定する</a>
+        </div>
+      </section>
+
+      <!-- 入力フォーム。 -->
+      <form id="ss-form" class="ss-panel" novalidate>
+        <div class="ss-field">
+          <label class="ss-field-label" for="ss-theme">動画テーマ</label>
+          <input id="ss-theme" class="ss-field-input" type="text"
+                 maxlength="100" autocomplete="off"
+                 placeholder="例: 生成AIとは / 認知心理学とは / 営業でAIを使う方法">
+          <p class="ss-field-hint">100文字以内。具体的なほど台本が締まります。</p>
+        </div>
+
+        <div class="ss-field">
+          <span id="ss-duration-label" class="ss-field-label">動画の尺</span>
+          <div class="ss-segment" role="radiogroup" aria-labelledby="ss-duration-label">
+            <label class="ss-segment-option">
+              <input type="radio" name="ss-duration" value="30" checked>
+              <span>30秒</span>
+            </label>
+            <label class="ss-segment-option">
+              <input type="radio" name="ss-duration" value="60">
+              <span>60秒</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="ss-actions">
+          <button id="ss-generate" type="submit" class="auth-button">台本を作る</button>
+          <button id="ss-cancel" type="button" class="auth-button auth-button--ghost" hidden>中止する</button>
+        </div>
+      </form>
+
+      <!-- 台本の貼り付け。既存の台本を Gemini を介さずそのまま取り込む。 -->
+      <form id="ss-paste" class="ss-panel" novalidate hidden>
+        <div class="ss-field">
+          <label class="ss-field-label" for="ss-paste-title">タイトル（任意）</label>
+          <input id="ss-paste-title" class="ss-field-input" type="text"
+                 maxlength="100" autocomplete="off" placeholder="例: 生成AIとは？">
+        </div>
+        <div class="ss-field">
+          <label class="ss-field-label" for="ss-paste-body">台本（本文）</label>
+          <textarea id="ss-paste-body" class="ss-field-input ss-textarea" rows="8"
+                    placeholder="すでにある台本を貼り付けてください。"></textarea>
+          <p class="ss-field-hint">貼り付けた全文を1つのシーンとして扱います（字幕は後段で自動的に折り返されます）。</p>
+        </div>
+        <div class="ss-actions">
+          <button id="ss-use-paste" type="submit" class="auth-button">この台本を使う</button>
+        </div>
+      </form>
+
+      <!-- セグメント編集。各セグメントに〔ナレーション文＋背景画像〕を指定して順に並べる。 -->
+      <form id="ss-segments" class="ss-panel" novalidate hidden>
+        <div class="ss-field">
+          <label class="ss-field-label" for="ss-seg-title">タイトル（任意）</label>
+          <input id="ss-seg-title" class="ss-field-input" type="text"
+                 maxlength="100" autocomplete="off" placeholder="例: 生成AIとは？">
+        </div>
+        <p class="ss-field-hint">
+          各セグメントにナレーション文と背景画像を指定します。上から順に再生され、
+          表示時間は各ナレーション音声の長さで決まります（画像はゆっくりズームします）。
+          画像を選ばないセグメントは既定の背景になります。
+        </p>
+        <ol id="ss-seg-list" class="ss-seg-list"></ol>
+        <div class="ss-actions">
+          <button id="ss-seg-add" type="button" class="auth-button auth-button--ghost">セグメントを追加</button>
+          <button id="ss-use-seg" type="submit" class="auth-button">この構成で使う</button>
+        </div>
+      </form>
+
+      <!-- 進捗・エラーの一言。role=status で読み上げる。 -->
+      <p id="ss-message" class="auth-message" role="status" aria-live="polite" tabindex="-1" hidden></p>
+
+      <!-- 生成結果。app.js が組み立てる。 -->
+      <section id="ss-result" class="ss-panel ss-result" aria-live="polite" hidden>
+        <h2 id="ss-result-title" class="ss-panel-title" tabindex="-1"></h2>
+        <dl id="ss-result-meta" class="ss-meta"></dl>
+        <ol id="ss-scenes" class="ss-scenes"></ol>
+        <div class="ss-actions">
+          <button id="ss-copy" type="button" class="auth-button auth-button--ghost">台本をコピー</button>
+          <button id="ss-download" type="button" class="auth-button auth-button--ghost">JSONで保存</button>
+          <button id="ss-regenerate" type="button" class="auth-button auth-button--ghost">作り直す</button>
+        </div>
+      </section>
+
+      <!--
+        音声・動画の生成。ローカル補助サービス（ai-video-app）へ台本を渡す。
+        台本が用意できたときだけ出す。
+      -->
+      <section id="ss-video" class="ss-panel" hidden>
+        <h2 class="ss-panel-title">音声・動画を作る</h2>
+        <p class="ss-guidance-text">
+          あなたのPCで動く生成サービス（ai-video-app）で、この台本から
+          ナレーション音声つきの縦型動画を作ります。
+        </p>
+
+        <!-- 補助サービスが未起動のときの案内。 -->
+        <div id="ss-companion-guidance" class="ss-subpanel ss-subpanel--guidance" aria-live="polite" hidden>
+          <p class="ss-guidance-text" id="ss-companion-text"></p>
+          <div class="ss-actions">
+            <button id="ss-companion-retry" type="button" class="auth-button auth-button--ghost">再確認する</button>
+          </div>
+        </div>
+
+        <!-- 声の設定。サービスが応答したときだけ操作できる。 -->
+        <div class="ss-field">
+          <label class="ss-field-label" for="ss-speaker">ナレーション話者（VOICEVOX）</label>
+          <select id="ss-speaker" class="ss-field-input"></select>
+        </div>
+        <div class="ss-field">
+          <label class="ss-field-label" for="ss-speed">話速</label>
+          <div class="ss-slider-row">
+            <input id="ss-speed" type="range" min="0.5" max="2" step="0.05" value="1">
+            <span id="ss-speed-val" class="ss-slider-val">1.00</span>
+          </div>
+        </div>
+
+        <div class="ss-field" id="ss-bg-field">
+          <label class="ss-field-label" for="ss-bg">背景画像（任意・複数可）</label>
+          <input id="ss-bg" class="ss-field-input" type="file"
+                 accept="image/png,image/jpeg,image/webp" multiple>
+          <p class="ss-field-hint">
+            選ばない場合は、生成サービスの背景（<code>public/bg</code> に置いた画像、または同梱のグラデーション）を使います。
+            複数選ぶとシーンごとに順に使われます。ゆっくりズームの動き（Ken Burns）も自動で付きます。
+          </p>
+        </div>
+
+        <div class="ss-actions">
+          <button id="ss-render" type="button" class="auth-button">動画を作る</button>
+          <button id="ss-render-cancel" type="button" class="auth-button auth-button--ghost" hidden>中止する</button>
+        </div>
+
+        <!-- 生成中の状況。 -->
+        <p id="ss-render-detail" class="ss-guidance-text" role="status" aria-live="polite" hidden></p>
+
+        <!-- 完成した動画。 -->
+        <div id="ss-video-out" hidden>
+          <div class="ss-phone">
+            <video id="ss-video-el" controls playsinline></video>
+          </div>
+          <div class="ss-actions">
+            <a id="ss-video-download" class="auth-button auth-button--ghost" download>MP4をダウンロード</a>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+
+</body>
+</html>

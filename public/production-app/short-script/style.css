@@ -1,0 +1,340 @@
+/*
+ * ショート動画 台本メーカーの見た目。
+ *
+ * 共通の色と部品は css/style.css と auth/auth.css を読み込んだうえで、
+ * 足りない分だけをここに書く（Portal・ログイン画面との視覚的一貫性）。
+ * 名刺OCR（../card-ocr/style.css）と同じ配色・寸法に揃える。
+ *
+ * スマートフォン優先。操作要素は 44px 以上を確保する。
+ */
+
+.ss-header {
+  margin-bottom: 1.75rem;
+}
+
+.ss-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.ss-lead {
+  margin: 0 0 0.35rem;
+  color: #4a5568;
+  line-height: 1.7;
+}
+
+.ss-panel {
+  border: 1px solid #d9dee5;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  background: #fff;
+}
+
+.ss-panel-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+}
+
+.ss-panel--guidance {
+  border-color: #d8b9b9;
+  background: #fdf6f6;
+}
+
+.ss-guidance-text {
+  margin: 0;
+  color: #4a5568;
+  line-height: 1.7;
+}
+
+/* ---------- 入力フォーム ---------- */
+
+.ss-field {
+  margin-bottom: 1.25rem;
+}
+
+.ss-field:last-of-type {
+  margin-bottom: 1.5rem;
+}
+
+.ss-field-label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+
+.ss-field-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #cbd2db;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.ss-field-input:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 1px;
+}
+
+.ss-field-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+/* ---------- 入力方法の切り替えバー ---------- */
+
+.ss-modebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.ss-modebar .ss-field-label {
+  margin-bottom: 0;
+}
+
+.ss-modebar .ss-segment {
+  flex: 1;
+  min-width: 12rem;
+}
+
+/* ---------- セグメント編集 ---------- */
+
+.ss-seg-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.ss-seg {
+  border: 1px solid #d9dee5;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: #fbfcfd;
+}
+
+.ss-seg-num {
+  font-weight: 700;
+  color: #2b6cb0;
+  margin: 0 0 0.5rem;
+}
+
+.ss-seg .ss-field:last-of-type {
+  margin-bottom: 0.75rem;
+}
+
+/* ---------- 貼り付け用テキストエリア ---------- */
+
+.ss-textarea {
+  min-height: 9rem;
+  resize: vertical;
+  line-height: 1.7;
+  font-family: inherit;
+}
+
+/* ---------- 尺の選択（30/60） ---------- */
+
+.ss-segment {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ss-segment-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd2db;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  background: #fff;
+}
+
+/* ネイティブの radio は残す（見えない位置へ動かさない＝支援技術のため）。 */
+.ss-segment-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.ss-segment-option:has(input:checked) {
+  border-color: #2b6cb0;
+  background: #ebf3fb;
+  font-weight: 700;
+}
+
+.ss-segment-option:has(input:focus-visible) {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
+/* ---------- 操作ボタンの並び ---------- */
+
+.ss-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ss-actions .auth-button {
+  min-height: 44px;
+}
+
+/* ---------- 進捗・エラーの一言 ---------- */
+
+.auth-message[data-tone="error"] {
+  color: #9b2c2c;
+}
+
+/* ---------- 結果 ---------- */
+
+.ss-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0 0 1.25rem;
+}
+
+.ss-meta-label {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.ss-meta-value {
+  margin: 0;
+  font-weight: 700;
+}
+
+.ss-scenes {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+}
+
+.ss-scene {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  background: #fbfcfd;
+}
+
+.ss-scene:last-child {
+  margin-bottom: 0;
+}
+
+.ss-scene-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+}
+
+.ss-scene-num {
+  font-weight: 700;
+  color: #2b6cb0;
+}
+
+.ss-scene-sec {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.ss-scene-text {
+  margin: 0;
+  line-height: 1.7;
+}
+
+/* ---------- 音声・動画パネル ---------- */
+
+.ss-subpanel {
+  border: 1px solid #d9dee5;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  background: #fbfcfd;
+}
+
+.ss-subpanel--guidance {
+  border-color: #d8b9b9;
+  background: #fdf6f6;
+}
+
+.ss-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ss-slider-row input[type="range"] {
+  flex: 1;
+  min-height: 44px;
+}
+
+.ss-slider-val {
+  min-width: 3rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #4a5568;
+}
+
+/* 縦型（9:16）の動画枠。スマホのプレビュー風に、幅を抑えて中央に置く。 */
+.ss-phone {
+  max-width: 270px;
+  margin: 0.5rem auto 1rem;
+  aspect-ratio: 9 / 16;
+  background: #000;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.ss-phone video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+
+/* ---------- ヘルプの箇条書き ---------- */
+
+.ss-help-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.8;
+  color: #4a5568;
+}
+
+.ss-help-list li {
+  margin-bottom: 0.5rem;
+}
+
+.ss-help-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- レスポンシブ（320 / 375 / 768 / 1024 / 1440 で確認） ---------- */
+
+@media (min-width: 768px) {
+  .ss-title {
+    font-size: 1.75rem;
+  }
+}
+
+/* 動きに配慮する利用者には、フォーカス以外の装飾遷移を出さない。 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto;
+  }
+}

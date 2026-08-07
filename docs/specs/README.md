@@ -19,6 +19,7 @@
 | [apps-grid-spec-v1.md](./apps-grid-spec-v1.md) | `/portal/` のアプリグリッド（ページ式）と配置データ ＋ `public/portal/app-registry.js` | v1 |
 | [receipt-ocr-v2.md](./receipt-ocr-v2.md) | 領収書スキャナ（`public/production-app/receipt-ocr/`。アプリID `receipt-ocr`）。利用者のドライブに保存し、当社サーバーを通さない | v2.0（ドラフト） |
 | [receipt-ocr-v1.3.md](./receipt-ocr-v1.3.md) | 上の前身。**抽出・検証の仕様（10・11・13・14・15・16.1・18.2章）は現役**で、v2.0 がここを参照する | v1.3 |
+| [short-script-spec-v1.md](./short-script-spec-v1.md) | ショート動画 台本メーカー（`public/production-app/short-script/`。アプリID `short-script`）。テーマ/貼り付け/セグメントから台本を作り、ローカル補助サービスで音声・動画化 | v1.4 |
 
 > `receipt-ocr-v1.3.md` にはサーバー（GAS）前提の記述が残っています。
 > **アーキテクチャは v2.0 が正**であり、v1.3 のうち参照してよいのは

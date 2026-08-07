@@ -132,4 +132,10 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/receipt-ocr/',
     icon: '領',
   }),
+  Object.freeze({
+    id: 'short-script',
+    name: 'ショート動画 台本メーカー',
+    href: 'production-app/short-script/',
+    icon: '台',
+  }),
 ]);
