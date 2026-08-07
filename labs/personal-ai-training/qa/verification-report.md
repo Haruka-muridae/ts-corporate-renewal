@@ -1,7 +1,12 @@
 # 自動検証レポート
 
 実施日: 2026年8月7日
-対象: [../index.html](../index.html) ／ [../css/style.css](../css/style.css) ／ [../js/main.js](../js/main.js)
+対象: [public/labs/personal-ai-training/](../../../public/labs/personal-ai-training/)
+（`index.html` ／ `css/style.css` ／ `js/main.js`）
+
+> 配信物は `public/` 配下へ移設した。この `qa/` と各レポートは**配信されない**よう
+> `labs/` 側に残してある（`public/` に置くと `tsam-ai.com` から誰でも読めるため。
+> 実測: `https://tsam-ai.com/apps/PHASE3_AUDIT_REPORT.md` は 200 を返す）。
 
 検証に使ったパッケージ（`axe-core` / `html-validate`）は作業用ディレクトリにのみ入れ、
 **リポジトリへはコミットしていない。** Playwright はリポジトリの devDependencies に既存。
