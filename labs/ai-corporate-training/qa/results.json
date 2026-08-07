@@ -641,6 +641,26 @@
       "pass": true
     },
     {
+      "sel": "p.eyebrow",
+      "text": "FAQ",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "よくある質問。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 3,
+      "pass": true
+    },
+    {
       "sel": "summary",
       "text": "何名まで参加できますか？",
       "size": 16,
@@ -796,6 +816,7 @@
       "H3",
       "H2",
       "H2",
+      "H2",
       "H2"
     ],
     "jsonld": [
@@ -887,7 +908,7 @@
     "summarySpaceOpens": true
   },
   "reducedMotion": {
-    "total": 36,
+    "total": 38,
     "notVisible": 0
   }
 }
