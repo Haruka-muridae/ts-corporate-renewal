@@ -782,6 +782,26 @@
     },
     {
       "sel": "p",
+      "text": "個人での受講をお考えの方へ — マンツーマン",
+      "size": 14,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a",
+      "text": "マンツーマンの「パーソナルAIトレーニング」",
+      "size": 14,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p",
       "text": "© TSアセットマネジメント合同会社",
       "size": 13,
       "fg": "#687078",
@@ -796,7 +816,7 @@
     "lang": "ja",
     "title": "AI人材育成プログラム",
     "description": "月4回・各60分のオンライン研修。参加人数による追加料金なし、月額55,000円(税込)で社員のAI活用を定着させる法人向けAI人材育成プログラム。",
-    "robots": "noindex",
+    "robots": null,
     "canonical": "https://tsam-ai.com/labs/ai-corporate-training/",
     "ogTitle": "AI人材育成プログラム",
     "ogDesc": "月4回・各60分のオンライン研修。参加人数による追加料金なし、月額55,000円(税込)で社員のAI活用を定着させる法人向けAI人材育成プログラム。",
@@ -901,7 +921,7 @@
       "summary:業務システムへのAI導入もお願い",
       "summary:契約期間や支払い方法を教えてくだ",
       "a:導入相談を予約する",
-      "body:AI人材育成プログラム\n    "
+      "a:マンツーマンの「パーソナルAIト"
     ],
     "summaryEnterOpens": true,
     "summaryEnterCloses": true,

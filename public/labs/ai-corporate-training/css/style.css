@@ -666,6 +666,54 @@ s {
 }
 
 /* ------------------------------------------------------------------
+ * 姉妹LPへのクロスリンク（フッター直上）
+ * ------------------------------------------------------------------
+ * 申込みCTAの直後に置くため、ボタンにはしない。本文より小さい補助テキスト
+ * 1行に留めて、CTA と競合させないようにしている。
+ * 罫線は .container の内側に引き、本文の左右幅と揃える。
+ * ------------------------------------------------------------------ */
+.cross-link {
+  /* 直前のセクション（淡色背景）の境目に罫線が貼り付かないよう間を空ける。 */
+  padding-top: 3.5rem;
+}
+
+.cross-link > .container {
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cross-link p {
+  font-size: 0.875rem;
+  line-height: 1.9;
+  text-align: center;
+  /* 折り返しで最後の行に1〜2文字だけ残さない。 */
+  text-wrap: balance;
+  /*
+   * 既定の折り返しだと 375px で「マンツ / ーマン」と長音符が行頭に来る。
+   * strict にすると長音符・小書き仮名の行頭禁則が効く。
+   */
+  line-break: strict;
+  color: var(--color-text-sub);
+}
+
+/*
+ * 下線は色に頼らず「押せる」ことを示すために必ず付ける。
+ * 補助テキスト色のままではリンクに見えないので、リンク部分だけ Secondary へ
+ * 上げている（#FAFAF8 の上で 4.53:1・AA）。
+ */
+.cross-link a {
+  color: var(--color-secondary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.cross-link a:hover {
+  color: var(--color-primary);
+}
+
+/* ------------------------------------------------------------------
  * フッター
  * ------------------------------------------------------------------ */
 .site-footer {
