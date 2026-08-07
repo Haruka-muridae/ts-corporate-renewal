@@ -405,6 +405,10 @@ sitemap を参照している箇所も無い（`lp-draft/sitemap.ts` は退避�
 デプロイした版: **`210b6b26-0544-46ba-9fe3-ce29764be7bc`**（内容は `f5d2f85`）
 切り戻し先の版: `218a6e77-6eea-4487-bdcd-0d97074a4f74`
 
+> その7分後に、LP と無関係の後続デプロイ `df0d00c9-bf9f-4abc-9f1c-bfd791ef3230`
+> が入っている（`main` に後から入ったショート動画 台本メーカー）。**現行はこちら。**
+> LP の配信内容は変わっていないことを確認済み。
+
 アップロードは **6ファイル**（両LPの `index.html` と `css/style.css`、
 `potenitas/index.html`、`BUILD_ID`）、残り544ファイルは無変更。
 
