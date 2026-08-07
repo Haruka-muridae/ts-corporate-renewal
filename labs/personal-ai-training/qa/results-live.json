@@ -1,0 +1,694 @@
+{
+  "viewports": [
+    {
+      "width": 375,
+      "scrollW": 375,
+      "clientW": 375,
+      "noHorizontalScroll": true
+    },
+    {
+      "width": 768,
+      "scrollW": 768,
+      "clientW": 768,
+      "noHorizontalScroll": true
+    },
+    {
+      "width": 1440,
+      "scrollW": 1440,
+      "clientW": 1440,
+      "noHorizontalScroll": true
+    }
+  ],
+  "contrast": [
+    {
+      "sel": "p.site-name",
+      "text": "パーソナルAIトレーニング",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a.btn",
+      "text": "申し込む",
+      "size": 14,
+      "fg": "#FFFFFF",
+      "bg": "#245B8A",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "One-on-one / Online",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h1.h-hero",
+      "text": "AIの使い方を、あなたの仕事に合わせて。",
+      "size": 52,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.hero-lead",
+      "text": "あなたの仕事や生活を一緒に見ながら、AIを「",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.hero-meta",
+      "text": "¥11,000/月 ｜ 月2回 ｜ 各60分",
+      "size": 15,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a.btn",
+      "text": "マンツーマンAI学習を始める",
+      "size": 15,
+      "fg": "#FFFFFF",
+      "bg": "#245B8A",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Concerns",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "AIが便利なのは分かる。でも自分の場合、何に",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "ChatGPTを使ってみたが、定着していない",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "動画教材を見ても、実践までいかなかった",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "自分に必要なAI活用だけ教えてほしい",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "気軽に質問できる相手がほしい",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.concern-closing",
+      "text": "必要なのは知識の量ではなく、「あなた専用の使",
+      "size": 17,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "span.em-primary",
+      "text": "「あなた専用の使い方」",
+      "size": 17,
+      "fg": "#245B8A",
+      "bg": "#FFFFFF",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Core Value",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.value-strike",
+      "text": "「ChatGPTでこんなことができます」では",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "s",
+      "text": "「ChatGPTでこんなことができます」",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.value-message",
+      "text": "「あなたなら、こう使えます」を一緒に作る。",
+      "size": 36,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "span.em-primary",
+      "text": "「あなたなら、こう使えます」",
+      "size": 36,
+      "fg": "#245B8A",
+      "bg": "#FAFAF8",
+      "ratio": 6.84,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.value-note",
+      "text": "普段の仕事、時間がかかっていること、困ってい",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Monthly Cycle",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#EAF2F7",
+      "ratio": 4.53,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "月2回の、シンプルなサイクル。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "h3.card-title",
+      "text": "Session 01｜発見・実装",
+      "size": 18,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "span.card-no",
+      "text": "Session 01",
+      "size": 13,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.card-body",
+      "text": "いま困っていることを確認し、AIを使える場所",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h3.card-title",
+      "text": "Session 02｜確認・改善",
+      "size": 18,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "span.card-no",
+      "text": "Session 02",
+      "size": 13,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.card-body",
+      "text": "実際に使ってみた結果をふり返り、使い方を改善",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.cycle-closing",
+      "text": "このサイクルを、毎月くり返します。",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Goal",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#EDF2EE",
+      "ratio": 4.53,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "目指すのは、自分でAIの使いどころを発見でき",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#EDF2EE",
+      "ratio": 13.94,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "「この作業ならAIを使える」",
+      "size": 20,
+      "fg": "#202326",
+      "bg": "#EDF2EE",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "「この仕事はこうAIに頼めばいい」",
+      "size": 20,
+      "fg": "#202326",
+      "bg": "#EDF2EE",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "「これは人間が考えるところ」",
+      "size": 20,
+      "fg": "#202326",
+      "bg": "#EDF2EE",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.goal-note",
+      "text": "知識を得ても、人は必ず行動できるわけではあり",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#EDF2EE",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "span.em",
+      "text": "知る → 使う → 改善する",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#EDF2EE",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Pricing",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "パーソナルAI育成プラン。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.price-amount",
+      "text": "¥11,000/月（税込）",
+      "size": 56,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "span.price-unit",
+      "text": "/月（税込）",
+      "size": 14,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.price-terms",
+      "text": "月2回 × 60分｜完全マンツーマン・オンラ",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.price-desc",
+      "text": "あなたの仕事や生活に合わせて、授業内容を毎回",
+      "size": 15,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a.btn",
+      "text": "AIを使える自分をつくる",
+      "size": 15,
+      "fg": "#FFFFFF",
+      "bg": "#245B8A",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "FAQ",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "よくある質問。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "summary",
+      "text": "AIにまったく詳しくなくても受講できますか？",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.faq-answer",
+      "text": "はい。マンツーマンなので、あなたのペースとレ",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "summary",
+      "text": "受講に必要なものはありますか？",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.faq-answer",
+      "text": "インターネットに接続できるパソコンがあれば受",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "summary",
+      "text": "授業の内容は決まっていますか？",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.faq-answer",
+      "text": "固定カリキュラムはありません。毎回、いまのあ",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "AIを使える自分を、ここからつくる。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.apply-pending",
+      "text": "申し込み受付は、現在準備中です。",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.apply-meta",
+      "text": "¥11,000/月 ｜ Online ｜ 2",
+      "size": 14,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p",
+      "text": "© パーソナルAIトレーニング",
+      "size": 13,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    }
+  ],
+  "axe": [],
+  "meta": {
+    "lang": "ja",
+    "title": "パーソナルAIトレーニング",
+    "description": "月2回・60分のマンツーマンで、あなたの仕事に合わせたAIの使い方を一緒に作る。月額11,000円。",
+    "robots": "noindex",
+    "canonical": "https://tsam-ai.com/labs/personal-ai-training/",
+    "ogTitle": "パーソナルAIトレーニング",
+    "ogDesc": "月2回・60分のマンツーマンで、あなたの仕事に合わせたAIの使い方を一緒に作る。月額11,000円。",
+    "ogType": "website",
+    "ogUrl": "https://tsam-ai.com/labs/personal-ai-training/",
+    "ogImage": "https://tsam-ai.com/labs/personal-ai-training/ogp.png",
+    "twitterCard": "summary_large_image",
+    "icon": "favicon.svg",
+    "h1Count": 1,
+    "headings": [
+      "H1",
+      "H2",
+      "H2",
+      "H3",
+      "H3",
+      "H2",
+      "H2",
+      "H2",
+      "H2"
+    ],
+    "jsonld": [
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Service",
+            "name": "パーソナルAIトレーニング",
+            "description": "月2回・60分のマンツーマンで、あなたの仕事に合わせたAIの使い方を一緒に作る。月額11,000円。",
+            "url": "https://tsam-ai.com/labs/personal-ai-training/",
+            "provider": {
+              "@type": "Organization",
+              "name": "パーソナルAIトレーニング"
+            },
+            "offers": {
+              "@type": "Offer",
+              "price": "11000",
+              "priceCurrency": "JPY",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "11000",
+                "priceCurrency": "JPY",
+                "billingDuration": 1,
+                "unitCode": "MON"
+              }
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "AIにまったく詳しくなくても受講できますか？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "はい。マンツーマンなので、あなたのペースとレベルに合わせてゼロから進めます。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "受講に必要なものはありますか？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "インターネットに接続できるパソコンがあれば受講できます。ツールの準備は初回授業で一緒に行います。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "授業の内容は決まっていますか？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "固定カリキュラムはありません。毎回、いまのあなたの仕事や困りごとに合わせて内容を設計します。"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "faqMatch": {
+    "ok": true,
+    "count": 3,
+    "mismatches": []
+  },
+  "keyboard": {
+    "tabOrder": [
+      "a:申し込む",
+      "a:マンツーマンAI学習を始める",
+      "a:AIを使える自分をつくる",
+      "summary:AIにまったく詳しくなくても受講",
+      "summary:受講に必要なものはありますか？",
+      "summary:授業の内容は決まっていますか？",
+      "body:パーソナルAIトレーニング\n  ",
+      "a:申し込む",
+      "a:マンツーマンAI学習を始める"
+    ],
+    "summaryEnterOpens": true,
+    "summaryEnterCloses": true,
+    "summarySpaceOpens": true
+  },
+  "reducedMotion": {
+    "total": 31,
+    "notVisible": 0
+  }
+}
