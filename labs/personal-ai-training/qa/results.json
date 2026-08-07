@@ -572,6 +572,26 @@
     },
     {
       "sel": "p",
+      "text": "企業・チームでの導入をお考えの方へ — 法人",
+      "size": 14,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a",
+      "text": "法人向け「AI人材育成プログラム」",
+      "size": 14,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p",
       "text": "© パーソナルAIトレーニング",
       "size": 13,
       "fg": "#687078",
@@ -680,8 +700,8 @@
       "summary:受講に必要なものはありますか？",
       "summary:授業の内容は決まっていますか？",
       "a:マンツーマンAI学習を始める",
-      "body:パーソナルAIトレーニング\n  ",
-      "a:申し込む"
+      "a:法人向け「AI人材育成プログラム",
+      "body:パーソナルAIトレーニング\n  "
     ],
     "summaryEnterOpens": true,
     "summaryEnterCloses": true,
