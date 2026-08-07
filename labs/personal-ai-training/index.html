@@ -7,6 +7,27 @@
 <title>パーソナルAIトレーニング</title>
 <meta name="description" content="月2回・60分のマンツーマンで、あなたの仕事に合わせたAIの使い方を一緒に作る。月額11,000円。">
 
+<!--
+  TODO: 申込フォームのURLを接続し、正式公開するときにこの1行を削除する。
+  いまは申込みボタンが href="#" のままで、辿り着いた人が申し込めないため、
+  検索結果に出さない。
+-->
+<meta name="robots" content="noindex">
+
+<link rel="canonical" href="https://tsam-ai.com/labs/personal-ai-training/">
+
+<!-- OGP。文言は上の title / description をそのまま使う（新しいコピーを作らない）。 -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tsam-ai.com/labs/personal-ai-training/">
+<meta property="og:title" content="パーソナルAIトレーニング">
+<meta property="og:description" content="月2回・60分のマンツーマンで、あなたの仕事に合わせたAIの使い方を一緒に作る。月額11,000円。">
+<meta property="og:image" content="https://tsam-ai.com/labs/personal-ai-training/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
@@ -17,6 +38,73 @@
   この1行が無いと、JS を切った利用者に本文が一切見えなくなる。
 -->
 <script>document.documentElement.classList.add('js');</script>
+
+<!--
+  構造化データ。
+  FAQPage の質問・回答は本文の <details> と一字一句同じでなければならない
+  （食い違うと Google はスパムとみなす）。qa/ の検証で機械照合している。
+
+  Course / EducationalOrganization は使わない（スクールではないため）。
+  AggregateRating / Review も使わない（第三者評価が存在しないため）。
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Service",
+      "name": "パーソナルAIトレーニング",
+      "description": "月2回・60分のマンツーマンで、あなたの仕事に合わせたAIの使い方を一緒に作る。月額11,000円。",
+      "url": "https://tsam-ai.com/labs/personal-ai-training/",
+      "provider": {
+        "@type": "Organization",
+        "name": "パーソナルAIトレーニング"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "11000",
+        "priceCurrency": "JPY",
+        "priceSpecification": {
+          "@type": "UnitPriceSpecification",
+          "price": "11000",
+          "priceCurrency": "JPY",
+          "billingDuration": 1,
+          "unitCode": "MON"
+        }
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "AIにまったく詳しくなくても受講できますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "はい。マンツーマンなので、あなたのペースとレベルに合わせてゼロから進めます。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "受講に必要なものはありますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "インターネットに接続できるパソコンがあれば受講できます。ツールの準備は初回授業で一緒に行います。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "授業の内容は決まっていますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "固定カリキュラムはありません。毎回、いまのあなたの仕事や困りごとに合わせて内容を設計します。"
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
 </head>
 <body>
 
