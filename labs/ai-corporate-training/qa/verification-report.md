@@ -176,13 +176,67 @@ opacity !== 1 の要素: 0
 
 ---
 
-## 8. 生データ
+## 8. ソフトローンチのデプロイ（2026-08-07・フェーズ1）
 
-[results.json](results.json) に全測定値を保存している。
+デプロイした版: **`f2aabd2c-3ead-45d2-9305-308521f8d46e`**（内容は `169a499`）
+切り戻し先の版: `566a82b4-c428-40ae-8f38-dfd321040a53`
+
+アップロードは **4ファイル**（`index.html` / `css/style.css` / `ogp.png` ＋ `BUILD_ID`）。
+`js/main.js` と `favicon.svg` は姉妹LPと**バイト単位で同一**のため、
+Cloudflare の内容ハッシュによる重複排除で再アップロードされていない。
+
+| 確認 | 結果 |
+| --- | --- |
+| 新LP `https://tsam-ai.com/labs/ai-corporate-training/` | **200** |
+| 配信HTML vs リポジトリ | **差分 0 行** |
+| `noindex` | **あり**（フェーズ2で削除） |
+| CTA の `href` | `https://calendar.app.google/j2vgYwytooBz9M1Q7` |
+| `href="#"` | **0件** |
+| 付随アセット（css / js / favicon / ogp） | **4点とも 200** |
+| CTA の遷移（デスクトップ・モバイル） | `calendar.google.com` へ **200・同一タブ**。スケジュールID `AcZssZ35I7FN…`（**個人向けの `AcZssZ15jRDD…` とは別物**） |
+| 回帰7ページ（`/` `/login/` `/portal/` `/apps/` `/event/` `/potenitas/` `/labs/personal-ai-training/`） | **全件 差分0行** |
+| `/event/apply/` | 200 かつ `x-opennext: 1` |
+| 本番URLでの再計測 | コントラスト75/75・axe 0件・横スクロール3幅なし・reduced-motion 36/36・FAQ 4/4 |
+| 3幅スクリーンショット | [screenshots/live/](screenshots/live/) |
+
+**ロールバックは発生していない。**
+
+### 8-1. 新規パスでも「404 の残りかす」が出た
+
+**今回は新規パスの追加なのに、デプロイ直後に 404 が混ざった。**
+
+```
+デプロイ直後   … 12回中 7回が 200、5回が 404
+数分後         … 20回中 19回が 200
+さらに後       … 20回中 20回が 200（収束）
+```
+
+原因は**否定キャッシュ**。デプロイ前のベースライン取得や状態確認で
+同じURLを叩いており、そのときの 404 がエッジに載っていた。
+Cloudflare は 404 応答もキャッシュするため、新規パスでも
+「まだ無かった頃の答え」がしばらく返る。
+
+判別は §10-3 と同じ方法で付く。**クエリ文字列を付けたURL**なら
+キャッシュを迂回してオリジンを見られる。
+
+```
+?cb=12345 付き … 8回中 8回が 200。アセット4点もすべて 200
+→ 配信物は正しく、エッジの否定キャッシュが残っているだけと判定
+```
+
+> **デプロイ前に新規URLの 404 を確認すると、その 404 がキャッシュされる。**
+> 確認したいときはクエリ文字列を付けるか、デプロイ後の収束待ちを見込むこと。
 
 ---
 
-## 9. 再検証の手順
+## 9. 生データ
+
+[results.json](results.json)（ローカル）と [results-live.json](results-live.json)（本番）に
+全測定値を保存している。
+
+---
+
+## 10. 再検証の手順
 
 姉妹LPの
 [personal-ai-training/qa/verification-report.md](../../personal-ai-training/qa/verification-report.md) §11
