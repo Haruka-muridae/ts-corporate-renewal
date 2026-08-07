@@ -206,8 +206,7 @@ s {
  */
 .cycle-closing,
 .goal-note,
-.apply-meta,
-.apply-pending {
+.apply-meta {
   color: var(--color-text);
 }
 
@@ -528,21 +527,8 @@ s {
   text-align: center;
 }
 
-/* フォーム完成後に CTA ボタンへ戻すため、この規則は残してある。 */
 .apply .btn {
   margin-top: 2.5rem;
-}
-
-/*
- * 申込みフォームが未完成のあいだ、CTA ボタンの代わりに出す案内。
- * **ボタン風にしない。** 押せるように見えて押せない状態を作らないため、
- * 背景も枠も丸みも付けず、本文と同じ大きさの文章として置く。
- * 淡色背景の上なので色は --color-text（--color-text-sub は 4.44:1 で AA に届かない）。
- */
-.apply-pending {
-  margin-top: 2.5rem;
-  font-size: 1rem;
-  line-height: 1.9;
 }
 
 .apply-meta {
