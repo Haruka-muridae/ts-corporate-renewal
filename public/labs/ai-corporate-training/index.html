@@ -292,8 +292,13 @@
     <div class="container">
       <h2 class="h-section reveal" id="apply-title">まずは、貴社の状況を<br class="br-lg">お聞かせください。</h2>
       <p class="apply-lead reveal">導入相談(オンライン・30分)は無料です。</p>
-      <!-- TODO: 法人導入相談の予約ページが決まったら href を差し替える。 -->
-      <p class="reveal"><a class="btn" href="#">導入相談を予約する</a></p>
+      <!--
+        リンク先は Google カレンダーの予約スケジュール（法人導入相談・30分）。
+        calendar.app.google の短縮URLで、calendar.google.com/appointments/schedules/...
+        へ302で転送される。**個人向けLPとは別の予約ページ**なので取り違えないこと。
+        target を付けないのは、サイト内の他のCTAと挙動を揃えるため（同一タブ遷移）。
+      -->
+      <p class="reveal"><a class="btn" href="https://calendar.app.google/j2vgYwytooBz9M1Q7">導入相談を予約する</a></p>
       <p class="apply-meta reveal">¥55,000/月(税込) ｜ Online ｜ 4 × 60 min</p>
     </div>
   </section>

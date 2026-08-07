@@ -152,8 +152,11 @@ opacity !== 1 の要素: 0
 
 | 項目 | 期待 | 実測 |
 | --- | --- | --- |
-| `noindex` | 1件（TODOコメント付き） | **1件** |
-| `href="#"` | **1箇所のみ**（申込みCTA） | **1件** |
+| `noindex` | 1件（フェーズ2で削除する） | **1件** |
+| `href="#"` | **0件**（CTA は予約ページへ接続済み） | **0件** |
+| 申込みCTAのリンク先 | `https://calendar.app.google/j2vgYwytooBz9M1Q7` | **1件** |
+| 個人向けLPの予約URL（`gMGf779…`）の誤混入 | 0件 | **0件** |
+| `#apply` アンカー（ヘッダー・Hero・料金カード） | 3件 | **3件** |
 | canonical | `https://tsam-ai.com/labs/ai-corporate-training/` | 一致 |
 | `og:*` | type / url / title / description / image / image:width / image:height | **7件** |
 | `twitter:card` | `summary_large_image` | 1件 |
@@ -163,8 +166,13 @@ opacity !== 1 の要素: 0
 | `--color-secondary` | `#567185`（補正後） | 一致 |
 | OGP画像 | 1200×630 | 1200×630（37.0KB） |
 
-`href="#"` の3つの兄弟（ヘッダー・Hero・料金カード）は `#apply` への
-ページ内アンカーであり、置き換え対象ではない。
+ヘッダー・Hero・料金カードの3つのボタンは `#apply` へのページ内アンカーで、
+遷移先の申込みセクションに予約ページへの CTA がある構成。
+
+> **予約ページは個人向けLPと別物。** 短縮URLの末尾が
+> 法人 `j2vgYwytooBz9M1Q7` ／ 個人 `gMGf779ioTYdkVuD7` と異なり、
+> 転送先の予約スケジュールIDも別（法人 `AcZssZ35I7FN…` ／ 個人 `AcZssZ15jRDD…`）。
+> 取り違えていないことを機械確認している。
 
 ---
 
