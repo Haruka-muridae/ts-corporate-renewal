@@ -1,0 +1,893 @@
+{
+  "viewports": [
+    {
+      "width": 375,
+      "scrollW": 375,
+      "clientW": 375,
+      "noHorizontalScroll": true
+    },
+    {
+      "width": 768,
+      "scrollW": 768,
+      "clientW": 768,
+      "noHorizontalScroll": true
+    },
+    {
+      "width": 1440,
+      "scrollW": 1440,
+      "clientW": 1440,
+      "noHorizontalScroll": true
+    }
+  ],
+  "contrast": [
+    {
+      "sel": "p.site-name",
+      "text": "AI人材育成プログラム",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a.btn",
+      "text": "導入相談を予約する",
+      "size": 14,
+      "fg": "#FFFFFF",
+      "bg": "#245B8A",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "For Business / Online",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h1.h-hero",
+      "text": "社員全員を、AIを使える人材に。",
+      "size": 52,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.hero-lead",
+      "text": "月4回・各60分のオンライン研修。参加人数に",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.hero-meta",
+      "text": "¥55,000/月(税込) ｜ 月4回 ｜ ",
+      "size": 15,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a.btn",
+      "text": "導入相談を予約する(無料・30分)",
+      "size": 15,
+      "fg": "#FFFFFF",
+      "bg": "#245B8A",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Concerns",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "「AIを使おう」と言うだけでは、現場は変わら",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "AI活用を呼びかけたが、一部の社員しか使って",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "単発の研修をやってみたが、定着しなかった",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "社員ごとに、AIリテラシーの差が大きい",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "1人あたり数万円の研修費は、全員分は出せない",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.concern-closing",
+      "text": "必要なのは一度きりの研修ではなく、「使える状",
+      "size": 17,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "span.em-primary",
+      "text": "「使える状態になるまで続く仕組み」",
+      "size": 17,
+      "fg": "#245B8A",
+      "bg": "#FFFFFF",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Core Value",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.value-strike",
+      "text": "「1日研修で教えて終わり」ではなく、",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "s",
+      "text": "「1日研修で教えて終わり」",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.value-message",
+      "text": "「週1回、使える状態まで続ける」研修です。",
+      "size": 36,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "span.em-primary",
+      "text": "「週1回、使える状態まで続ける」",
+      "size": 36,
+      "fg": "#245B8A",
+      "bg": "#FAFAF8",
+      "ratio": 6.84,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.value-note",
+      "text": "学んだ翌週に、現場で試した結果を持ち寄って質",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Fixed Pricing",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#EAF2F7",
+      "ratio": 4.53,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "月額固定。参加人数が増えても、料金は変わりま",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.pricing-body",
+      "text": "一般的な企業研修は「1人あたり◯円」の課金で",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "10名の参加なら 1人あたり 月5,500円",
+      "size": 17,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "20名の参加なら 1人あたり 月2,750円",
+      "size": 17,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.pricing-closing",
+      "text": "チームで受けるほど、1人あたりの投資は小さく",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Monthly Cycle",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "週1回・60分の、続く研修。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "h3.card-title",
+      "text": "01｜毎月のテーマ設計",
+      "size": 18,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "span.card-no",
+      "text": "01",
+      "size": 13,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.card-body",
+      "text": "貴社の業務や課題を伺い、その月に扱うテーマを",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h3.card-title",
+      "text": "02｜週1回の研修(60分×4回)",
+      "size": 18,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "span.card-no",
+      "text": "02",
+      "size": 13,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.card-body",
+      "text": "Google Meetで実施。実際にAIを操",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h3.card-title",
+      "text": "03｜翌週の質問・改善",
+      "size": 18,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "span.card-no",
+      "text": "03",
+      "size": 13,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.card-body",
+      "text": "現場で使ってみて詰まったことを、次の回で解消",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "生成AIの基礎",
+      "size": 13,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "AIへの指示の出し方",
+      "size": 13,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "文章・資料作成",
+      "size": 13,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "リサーチ・情報整理",
+      "size": 13,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "業務利用の注意点",
+      "size": 13,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.cycle-closing",
+      "text": "このサイクルを、毎月くり返します。",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Pricing",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FAFAF8",
+      "ratio": 4.91,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "AI人材育成プログラム。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.price-amount",
+      "text": "¥55,000/月(税込)",
+      "size": 56,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "span.price-unit",
+      "text": "/月(税込)",
+      "size": 14,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.price-terms",
+      "text": "月4回 × 60分｜オンライン(Google",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "月4回のオンライン研修",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "毎月のテーマ設計",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "li",
+      "text": "研修内での質疑応答",
+      "size": 15,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.price-note",
+      "text": "最低契約期間は6か月です。個別業務へのAI導",
+      "size": 13,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a.btn",
+      "text": "導入相談を予約する",
+      "size": 15,
+      "fg": "#FFFFFF",
+      "bg": "#245B8A",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.eyebrow",
+      "text": "Steps",
+      "size": 12,
+      "fg": "#567185",
+      "bg": "#FFFFFF",
+      "ratio": 5.13,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "導入までの流れ。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.step-title",
+      "text": "導入相談(無料・30分)",
+      "size": 17,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.step-body",
+      "text": "オンラインで、貴社の状況とご要望を伺います。",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.step-title",
+      "text": "研修プランのすり合わせ",
+      "size": 17,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.step-body",
+      "text": "対象メンバー・初月のテーマ・曜日と時間を決め",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.step-title",
+      "text": "研修スタート",
+      "size": 17,
+      "fg": "#202326",
+      "bg": "#FFFFFF",
+      "ratio": 15.79,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.step-body",
+      "text": "週1回・60分の研修を開始します。",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FFFFFF",
+      "ratio": 5.03,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "summary",
+      "text": "何名まで参加できますか？",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.faq-answer",
+      "text": "料金上の人数制限はありません。オンライン会議",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "summary",
+      "text": "社員のITレベルがバラバラでも大丈夫ですか？",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.faq-answer",
+      "text": "はい。研修は基礎から、実際の操作を交えて進め",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "summary",
+      "text": "業務システムへのAI導入もお願いできますか？",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.faq-answer",
+      "text": "本プログラムの提供範囲は研修のみです。個別業",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "summary",
+      "text": "契約期間や支払い方法を教えてください。",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#FAFAF8",
+      "ratio": 15.11,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.faq-answer",
+      "text": "最低契約期間は6か月・月額制です。お支払いは",
+      "size": 16,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "h2.h-section",
+      "text": "まずは、貴社の状況をお聞かせください。",
+      "size": 32,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 3,
+      "pass": true
+    },
+    {
+      "sel": "p.apply-lead",
+      "text": "導入相談(オンライン・30分)は無料です。",
+      "size": 16,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "a.btn",
+      "text": "導入相談を予約する",
+      "size": 15,
+      "fg": "#FFFFFF",
+      "bg": "#245B8A",
+      "ratio": 7.15,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p.apply-meta",
+      "text": "¥55,000/月(税込) ｜ Online",
+      "size": 14,
+      "fg": "#202326",
+      "bg": "#EAF2F7",
+      "ratio": 13.94,
+      "need": 4.5,
+      "pass": true
+    },
+    {
+      "sel": "p",
+      "text": "© TSアセットマネジメント合同会社",
+      "size": 13,
+      "fg": "#687078",
+      "bg": "#FAFAF8",
+      "ratio": 4.81,
+      "need": 4.5,
+      "pass": true
+    }
+  ],
+  "axe": [],
+  "meta": {
+    "lang": "ja",
+    "title": "AI人材育成プログラム",
+    "description": "月4回・各60分のオンライン研修。参加人数による追加料金なし、月額55,000円(税込)で社員のAI活用を定着させる法人向けAI人材育成プログラム。",
+    "robots": "noindex",
+    "canonical": "https://tsam-ai.com/labs/ai-corporate-training/",
+    "ogTitle": "AI人材育成プログラム",
+    "ogDesc": "月4回・各60分のオンライン研修。参加人数による追加料金なし、月額55,000円(税込)で社員のAI活用を定着させる法人向けAI人材育成プログラム。",
+    "ogType": "website",
+    "ogUrl": "https://tsam-ai.com/labs/ai-corporate-training/",
+    "ogImage": "https://tsam-ai.com/labs/ai-corporate-training/ogp.png",
+    "twitterCard": "summary_large_image",
+    "icon": "favicon.svg",
+    "h1Count": 1,
+    "headings": [
+      "H1",
+      "H2",
+      "H2",
+      "H2",
+      "H3",
+      "H3",
+      "H3",
+      "H2",
+      "H2",
+      "H2"
+    ],
+    "jsonld": [
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Service",
+            "name": "AI人材育成プログラム",
+            "description": "月4回・各60分のオンライン研修。参加人数による追加料金なし、月額55,000円(税込)で社員のAI活用を定着させる法人向けAI人材育成プログラム。",
+            "url": "https://tsam-ai.com/labs/ai-corporate-training/",
+            "provider": {
+              "@type": "Organization",
+              "name": "TSアセットマネジメント合同会社"
+            },
+            "offers": {
+              "@type": "Offer",
+              "price": "55000",
+              "priceCurrency": "JPY",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "55000",
+                "priceCurrency": "JPY",
+                "billingDuration": 1,
+                "unitCode": "MON"
+              }
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "何名まで参加できますか？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "料金上の人数制限はありません。オンライン会議(Google Meet)で接続できる範囲でご参加いただけます。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "社員のITレベルがバラバラでも大丈夫ですか？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "はい。研修は基礎から、実際の操作を交えて進めます。AIに初めて触れる方もご参加いただけます。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "業務システムへのAI導入もお願いできますか？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "本プログラムの提供範囲は研修のみです。個別業務への導入作業やシステム構築は含まれません。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "契約期間や支払い方法を教えてください。",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "最低契約期間は6か月・月額制です。お支払いはクレジットカードまたは銀行振込に対応しています。"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "faqMatch": {
+    "ok": true,
+    "count": 4,
+    "mismatches": []
+  },
+  "keyboard": {
+    "tabOrder": [
+      "a:導入相談を予約する",
+      "a:導入相談を予約する(無料・30分",
+      "a:導入相談を予約する",
+      "summary:何名まで参加できますか？",
+      "summary:社員のITレベルがバラバラでも大",
+      "summary:業務システムへのAI導入もお願い",
+      "summary:契約期間や支払い方法を教えてくだ",
+      "a:導入相談を予約する",
+      "body:AI人材育成プログラム\n    "
+    ],
+    "summaryEnterOpens": true,
+    "summaryEnterCloses": true,
+    "summarySpaceOpens": true
+  },
+  "reducedMotion": {
+    "total": 36,
+    "notVisible": 0
+  }
+}

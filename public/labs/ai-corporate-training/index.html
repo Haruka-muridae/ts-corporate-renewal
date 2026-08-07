@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>AI人材育成プログラム</title>
+<meta name="description" content="月4回・各60分のオンライン研修。参加人数による追加料金なし、月額55,000円(税込)で社員のAI活用を定着させる法人向けAI人材育成プログラム。">
+
+<!--
+  TODO: 法人導入相談の予約ページを用意して CTA へ接続し、正式公開するときに
+  この1行を削除する。いまは予約先が未作成で申し込めないため、検索結果に出さない。
+-->
+<meta name="robots" content="noindex">
+
+<link rel="canonical" href="https://tsam-ai.com/labs/ai-corporate-training/">
+
+<!-- OGP。文言は上の title / description をそのまま使う（新しいコピーを作らない）。 -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tsam-ai.com/labs/ai-corporate-training/">
+<meta property="og:title" content="AI人材育成プログラム">
+<meta property="og:description" content="月4回・各60分のオンライン研修。参加人数による追加料金なし、月額55,000円(税込)で社員のAI活用を定着させる法人向けAI人材育成プログラム。">
+<meta property="og:image" content="https://tsam-ai.com/labs/ai-corporate-training/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="css/style.css">
+
+<!--
+  スクロール表示は JavaScript が動く環境でだけ「隠してから出す」。
+  この1行が無いと、JS を切った利用者に本文が一切見えなくなる。
+-->
+<script>document.documentElement.classList.add('js');</script>
+
+<!--
+  構造化データ。
+  FAQPage の質問・回答は本文の <details> と一字一句同じでなければならない
+  （食い違うと Google はスパムとみなす）。qa/ の検証で機械照合している。
+
+  AggregateRating / Review は使わない（第三者評価が存在しないため）。
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Service",
+      "name": "AI人材育成プログラム",
+      "description": "月4回・各60分のオンライン研修。参加人数による追加料金なし、月額55,000円(税込)で社員のAI活用を定着させる法人向けAI人材育成プログラム。",
+      "url": "https://tsam-ai.com/labs/ai-corporate-training/",
+      "provider": {
+        "@type": "Organization",
+        "name": "TSアセットマネジメント合同会社"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "55000",
+        "priceCurrency": "JPY",
+        "priceSpecification": {
+          "@type": "UnitPriceSpecification",
+          "price": "55000",
+          "priceCurrency": "JPY",
+          "billingDuration": 1,
+          "unitCode": "MON"
+        }
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "何名まで参加できますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "料金上の人数制限はありません。オンライン会議(Google Meet)で接続できる範囲でご参加いただけます。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "社員のITレベルがバラバラでも大丈夫ですか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "はい。研修は基礎から、実際の操作を交えて進めます。AIに初めて触れる方もご参加いただけます。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "業務システムへのAI導入もお願いできますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "本プログラムの提供範囲は研修のみです。個別業務への導入作業やシステム構築は含まれません。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "契約期間や支払い方法を教えてください。",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "最低契約期間は6か月・月額制です。お支払いはクレジットカードまたは銀行振込に対応しています。"
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <p class="site-name">AI人材育成プログラム</p>
+    <a class="btn btn--sm" href="#apply">導入相談を予約する</a>
+  </div>
+</header>
+
+<main>
+
+  <!-- Hero -->
+  <section class="section hero" aria-labelledby="hero-title">
+    <div class="container">
+      <p class="eyebrow reveal">For Business / Online</p>
+      <h1 class="h-hero reveal" id="hero-title">社員全員を、<br class="br-lg">AIを使える人材に。</h1>
+      <p class="hero-lead reveal">月4回・各60分のオンライン研修。参加人数による追加料金はありません。チーム全体で、AIを業務で使える状態を目指します。</p>
+      <p class="hero-meta reveal">¥55,000/月(税込) ｜ 月4回 ｜ 各60分</p>
+      <p class="reveal"><a class="btn" href="#apply">導入相談を予約する(無料・30分)</a></p>
+    </div>
+  </section>
+
+  <!-- 課題 -->
+  <section class="section section--surface" aria-labelledby="concerns-title">
+    <div class="container">
+      <p class="eyebrow reveal">Concerns</p>
+      <h2 class="h-section reveal" id="concerns-title">「AIを使おう」と言うだけでは、<br class="br-lg">現場は変わらない。</h2>
+
+      <ul class="concern-list reveal">
+        <li>AI活用を呼びかけたが、一部の社員しか使っていない</li>
+        <li>単発の研修をやってみたが、定着しなかった</li>
+        <li>社員ごとに、AIリテラシーの差が大きい</li>
+        <li>1人あたり数万円の研修費は、全員分は出せない</li>
+      </ul>
+
+      <p class="concern-closing reveal">必要なのは一度きりの研修ではなく、<span class="em-primary">「使える状態になるまで続く仕組み」</span>です。</p>
+    </div>
+  </section>
+
+  <!--
+    価値。ここだけ h2 を置かない（指示書 4.4）。
+    見出しが無いぶん、ランドマークは eyebrow を参照して名前を付ける。
+  -->
+  <section class="section" aria-labelledby="value-eyebrow">
+    <div class="container">
+      <p class="eyebrow reveal" id="value-eyebrow">Core Value</p>
+      <p class="value-strike reveal"><s>「1日研修で教えて終わり」</s>ではなく、</p>
+      <p class="value-message reveal"><span class="em-primary">「週1回、使える状態まで続ける」</span><br class="br-lg">研修です。</p>
+      <p class="value-note reveal">学んだ翌週に、現場で試した結果を持ち寄って質問できる。この繰り返しが、研修を「聞いた話」から「業務の習慣」に変えます。</p>
+    </div>
+  </section>
+
+  <!-- 料金の構造 -->
+  <section class="section section--pale-blue" aria-labelledby="fixed-title">
+    <div class="container">
+      <p class="eyebrow reveal">Fixed Pricing</p>
+      <h2 class="h-section reveal" id="fixed-title">月額固定。<br class="br-lg">参加人数が増えても、料金は変わりません。</h2>
+
+      <p class="pricing-body reveal">一般的な企業研修は「1人あたり◯円」の課金です。本プログラムは月額55,000円(税込)の固定制。オンライン会議に接続できる範囲なら、何名でもご参加いただけます。</p>
+
+      <ul class="rate-list reveal">
+        <li>10名の参加なら 1人あたり 月5,500円</li>
+        <li>20名の参加なら 1人あたり 月2,750円</li>
+      </ul>
+
+      <p class="pricing-closing reveal">チームで受けるほど、1人あたりの投資は小さくなります。</p>
+    </div>
+  </section>
+
+  <!-- 月4回の進め方 -->
+  <section class="section section--surface" aria-labelledby="cycle-title">
+    <div class="container">
+      <p class="eyebrow reveal">Monthly Cycle</p>
+      <h2 class="h-section reveal" id="cycle-title">週1回・60分の、続く研修。</h2>
+
+      <div class="card-list">
+        <article class="card reveal">
+          <h3 class="card-title"><span class="card-no">01</span><span class="card-sep" aria-hidden="true">｜</span>毎月のテーマ設計</h3>
+          <p class="card-body">貴社の業務や課題を伺い、その月に扱うテーマを決めます。</p>
+        </article>
+        <article class="card reveal">
+          <h3 class="card-title"><span class="card-no">02</span><span class="card-sep" aria-hidden="true">｜</span>週1回の研修(60分×4回)</h3>
+          <p class="card-body">Google Meetで実施。実際にAIを操作しながら進めます。</p>
+        </article>
+        <article class="card reveal">
+          <h3 class="card-title"><span class="card-no">03</span><span class="card-sep" aria-hidden="true">｜</span>翌週の質問・改善</h3>
+          <p class="card-body">現場で使ってみて詰まったことを、次の回で解消します。</p>
+        </article>
+      </div>
+
+      <ul class="tag-list reveal">
+        <li>生成AIの基礎</li>
+        <li>AIへの指示の出し方</li>
+        <li>文章・資料作成</li>
+        <li>リサーチ・情報整理</li>
+        <li>業務利用の注意点</li>
+      </ul>
+
+      <p class="cycle-closing reveal">このサイクルを、毎月くり返します。</p>
+    </div>
+  </section>
+
+  <!-- 料金カード -->
+  <section class="section" id="price" aria-labelledby="price-title">
+    <div class="container">
+      <p class="eyebrow reveal">Pricing</p>
+      <h2 class="h-section reveal" id="price-title">AI人材育成プログラム。</h2>
+
+      <div class="price-card reveal">
+        <p class="price-amount">¥55,000<span class="price-unit">/月(税込)</span></p>
+        <p class="price-terms">月4回 × 60分｜オンライン(Google Meet)｜参加人数の追加料金なし</p>
+
+        <ul class="price-includes">
+          <li>月4回のオンライン研修</li>
+          <li>毎月のテーマ設計</li>
+          <li>研修内での質疑応答</li>
+        </ul>
+
+        <p class="price-note">最低契約期間は6か月です。個別業務へのAI導入作業・システム構築は含まれません。</p>
+
+        <p><a class="btn" href="#apply">導入相談を予約する</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 導入の流れ -->
+  <section class="section section--surface" aria-labelledby="steps-title">
+    <div class="container">
+      <p class="eyebrow reveal">Steps</p>
+      <h2 class="h-section reveal" id="steps-title">導入までの流れ。</h2>
+
+      <ol class="step-list reveal">
+        <li>
+          <p class="step-title">導入相談(無料・30分)</p>
+          <p class="step-body">オンラインで、貴社の状況とご要望を伺います。その場での契約は不要です。</p>
+        </li>
+        <li>
+          <p class="step-title">研修プランのすり合わせ</p>
+          <p class="step-body">対象メンバー・初月のテーマ・曜日と時間を決めます。</p>
+        </li>
+        <li>
+          <p class="step-title">研修スタート</p>
+          <p class="step-body">週1回・60分の研修を開始します。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!--
+    FAQ。指示書 4.9 は Eyebrow も見出しも指定していないため、置いていない
+    （書かれていないものを足さない）。
+  -->
+  <section class="section">
+    <div class="container">
+      <div class="faq-list reveal">
+        <details class="faq-item">
+          <summary>何名まで参加できますか？</summary>
+          <p class="faq-answer">料金上の人数制限はありません。オンライン会議(Google Meet)で接続できる範囲でご参加いただけます。</p>
+        </details>
+        <details class="faq-item">
+          <summary>社員のITレベルがバラバラでも大丈夫ですか？</summary>
+          <p class="faq-answer">はい。研修は基礎から、実際の操作を交えて進めます。AIに初めて触れる方もご参加いただけます。</p>
+        </details>
+        <details class="faq-item">
+          <summary>業務システムへのAI導入もお願いできますか？</summary>
+          <p class="faq-answer">本プログラムの提供範囲は研修のみです。個別業務への導入作業やシステム構築は含まれません。</p>
+        </details>
+        <details class="faq-item">
+          <summary>契約期間や支払い方法を教えてください。</summary>
+          <p class="faq-answer">最低契約期間は6か月・月額制です。お支払いはクレジットカードまたは銀行振込に対応しています。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- 申込み -->
+  <section class="section section--pale-blue apply" id="apply" aria-labelledby="apply-title">
+    <div class="container">
+      <h2 class="h-section reveal" id="apply-title">まずは、貴社の状況を<br class="br-lg">お聞かせください。</h2>
+      <p class="apply-lead reveal">導入相談(オンライン・30分)は無料です。</p>
+      <!-- TODO: 法人導入相談の予約ページが決まったら href を差し替える。 -->
+      <p class="reveal"><a class="btn" href="#">導入相談を予約する</a></p>
+      <p class="apply-meta reveal">¥55,000/月(税込) ｜ Online ｜ 4 × 60 min</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© TSアセットマネジメント合同会社</p>
+  </div>
+</footer>
+
+<script src="js/main.js" defer></script>
+</body>
+</html>

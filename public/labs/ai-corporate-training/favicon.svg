@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="パーソナルAIトレーニング">
+  <!-- 基調色の地に Primary の無地の丸。デザイントークンの2色だけを使う。 -->
+  <rect width="32" height="32" rx="7" fill="#FAFAF8"/>
+  <circle cx="16" cy="16" r="7" fill="#245B8A"/>
+</svg>

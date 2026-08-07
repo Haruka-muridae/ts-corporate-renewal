@@ -1,0 +1,724 @@
+/* ==================================================================
+ * AI人材育成プログラム（法人向け）LP
+ *
+ * 姉妹商品「パーソナルAIトレーニング」の style.css を複製したもの。
+ *   複製元: public/labs/personal-ai-training/css/style.css
+ *   複製日: 2026年8月7日
+ * デザイントークン・ボタン・カード・FAQ・fade モーション・レスポンシブ・
+ * アクセシビリティ実装はそのまま流用している。
+ *
+ * このページに無いセクション（目指す状態）の規則は削除し、
+ * このページだけにある部品（換算例・テーマ例・含まれるもの・導入の流れ）を
+ * 末尾に足してある。
+ *
+ * **共通化はしない。** 2本のLPは別々に育つ想定で、片方の都合で共有CSSを
+ * 変えるともう片方が壊れる。docs/repository-structure.md §4-1 と同じ理由。
+ *
+ * モバイルファースト。サイズは clamp() で 375px 〜 1440px を連続で埋め、
+ * ブレークポイントは「clamp では表現できないもの」だけに使う。
+ * 色とフォントは必ず :root の変数を経由する。
+ * ================================================================== */
+
+/* ------------------------------------------------------------------
+ * デザイントークン
+ * ------------------------------------------------------------------ */
+:root {
+  --color-primary: #245B8A;
+  /*
+   * 実装指示書の当初値は #7895AA。12px の英語ラベルに使うと、どの背景でも
+   * 2.78〜3.14:1 にしかならず §6 の WCAG AA（4.5:1）を満たせなかったため、
+   * オーナー判断（2026-08-07・B案）で暗くすることになった。
+   *
+   * 指示された #5F7D93 は実測 3.83〜4.34:1 で、まだ 4.5 に届かない
+   * （淡色背景で 3.83）。指示書タスク1-3 の「不足するならさらに暗い値を
+   * 検討してよい／ただし Primary より暗くしない」に従い、#5F7D93 の色相を
+   * 保ったまま 4背景すべてが 4.5:1 に届く**最も明るい**値を探して採用した。
+   *   #567185 … 最悪値 4.53:1（淡色2色）／輝度 0.1548（Primary 0.0969 より明るい）
+   * 計測は qa/verification-report.md。
+   */
+  --color-secondary: #567185;
+  --color-pale-blue: #EAF2F7;
+  --color-pale-sage: #EDF2EE;
+  --color-bg: #FAFAF8;
+  --color-surface: #FFFFFF;
+  --color-text: #202326;
+  --color-text-sub: #687078;
+  --color-border: #E5E8EA;
+
+  /*
+   * Inter を先に置くのは、英数字だけを Inter に落とすため。
+   * Inter は日本語グリフを持たないので、日本語は自動で Zen Kaku へ落ちる。
+   * これで「英語・数字は Inter、日本語は Zen Kaku」が1つの指定で成立する。
+   */
+  --font-base: "Inter", "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-en: "Inter", system-ui, sans-serif;
+
+  --container: 760px;
+  --container-wide: 1120px;
+
+  /* 左右 20px（モバイル）〜 40px（デスクトップ）。 */
+  --gutter: clamp(1.25rem, 5vw, 2.5rem);
+  /* 上下 92px（モバイル）〜 140px（デスクトップ）。 */
+  --section-space: clamp(5.75rem, 9vw, 8.75rem);
+
+  /* sticky ヘッダーの実高。アンカー着地位置の計算に使う。 */
+  --header-height: 69px;
+}
+
+/* ------------------------------------------------------------------
+ * ベース
+ * ------------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  /* アンカー先が sticky ヘッダーの下に潜らないようにする。 */
+  scroll-padding-top: calc(var(--header-height) + 1.5rem);
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-base);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.85;
+  letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+p,
+ul {
+  margin: 0;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: inherit;
+}
+
+s {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.1em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------------
+ * レイアウト
+ * ------------------------------------------------------------------ */
+.container {
+  width: 100%;
+  max-width: var(--container);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.section {
+  padding-block: var(--section-space);
+}
+
+.section--surface { background: var(--color-surface); }
+.section--pale-blue { background: var(--color-pale-blue); }
+.section--pale-sage { background: var(--color-pale-sage); }
+
+/*
+ * 改行はデスクトップでの読みやすさのための指定。
+ * 狭い画面では自然に折り返させる（日本語は語間に空白が要らないため、
+ * br を消しても文がつながって読める）。
+ */
+.br-lg { display: none; }
+
+@media (min-width: 768px) {
+  .br-lg { display: inline; }
+}
+
+/* ------------------------------------------------------------------
+ * タイポグラフィ
+ * ------------------------------------------------------------------ */
+.eyebrow {
+  font-family: var(--font-en);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+  margin-bottom: 1.5rem;
+}
+
+/*
+ * 見出しの行分割。
+ *
+ * 狭い画面では br を消して自然に折り返させるが、そのままだと最終行が
+ * 「て。」「態。」のように1〜2文字だけ残る。balance は各行の幅を
+ * ならすため、この孤立を防げる。対応しないブラウザでは無視され、
+ * 従来どおりの折り返しに戻るだけで壊れない。
+ */
+.h-hero,
+.h-section,
+.value-message,
+.price-terms {
+  text-wrap: balance;
+}
+
+/* 36px（モバイル）〜 52px（デスクトップ）。 */
+.h-hero {
+  font-size: clamp(2.25rem, 5.4vw, 3.25rem);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+
+/* 26px（モバイル）〜 32px（デスクトップ）。 */
+.h-section {
+  font-size: clamp(1.625rem, 3.2vw, 2rem);
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+/* 指示書で色指定のある強調（悩みの締め・価値のメッセージ）だけがこれ。 */
+.em-primary {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* 色の指定が無い強調は、青を増やさず太さだけで差を付ける。 */
+.em {
+  font-weight: 500;
+}
+
+/*
+ * ------------------------------------------------------------------
+ * 淡色背景の上の補助テキスト
+ * ------------------------------------------------------------------
+ * --color-text-sub は基調色の上で 4.81:1、白の上で 5.03:1 と AA を満たすが、
+ * Pale Blue / Pale Sage の上では 4.44:1 になり 4.5:1 にわずかに届かない。
+ * 淡色セクションに直接置く補助テキストだけ本文色へ上げる
+ * （白カードの中にある .card-body は白背景なので対象外）。
+ * ------------------------------------------------------------------
+ */
+.pricing-body,
+.pricing-closing,
+.apply-lead,
+.apply-meta {
+  color: var(--color-text);
+}
+
+/* ------------------------------------------------------------------
+ * ボタン
+ * ------------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.875rem 2.25rem;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #FFFFFF;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  transition: transform 250ms ease, box-shadow 250ms ease;
+}
+
+/* 色は変えず、浮き上がりだけで反応を返す。 */
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(36, 91, 138, 0.16);
+}
+
+.btn--sm {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------------
+ * ヘッダー
+ * ------------------------------------------------------------------ */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(250, 250, 248, 0.82);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  /* 半透明の帯と本文の境目を示すための線。装飾ではなく機能。 */
+  border-bottom: 1px solid rgba(229, 232, 234, 0.7);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: var(--container-wide);
+  margin-inline: auto;
+  padding: 10px var(--gutter);
+}
+
+.site-name {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+}
+
+/* 375px 幅でサイト名とボタンが1行に収まるようにする。 */
+@media (max-width: 400px) {
+  .site-name {
+    font-size: 0.875rem;
+    letter-spacing: 0.02em;
+  }
+
+  .btn--sm {
+    padding: 0.75rem 1.125rem;
+    font-size: 0.8125rem;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Hero
+ * ------------------------------------------------------------------ */
+.hero {
+  text-align: center;
+}
+
+.hero-lead {
+  margin-top: 1.75rem;
+  margin-inline: auto;
+  max-width: 34em;
+  color: var(--color-text-sub);
+  line-height: 1.9;
+}
+
+.hero-meta {
+  margin-top: 2rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0.08em;
+  color: var(--color-text-sub);
+}
+
+.hero .btn {
+  margin-top: 2.5rem;
+}
+
+/* ------------------------------------------------------------------
+ * 悩み
+ * ------------------------------------------------------------------ */
+.concern-list {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.concern-list li {
+  padding-block: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.concern-closing {
+  margin-top: 2.5rem;
+  font-size: 1.0625rem;
+  line-height: 1.9;
+}
+
+/* ------------------------------------------------------------------
+ * 価値
+ * ------------------------------------------------------------------ */
+.value-strike {
+  color: var(--color-text-sub);
+}
+
+/* 28px 〜 36px。見出しより大きくし、このセクションの主役にする。 */
+.value-message {
+  margin-top: 1rem;
+  font-size: clamp(1.75rem, 3.8vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+}
+
+.value-note {
+  margin-top: 2.25rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * 料金の構造
+ * ------------------------------------------------------------------ */
+.pricing-body {
+  margin-top: 2.5rem;
+}
+
+/*
+ * 換算例。**KPI 型の巨大数字にはしない。**
+ * 数字を大きく見せるのではなく、本文と同じ調子の行を罫線で区切って並べる。
+ * 金額は --font-base のまま Inter が拾う（日本語は Zen Kaku へ落ちる）。
+ */
+.rate-list {
+  margin-top: 2rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.rate-list li {
+  padding-block: 1.125rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 1.0625rem;
+  letter-spacing: 0.04em;
+}
+
+.pricing-closing {
+  margin-top: 2rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0.06em;
+}
+
+/* ------------------------------------------------------------------
+ * 月4回の進め方
+ * ------------------------------------------------------------------ */
+.card-list {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 2.5rem;
+}
+
+.card {
+  padding: clamp(1.75rem, 4vw, 2.25rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+}
+
+.card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0.03em;
+}
+
+.card-no {
+  font-family: var(--font-en);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--color-secondary);
+}
+
+.card-sep {
+  margin-inline: 0.4em;
+  color: var(--color-secondary);
+}
+
+.card-body {
+  margin-top: 1rem;
+  color: var(--color-text-sub);
+}
+
+/*
+ * テーマ例。押せる要素ではないので、ボタンと見分けが付く形にする
+ * （塗りつぶさず、細い枠と小さめの文字だけ）。
+ */
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.75rem;
+}
+
+.tag-list li {
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  color: var(--color-text-sub);
+}
+
+.cycle-closing {
+  margin-top: 2.5rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0.06em;
+}
+
+/* ------------------------------------------------------------------
+ * 料金
+ * ------------------------------------------------------------------ */
+.price-card {
+  margin-top: 2.5rem;
+  padding: clamp(2.25rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  text-align: center;
+}
+
+.price-amount {
+  font-family: var(--font-en);
+  font-size: clamp(2.75rem, 7vw, 3.5rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.price-unit {
+  margin-left: 0.4rem;
+  font-family: var(--font-base);
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--color-text-sub);
+}
+
+.price-terms {
+  margin-top: 1.25rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0.04em;
+}
+
+/*
+ * 含まれるもの。チェック記号は「含まれる」ことを表す意味のある印なので置くが、
+ * 読み上げでは冗長になるため aria-hidden にはできない（::before の生成内容は
+ * 読み上げ対象になりうる）。リスト項目としての意味は ul が担保している。
+ */
+.price-includes {
+  display: inline-grid;
+  gap: 0.5rem;
+  margin-top: 1.75rem;
+  text-align: left;
+}
+
+.price-includes li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+.price-includes li::before {
+  content: "\2713"; /* ✓ */
+  flex: none;
+  color: var(--color-secondary);
+  font-size: 0.875rem;
+}
+
+/*
+ * 契約条件の注記。**小さくはするが、薄くして隠さない。**
+ * 白カードの上なので --color-text-sub で 5.03:1（AA を満たす）。
+ */
+.price-note {
+  margin-top: 1.75rem;
+  margin-inline: auto;
+  max-width: 34em;
+  font-size: 0.8125rem;
+  line-height: 1.85;
+  color: var(--color-text-sub);
+}
+
+.price-card .btn {
+  margin-top: 2.25rem;
+}
+
+/* ------------------------------------------------------------------
+ * 導入の流れ
+ * ------------------------------------------------------------------ */
+/* ol はベースのリセット（ul のみ）に含まれないため、ここで潰す。 */
+.step-list {
+  margin: 2.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+  counter-reset: step;
+}
+
+.step-list li {
+  padding-block: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  counter-increment: step;
+}
+
+.step-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  line-height: 1.7;
+  letter-spacing: 0.03em;
+}
+
+/* 番号は ol の意味づけが持つ。ここは見た目の番号だけを出す。 */
+.step-title::before {
+  content: counter(step, decimal-leading-zero);
+  flex: none;
+  margin-right: 0.75rem;
+  font-family: var(--font-en);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--color-secondary);
+}
+
+.step-body {
+  margin-top: 0.5rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * FAQ
+ * ------------------------------------------------------------------ */
+.faq-list {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.faq-item summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-height: 44px;
+  padding-block: 1.25rem;
+  font-weight: 500;
+  line-height: 1.7;
+  list-style: none;
+  cursor: pointer;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+/*
+ * 開閉の目印。アイコンライブラリを足さず、記号1文字で示す。
+ * 装飾ではなく「押せば開く」ことを伝えるための表示。
+ */
+.faq-item summary::after {
+  content: "+";
+  flex: none;
+  font-family: var(--font-en);
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--color-secondary);
+}
+
+.faq-item[open] summary::after {
+  content: "\2212"; /* 全角ではないマイナス記号。+ と同じ幅で収まる。 */
+}
+
+.faq-answer {
+  padding-bottom: 1.5rem;
+  padding-right: 2.5rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * 申込み
+ * ------------------------------------------------------------------ */
+.apply {
+  text-align: center;
+}
+
+.apply-lead {
+  margin-top: 1.75rem;
+}
+
+.apply .btn {
+  margin-top: 2.5rem;
+}
+
+.apply-meta {
+  margin-top: 2rem;
+  font-size: 0.875rem;
+  letter-spacing: 0.08em;
+}
+
+/* ------------------------------------------------------------------
+ * フッター
+ * ------------------------------------------------------------------ */
+.site-footer {
+  padding-block: 3rem;
+}
+
+.site-footer p {
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * スクロール表示（Fade Up）
+ * ------------------------------------------------------------------
+ * .js が付いているとき（＝JavaScript が動くとき）だけ隠す。
+ * JS が無効なら最初から見えている状態が既定になる。
+ * ------------------------------------------------------------------ */
+.js .reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 700ms ease, transform 700ms ease;
+}
+
+.js .reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ------------------------------------------------------------------
+ * アニメーションの軽減
+ * ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* 表示のきっかけを待たず、最初から見えている状態にする。 */
+  .js .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .btn:hover {
+    transform: none;
+  }
+}
