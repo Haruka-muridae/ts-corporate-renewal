@@ -6,14 +6,26 @@ TSAM AI コーポレートサイトと、本番認証システムの公開手順
 
 ## 現在の公開構成
 
+> **重要（2026-08-08 訂正）**: 本文書は **Vercel 時代の手順**が中心で、現在は古い。
+> **いまの本番配信は Cloudflare Workers（OpenNext）**。デプロイは手動で
+> `npm run deploy`（= `opennextjs-cloudflare build && opennextjs-cloudflare deploy`）を実行する。
+> **`main` への push で自動デプロイはされない**（GitHub Actions の `nextjs.yml` は
+> 無効化済み＝`nextjs.yml.disabled`）。切替手順は
+> [docs/cloudflare-cutover.md](docs/cloudflare-cutover.md)。
+> 以下の Vercel 前提の記述は**ロールバック用の歴史的記録**として残しているが、日常運用の正ではない。
+
 ```text
-GitHub リポジトリ
+GitHub リポジトリ（コード）
         │
-        ├─ main への push        ──▶ Vercel ──▶ https://tsam-ai.com/（本番）
-        └─ それ以外への push     ──▶ Vercel ──▶ プレビューURL（Vercel SSO で保護）
+        └─ 手動で `npm run deploy`  ──▶ Cloudflare Workers ──▶ https://tsam-ai.com/（本番）
 ```
 
-**2026-08-01 に GitHub Pages から Vercel へ移行しました。**
+**配信元は Cloudflare Workers。** 本番の応答ヘッダは `Server: cloudflare`（`X-Vercel-Id` は出ない）。
+経緯: 2026-08-01 に GitHub Pages → Vercel、その後 2026-08 に Vercel → Cloudflare Workers へ再切替。
+以降の本文は Vercel 時代の記録（Vercel をロールバック先として一時保持していた期間のもの）。
+
+<!-- 以下、Vercel 時代の手順（歴史的記録） -->
+**2026-08-01 に GitHub Pages から Vercel へ移行しました。**（※その後 Cloudflare へ再移行済み）
 GitHub Pages は無効化済みで、`CNAME` も削除されています。
 切替の全手順と実施記録は [docs/production-cutover.md](docs/production-cutover.md)、
 移行の設計判断は [docs/vercel-migration.md](docs/vercel-migration.md) にあります。

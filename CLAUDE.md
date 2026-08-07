@@ -29,7 +29,9 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 
 ## 配信構成（ここを誤解すると壊れる）
 
-**Vercel が Next.js アプリとして配信している。`main` へのマージがそのまま本番公開になる**（2026-08-01 に GitHub Pages から切替済み。[docs/production-cutover.md](docs/production-cutover.md)）。
+**配信は Cloudflare Workers（OpenNext）。本番デプロイは手動で `npm run deploy`（= `opennextjs-cloudflare build && opennextjs-cloudflare deploy`）を実行して行う。`main` への push では自動デプロイされない**（GitHub Actions の `nextjs.yml` は無効化済み＝`nextjs.yml.disabled`。動いているのは `test.yml` のみ）。`wrangler.jsonc` の `main` は `.open-next/worker.js`（OpenNext生成物）。本番の応答ヘッダは `Server: cloudflare`。2026-08 に Vercel から Cloudflare Workers へ切替済み（手順は [docs/cloudflare-cutover.md](docs/cloudflare-cutover.md)）。
+
+> **注意（2026-08-08 訂正）**: 以前この項は「Vercel が配信・`main` へのマージが本番公開」と書いていたが、**それは Cloudflare 切替前の古い記述**。DEPLOYMENT.md / docs/production-cutover.md / docs/vercel-migration.md にも同じ古い Vercel 前提が残っている（歴史的記録として保持）。
 
 | URL | 実体 |
 | --- | --- |
