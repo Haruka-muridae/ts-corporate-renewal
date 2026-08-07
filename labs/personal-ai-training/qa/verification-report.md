@@ -190,3 +190,54 @@ CTA文言が Hero と申込みの両方に）を引き切れていないだけ�
 
 [results.json](results.json) に全測定値を保存している（コントラスト全56件の
 前景色・背景色・サイズ・比、axe の結果、メタ情報、Tab順）。
+
+---
+
+## 9. ローカルでの確認と再検証の手順
+
+### 見た目を確認するだけ
+
+```powershell
+npx serve public/labs/personal-ai-training
+# もしくは
+py -m http.server 8000 --directory public/labs/personal-ai-training
+```
+
+`file://` では開かないこと（フォント取得と相対パスが解決できない）。
+
+配信構成ごと確認したい場合は、リポジトリのルートで `npm run dev` を実行して
+<http://localhost:3000/labs/personal-ai-training/> を開く。
+`next.config.ts` の fallback rewrite を通るため、本番と同じ経路になる。
+
+### 検証をやり直す
+
+このレポートの数値は、次の4つを実行して得たもの。**検証用パッケージは
+リポジトリへ入れていない**ため、作業用ディレクトリで `--no-save` で入れる。
+
+```powershell
+# 1. 検証用パッケージ（リポジトリ外の作業ディレクトリで）
+npm i --no-save axe-core html-validate
+
+# 2. HTML 構文
+npx html-validate --preset a11y,recommended,standard `
+  public/labs/personal-ai-training/index.html
+
+# 3. Playwright はリポジトリの devDependencies に既にある
+npx playwright install chromium
+```
+
+コントラスト・axe・スクリーンショット・キーボード・reduced-motion は
+Playwright で1本のスクリプトにまとめて測っている。要点は次のとおり。
+
+| 測定 | 方法 |
+| --- | --- |
+| コントラスト | `getComputedStyle` の `color` と、祖先をたどって最初に不透明だった `backgroundColor` から相対輝度比を計算。`aria-hidden="true"` の要素は除外 |
+| axe | 実ページに `axe-core` を `addScriptTag` で注入し `axe.run(document, { resultTypes: ['violations'] })` |
+| 横スクロール | `documentElement.scrollWidth <= clientWidth` |
+| キーボード | `page.keyboard.press('Tab')` を9回押して `document.activeElement` を記録 |
+| reduced-motion | `browser.newContext({ reducedMotion: 'reduce' })` で開き、`.reveal` 全件の `opacity` を確認 |
+| コピー照合 | HTML からタグ・コメント・`<script>` を除去し、確定稿49件が含まれるかを検査 |
+| JSON-LD 照合 | `FAQPage.mainEntity` と `<summary>` / `.faq-answer` の `textContent` を厳密比較 |
+
+**コピーまたは FAQ を変更したときは、§7 の照合を必ずやり直すこと。**
+JSON-LD と本文がずれると、Google はそれをスパムとして扱う。
