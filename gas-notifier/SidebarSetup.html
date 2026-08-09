@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<style>
+  /*
+    サイドバーは幅300px前後しかない。詰め込まず、1画面に1手順だけ出す。
+    色は Apps Script の既定UIに寄せる（利用者が別アプリと感じないように）。
+  */
+  body {
+    font-family: 'Helvetica Neue', Arial, 'Hiragino Sans', 'Meiryo', sans-serif;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #202124;
+    margin: 0;
+    padding: 12px;
+  }
+
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  h2 { font-size: 13px; margin: 18px 0 6px; }
+  p  { margin: 0 0 8px; }
+
+  ol.steps { padding-left: 1.2em; margin: 0 0 8px; }
+  ol.steps li { margin-bottom: 4px; }
+
+  .status { list-style: none; padding: 0; margin: 0 0 12px; }
+  .status li {
+    display: flex;
+    gap: 8px;
+    padding: 3px 0;
+    border-bottom: 1px solid #eee;
+  }
+  .status .mark { width: 1.2em; font-weight: 700; }
+  .status .mark[data-ok='true']  { color: #137333; }
+  .status .mark[data-ok='false'] { color: #c5221f; }
+
+  button {
+    font: inherit;
+    padding: 6px 12px;
+    border: 1px solid #1a73e8;
+    border-radius: 4px;
+    background: #1a73e8;
+    color: #fff;
+    cursor: pointer;
+  }
+  button[disabled] { opacity: 0.5; cursor: default; }
+  button.ghost { background: #fff; color: #1a73e8; }
+
+  .note {
+    background: #f8f9fa;
+    border-left: 3px solid #dadce0;
+    padding: 8px 10px;
+    margin: 0 0 10px;
+  }
+  .warn {
+    background: #fef7e0;
+    border-left: 3px solid #f9ab00;
+    padding: 8px 10px;
+    margin: 0 0 10px;
+  }
+  .code {
+    font-family: 'Roboto Mono', Consolas, monospace;
+    font-size: 11px;
+    word-break: break-all;
+    background: #f1f3f4;
+    border-radius: 3px;
+    padding: 6px;
+    margin: 0 0 8px;
+  }
+  .msg { margin: 8px 0 0; min-height: 1.7em; }
+  .msg[data-kind='error'] { color: #c5221f; }
+  .msg[data-kind='ok'] { color: #137333; }
+</style>
+</head>
+<body>
+
+<h1>録音通知のセットアップ</h1>
+<p>上から順に進めてください。②は何度実行しても同じ結果になります。</p>
+
+<h2>いまの状態</h2>
+<ul class="status" id="status">
+  <li><span class="mark" id="mark-jsrsasign">…</span><span>jsrsasign（署名ライブラリ）</span></li>
+  <li><span class="mark" id="mark-sheets">…</span><span>シート4種</span></li>
+  <li><span class="mark" id="mark-keys">…</span><span>通知の鍵（VAPID）</span></li>
+  <li><span class="mark" id="mark-connectKey">…</span><span>接続キー</span></li>
+  <li><span class="mark" id="mark-trigger">…</span><span>毎分トリガー</span></li>
+  <li><span class="mark" id="mark-deployed">…</span><span>ウェブアプリの公開</span></li>
+</ul>
+
+<h2>① 承認</h2>
+<p class="warn">
+  ②を押すと「このアプリは Google で確認されていません」という警告が出ます。
+  <strong>これは正常です。</strong>あなた自身が書いた（コピーした）スクリプトを、
+  あなた自身が承認する操作だからです。「詳細」→「（プロジェクト名）に移動」で続行してください。
+</p>
+
+<h2>② トリガー・鍵の作成</h2>
+<p>シート・VAPID の鍵・接続キー・毎分トリガーを用意します。</p>
+<p>
+  <button type="button" id="run-setup">セットアップを実行</button>
+</p>
+
+<h2>③ 公開（デプロイ）</h2>
+<p class="note">
+  この操作だけは Google の画面で行います。<br>
+  「デプロイ」→「新しいデプロイ」→ 種類「ウェブアプリ」→
+  <strong>アクセスできるユーザー: 全員</strong> ／
+  <strong>次のユーザーとして実行: 自分</strong> → デプロイ。
+</p>
+<p>
+  <button type="button" class="ghost" id="reload-status">状態を読み直す</button>
+</p>
+
+<h2>④ 接続コード</h2>
+<p>録音アプリの「Googleカレンダー連携」へ貼り付けてください。</p>
+<div id="code-area" hidden>
+  <p>GAS の URL</p>
+  <div class="code" id="code-url"></div>
+  <p>接続キー（第三者へ渡さないでください）</p>
+  <div class="code" id="code-key"></div>
+</div>
+<p>
+  <button type="button" class="ghost" id="show-code">接続コードを表示</button>
+</p>
+
+<p class="msg" id="msg" role="status"></p>
+
+<script>
+  /*
+    innerHTML は使わない。接続キーとURLはこの画面にしか出ない値であり、
+    textContent 以外で入れる理由が無い。
+  */
+  var MARK_IDS = ['jsrsasign', 'sheets', 'keys', 'connectKey', 'trigger', 'deployed'];
+
+  function setMessage(text, kind) {
+    var node = document.getElementById('msg');
+    node.textContent = text;
+    node.dataset.kind = kind || '';
+  }
+
+  function renderStatus(status) {
+    for (var i = 0; i < MARK_IDS.length; i++) {
+      var name = MARK_IDS[i];
+      var node = document.getElementById('mark-' + name);
+      var ok = status[name] === true;
+
+      node.textContent = ok ? '○' : '×';
+      node.dataset.ok = String(ok);
+    }
+  }
+
+  function loadStatus() {
+    google.script.run
+      .withSuccessHandler(renderStatus)
+      .withFailureHandler(function (err) { setMessage(String(err.message || err), 'error'); })
+      .getSetupStatus();
+  }
+
+  document.getElementById('run-setup').addEventListener('click', function () {
+    var button = this;
+    button.disabled = true;
+    setMessage('実行しています…');
+
+    google.script.run
+      .withSuccessHandler(function (status) {
+        button.disabled = false;
+        renderStatus(status);
+        setMessage('完了しました。③の公開へ進んでください。', 'ok');
+      })
+      .withFailureHandler(function (err) {
+        button.disabled = false;
+        setMessage(String(err.message || err), 'error');
+      })
+      .setupNotifier();
+  });
+
+  document.getElementById('reload-status').addEventListener('click', function () {
+    setMessage('');
+    loadStatus();
+  });
+
+  document.getElementById('show-code').addEventListener('click', function () {
+    setMessage('');
+
+    google.script.run
+      .withSuccessHandler(function (code) {
+        if (!code.url) {
+          setMessage('まだ公開されていません。③のデプロイを先に行ってください。', 'error');
+          return;
+        }
+
+        document.getElementById('code-url').textContent = code.url;
+        document.getElementById('code-key').textContent = code.key;
+        document.getElementById('code-area').hidden = false;
+      })
+      .withFailureHandler(function (err) { setMessage(String(err.message || err), 'error'); })
+      .getConnectionCode();
+  });
+
+  loadStatus();
+</script>
+
+</body>
+</html>
