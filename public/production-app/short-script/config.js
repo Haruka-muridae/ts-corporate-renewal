@@ -59,6 +59,13 @@ export const THEME_MAX_LENGTH = 100;
  */
 export const COMPANION_BASE_URL = 'http://127.0.0.1:3000';
 
+/*
+ * 音声エンジン（VOICEVOX）を画面から起動するときの待ち方。
+ * 実測7.9秒で起動するが、低速機・コールドスタートに備え約4倍のマージン。
+ */
+export const ENGINE_START_POLL_INTERVAL_MS = 2000;
+export const ENGINE_START_TIMEOUT_MS = 30000;
+
 /* ================================================================
  * 台本の版
  * ================================================================
