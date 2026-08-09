@@ -47,6 +47,8 @@ import {
 import { Recorder, RecorderErrorCode, RecorderState } from './recorder/recorder.js';
 import { cleanupStaleFiles } from './recorder/opfs-storage.js';
 
+import { mountNotifier } from './notifier-panel.js';
+
 setScreenDepth(SCREEN_DEPTH);
 
 /* ---------- 要素 ---------- */
@@ -673,6 +675,21 @@ async function main() {
   });
 
   await checkDevice();
+
+  /*
+   * カレンダー通知（要件書 5.1）。
+   *
+   * ------------------------------------------------------------------
+   * 録音より後に、失敗しても録音を止めない形で組み立てる
+   * ------------------------------------------------------------------
+   * 通知は録音の付随機能である。GAS が落ちていても、通知の設定が
+   * 未完了でも、録音と保存は従来どおり使えなければならない。
+   * したがって await せず、例外もここで握りつぶす。
+   * ------------------------------------------------------------------
+   */
+  mountNotifier().catch((error) => {
+    console.warn('[voice-recorder] カレンダー通知の初期化に失敗', error);
+  });
 
   el['vr-start'].addEventListener('click', () => {
     /* 保存名の基準は録音開始時刻（§FR-07）。押した時点で確定させる。 */

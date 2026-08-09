@@ -1,0 +1,23 @@
+{
+  "name": "ブラウザ録音｜TSAM AI",
+  "short_name": "録音",
+  "description": "会議の音声を端末内で録音し、MP3としてGoogleドライブへ保存します。",
+  "lang": "ja",
+  "start_url": "/production-app/voice-recorder/",
+  "scope": "/production-app/voice-recorder/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a4f8a",
+  "icons": [
+    {
+      "src": "/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
