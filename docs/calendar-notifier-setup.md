@@ -369,6 +369,7 @@ Apps Script エディタで `resetConnectionKey` を実行し、
 
 ## 関連文書
 
+- 受け入れ検証の記録: [calendar-notifier-acceptance.md](./calendar-notifier-acceptance.md)
 - 録音アプリ本体の要件: [requirements/mvp-requirements.md](./requirements/mvp-requirements.md)
 - 配布用GASの構成（運営者向け）: [../gas-notifier/README.md](../gas-notifier/README.md)
 - 外部依存の承認記録: [external-dependency-approvals.md](./external-dependency-approvals.md)
