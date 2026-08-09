@@ -92,6 +92,18 @@ export const SCREENS = Object.freeze({
   passwordReset: 'password/reset/',
   paymentSuccess: 'payment/success/',
   paymentCancel: 'payment/cancel/',
+
+  /*
+   * 保護対象アプリのうち、ログイン後に「元の画面へ戻す」対象。
+   *
+   * ブラウザ録音アプリは、カレンダー通知から `?eventId=` 付きで開かれる
+   * （docs/specs/login-page-detailed-spec-v3.md §6）。Portal へ戻すと
+   * その予定がどれだったのか分からなくなるため、ここに名前を持つ。
+   *
+   * **他のアプリを足すときは ALLOWED_NEXT（session.js）にも足すこと。**
+   * SCREENS に書いただけでは next には使えない（許可リストが別にある）。
+   */
+  voiceRecorder: 'production-app/voice-recorder/',
 });
 
 /*

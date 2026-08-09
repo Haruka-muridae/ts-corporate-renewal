@@ -321,6 +321,94 @@
   color: #7d1a15;
 }
 
+/* ---------- 通知から開いたときの対象表示（要件書 5.3） ---------- */
+
+.vr-event-banner {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  border-left: 4px solid #1a4f8a;
+  background: #eaf3ff;
+  color: #1a4f8a;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+/* ---------- Googleカレンダー連携 ---------- */
+
+/*
+ * 対処法は、失敗した行の下へ回り込ませる。
+ * .vr-step は flex なので、幅100%で改行させる。
+ */
+.vr-step__hint {
+  flex: 1 1 100%;
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: #7d1a15;
+}
+
+.vr-details {
+  margin: 0 0 1.25rem;
+  border: 1px solid #e3e7ed;
+  border-radius: 0.375rem;
+  padding: 0 0.875rem;
+}
+
+.vr-details[open] {
+  padding-bottom: 0.5rem;
+}
+
+.vr-details__summary {
+  padding: 0.6rem 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vr-fieldset {
+  border: 1px solid #e3e7ed;
+  border-radius: 0.375rem;
+  padding: 0.75rem 0.875rem 0.875rem;
+  margin: 0 0 1rem;
+}
+
+.vr-fieldset__legend {
+  padding: 0 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.vr-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.vr-check:last-child {
+  margin-bottom: 0;
+}
+
+/* form 直下のチェックは、fieldset の下で少し離す。 */
+#vr-nf-settings-form > .vr-check {
+  margin-bottom: 1rem;
+}
+
+#vr-nf-message[data-kind='ok'] {
+  border-left-color: #1f7a3d;
+  background: #f4faf5;
+}
+
+#vr-nf-message[data-kind='error'] {
+  border-left-color: #b3261e;
+  background: #fdecea;
+  color: #7d1a15;
+}
+
 /* ---------- 同梱ライブラリの表示 ---------- */
 
 .vr-footer {

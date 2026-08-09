@@ -15,11 +15,15 @@ import { check, section, finish, fatal } from '../../public/apps/tests/helpers/a
 let currentSearch = '';
 let replacedUrl = null;
 
+/* location.replace(...) の行き先を受け取る。goToLogin / goToScreen の検証に使う。 */
+let replacedLocation = null;
+
 globalThis.location = {
   get href() { return `https://tsam-ai.example/password/setup/${currentSearch}`; },
   get search() { return currentSearch; },
   get pathname() { return '/password/setup/'; },
   get origin() { return 'https://tsam-ai.example'; },
+  replace: (url) => { replacedLocation = url; },
 };
 
 globalThis.history = {
@@ -227,6 +231,102 @@ try {
 
   currentSearch = '';
   check('next が無ければ portal', session.readNextParam() === 'portal');
+
+  check('録音アプリは戻り先として許可されている', session.safeNextName('voiceRecorder') === 'voiceRecorder');
+  check('録音アプリの画面パスが定義されている',
+    config.SCREENS.voiceRecorder === 'production-app/voice-recorder/');
+
+  /* ---------------------------------------------------------------- */
+  section('ログイン後に引き継ぐクエリ（仕様 §6 / 画面ごとの許可リスト）');
+
+  /*
+   * カレンダー通知から未ログインで開いた場合、ログイン画面を挟んでも
+   * ?eventId= が残らなければ「どの予定の通知だったか」を出せない。
+   * 引き継ぎは画面ごとの許可リストで行い、元URLはそのまま持ち回らない。
+   */
+  check('録音アプリでは eventId を引き継ぐ',
+    session.safeNextParams('voiceRecorder', { eventId: 'abc123' }).eventId === 'abc123');
+  check('URLSearchParams でも受け取れる',
+    session.safeNextParams('voiceRecorder', new URLSearchParams('eventId=abc123')).eventId === 'abc123');
+  check('繰り返し予定の回IDも通す（_YYYYMMDDTHHMMSSZ）',
+    session.safeNextParams('voiceRecorder', { eventId: 'evt_20260810T010000Z' }).eventId
+      === 'evt_20260810T010000Z');
+
+  check('★portal には eventId を引き継がない（許可した画面だけ）',
+    session.safeNextParams('portal', { eventId: 'abc123' }).eventId === undefined);
+  check('★許可していない名前のパラメータは引き継がない',
+    session.safeNextParams('voiceRecorder', { redirect: 'https://evil.example.com' }).redirect === undefined);
+
+  check('★記号を含む eventId は落とす（別のクエリを差し込ませない）',
+    session.safeNextParams('voiceRecorder', { eventId: 'a&next=portal' }).eventId === undefined);
+  check('★スラッシュを含む値も落とす',
+    session.safeNextParams('voiceRecorder', { eventId: '../../etc' }).eventId === undefined);
+  check('★空文字は引き継がない',
+    session.safeNextParams('voiceRecorder', { eventId: '' }).eventId === undefined);
+  check('★長すぎる値は落とす',
+    session.safeNextParams('voiceRecorder', { eventId: 'a'.repeat(513) }).eventId === undefined);
+  check('文字列でない値も落とす',
+    session.safeNextParams('voiceRecorder', { eventId: 12345 }).eventId === undefined);
+  check('source が無くても壊れない',
+    Object.keys(session.safeNextParams('voiceRecorder', null)).length === 0);
+
+  currentSearch = '?eventId=abc123&next=voiceRecorder';
+  check('URLから引き継ぎ値を読める', session.readNextParams().eventId === 'abc123');
+
+  currentSearch = '?eventId=abc123&next=portal';
+  check('★next が portal なら URL に eventId があっても読まない',
+    session.readNextParams().eventId === undefined);
+
+  /* ---------------------------------------------------------------- */
+  section('ログイン画面への往復（実機で eventId が消えた経路）');
+
+  config.setScreenDepth(2);
+  currentSearch = '?eventId=abc123';
+  replacedLocation = null;
+
+  session.goToLogin({ next: 'voiceRecorder', params: { eventId: 'abc123' } });
+
+  check('ログイン画面へ送る',
+    replacedLocation === 'https://tsam-ai.example/login/?next=voiceRecorder&eventId=abc123',
+    replacedLocation);
+
+  replacedLocation = null;
+  session.goToLogin({ next: 'voiceRecorder', params: { eventId: 'a b' } });
+  check('★不正な eventId はログインURLに載せない',
+    replacedLocation === 'https://tsam-ai.example/login/?next=voiceRecorder', replacedLocation);
+
+  replacedLocation = null;
+  session.goToLogin({ next: 'portal', params: { eventId: 'abc123' } });
+  check('★portal 行きには eventId を載せない',
+    replacedLocation === 'https://tsam-ai.example/login/?next=portal', replacedLocation);
+
+  /*
+   * ログイン成功後の遷移（login.js が goToScreen へ渡す形）。
+   *
+   * 深さは2のまま。この偽の location は /password/setup/ を指しており、
+   * ルートまで戻るには '../../' が要る。実際のログイン画面は1階層下だが、
+   * ここで見たいのは「引き継ぎ値が付くか」であって階層の計算ではない。
+   */
+  replacedLocation = null;
+
+  session.goToScreen('voiceRecorder', { eventId: 'abc123' });
+
+  check('★ログイン後に録音アプリへ eventId 付きで戻る',
+    replacedLocation === 'https://tsam-ai.example/production-app/voice-recorder/?eventId=abc123',
+    replacedLocation);
+
+  replacedLocation = null;
+  session.goToScreen('portal', { eventId: 'abc123' });
+  check('portal へ戻るときは eventId を付けない',
+    replacedLocation === 'https://tsam-ai.example/portal/', replacedLocation);
+
+  replacedLocation = null;
+  session.goToScreen('voiceRecorder');
+  check('引き継ぎ値が無ければクエリを付けない',
+    replacedLocation === 'https://tsam-ai.example/production-app/voice-recorder/', replacedLocation);
+
+  currentSearch = '';
+  config.setScreenDepth(1);
 
   /* ---------------------------------------------------------------- */
   section('Portal のアプリ一覧（portal/app-registry.js）');
