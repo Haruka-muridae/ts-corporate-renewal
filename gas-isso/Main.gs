@@ -113,11 +113,20 @@ function issoRemoveTheme(themeId) {
  *
  * 画面を開けば `issoBootstrap()` が同じことをするが、**権限の承認を
  * 先に済ませたいとき**（初回デプロイ前）にここから実行する。
+ *
+ * **結果をログに書く。** エディタから手で実行する関数は、戻り値が
+ * どこにも表示されない（実行ログに出るのは console/Logger の出力だけ）。
+ * 戻り値だけにしていると、**成功しても「実行完了」しか見えず、
+ * 何が起きたのか分からない。**
  */
 function issoSetup() {
   var created = IssoSheets_open().ensureSheets();
 
-  return created.length === 0
+  var message = created.length === 0
     ? 'シートはすべてそろっています。'
     : '作成したシート: ' + created.join(', ');
+
+  console.log(message);
+
+  return message;
 }
