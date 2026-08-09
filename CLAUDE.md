@@ -48,17 +48,17 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 
 > 配信構成の記述は [README.md](README.md) / [DEPLOYMENT.md](DEPLOYMENT.md) / [docs/repository-structure.md](docs/repository-structure.md) / [docs/vercel-migration.md](docs/vercel-migration.md) / [docs/production-cutover.md](docs/production-cutover.md) で揃えてある。ただし [docs/specs/README.md](docs/specs/README.md) 末尾には「GitHub Pages がルートを配信しているため `docs/` も公開される」という移行前の記述が残っている（現在 `docs/` は公開URLからは404。秘密情報を書かないという結論自体は、リポジトリがGitHubにある以上そのまま有効）。
 
-## 共存している3つの独立したシステム
+## 共存している4つの独立したシステム
 
 同じリポジトリ・同じドメインに、互いに独立した系が同居している。**片方の都合でもう片方を変えない。**
 
-| | 本番認証系 | `/apps/`（テスト環境） | 交流会申込アプリ |
-| --- | --- | --- | --- |
-| 画面 | `public/login/` `public/portal/` `public/pricing/` `public/password/` `public/payment/` | `public/apps/` | `app/event/` |
-| 共通JS | `public/auth/` | `public/apps/shared/` | `lib/event/` |
-| バックエンド | Apps Script（`gas-auth/`）＋ Googleスプレッドシート | Apps Script（`public/gas/`）＋ Supabase（未接続） | Next.js サーバー ＋ Supabase（`tsam-event`） |
-| セッションキー | `tsam-auth-session` | `tsam-ai-session` | Cookie `tsam-event-admin`（httpOnly、path `/event/admin`） |
-| テスト | `tests/` | `public/apps/tests/` | `tests/`（`event-*` スイート） |
+| | 本番認証系 | `/apps/`（テスト環境） | 交流会申込アプリ | コンテンツ自動展開アプリ |
+| --- | --- | --- | --- | --- |
+| 画面 | `public/login/` `public/portal/` `public/pricing/` `public/password/` `public/payment/` | `public/apps/` | `app/event/` | `app/pipeline/` |
+| 共通JS | `public/auth/` | `public/apps/shared/` | `lib/event/` | `lib/pipeline/` |
+| バックエンド | Apps Script（`gas-auth/`）＋ Googleスプレッドシート | Apps Script（`public/gas/`）＋ Supabase（未接続） | Next.js サーバー ＋ Supabase（`tsam-event`） | Next.js サーバー。**会員のコンテンツ・SNSトークン・履歴を運営側で保持しない** |
+| セッションキー | `tsam-auth-session` | `tsam-ai-session` | Cookie `tsam-event-admin`（httpOnly、path `/event/admin`） | 本番認証系の `tsam-auth-session` を再利用（検証はサーバー側） |
+| テスト | `tests/` | `public/apps/tests/` | `tests/`（`event-*` スイート） | `tests/`（`pipeline-*` スイート） |
 
 `gas-auth/*.gs` は配信されないソース。**エディタで保存しただけでは公開中の Web アプリに反映されない**ため、「デプロイを管理」から既存デプロイを新バージョンへ更新する（新規デプロイを作ると `/exec` URL が変わり、`public/auth/config.js` と Stripe の設定を直す必要が出る）。Node 上の偽 Apps Script 環境（[tests/helpers/gas-harness.mjs](tests/helpers/gas-harness.mjs)）で検証しており、本番スプレッドシートには書き込まない。
 
@@ -74,6 +74,33 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 
 - マイグレーションは [supabase/migrations/](supabase/migrations/) にあり、Supabase CLI（`supabase db push`）で適用する。ダッシュボードのSQL Editorは使わない。**適用済みのファイルは編集せず、新しいマイグレーションを追加する。**
 - 全表で RLS を有効にし、ポリシーを1つも作っていない。加えてテーブル権限を `service_role` にのみ付与している（権限判定は RLS より前に走るため、これが無いと service_role でも permission denied になる）。読み書きは必ずサーバー側を通る。
+
+## コンテンツ自動展開・投稿アプリ「一想」（**2段階ロードマップ・第1段を実装中**）
+
+> **一想は最終的にポータル会員向けとして提供する。** いまは**第1段**（発注者専用の
+> 個人ツール・Note Draft Helper 方式＝Workspace Studio Flows + GAS + Sheets）を実装中。
+> **第2段**（会員向け）の設計資産は [docs/pipeline/archive/](docs/pipeline/archive/) に揃っている
+> （**凍結庫ではなく「第2段の出発点」**）。
+>
+> - 実装指示書（第1段の正）: [docs/pipeline/implementation-guide-v1_0-personal.md](docs/pipeline/implementation-guide-v1_0-personal.md)
+> - 発注者向けセットアップ手順: [docs/pipeline/setup-v1_0-personal.md](docs/pipeline/setup-v1_0-personal.md)
+> - ロードマップと**移植マップ**: [docs/pipeline/roadmap.md](docs/pipeline/roadmap.md)
+> - 第1段の運用で記録する学び: [docs/pipeline/learnings.md](docs/pipeline/learnings.md)
+>
+> **第1段の実装は [gas-isso/](gas-isso/)**（`gas-auth/` と同じ「配信しないソース置き場」）。
+> プロンプトは [lib/pipeline/prompts/](lib/pipeline/prompts/) が単一ソースで、
+> `gas-isso/Prompts.gs` と `docs/pipeline/flow-text/*.txt` は**そこからの生成物**（手で編集しない）。
+>
+> **`app/pipeline/`（Next.js）は作られていない。** `lib/pipeline/db/` だけが第2段向けに
+> 実装済みで、**第2段でそのまま使うため消さない**（第1段では Sheets を使う）。
+>
+> 下の注意書きは**第2段の前提**であり、第1段では成立しない項目がある。
+
+- **`basePath` を設定しない。** 交流会アプリと同じ理由（`public/` の静的ファイルにも効き、ルートが404になる）。公開URLは basePath なしでも `/pipeline/...` になる。
+- **[next.config.ts](next.config.ts) の `rewrites` を変更しない。** `fallback` の構造を壊すと `/pipeline/api/...` のルートハンドラが `index.html` に飲まれて404になる（交流会アプリで実害が出ている）。
+- **`trailingSlash: true` のため、OAuth コールバックは末尾スラッシュ付きで登録する**（`https://tsam-ai.com/pipeline/api/auth/callback/<platform>/`）。スラッシュなしへの POST は308になり、リダイレクトを追わない相手には届かない。
+- **会員のコンテンツ・SNSトークン・履歴を運営側で保持しない。** この方針が権限申請の内容そのものになるため、保持するものを増やす変更は仕様変更として扱う。予約投稿はリマインダー方式（実行主体を運営側に持たない）。
+- **導線は `/portal/`。** `/apps/` はテスト環境であり、本番アプリの掲載先ではない。掲載は [public/portal/app-registry.js](public/portal/app-registry.js) と スプレッドシート「アプリ一覧」（こちらが正本）。
 
 ## 生成物・退避物（手で編集しない／デプロイされない）
 

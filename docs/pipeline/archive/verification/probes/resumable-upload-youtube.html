@@ -1,0 +1,223 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>T3-7 ブラウザからの Resumable Upload 検証</title>
+<style>
+  body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+         max-width: 44rem; margin: 0 auto; padding: 1.5rem; line-height: 1.7; color: #1F2B45; }
+  h1 { font-size: 1.3rem; }
+  fieldset { border: 1px solid #DEE2DC; border-radius: 4px; margin: 1rem 0; padding: 1rem; }
+  label { display: block; margin: .6rem 0 .2rem; font-size: .9rem; }
+  input { width: 100%; box-sizing: border-box; padding: .4rem;
+          border: 1px solid #DEE2DC; border-radius: 3px; font: inherit; }
+  button { padding: .5rem 1.1rem; font: inherit; cursor: pointer; margin-right: .4rem;
+           border: 1px solid #1F2B45; background: #1F2B45; color: #fff; border-radius: 3px; }
+  button.secondary { background: #fff; color: #1F2B45; }
+  output { display: block; white-space: pre-wrap; word-break: break-all; background: #F4F5F2;
+           border: 1px solid #DEE2DC; border-radius: 3px; padding: .8rem; margin-top: 1rem;
+           font-family: ui-monospace, monospace; font-size: .85rem; }
+  .warn { background: #FAECE9; border-left: 4px solid #C7392B; padding: .8rem 1rem; }
+  progress { width: 100%; }
+</style>
+</head>
+<body>
+
+<h1>T3-7: ブラウザから YouTube へ Resumable Upload できるか</h1>
+
+<p>
+  <strong>Phase 3 の前提条件。</strong> これが成立しないと動画ファイルがサーバーを経由することになり、
+  実装指示書 §2-1 の非保持方針が崩れる（一時保持の範囲が広がり、監査での説明も変わる）。
+</p>
+
+<div class="warn">
+  <p>
+    <strong>アップロードは実際に行われる。</strong> 自分のチャンネルへ<code>private</code>で上がる。
+    検証後に削除すること。
+  </p>
+  <p>
+    <strong>セッションURLは資格情報として扱う。</strong> 画面には先頭だけ表示する。
+    results/ へ貼らないこと。
+  </p>
+</div>
+
+<form id="probe">
+  <fieldset>
+    <legend>入力</legend>
+    <label for="token">Google アクセストークン（<code>youtube.upload</code> スコープ・使い捨て）</label>
+    <input id="token" type="password" autocomplete="off" required>
+
+    <label for="file">動画ファイル（小さいもので十分。10MB 程度を推奨）</label>
+    <input id="file" type="file" accept="video/*" required>
+
+    <label for="chunk">チャンクサイズ（MiB。中断・再開を試すため小さめに）</label>
+    <input id="chunk" type="number" value="1" min="1" max="64">
+  </fieldset>
+
+  <button type="submit">アップロード開始</button>
+  <button type="button" class="secondary" id="abort">中断する</button>
+  <button type="button" class="secondary" id="resume">再開する</button>
+</form>
+
+<progress id="bar" value="0" max="100"></progress>
+<output id="result">未実行</output>
+
+<script type="module">
+  const UPLOAD_API = 'https://www.googleapis.com/upload/youtube/v3/videos';
+  const out = document.getElementById('result');
+  const bar = document.getElementById('bar');
+
+  /* 中断・再開を試せるよう、セッションの状態をページに保持する。 */
+  const state = { sessionUrl: null, file: null, token: null, chunkBytes: 0, aborted: false };
+
+  function log(line) {
+    out.textContent += `\n${line}`;
+  }
+
+  /* セッションURL自体が資格情報として働くので、全体は出さない。 */
+  function maskUrl(url) {
+    return `${url.slice(0, 60)}…（以下省略）`;
+  }
+
+  async function startSession() {
+    const res = await fetch(`${UPLOAD_API}?uploadType=resumable&part=snippet,status`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Length': String(state.file.size),
+        'X-Upload-Content-Type': state.file.type || 'video/mp4',
+      },
+      body: JSON.stringify({
+        snippet: {
+          title: `[検証 T3-7] ${new Date().toISOString()}`,
+          description: '検証用。削除予定。',
+        },
+        /* 監査未通過でも通るよう、明示的に private で上げる。 */
+        status: { privacyStatus: 'private', selfDeclaredMadeForKids: false },
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`セッション開始に失敗: HTTP ${res.status}`);
+    }
+
+    const location = res.headers.get('location');
+
+    if (location === null) {
+      /*
+       * ここで落ちるなら CORS の露出設定の問題。Location ヘッダが
+       * Access-Control-Expose-Headers に含まれていないとブラウザからは読めない。
+       * サーバー実装なら読めるので、これは「ブラウザからできるか」の核心部分。
+       */
+      throw new Error(
+        'Location ヘッダを読めない。CORS の Access-Control-Expose-Headers に '
+        + 'location が含まれていない可能性がある。これが読めないとブラウザ完結は不可能',
+      );
+    }
+
+    return location;
+  }
+
+  /** 現在どこまで受理されたかをサーバーへ問い合わせる（再開に必要）。 */
+  async function queryOffset() {
+    const res = await fetch(state.sessionUrl, {
+      method: 'PUT',
+      headers: { 'Content-Range': `bytes */${state.file.size}` },
+    });
+
+    if (res.status === 200 || res.status === 201) {
+      return state.file.size;
+    }
+
+    const range = res.headers.get('range');
+
+    /* Range が無い＝まだ1バイトも受理されていない。 */
+    return range === null ? 0 : Number(range.split('-')[1]) + 1;
+  }
+
+  async function uploadFrom(offset) {
+    const total = state.file.size;
+    let sent = offset;
+
+    while (sent < total) {
+      if (state.aborted) {
+        log(`中断した（${sent} / ${total} バイト送出済み）。「再開する」で続きから試せる`);
+        return;
+      }
+
+      const end = Math.min(sent + state.chunkBytes, total);
+      const res = await fetch(state.sessionUrl, {
+        method: 'PUT',
+        headers: { 'Content-Range': `bytes ${sent}-${end - 1}/${total}` },
+        body: state.file.slice(sent, end),
+      });
+
+      if (res.status === 308) {
+        /* 継続。実際に受理された位置をサーバーに合わせる。 */
+        const range = res.headers.get('range');
+        sent = range === null ? end : Number(range.split('-')[1]) + 1;
+      } else if (res.ok) {
+        const body = await res.json();
+        bar.value = 100;
+        log(`完了。videoId=${body.id ?? '(不明)'} / privacyStatus=${body.status?.privacyStatus ?? '(不明)'}`);
+        log('→ ブラウザ完結でのアップロードが成立する。中継を実装しない');
+        log('**検証後にこの動画を削除すること**');
+        return;
+      } else {
+        throw new Error(`チャンク送出に失敗: HTTP ${res.status}`);
+      }
+
+      bar.value = Math.round((sent / total) * 100);
+      log(`  ${sent} / ${total} バイト`);
+    }
+  }
+
+  document.getElementById('probe').addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    state.token = document.getElementById('token').value;
+    state.file = document.getElementById('file').files[0];
+    state.chunkBytes = Number(document.getElementById('chunk').value) * 1024 * 1024;
+    state.aborted = false;
+
+    out.textContent = `オリジン: ${location.origin}\n開始: ${new Date().toISOString()}`;
+    bar.value = 0;
+
+    try {
+      state.sessionUrl = await startSession();
+      log(`セッション発行: ${maskUrl(state.sessionUrl)}`);
+      await uploadFrom(0);
+    } catch (error) {
+      log(`失敗: ${error.message}`);
+      log('CORS 遮断かどうかは DevTools の Console / Network で確認すること');
+      log('不成立なら指示書 §2-2 の「レンダリング後に利用者へ返却」へ倒す');
+    }
+  });
+
+  document.getElementById('abort').addEventListener('click', () => {
+    state.aborted = true;
+  });
+
+  document.getElementById('resume').addEventListener('click', async () => {
+    if (state.sessionUrl === null) {
+      log('セッションがない。先に開始すること');
+      return;
+    }
+
+    state.aborted = false;
+
+    try {
+      const offset = await queryOffset();
+      log(`再開: サーバーは ${offset} バイトまで受理済み`);
+      await uploadFrom(offset);
+    } catch (error) {
+      log(`再開に失敗: ${error.message}`);
+    }
+  });
+</script>
+
+</body>
+</html>

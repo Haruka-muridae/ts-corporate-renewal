@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>T6-5 Web Push（予約リマインダー）の検証</title>
+<style>
+  body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+         max-width: 44rem; margin: 0 auto; padding: 1.5rem; line-height: 1.7; color: #1F2B45; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 1.8rem; }
+  fieldset { border: 1px solid #DEE2DC; border-radius: 4px; margin: 1rem 0; padding: 1rem; }
+  button { padding: .5rem 1.1rem; font: inherit; cursor: pointer; margin: .2rem .4rem .2rem 0;
+           border: 1px solid #1F2B45; background: #1F2B45; color: #fff; border-radius: 3px; }
+  button.secondary { background: #fff; color: #1F2B45; }
+  output { display: block; white-space: pre-wrap; word-break: break-all; background: #F4F5F2;
+           border: 1px solid #DEE2DC; border-radius: 3px; padding: .8rem; margin-top: 1rem;
+           font-family: ui-monospace, monospace; font-size: .85rem; }
+  .warn { background: #FAECE9; border-left: 4px solid #C7392B; padding: .8rem 1rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { border: 1px solid #DEE2DC; padding: .4rem .6rem; text-align: left; }
+</style>
+</head>
+<body>
+
+<h1>T6-5: Web Push で予約リマインダーが成立するか</h1>
+
+<p>
+  実装指示書 §2-4 は、サーバーがトークンを持たないため代理投稿ができないとして、
+  予約投稿を<strong>リマインダー方式</strong>へ読み替えている。
+  <strong>AC-05 の読み替えが成立するかどうかが、この項目に懸かっている。</strong>
+</p>
+
+<div class="warn">
+  <p>
+    <strong>ローカル通知では検証にならない。</strong> 画面を閉じている・端末がスリープしている
+    ときに届くかどうかが問われているのに、<code>setTimeout</code> はページが生きている間しか動かない。
+    <strong>本物のプッシュ（VAPID 署名つきの送信）でしか確かめられない。</strong>
+    このページは購読までを行い、送信は別途サーバーから行う。
+  </p>
+</div>
+
+<h2>手順1: Service Worker の登録と通知許諾</h2>
+<fieldset>
+  <button type="button" id="register">Service Worker を登録</button>
+  <button type="button" id="permit">通知を許可する</button>
+</fieldset>
+
+<h2>手順2: プッシュ購読</h2>
+<fieldset>
+  <p style="font-size:.9rem">
+    VAPID 公開鍵が要る。<code>WEB_PUSH_VAPID_PUBLIC</code> の値を貼る（公開鍵なので秘密ではない）。
+  </p>
+  <input id="vapid" type="text" style="width:100%;box-sizing:border-box;padding:.4rem;border:1px solid #DEE2DC;border-radius:3px;font:inherit" placeholder="VAPID 公開鍵（Base64URL）" autocomplete="off">
+  <button type="button" id="subscribe">購読する</button>
+  <button type="button" class="secondary" id="unsubscribe">購読を解除</button>
+</fieldset>
+
+<h2>手順3: 対照実験（ローカル通知）</h2>
+<fieldset>
+  <p style="font-size:.9rem">
+    30秒後にローカル通知を出す。<strong>これは「動く例」ではなく「動かない例」を見るための操作。</strong>
+    出したあとタブを閉じ、通知が来ないことを確認する。ここが Web Push が要る理由になる。
+  </p>
+  <button type="button" class="secondary" id="local">30秒後にローカル通知</button>
+</fieldset>
+
+<output id="result">未実行</output>
+
+<h2>記録すること</h2>
+<table>
+  <thead><tr><th>環境</th><th>許諾UI</th><th>タブを閉じて届くか</th><th>スリープ中に届くか</th><th>通知から復帰できるか</th></tr></thead>
+  <tbody>
+    <tr><td>Windows Chrome</td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>Android Chrome</td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>iPhone Safari（ホーム画面追加あり）</td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>iPhone Safari（ブラウザのまま）</td><td></td><td></td><td></td><td></td></tr>
+  </tbody>
+</table>
+
+<p style="font-size:.9rem">
+  <strong>iOS で成立しないなら、AC-05 の読み替え自体を見直す必要がある。</strong>
+  「タブが開いている間のみ有効な自動実行」だけでは利用者の期待に対して弱すぎる。
+  実測してから発注者へ報告する（指示書 §2-4）。
+</p>
+
+<script type="module">
+  const out = document.getElementById('result');
+  const log = (line) => { out.textContent += `\n${line}`; };
+
+  out.textContent = `オリジン: ${location.origin}`;
+  log(`Secure Context: ${window.isSecureContext}`);
+  log(`Notification API: ${'Notification' in window}`);
+  log(`Service Worker: ${'serviceWorker' in navigator}`);
+  log(`Push API: ${'PushManager' in window}`);
+
+  if (!window.isSecureContext) {
+    log('→ HTTPS か localhost で開くこと。それ以外では Push も SW も使えない');
+  }
+
+  let registration = null;
+
+  /* VAPID 公開鍵は Base64URL。PushManager は Uint8Array を要求する。 */
+  function toUint8Array(base64url) {
+    const padded = base64url.replace(/-/g, '+').replace(/_/g, '/')
+      .padEnd(Math.ceil(base64url.length / 4) * 4, '=');
+    const raw = atob(padded);
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+
+  document.getElementById('register').addEventListener('click', async () => {
+    try {
+      registration = await navigator.serviceWorker.register('./push-sw.js');
+      await navigator.serviceWorker.ready;
+      log('Service Worker を登録した');
+    } catch (error) {
+      log(`Service Worker の登録に失敗: ${error.message}`);
+    }
+  });
+
+  document.getElementById('permit').addEventListener('click', async () => {
+    const permission = await Notification.requestPermission();
+    log(`通知許諾: ${permission}`);
+
+    if (permission === 'denied') {
+      log('→ 拒否されたときの案内文が要る。何を出すか決めて記録する');
+    }
+  });
+
+  document.getElementById('subscribe').addEventListener('click', async () => {
+    const key = document.getElementById('vapid').value.trim();
+
+    if (registration === null) {
+      log('先に Service Worker を登録すること');
+      return;
+    }
+
+    if (key === '') {
+      log('VAPID 公開鍵が空。WEB_PUSH_VAPID_PUBLIC の値を貼ること');
+      return;
+    }
+
+    try {
+      const subscription = await registration.pushManager.subscribe({
+        /* false は許容されない環境が多い。常に true にする。 */
+        userVisibleOnly: true,
+        applicationServerKey: toUint8Array(key),
+      });
+
+      const json = subscription.toJSON();
+
+      log('購読した。以下をサーバー側の送信テストへ渡す');
+      log(`  endpoint のホスト: ${new URL(json.endpoint).host}`);
+      log('  **endpoint 全体と keys は資格情報。results/ へ貼らない**');
+      log('');
+      log('次: サーバーから VAPID 署名つきで送信し、');
+      log('    タブを閉じた状態・スリープ状態で届くかを確かめる');
+
+      /* 送信テスト用に取り出せるようにするが、画面には出さない。 */
+      window.__subscription = json;
+      log('（購読情報は window.__subscription に入れた。DevTools からコピーする）');
+    } catch (error) {
+      log(`購読に失敗: ${error.message}`);
+    }
+  });
+
+  document.getElementById('unsubscribe').addEventListener('click', async () => {
+    const subscription = await registration?.pushManager.getSubscription();
+
+    if (subscription) {
+      await subscription.unsubscribe();
+      log('購読を解除した');
+    } else {
+      log('購読がない');
+    }
+  });
+
+  document.getElementById('local').addEventListener('click', () => {
+    log('30秒後にローカル通知を出す。**いまタブを閉じること**');
+
+    setTimeout(() => {
+      /* タブが閉じていればこの行は実行されない。それを見せるのが目的。 */
+      registration?.showNotification('ローカル通知（対照実験）', {
+        body: 'タブが開いていたから届いた。閉じていれば届かない。',
+      });
+      log('ローカル通知を出した（＝タブが開いたままだった）');
+    }, 30_000);
+  });
+</script>
+
+</body>
+</html>

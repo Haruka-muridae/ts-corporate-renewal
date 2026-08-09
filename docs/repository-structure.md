@@ -26,7 +26,8 @@
 | --- | --- | --- |
 | **TSAM AI 本体（静的）** | `public/index.html`<br>`public/css/` `js/` `assets/` `event/` `legal/` `potenitas/`<br>`public/login/` `portal/` `pricing/` `password/` `payment/` `logout/`<br>`public/auth/`（共通JS・CSS） | 本番。仕様書は `docs/specs/` が正 |
 | **TSAM AI 本体（サーバー実行）** | `app/event/`（Next.js） | 交流会申込・決済・Webhook・管理画面 |
-| **本番アプリ領域** | `public/production-app/<アプリID>/` | **Portal（`/portal/`）に載せる本番アプリの置き場所。**<br>`receipt-ocr`（[specs/receipt-ocr-v2.md](./specs/receipt-ocr-v2.md)）／`card-ocr`（[specs/meishi-ocr-requirements-v3.md](./specs/meishi-ocr-requirements-v3.md)）<br>レジストリの `href` に `apps/` を含めない・先頭に `/` を付けない（`public/portal/app-registry.js`、自動テストで固定）<br>**アプリ間で共通層を作らない（§4）** |
+| **本番アプリ領域（ブラウザ完結）** | `public/production-app/<アプリID>/` | **Portal（`/portal/`）に載せる本番アプリのうち、サーバー実行を伴わないもの。**<br>`receipt-ocr`（[specs/receipt-ocr-v2.md](./specs/receipt-ocr-v2.md)）／`card-ocr`（[specs/meishi-ocr-requirements-v3.md](./specs/meishi-ocr-requirements-v3.md)）<br>レジストリの `href` に `apps/` を含めない・先頭に `/` を付けない（`public/portal/app-registry.js`、自動テストで固定）<br>**アプリ間で共通層を作らない（§4）** |
+| **本番アプリ領域（サーバー実行）** | `app/<アプリID>/` ＋ `lib/<アプリID>/` | **Portal に載せる本番アプリのうち、サーバー実行を伴うもの。**<br>`event`（交流会申込）／`pipeline`（コンテンツ自動展開「一想」。**第2段の形**。第1段は GAS で作っており [pipeline/roadmap.md](./pipeline/roadmap.md) が経緯）<br>`basePath` を設定せず、`next.config.ts` の rewrites を変更しない（§5）<br>**アプリ間で共通層を作らない（§4 を準用）** |
 | **配信しないもの** | `gas-auth/` `tests/` `docs/` `supabase/` `lp-draft/` | `public/` の外にあるため Web からは届かない |
 | **テスト環境** | `public/apps/` | TSAM AI のアプリ実験場。本体と地続きで、`public/auth/` 等を参照してよい。<br>**本番アプリからここを import しない**（流用はコピー） |
 | **別プロジェクト領域** | `labs/`（未作成） | **TSAM AI とは無関係な同居プロジェクト。**<br>`labs/<プロジェクト名>/` の形で追加する |
@@ -148,6 +149,44 @@ Web で公開したいかどうかで置き場所を決め、決めた側を
 
 ---
 
+## 5. サーバー実行アプリの置き場所
+
+### 5-1. `app/<アプリID>/` ＋ `lib/<アプリID>/` の対で置く
+
+画面とサーバー処理は `app/<アプリID>/`、ビジネスロジックは `lib/<アプリID>/` に置く。
+
+`lib/` 側を分けるのは、**Node のテストランナーから直接読めるようにするため**である。
+`app/` 配下は Next.js のビルドを前提とするが、`lib/` 配下の `.mjs` は
+`node tests/unit/<name>.mjs` でそのまま実行できる。既存の `lib/event/` が
+この形をとっており、`tests/unit/event-*.mjs` が別プロセスで直接読んでいる。
+
+型は手書きの `.d.mts` を対で置く（`tsconfig.json` は `allowJs: false` で、
+`.d.ts` では TypeScript が `.mjs` の型として認識しない）。
+
+### 5-2. 共有の Next.js 設定を、アプリの都合で変えない
+
+`next.config.ts` は**すべてのアプリと静的サイトが共有する1ファイル**である。
+アプリを足すたびにここを触れば、いずれ他のアプリを壊す。
+
+| 触らない | 理由 |
+| --- | --- |
+| `basePath` | `public/` 配下の静的ファイルにも効く。設定するとルート（`/`）が404になる |
+| `rewrites` の構造 | `fallback` 以外に置くとルートハンドラより先に評価され、`/<アプリID>/api/...` が `index.html` への書き換えに飲まれて404になる |
+| `trailingSlash` | 既存URLの正がこちら。外部サービスへ登録するエンドポイントは末尾スラッシュ付きで揃える |
+
+どうしても必要になったときは、**変更せずに確認を取る。**
+
+### 5-3. §4-1（共通層を作らない）を準用する
+
+`app/` 側のアプリ間でも、`app/shared/` や `lib/shared/` の類を置かない。
+理由は §4-1 と同じで、**別々に進む開発を互いに止めないため**である。
+
+ただし §4-2 の「3本目で再検討する」は、ブラウザ完結アプリ（`receipt-ocr` /
+`card-ocr`）の系列について述べたものである。サーバー実行アプリは `event` の
+1本しか動いておらず（`pipeline` は第2段で作る）、再検討の起点はまだ来ていない。
+
+---
+
 ## 迷ったときの判断
 
 | 状況 | 判断 |
@@ -155,6 +194,8 @@ Web で公開したいかどうかで置き場所を決め、決めた側を
 | `labs/` の作業で本体の共通資産を直したくなった | 直さない。`labs/` 側に持つ（2-1） |
 | 本体の変更が `labs/` を壊しそう | 壊れてよい。`labs/` は本体に依存していないはず（2-1） |
 | 本番アプリで、別の本番アプリと同じロジックが要る | 共通層を作らず複製する。複製元と複製日を書く（4-1） |
+| サーバー実行のアプリを足したい | `app/<アプリID>/` ＋ `lib/<アプリID>/` の対で置く（5-1） |
+| アプリの都合で `next.config.ts` を変えたくなった | 変えない。必要と判断したら実行せずに確認を取る（5-2） |
 | 複製元に不具合がありそう | 写す前に直す。複製元は別ラインなので勝手に直さず、指摘として残す（4-3） |
 | どちらの領域か判断できない | 実装せず、確認を取る |
 

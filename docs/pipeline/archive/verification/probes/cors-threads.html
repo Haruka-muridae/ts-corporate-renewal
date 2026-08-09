@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>T1-6 Threads API の CORS 検証</title>
+<style>
+  body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+         max-width: 44rem; margin: 0 auto; padding: 1.5rem; line-height: 1.7;
+         color: #1F2B45; }
+  h1 { font-size: 1.3rem; }
+  fieldset { border: 1px solid #DEE2DC; border-radius: 4px; margin: 1rem 0; padding: 1rem; }
+  label { display: block; margin: .6rem 0 .2rem; font-size: .9rem; }
+  input, textarea { width: 100%; box-sizing: border-box; padding: .4rem;
+                    border: 1px solid #DEE2DC; border-radius: 3px; font: inherit; }
+  button { padding: .5rem 1.1rem; font: inherit; cursor: pointer;
+           border: 1px solid #1F2B45; background: #1F2B45; color: #fff; border-radius: 3px; }
+  output { display: block; white-space: pre-wrap; word-break: break-all;
+           background: #F4F5F2; border: 1px solid #DEE2DC; border-radius: 3px;
+           padding: .8rem; margin-top: 1rem; font-family: ui-monospace, monospace;
+           font-size: .85rem; }
+  .warn { background: #FAECE9; border-left: 4px solid #C7392B; padding: .8rem 1rem; }
+</style>
+</head>
+<body>
+
+<h1>T1-6: ブラウザから Threads API を直接呼べるか（CORS）</h1>
+
+<p>
+  通れば、投稿の<strong>無状態中継APIを実装しなくてよくなる</strong>。本文がサーバーを
+  一度も通らなくなるため、実装指示書 §2 の非保持の主張が「記録しない」から
+  「そもそも通らない」に強くなり、審査での説明も楽になる。
+</p>
+
+<div class="warn">
+  <p>
+    <strong>オリジンが重要。</strong> 許可されるオリジンはサービス側の設定で決まるため、
+    <code>localhost</code> での結果は本番の可否を示さない。
+    <strong>本番と同じオリジン</strong>（Vercel のプレビューURL、または
+    <code>https://tsam-ai.com/</code>）で確認すること。
+  </p>
+  <p>
+    <strong>このページはトークンを保存しない。</strong> 検証後はトークンを失効させ、
+    スクリーンショットに写さないこと。
+  </p>
+</div>
+
+<form id="probe">
+  <fieldset>
+    <legend>入力</legend>
+    <label for="token">アクセストークン（検証用・使い捨て）</label>
+    <input id="token" type="password" autocomplete="off" required>
+
+    <label for="userId">Threads ユーザーID</label>
+    <input id="userId" type="text" autocomplete="off" required>
+
+    <label for="text">投稿本文（コンテナ作成のみ。公開はしない）</label>
+    <textarea id="text" rows="2">[検証 T1-6] CORS 確認</textarea>
+  </fieldset>
+
+  <button type="submit">3種類の呼び出しを試す</button>
+</form>
+
+<output id="result">未実行</output>
+
+<script type="module">
+  const API = 'https://graph.threads.net/v1.0';
+  const out = document.getElementById('result');
+
+  /*
+   * 3種類を分けて試す理由:
+   *   1. 単純GET      … プリフライトが飛ばない。最も通りやすい
+   *   2. 認可ヘッダ付き … プリフライトが飛ぶ。ここで落ちる実装が多い
+   *   3. POST         … 実際に使いたい形
+   * どこまで通るかで、中継を外せる範囲が決まる。
+   */
+  async function probe(label, url, init) {
+    const started = performance.now();
+
+    try {
+      const res = await fetch(url, init);
+      const elapsed = Math.round(performance.now() - started);
+      let body = '';
+
+      try {
+        body = JSON.stringify(await res.json()).slice(0, 300);
+      } catch {
+        body = '(JSON ではない)';
+      }
+
+      return `${label}\n  結果: 到達した（CORS は通った）\n  HTTP ${res.status} / ${elapsed}ms\n  応答: ${body}\n`;
+    } catch (error) {
+      /*
+       * CORS で止められた場合、fetch は TypeError になり、
+       * スクリプトからは理由を読めない（仕様どおり）。
+       * 本当の理由は DevTools の Console に出るので、そちらも必ず見る。
+       */
+      return `${label}\n  結果: 失敗\n  ${error.name}: ${error.message}\n`
+        + `  → CORS 遮断か通信失敗かはスクリプトから区別できない。\n`
+        + `    DevTools の Console と Network を必ず確認すること。\n`;
+    }
+  }
+
+  document.getElementById('probe').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    out.textContent = '実行中…';
+
+    const token = document.getElementById('token').value;
+    const userId = encodeURIComponent(document.getElementById('userId').value);
+    const text = document.getElementById('text').value;
+
+    const lines = [`オリジン: ${location.origin}`, `実行: ${new Date().toISOString()}`, ''];
+
+    lines.push(await probe(
+      '1. 単純GET（クエリ文字列でトークンを渡す／プリフライトなし）',
+      `${API}/${userId}?fields=id,username&access_token=${encodeURIComponent(token)}`,
+    ));
+
+    lines.push(await probe(
+      '2. Authorization ヘッダ付きGET（プリフライトが飛ぶ）',
+      `${API}/${userId}?fields=id,username`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    ));
+
+    lines.push(await probe(
+      '3. POST（コンテナ作成。実際に使いたい形）',
+      `${API}/${userId}/threads`,
+      {
+        method: 'POST',
+        body: new URLSearchParams({ media_type: 'TEXT', text, access_token: token }),
+      },
+    ));
+
+    lines.push(
+      '判定の目安:',
+      '  3 が通る    → 中継APIを実装しない（本文がサーバーを通らない）',
+      '  1 のみ通る  → 参照は直接、投稿は中継。中途半端なので中継に寄せてよい',
+      '  すべて失敗  → 指示書 §2-3 の既定どおり無状態中継を実装する',
+    );
+
+    out.textContent = lines.join('\n');
+  });
+</script>
+
+</body>
+</html>
