@@ -217,8 +217,15 @@ details.tl > summary:hover .tl-year{color:var(--ai);}
   font-weight:600;letter-spacing:.22em;
   color:var(--ai-deep);
   margin-bottom:20px;
-  /* 375px で「仕組みにす／る。」と最後に1文字だけ残るのを防ぐ。 */
-  text-wrap:balance;
+}
+/*
+ * 狭い画面では読点で折る。text-wrap:balance も試したが、
+ * 「可能性を、仕／組みにする。」と語の途中で割れたため、明示改行にした。
+ * 768px 以上は1行に収まるので消す。
+ */
+.br-sp{display:inline;}
+@media(min-width:768px){
+  .br-sp{display:none;}
 }
 .closing-sub{font-size:.9rem;color:var(--ink-soft);letter-spacing:.1em;}
 
@@ -548,7 +555,7 @@ footer{
 </details>
 
 <div class="closing">
-  <p class="closing-copy">可能性を、仕組みにする。</p>
+  <p class="closing-copy">可能性を、<br class="br-sp">仕組みにする。</p>
   <p class="closing-sub">それが、Potenitasのテーマです。</p>
 </div>
 
