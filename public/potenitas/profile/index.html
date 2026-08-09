@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>主催者について | Potenitas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#fbfbf9;
+  --ink:#22282a;
+  --ink-soft:#4b5457;
+  --ai:#2a5674;        /* 藍 */
+  --ai-deep:#1e3f57;
+  --line:#dfe2dd;
+  --line-soft:#ecede9;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  font-size:16px;
+  line-height:2;
+  letter-spacing:.04em;
+  -webkit-font-smoothing:antialiased;
+}
+.serif{font-family:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;}
+
+.wrap{max-width:720px;margin:0 auto;padding:0 24px;}
+
+/* ---------- header ---------- */
+header{border-bottom:1px solid var(--line-soft);}
+.header-inner{
+  max-width:1080px;margin:0 auto;
+  padding:20px 24px;
+  display:flex;justify-content:space-between;align-items:baseline;
+}
+.brand{
+  font-family:"Shippori Mincho",serif;
+  font-size:1.05rem;font-weight:600;letter-spacing:.14em;
+  color:var(--ink);text-decoration:none;
+}
+.header-label{font-size:.75rem;color:var(--ink-soft);letter-spacing:.18em;}
+
+/* ---------- hero ---------- */
+.hero{
+  max-width:1080px;margin:0 auto;
+  padding:88px 24px 96px;
+  display:flex;justify-content:space-between;gap:48px;
+}
+.hero-main{max-width:620px;}
+.hero-eyebrow{font-size:.8rem;letter-spacing:.3em;color:var(--ai);margin-bottom:28px;}
+.hero-name{
+  font-size:clamp(2.2rem,5.5vw,3.4rem);
+  font-weight:600;letter-spacing:.08em;line-height:1.4;margin-bottom:6px;
+}
+.hero-name-en{font-size:.85rem;letter-spacing:.28em;color:var(--ink-soft);margin-bottom:36px;}
+.hero-titles{
+  border-left:2px solid var(--ai);
+  padding-left:18px;
+  font-size:.95rem;line-height:2.1;color:var(--ink-soft);
+  margin-bottom:36px;
+}
+.hero-titles strong{color:var(--ink);font-weight:700;}
+.hero-lead{font-size:1rem;color:var(--ink);}
+.hero-tate{
+  writing-mode:vertical-rl;
+  font-family:"Shippori Mincho",serif;
+  font-size:clamp(1.3rem,2.6vw,1.75rem);
+  font-weight:600;letter-spacing:.42em;
+  color:var(--ai-deep);
+  padding-top:8px;
+  border-right:1px solid var(--line);
+  padding-right:26px;
+  height:fit-content;
+  align-self:flex-start;
+  flex-shrink:0;
+}
+@media(max-width:760px){
+  .hero{flex-direction:column;padding:56px 24px 64px;}
+  .hero-tate{
+    writing-mode:horizontal-tb;
+    border-right:none;border-top:1px solid var(--line);
+    padding:24px 0 0;letter-spacing:.24em;
+  }
+}
+
+/* ---------- section accordion ---------- */
+main{padding-bottom:24px;}
+details.sec{border-top:1px solid var(--line-soft);}
+details.sec:last-of-type{border-bottom:1px solid var(--line-soft);}
+details.sec > summary{
+  list-style:none;
+  cursor:pointer;
+  display:flex;align-items:center;gap:14px;
+  padding:30px 0;
+  user-select:none;
+}
+details.sec > summary::-webkit-details-marker{display:none;}
+details.sec > summary .num{font-size:.72rem;letter-spacing:.2em;color:var(--ai);}
+details.sec > summary h2{
+  font-family:"Shippori Mincho",serif;
+  font-size:1.35rem;font-weight:600;letter-spacing:.12em;
+  flex:1;
+}
+.chev{
+  width:10px;height:10px;
+  border-right:1.5px solid var(--ai);
+  border-bottom:1.5px solid var(--ai);
+  transform:rotate(45deg);
+  transition:transform .25s ease;
+  flex-shrink:0;
+  margin-right:4px;
+}
+details[open] > summary .chev{transform:rotate(-135deg);}
+details.sec > summary:hover h2{color:var(--ai-deep);}
+.sec-body{padding:4px 0 56px;}
+
+p + p{margin-top:1.6em;}
+.pull{
+  margin:2.4em 0 0;
+  padding:1.4em 1.6em;
+  background:#f3f5f2;
+  border-radius:6px;
+  font-size:.95rem;
+  color:var(--ink-soft);
+}
+.pull span{color:var(--ai-deep);font-weight:700;}
+
+/* ---------- timeline accordion ---------- */
+.timeline{list-style:none;}
+details.tl{border-bottom:1px dashed var(--line);}
+details.tl:first-of-type{border-top:1px dashed var(--line);}
+details.tl > summary{
+  list-style:none;
+  cursor:pointer;
+  display:flex;align-items:center;gap:20px;
+  padding:18px 4px;
+  user-select:none;
+}
+details.tl > summary::-webkit-details-marker{display:none;}
+.tl-year{
+  font-family:"Shippori Mincho",serif;
+  font-size:1.1rem;font-weight:600;
+  color:var(--ai-deep);
+  letter-spacing:.06em;
+  width:64px;flex-shrink:0;
+}
+.tl-head{
+  flex:1;
+  font-size:.9rem;color:var(--ink-soft);
+  line-height:1.7;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+details.tl[open] .tl-head{display:none;}
+details.tl > summary:hover .tl-year{color:var(--ai);}
+.tl-body{
+  padding:0 4px 24px 84px;
+  font-size:.95rem;color:var(--ink);
+}
+.tl-body p + p{margin-top:.8em;}
+@media(max-width:560px){
+  .tl-body{padding-left:4px;}
+  .tl-head{display:none;}
+}
+
+/* ---------- list of questions ---------- */
+.q-list{list-style:none;margin:2em 0;}
+.q-list li{
+  padding:.55em 0 .55em 1.4em;
+  position:relative;
+  color:var(--ink);
+}
+.q-list li::before{
+  content:"";
+  position:absolute;left:0;top:1.15em;
+  width:8px;height:1px;background:var(--ai);
+}
+
+/* ---------- closing ---------- */
+.closing{padding:96px 0 120px;text-align:center;}
+.closing-copy{
+  font-family:"Shippori Mincho",serif;
+  font-size:clamp(1.5rem,4vw,2.1rem);
+  font-weight:600;letter-spacing:.22em;
+  color:var(--ai-deep);
+  margin-bottom:20px;
+}
+.closing-sub{font-size:.9rem;color:var(--ink-soft);letter-spacing:.1em;}
+
+footer{
+  border-top:1px solid var(--line-soft);
+  padding:28px 24px;
+  text-align:center;
+  font-size:.75rem;color:var(--ink-soft);letter-spacing:.14em;
+}
+
+@media(prefers-reduced-motion:no-preference){
+  .hero-main,.hero-tate{animation:fadeup .8s ease both;}
+  .hero-tate{animation-delay:.15s;}
+  @keyframes fadeup{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <a class="brand" href="#">Potenitas</a>
+    <span class="header-label">主催者について</span>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-main">
+    <p class="hero-eyebrow">PROFILE</p>
+    <h1 class="hero-name serif">Yuki Saito</h1>
+    <p class="hero-name-en">SAITO YUKI</p>
+    <div class="hero-titles">
+      <strong>Potenitas 主催 / Chief AI Officer（CAIO）</strong><br>
+      TSアセットマネジメント合同会社 執行役員
+    </div>
+    <p class="hero-lead">
+      AI・生成AIの設計、実装、業務導入を専門領域とし、認知心理学、教育、IT、業務設計を横断して活動しています。
+    </p>
+  </div>
+  <div class="hero-tate">可能性を、仕組みにする。</div>
+</div>
+
+<main class="wrap">
+
+<details class="sec" open>
+  <summary>
+    <span class="num">01</span>
+    <h2>これまでの歩み</h2>
+    <span class="chev"></span>
+  </summary>
+  <div class="sec-body">
+    <p>2010年にPythonに触れ、2011年からAIの学習と実装を開始しました。その後、AIの開発・実験、AWS環境構築、Pythonを用いたデータ処理、APIテスト、システムの要件定義・基本設計など、AIを支える技術領域の実務経験を重ねてきました。</p>
+    <p>近年は、Gemini APIをはじめとする生成AIを実際の業務へ組み込み、業務分析、AI導入要件の定義、プロンプト設計、資料生成ロジックの構築、情報の構造化、試験運用、品質評価、改善まで、一連のAI導入プロセスに携わっています。職務上も、生成AIを活用した業務支援システムの構築や、認知科学・行動科学の考え方を取り入れたプロンプト設計などに取り組んできました。</p>
+    <p>一方で、AIを技術だけの問題として捉えていません。認知心理学への関心、教育現場での指導・マネジメント、組織運営や業務改善の経験を通じ、「人がAIをどのように理解し、使い、自らの能力を拡張していけるのか」という視点を重視しています。</p>
+    <div class="pull">
+      Potenitasでは、AIそのものの導入ではなく、<span>AIによって人や組織の可能性をどう引き出し、それを持続可能な仕組みにできるか</span>を考えています。
+    </div>
+  </div>
+</details>
+
+<details class="sec">
+  <summary>
+    <span class="num">02</span>
+    <h2>略歴</h2>
+    <span class="chev"></span>
+  </summary>
+  <div class="sec-body">
+    <div class="timeline">
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2005</span>
+          <span class="tl-head">空手教室に通い始める</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>空手教室に通い始める。長期間にわたり稽古を続け、後に指導する側としても空手に携わる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2010</span>
+          <span class="tl-head">Pythonとの出会い</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>Pythonに触れ、プログラミングの世界を知る。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2011</span>
+          <span class="tl-head">AIの学習と実装を開始</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>AIについて本格的に学び始め、AI技術の学習と実装に取り組む。以降、技術の変化を追いながら、AIを継続的な専門領域の一つとして学ぶ。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2012</span>
+          <span class="tl-head">認知心理学への関心</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>心理学という分野を知り、認知心理学に関心を持つ。AIという「知能を技術から考える領域」と並行して、人間の認知や意思決定について考えるようになる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2013</span>
+          <span class="tl-head">100人規模のコミュニティ運営</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>仮面ライダーをテーマとしたコミュニティを立ち上げ、100人規模のグループを運営。個人の興味から始まった活動を、複数の人が参加するコミュニティへ発展させる経験をする。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2014</span>
+          <span class="tl-head">情報セキュリティの基本を学ぶ</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>父の仕事を通じて、情報セキュリティ要件の基本を学ぶ。システムは「動けばよい」のではなく、安全性や運用まで考えて設計する必要があることを知る。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2015</span>
+          <span class="tl-head">不動産投資業務に携わる</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>不動産投資に関する業務の手伝いを開始。相続税路線価などの情報を調査しながら、収益性を考慮した物件調査に携わる。データや条件を整理し、投資対象を判断する経験を積む。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2016</span>
+          <span class="tl-head">小説の執筆を始める</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>小説の執筆を始める。技術とは異なる側面から、人の感情や行動、物語について考えるようになる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2017</span>
+          <span class="tl-head">浪人生活</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>浪人生活を送る。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2018</span>
+          <span class="tl-head">サークル設立 / 執行役員に就任</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>大学でサークルを設立。並行して、合計4つのサークル運営に携わる。</p>
+          <p>同年、TSアセットマネジメント合同会社の執行役員に就任。不動産管理業務にも携わる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2019</span>
+          <span class="tl-head">AI開発・実験 / AWS環境構築</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>AIの開発・実験に関する業務に携わる。AWSの環境構築も経験し、AIだけではなく、それを動かすITインフラについても実践的に学ぶ。</p>
+          <p>並行して、空手講師としての活動を開始。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2020</span>
+          <span class="tl-head">塾講師としての活動を開始</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>塾講師としての活動を開始。担当した生徒全員の成績向上を経験し、人によって理解の仕方や行動のきっかけが異なることを、教育現場で改めて認識する。</p>
+          <p>同年、情報商材を購入したことをきっかけに、その仕組みや内容を技術的に検証。販売時の説明と実際の内容に大きな乖離があると判断した経験から、情報をそのまま受け入れるのではなく、可能な限り自ら構造や根拠を確認し、信頼性を判断する姿勢を強く意識するようになる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2021</span>
+          <span class="tl-head">エンジニアリング実務へ参画</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>ITプロジェクトへ参画し、エンジニアリングの実務に携わる。C、Java、Pythonを用いたWebサービス向けAPIテストを担当。各言語の仕様を確認しながらAPIの挙動やレスポンスを検証し、不具合の報告や品質確認を行う。また、Pythonを用いた取得データのクレンジング・整形・構造化にも携わる。</p>
+          <p>農業IoT向けドローン開発では、実証実験環境の整備やAPIテストにも携わり、ソフトウェアだけで完結しない、現実の環境を含めた技術検証を経験する。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2022</span>
+          <span class="tl-head">要件定義・基幹システム導入支援</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>自治体への導入を想定したAPIの品質評価に携わる。テストの実施にとどまらず、検出した仕様上の問題に対する改善案の提示や、小規模な機能変更における要件定義まで担当。</p>
+          <p>その後、会員制ビジネス事業者向け基幹システムの導入支援に携わる。顧客独自の複雑な組織構造や報酬制度を整理し、システム要件へ落とし込む業務を経験。パッケージの標準機能では対応できない要件については、新規APIの要件定義、基本設計、テスト、導入まで一連の工程に携わる。</p>
+          <p>この時期から、単にコードやシステムを見るだけでなく、「現場の要望をどのように技術要件へ変換するか」を仕事の一部として扱うようになる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2023</span>
+          <span class="tl-head">UI設計 / 個別指導塾の教室運営</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>基幹システムと連携する会員向けWebサイト・マイページの設計やUI改善を担当。複雑な報酬体系や会員情報を、利用者が理解しやすい形で提示するための情報設計やワイヤーフレーム作成などに携わる。</p>
+          <p>インボイス制度施行に伴うシステム対応では、制度上の要件を整理し、基幹システムの計算ロジックからWebフロントの表示・入力フローまでの対応に携わる。</p>
+          <p>6月からは個別指導塾の教室運営に従事。学習指導に加え、生徒・保護者へのカウンセリングやコーチング、講師のマネジメントなどを担当する。認知科学の考え方を指導設計へ取り入れ、生徒の特性や認知負荷、行動特性を考慮した教育環境づくりを行う。担当教室では高校志願校合格率89％などの実績を記録している。</p>
+          <p>AIを「人間の代わり」として考えるだけではなく、人間の認知や行動を理解したうえで使う必要性を強く意識するようになる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2024</span>
+          <span class="tl-head">教育現場のBPR / 生成AI導入を本格化</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>教育現場における業務改革を推進。紙やアナログ管理が残っていた教室運営業務について、業務プロセスを整理・可視化し、勤怠管理・授業管理システムの比較検討、要件定義、導入、マニュアル作成、現場へのオンボーディングまで担当。ITツールを導入するだけではなく、実際に現場で使われ続ける状態まで含めたBPRに取り組む。</p>
+          <p>11月からは、生成AIを実際の業務へ導入する取り組みを本格化。Gemini APIを活用し、面談記録や学習データなどから、生徒ごとに最適化した学習方針資料を生成する仕組みや、対話内容から必要な情報を抽出・構造化する仕組みを開発・導入する。現場から出てくる抽象的な要望を、AIが扱えるデータ構造や処理ロジックへ変換し、プロンプト設計や資料生成ロジックの構築まで担当。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2025</span>
+          <span class="tl-head">AIを前提とした業務設計へ</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>教育現場の運営と並行して、生成AIを実際の業務プロセスへ組み込む取り組みを継続。業務分析からAI導入要件の策定、プロンプトエンジニアリング、試験運用、出力品質の評価、フィードバックに基づく改善まで、一連のAI導入工程に携わる。</p>
+          <p>単発でAIを使用するのではなく、既存業務のどこにAIを配置し、どの情報を入力し、どのような形式で出力し、人間がどこで判断するのかという、AIを前提とした業務設計を行うようになる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2026</span>
+          <span class="tl-head">Potenitas 主催 / CAIOとして活動</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>これまで取り組んできたAI、エンジニアリング、業務改善、認知心理学、教育の経験を横断し、Potenitas 主催 / Chief AI Officer（CAIO）として活動。</p>
+          <p>AIを単に導入するのではなく、人間の認知や組織の業務プロセスまで含めて設計し、実際に利用される仕組みとして実装することを専門領域とする。</p>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</details>
+
+<details class="sec">
+  <summary>
+    <span class="num">03</span>
+    <h2>AIに対する考え方</h2>
+    <span class="chev"></span>
+  </summary>
+  <div class="sec-body">
+    <p>AIは非常に強力な技術ですが、AIを導入しただけで、人や組織の問題が解決するわけではありません。同じAIを使っていても、大きな成果につながる場合もあれば、ほとんど利用されなくなる場合もあります。</p>
+    <p>その差を生むものの一つが、人間と業務に対する理解だと考えています。</p>
+    <ul class="q-list">
+      <li>人はどのように情報を理解するのか。</li>
+      <li>どのようなときに認知負荷が高くなるのか。</li>
+      <li>どのような環境なら行動しやすいのか。</li>
+      <li>現場では、どのような業務が行われ、どこに判断が必要なのか。</li>
+      <li>AIに任せる部分と、人間が判断する部分をどう分けるのか。</li>
+    </ul>
+    <p>AIを実務で機能させるためには、モデルやプロンプトだけではなく、こうした周辺の設計まで必要になります。そのため、PotenitasではAI技術だけを見るのではなく、認知心理学、教育、業務分析、システム設計などを横断してAI活用を考えます。</p>
+  </div>
+</details>
+
+<details class="sec">
+  <summary>
+    <span class="num">04</span>
+    <h2>Potenitasについて</h2>
+    <span class="chev"></span>
+  </summary>
+  <div class="sec-body">
+    <p>これまで、AI、IT、心理学、教育、空手、コミュニティ運営、不動産、業務改善など、一見すると異なる分野に携わってきました。これらすべてを、最初から一つの目的のために計画してきたわけではありません。その時々に興味を持ったものを学び、必要とされた仕事に向き合いながら、結果として現在の専門領域が形成されてきました。</p>
+    <p>ただ、その中で一貫して考えていることがあります。人の能力は、その人自身の能力だけで決まるものではないということです。</p>
+    <ul class="q-list">
+      <li>どのような情報を与えられるか。</li>
+      <li>どのような道具を使えるか。</li>
+      <li>どのような環境に置かれているか。</li>
+      <li>どのような仕組みの中で行動しているか。</li>
+    </ul>
+    <p>それらによって、人が発揮できる能力は大きく変わります。</p>
+    <p>教育の現場では、人がどのように理解し、学び、行動するのかを考えてきました。システム開発や業務改善の現場では、人が無理なく仕事を進めるためには、どのような業務プロセスやシステムが必要なのかを考えてきました。そしてAIによって、これまで人間だけでは処理することが難しかった情報や知識を、より柔軟に仕組みへ組み込めるようになっています。</p>
+    <p>だからこそ、AIを単なる効率化の道具として終わらせたくありません。</p>
+    <p>AIによって、人が本来集中するべき仕事に集中できるようにする。人によって異なる学び方や考え方に、より細かく対応できるようにする。個人の経験や暗黙知を整理し、他の人も活用できる形にする。人間だけでは維持することが難しかった仕組みを、AIによって持続可能なものにする。</p>
+    <p>Potenitasでは、そのためにAI・ITと認知心理学・教育を横断します。技術を導入することそのものではなく、その技術によって、人や組織が何をできるようになるのか。そこまでを考え、実際の仕組みとして形にしていきます。</p>
+  </div>
+</details>
+
+<div class="closing">
+  <p class="closing-copy">可能性を、仕組みにする。</p>
+  <p class="closing-sub">それが、Potenitasのテーマです。</p>
+</div>
+
+</main>
+
+<footer>
+  © Potenitas
+</footer>
+
+</body>
+</html>
