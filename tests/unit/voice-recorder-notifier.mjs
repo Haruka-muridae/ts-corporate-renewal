@@ -697,23 +697,63 @@ try {
   {
     const manifest = JSON.parse(readFileSync(join(REPO_ROOT, 'gas-notifier/appsscript.json'), 'utf8'));
 
-    check('★スコープはちょうど4つ（NFR-02）', manifest.oauthScopes.length === 4,
+    /*
+     * ★スコープの一覧を丸ごと固定する。
+     *
+     * oauthScopes を明示すると Apps Script の自動判定が無効になり、
+     * 「コードが使う権限を1つ残らず自分で並べる」責任がこちらへ移る。
+     * 実機では script.container.ui の書き漏らしで
+     * Ui.showSidebar が例外になった（gas-notifier/README.md §1-1）。
+     *
+     * 件数だけを見ると、1つ落として1つ足しても通ってしまう。
+     * 中身の集合で固定し、増減はこのテストを直す判断とセットにする。
+     */
+    const EXPECTED_SCOPES = [
+      'https://www.googleapis.com/auth/calendar.events.readonly',
+      'https://www.googleapis.com/auth/script.container.ui',
+      'https://www.googleapis.com/auth/script.external_request',
+      'https://www.googleapis.com/auth/script.scriptapp',
+      'https://www.googleapis.com/auth/spreadsheets.currentonly',
+    ];
+
+    check('★スコープは5つ（NFR-02）', manifest.oauthScopes.length === 5,
       manifest.oauthScopes.join(' / '));
+    check('★スコープの一覧が想定どおり（増減はこのテストとセットで直す）',
+      JSON.stringify(manifest.oauthScopes.slice().sort()) === JSON.stringify(EXPECTED_SCOPES),
+      manifest.oauthScopes.slice().sort().join(' / '));
     check('カレンダーは読み取りのみ',
       manifest.oauthScopes.includes('https://www.googleapis.com/auth/calendar.events.readonly'));
     check('★カレンダーの書き込み権限を持たない',
       !manifest.oauthScopes.some((scope) => /auth\/calendar$/.test(scope)));
     check('★スプレッドシートは currentonly（他のファイルを開けない）',
       manifest.oauthScopes.includes('https://www.googleapis.com/auth/spreadsheets.currentonly'));
+    check('メニューとサイドバーの表示権限がある（Ui.showSidebar に要る）',
+      manifest.oauthScopes.includes('https://www.googleapis.com/auth/script.container.ui'));
     check('★Drive 全体の権限を持たない',
       !manifest.oauthScopes.some((scope) => scope.includes('auth/drive')));
     check('★メール送信の権限を持たない',
       !manifest.oauthScopes.some((scope) => scope.includes('send_mail')));
+    check('★UI権限を足してもデータへの経路は増えていない（container.ui はUI表示のみ）',
+      !manifest.oauthScopes.some((scope) => /userinfo|drive|gmail|contacts/.test(scope)));
     check('Calendar Advanced Service を使う',
       manifest.dependencies.enabledAdvancedServices[0].userSymbol === 'Calendar');
     check('ウェブアプリは匿名アクセス（Service Worker から叩くため）',
       manifest.webapp.access === 'ANYONE_ANONYMOUS');
     check('実行は公開した本人', manifest.webapp.executeAs === 'USER_DEPLOYING');
+
+    /*
+     * ★「なぜ5つなのか」を文書から消させない。
+     * appsscript.json は素の JSON でコメントを書けないため、理由の置き場は
+     * README だけである。消えると、次の作業者が「多い」と判断して削り、
+     * 実機で同じ例外を踏み直すことになる。
+     */
+    const gasReadme = readFileSync(join(REPO_ROOT, 'gas-notifier/README.md'), 'utf8');
+
+    check('★README にスコープが5つである理由が書かれている',
+      gasReadme.includes('script.container.ui') && gasReadme.includes('自動スコープ判定'));
+    check('★手順書にこのエラーの対処がある',
+      readFileSync(join(REPO_ROOT, 'docs/calendar-notifier-setup.md'), 'utf8')
+        .includes('script.container.ui'));
 
     const lib = readFileSync(join(REPO_ROOT, 'gas-notifier/lib_jsrsasign.gs'), 'utf8');
     const stubAt = lib.indexOf('var navigator');

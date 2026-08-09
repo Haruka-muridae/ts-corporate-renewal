@@ -35,9 +35,12 @@ var PUSH_TTL_SECONDS = 300;
  * VAPID の `sub`（連絡先）。
  *
  * RFC 8292 は `mailto:` と `https:` の URI を許す。
- * メールアドレスを取るために userinfo.email スコープを足すと、要件 NFR-02 の
- * 「スコープ4つ」を破ることになる。**スコープは増やさず**、
- * Session.getEffectiveUser() が空を返す環境では https の連絡先URIへ落とす。
+ * メールアドレスを取るために userinfo.email スコープを足すと、**利用者の
+ * データへ届く範囲が広がる**（要件 NFR-02 の最小権限に反する）。
+ * スコープは増やさず、Session.getEffectiveUser() が空を返す環境では
+ * https の連絡先URIへ落とす。
+ *
+ * 現在のスコープ一覧とその理由は gas-notifier/README.md §1-1。
  */
 var CONTACT_URI = 'https://tsam-ai.com/production-app/voice-recorder/';
 

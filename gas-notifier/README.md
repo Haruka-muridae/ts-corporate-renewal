@@ -45,7 +45,7 @@ Google アカウントの中に持つ。運営が預かるものは、鍵もデ�
 4. `appsscript.json` は、プロジェクトの設定で
    「`appsscript.json` マニフェスト ファイルをエディタで表示する」を ON にしてから、
    このディレクトリの内容で**置き換える**。
-   - **スコープは4つだけ**（要件 NFR-02）。増やさないこと。
+   - **スコープは5つだけ**（要件 NFR-02）。理由は §1-1。増やさないこと。
    - `Calendar` の Advanced Service が必要。`CalendarApp` では
      `responseStatus`（自分の出欠）が取れず、FR-04 が満たせない。
 5. 「サービス」から Google Calendar API（v3、識別子 `Calendar`）を追加する。
@@ -58,6 +58,39 @@ Google アカウントの中に持つ。運営が預かるものは、鍵もデ�
    開くとコピー画面になる。これを
    `public/production-app/voice-recorder/notifier-config.js` の
    `TEMPLATE_COPY_URL` へ設定する。
+
+### 1-1. スコープが5つある理由（`script.container.ui` を含む）
+
+`appsscript.json` に `oauthScopes` を書くと、**Apps Script の自動スコープ判定が無効になる。**
+以後は「コードが実際に使う権限」を1つ残らず自分で列挙しなければならず、
+書き漏らした権限は実行時に例外になる。
+
+実機検証で踏んだのがこれで、セットアップウィザードを開いた時点で次のように落ちた。
+
+```
+Exception: 指定された権限では Ui.showSidebar を呼び出すことができません。
+必要な権限: https://www.googleapis.com/auth/script.container.ui
+```
+
+`SpreadsheetApp.getUi()`（メニュー・サイドバー・ダイアログ）は
+`script.container.ui` を要求する。自動判定なら勝手に付くが、明示指定にした以上は
+こちらが並べる必要がある。**oauthScopes を明示するなら、UI 権限も列挙する。**
+
+| スコープ | 何のためか |
+| --- | --- |
+| `calendar.events.readonly` | 通知対象の予定を読む（FR-03/04）。**書き込みはできない** |
+| `script.external_request` | Push サービスへ送信する（`UrlFetchApp`） |
+| `script.scriptapp` | 毎分トリガーの作成・確認（`ScriptApp`） |
+| `spreadsheets.currentonly` | 設定と記録の保存。**このスプレッドシートだけ** |
+| `script.container.ui` | メニューとセットアップサイドバーの表示（`SpreadsheetApp.getUi()`） |
+
+**データへ届く範囲は増えていない。** `script.container.ui` は
+「このスクリプトが紐づいた画面に UI を出してよい」という権限であって、
+カレンダー・ドライブ・他のスプレッドシートのどれにも新しい経路を作らない。
+NFR-02（最小権限）は、依然として上の5つで満たしている。
+
+**追加するときは、それが「データへの経路」か「UIの表示」かを分けて考えること。**
+前者なら要件の見直しが要る。後者ならここへ1行足して理由を書く。
 
 ---
 
