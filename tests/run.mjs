@@ -55,6 +55,14 @@ const SUITES = [
   { name: 'card-ocr', file: 'unit/card-ocr.mjs', kind: 'unit' },
   { name: 'voice-recorder', file: 'unit/voice-recorder.mjs', kind: 'unit' },
   { name: 'voice-recorder-notifier', file: 'unit/voice-recorder-notifier.mjs', kind: 'unit' },
+  { name: 'pipeline-db', file: 'unit/pipeline-db.mjs', kind: 'unit' },
+  { name: 'pipeline-prompts', file: 'unit/pipeline-prompts.mjs', kind: 'unit' },
+  { name: 'pipeline-gas', file: 'unit/pipeline-gas.mjs', kind: 'unit' },
+  { name: 'pipeline-gas-versions', file: 'unit/pipeline-gas-versions.mjs', kind: 'unit' },
+  { name: 'pipeline-gas-generation', file: 'unit/pipeline-gas-generation.mjs', kind: 'unit' },
+  { name: 'pipeline-gas-scenes', file: 'unit/pipeline-gas-scenes.mjs', kind: 'unit' },
+  { name: 'pipeline-gas-posting', file: 'unit/pipeline-gas-posting.mjs', kind: 'unit' },
+  { name: 'pipeline-gas-api', file: 'unit/pipeline-gas-api.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];
 

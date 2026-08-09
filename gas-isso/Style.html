@@ -1,0 +1,196 @@
+<style>
+/*
+ * 一想（ISSO）の見た目。
+ *
+ * プロトタイプ（docs/pipeline/prototype/content-pipeline-mvp.jsx）の
+ * トーンを引き継ぐ。藍 × 朱、冷たい和紙、明朝の見出し。
+ *
+ * **スマホ優先で書く。** ホーム画面に追加して使うため、
+ * 320px で崩れないことを最初の条件にしている。広い画面は @media で足す。
+ */
+
+:root {
+  --ink: #1F2B45;        /* 藍 — 本文・骨格 */
+  --ink-soft: #61708F;
+  --ink-faint: #9AA5BC;
+  --paper: #F4F5F2;      /* 冷たい和紙 */
+  --card: #FFFFFF;
+  --line: #DEE2DC;
+  --shu: #C7392B;        /* 朱 — 採用の印 */
+  --shu-soft: #FAECE9;
+  --moss: #3F7157;       /* 採用済み */
+  --moss-soft: #EAF2ED;
+
+  --serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  --sans: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* 触れる要素は最低 44px。スマホで押しにくくしない。 */
+button, .tab { min-height: 44px; }
+
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: .04em; }
+
+.wrap { max-width: 46rem; margin: 0 auto; padding: 1rem .9rem 4rem; }
+
+/* ---------- ヘッダー ---------- */
+
+.head {
+  display: flex; align-items: baseline; gap: .6rem;
+  border-bottom: 1px solid var(--line); padding-bottom: .6rem; margin-bottom: 1rem;
+}
+.head h1 { font-size: 1.4rem; margin: 0; letter-spacing: .12em; }
+.head .en { font-size: .7rem; color: var(--ink-faint); letter-spacing: .2em; }
+.head .spacer { flex: 1; }
+
+/* 保存先の注意。常時小さく出す（データがどこにあるかを忘れさせない）。 */
+.where {
+  font-size: .72rem; color: var(--ink-faint);
+  border-left: 2px solid var(--line); padding-left: .5rem; margin-bottom: 1rem;
+}
+
+/* ---------- ボタン ---------- */
+
+button {
+  font: inherit; cursor: pointer; border-radius: 3px; padding: .5rem 1rem;
+  border: 1px solid var(--ink); background: var(--ink); color: #fff;
+}
+button.quiet { background: #fff; color: var(--ink); }
+button.link {
+  background: none; border: none; color: var(--ink-soft);
+  text-decoration: underline; padding: .4rem .2rem; min-height: 0;
+}
+button.adopt { background: var(--shu); border-color: var(--shu); }
+button[disabled] { opacity: .4; cursor: not-allowed; }
+
+.row { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+
+/* ---------- 入力 ---------- */
+
+label { display: block; font-size: .82rem; color: var(--ink-soft); margin: .8rem 0 .2rem; }
+input[type="text"], textarea, select {
+  width: 100%; font: inherit; padding: .5rem;
+  border: 1px solid var(--line); border-radius: 3px; background: #fff; color: var(--ink);
+}
+textarea { line-height: 1.8; resize: vertical; }
+
+/* ---------- カード ---------- */
+
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 4px;
+  padding: .9rem; margin-bottom: .7rem;
+}
+.card.is-adopted { border-color: var(--moss); background: var(--moss-soft); }
+.card__meta {
+  display: flex; gap: .5rem; align-items: center;
+  font-size: .74rem; color: var(--ink-faint); margin-bottom: .5rem;
+}
+.card__body { white-space: pre-wrap; word-break: break-word; }
+
+/* ---------- 投稿 ---------- */
+
+.post { border-top: 1px dashed var(--line); margin-top: .7rem; padding-top: .6rem; }
+.post__done { font-size: .8rem; color: var(--moss); margin: 0 0 .3rem; }
+.post a { font-size: .8rem; color: var(--ink-soft); }
+
+/* 課金の使用量。**上限が近いことを色で分かるようにする。** */
+.usage {
+  font-size: .78rem; color: var(--ink-soft);
+  background: #fff; border: 1px solid var(--line); border-radius: 3px;
+  padding: .4rem .6rem; margin: 0 0 .7rem;
+}
+.usage.over { color: var(--shu); border-color: var(--shu); background: var(--shu-soft); }
+
+/* ---------- 台本のシーン ---------- */
+
+/*
+ * 読むための表示。**ここからは直せない**ので入力欄に見せない
+ * （原本は上の本文で、シーンはそこから読み取った構造）。
+ */
+.scenes { border-top: 1px dashed var(--line); margin-top: .7rem; padding-top: .6rem; }
+.scenes__head { font-size: .74rem; color: var(--ink-faint); margin: 0 0 .4rem; }
+
+.scene { display: flex; gap: .5rem; padding: .4rem 0; border-top: 1px solid var(--line); }
+.scene:first-of-type { border-top: none; }
+
+/* 番号は本文と混ざらないよう、朱の小さな丸で置く。 */
+.scene__no {
+  flex: 0 0 1.4rem; height: 1.4rem; line-height: 1.4rem; text-align: center;
+  font-size: .7rem; border-radius: 999px;
+  background: var(--shu-soft); color: var(--shu);
+}
+
+.scene__line { margin: 0 0 .2rem; font-size: .84rem; white-space: pre-wrap; word-break: break-word; }
+.scene__line--visual { color: var(--ink-soft); }
+.scene__line--subtitle { color: var(--ink-faint); }
+
+.scene__tag {
+  display: inline-block; margin-right: .4rem;
+  font-size: .66rem; color: var(--ink-faint); letter-spacing: .08em;
+}
+
+/* ---------- 印 ---------- */
+
+.chip {
+  display: inline-block; font-size: .7rem; padding: .1rem .5rem;
+  border-radius: 999px; border: 1px solid var(--line); color: var(--ink-soft);
+}
+.chip.adopted { background: var(--moss-soft); color: var(--moss); border-color: var(--moss-soft); }
+.chip.edited { background: var(--shu-soft); color: var(--shu); border-color: var(--shu-soft); }
+.chip.waiting { background: #fff; color: var(--ink-soft); }
+
+/* ---------- 段階タブ ---------- */
+
+.tabs {
+  display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .3rem;
+  border-bottom: 1px solid var(--line); margin-bottom: .9rem;
+}
+.tab {
+  flex: 0 0 auto; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--ink-soft); padding: .5rem .7rem; border-radius: 0;
+  font-family: var(--serif); font-size: .95rem; white-space: nowrap;
+}
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--shu); }
+.tab[disabled] { color: var(--ink-faint); opacity: .5; }
+.tab .state { display: block; font-family: var(--sans); font-size: .64rem; }
+
+/* ---------- 一覧 ---------- */
+
+.theme {
+  display: block; width: 100%; text-align: left; background: var(--card);
+  border: 1px solid var(--line); color: var(--ink);
+  padding: .8rem; margin-bottom: .5rem; border-radius: 4px;
+}
+.theme strong { font-family: var(--serif); font-size: 1rem; display: block; }
+.theme span { font-size: .76rem; color: var(--ink-faint); }
+
+/* ---------- 報せ ---------- */
+
+.note { font-size: .84rem; color: var(--ink-soft); padding: .6rem 0; }
+.error {
+  background: var(--shu-soft); border-left: 3px solid var(--shu);
+  color: var(--shu); padding: .6rem .8rem; margin: .6rem 0; font-size: .86rem;
+  white-space: pre-wrap;
+}
+.busy { color: var(--ink-faint); font-size: .84rem; }
+.hidden { display: none !important; }
+
+.count { font-size: .74rem; color: var(--ink-faint); text-align: right; }
+.count.over { color: var(--shu); }
+
+@media (min-width: 40rem) {
+  body { font-size: 16px; }
+  .wrap { padding: 1.4rem 1.2rem 4rem; }
+}
+</style>

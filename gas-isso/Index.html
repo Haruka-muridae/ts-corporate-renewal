@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Style'); ?>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="head">
+    <h1>一想</h1>
+    <span class="en">ISSO</span>
+    <span class="spacer"></span>
+    <button type="button" class="link" id="nav-themes">テーマ一覧</button>
+    <button type="button" class="link" id="nav-settings">設定</button>
+  </header>
+
+  <p class="where">
+    このデータは、あなたの Google スプレッドシートに保存されます。
+    note のアカウントに何かあっても、書いたものはシートに残ります。
+  </p>
+
+  <div id="error" class="error hidden" role="alert"></div>
+  <p id="busy" class="busy hidden" role="status">処理しています…</p>
+
+  <!-- ============ テーマ一覧 ============ -->
+  <section id="view-themes" aria-labelledby="themes-title">
+    <h2 id="themes-title">テーマ</h2>
+
+    <label for="new-source">着想（1〜3行でも、長文でも）</label>
+    <textarea id="new-source" rows="3" placeholder="今日考えたこと、伝えたいこと"></textarea>
+
+    <label for="new-title">題名（任意）</label>
+    <input id="new-title" type="text">
+
+    <p class="row">
+      <button type="button" id="create-theme">このテーマを始める</button>
+    </p>
+
+    <h3>これまでのテーマ</h3>
+    <div id="theme-list"></div>
+    <p id="theme-empty" class="note hidden">まだテーマがありません。</p>
+  </section>
+
+  <!-- ============ ワークスペース ============ -->
+  <section id="view-workspace" class="hidden" aria-labelledby="ws-title">
+    <h2 id="ws-title"></h2>
+    <p id="ws-source" class="note"></p>
+
+    <div class="tabs" id="tabs" role="tablist"></div>
+
+    <div id="stage-panel" role="tabpanel"></div>
+  </section>
+
+  <!-- ============ 設定 ============ -->
+  <section id="view-settings" class="hidden" aria-labelledby="settings-title">
+    <h2 id="settings-title">設定</h2>
+    <p class="note">空にすると既定値に戻ります。</p>
+
+    <div id="settings-fields"></div>
+
+    <p class="row">
+      <button type="button" id="save-settings">保存する</button>
+    </p>
+
+    <h3>Threads のトークン</h3>
+    <p class="note">
+      長期トークンは60日で切れます。<strong>期限内に更新すれば延長されます。</strong>
+      切れてしまった場合は、手順書 §D-3 の交換からやり直してください。
+    </p>
+    <p class="row">
+      <button type="button" class="quiet" id="refresh-threads">トークンを更新する</button>
+    </p>
+  </section>
+
+</div>
+
+<?!= include('Script'); ?>
+</body>
+</html>

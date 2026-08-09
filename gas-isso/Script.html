@@ -1,0 +1,686 @@
+<script>
+/*
+ * 画面の処理。素の DOM だけで書く（ビルドなし・実装指示書 §1）。
+ *
+ * ==================================================================
+ * 状態はサーバーが正
+ * ==================================================================
+ * 「原本は Sheets」という設計原則（v1.0-personal §2-1）に合わせ、
+ * **操作のたびにサーバーへ書いてから、返ってきた状態で描き直す。**
+ * 画面側で状態を先に進めない。ずれたときにどちらが正か分からなくなる。
+ *
+ * その代わり往復が増えるので、ワークスペースは
+ * **段階ぶんをまとめて1回で取る**（Api.gs の IssoApi_workspace）。
+ * ==================================================================
+ */
+(function () {
+  'use strict';
+
+  var state = { themes: [], stages: [], settings: {}, theme: null, current: null };
+
+  var el = {};
+
+  function $(id) { return document.getElementById(id); }
+
+  function ready() {
+    el.error = $('error');
+    el.busy = $('busy');
+    el.views = {
+      themes: $('view-themes'),
+      workspace: $('view-workspace'),
+      settings: $('view-settings')
+    };
+
+    $('nav-themes').addEventListener('click', function () { showThemes(); });
+    $('nav-settings').addEventListener('click', function () { showSettings(); });
+    $('create-theme').addEventListener('click', createTheme);
+    $('save-settings').addEventListener('click', saveSettings);
+    $('refresh-threads').addEventListener('click', refreshThreadsToken);
+
+    call('issoBootstrap', [], function (data) {
+      state.themes = data.themes;
+      state.settings = data.settings;
+      state.stages = data.stages;
+      showThemes();
+    });
+  }
+
+  /* ---------------------------------------------------------------
+   * サーバー呼び出し
+   * --------------------------------------------------------------- */
+
+  /**
+   * google.script.run の薄い包み。
+   *
+   * **失敗を握りつぶさない。** 例外はそのまま画面へ出す。
+   * 個人の道具なので、丁寧に言い換えるより原文が出たほうが直しやすい。
+   */
+  function call(name, args, onDone) {
+    busy(true);
+    clearError();
+
+    var runner = google.script.run
+      .withSuccessHandler(function (result) {
+        busy(false);
+        onDone(result);
+      })
+      .withFailureHandler(function (error) {
+        busy(false);
+        showError(error && error.message ? error.message : String(error));
+      });
+
+    runner[name].apply(runner, args);
+  }
+
+  function busy(on) { el.busy.classList.toggle('hidden', !on); }
+
+  function showError(message) {
+    el.error.textContent = message;
+    el.error.classList.remove('hidden');
+    el.error.scrollIntoView({ block: 'nearest' });
+  }
+
+  function clearError() {
+    el.error.textContent = '';
+    el.error.classList.add('hidden');
+  }
+
+  function show(view) {
+    for (var key in el.views) {
+      if (Object.prototype.hasOwnProperty.call(el.views, key)) {
+        el.views[key].classList.toggle('hidden', key !== view);
+      }
+    }
+  }
+
+  /* ---------------------------------------------------------------
+   * テーマ一覧
+   * --------------------------------------------------------------- */
+
+  function showThemes() {
+    show('themes');
+    renderThemes();
+  }
+
+  function renderThemes() {
+    var list = $('theme-list');
+
+    list.textContent = '';
+    $('theme-empty').classList.toggle('hidden', state.themes.length > 0);
+
+    state.themes.forEach(function (theme) {
+      var button = document.createElement('button');
+
+      button.type = 'button';
+      button.className = 'theme';
+
+      var name = document.createElement('strong');
+      name.textContent = theme.title || theme.source_text.slice(0, 30);
+
+      var meta = document.createElement('span');
+      meta.textContent = theme.updated_at.slice(0, 16).replace('T', ' ');
+
+      button.appendChild(name);
+      button.appendChild(meta);
+      button.addEventListener('click', function () { openTheme(theme.theme_id); });
+
+      list.appendChild(button);
+    });
+  }
+
+  function createTheme() {
+    var source = $('new-source').value;
+
+    if (source.replace(/^\s+|\s+$/g, '') === '') {
+      showError('着想を入力してください。');
+      return;
+    }
+
+    call('issoCreateTheme', [{ source_text: source, title: $('new-title').value }],
+      function (theme) {
+        $('new-source').value = '';
+        $('new-title').value = '';
+        openTheme(theme.theme_id);
+      });
+  }
+
+  /* ---------------------------------------------------------------
+   * ワークスペース
+   * --------------------------------------------------------------- */
+
+  function openTheme(themeId) {
+    call('issoWorkspace', [themeId], function (data) {
+      state.theme = data.theme;
+      state.stages = data.stages;
+      state.settings = data.settings;
+      state.xUsage = data.xUsage;
+
+      if (state.current === null || !findStage(state.current)) {
+        state.current = data.stages[0].id;
+      }
+
+      show('workspace');
+      renderWorkspace();
+    });
+  }
+
+  function reload() {
+    if (state.theme) {
+      openTheme(state.theme.theme_id);
+    }
+  }
+
+  function findStage(id) {
+    for (var i = 0; i < state.stages.length; i++) {
+      if (state.stages[i].id === id) {
+        return state.stages[i];
+      }
+    }
+
+    return null;
+  }
+
+  function renderWorkspace() {
+    $('ws-title').textContent = state.theme.title || '（題名なし）';
+    $('ws-source').textContent = state.theme.source_text;
+
+    renderTabs();
+    renderStage();
+  }
+
+  function renderTabs() {
+    var tabs = $('tabs');
+
+    tabs.textContent = '';
+
+    state.stages.forEach(function (stage) {
+      var tab = document.createElement('button');
+
+      tab.type = 'button';
+      tab.className = 'tab';
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', String(stage.id === state.current));
+
+      /*
+       * **前段が未採用なら押せない。**
+       * 要件15章「前段の採用版を次段の主要入力とする」を操作で担保する。
+       */
+      tab.disabled = stage.canGenerate !== true && stage.versions.length === 0;
+
+      tab.appendChild(document.createTextNode(stage.label));
+
+      var state_ = document.createElement('span');
+      state_.className = 'state';
+      state_.textContent = stageStateLabel(stage);
+      tab.appendChild(state_);
+
+      tab.addEventListener('click', function () {
+        state.current = stage.id;
+        renderTabs();
+        renderStage();
+      });
+
+      tabs.appendChild(tab);
+    });
+  }
+
+  function stageStateLabel(stage) {
+    if (stage.request) {
+      return stage.request.status;
+    }
+
+    if (stage.adoptedId) {
+      return '採用済み';
+    }
+
+    if (stage.versions.length > 0) {
+      return '下書き';
+    }
+
+    return stage.canGenerate ? '未生成' : '—';
+  }
+
+  function renderStage() {
+    var stage = findStage(state.current);
+    var panel = $('stage-panel');
+
+    panel.textContent = '';
+
+    if (stage === null) {
+      return;
+    }
+
+    /*
+     * **X の使用量は常に出す。** 課金は見えないところで増えるので、
+     * 上限に当たってから気づく形にしない（手順書 §E-4）。
+     */
+    if (stage.id === 'x' && state.xUsage) {
+      var usage = document.createElement('p');
+      var over = state.xUsage.used >= state.xUsage.limit;
+
+      usage.className = 'usage' + (over ? ' over' : '');
+      usage.textContent = '今月の X への投稿 '
+        + state.xUsage.used + ' / ' + state.xUsage.limit + ' 件'
+        + (over ? '（上限に達しています。設定の x.monthlyPostLimit で変えられます）' : '');
+
+      panel.appendChild(usage);
+    }
+
+    if (stage.request) {
+      panel.appendChild(requestBlock(stage));
+    } else {
+      panel.appendChild(generateBlock(stage));
+    }
+
+    if (stage.versions.length === 0) {
+      var empty = document.createElement('p');
+      empty.className = 'note';
+      empty.textContent = stage.canGenerate
+        ? 'まだ生成していません。'
+        : '前の段階を採用すると生成できます。';
+      panel.appendChild(empty);
+      return;
+    }
+
+    stage.versions.forEach(function (version) {
+      panel.appendChild(versionCard(stage, version));
+    });
+  }
+
+  /** 依頼していないとき。 */
+  function generateBlock(stage) {
+    var box = document.createElement('p');
+
+    box.className = 'row';
+
+    var button = document.createElement('button');
+
+    button.type = 'button';
+    button.textContent = stage.versions.length === 0
+      ? stage.label + ' を生成する'
+      : 'もう一度生成する';
+    button.disabled = stage.canGenerate !== true;
+
+    button.addEventListener('click', function () {
+      call('issoRequestGeneration', [state.theme.theme_id, stage.id], function () {
+        reload();
+      });
+    });
+
+    box.appendChild(button);
+
+    return box;
+  }
+
+  /**
+   * 依頼中のとき。
+   *
+   * **手で結果を貼る口を必ず出す。** Flow が無くても・失敗しても、
+   * ここから通しで進められる（v1.0-personal §10）。
+   */
+  function requestBlock(stage) {
+    var box = document.createElement('div');
+    var request = stage.request;
+
+    var head = document.createElement('p');
+    head.className = 'row';
+
+    var chip = document.createElement('span');
+    chip.className = 'chip waiting';
+    chip.textContent = request.status;
+    head.appendChild(chip);
+
+    var refresh = document.createElement('button');
+    refresh.type = 'button';
+    refresh.className = 'quiet';
+    refresh.textContent = '更新';
+    refresh.addEventListener('click', function () {
+      call('issoRefresh', [request.request_id], function (result) {
+        if (result.ingested !== true) {
+          showError('まだ結果が入っていません（現在: ' + result.status + '）。');
+        }
+
+        reload();
+      });
+    });
+    head.appendChild(refresh);
+
+    box.appendChild(head);
+
+    if (request.error) {
+      var error = document.createElement('p');
+      error.className = 'error';
+      error.textContent = request.error;
+      box.appendChild(error);
+    }
+
+    var label = document.createElement('label');
+    label.setAttribute('for', 'paste-result');
+    label.textContent = '結果を手で貼る（Flow を使わない場合）';
+    box.appendChild(label);
+
+    var area = document.createElement('textarea');
+    area.id = 'paste-result';
+    area.rows = 8;
+    box.appendChild(area);
+
+    var submit = document.createElement('button');
+    submit.type = 'button';
+    submit.textContent = '貼った結果を取り込む';
+    submit.addEventListener('click', function () {
+      if (area.value.replace(/^\s+|\s+$/g, '') === '') {
+        showError('結果が空です。');
+        return;
+      }
+
+      call('issoSubmitResult', [request.request_id, area.value], function () {
+        reload();
+      });
+    });
+
+    var row = document.createElement('p');
+    row.className = 'row';
+    row.appendChild(submit);
+    box.appendChild(row);
+
+    return box;
+  }
+
+  /** 版1件のカード。 */
+  function versionCard(stage, version) {
+    var card = document.createElement('div');
+
+    card.className = 'card' + (version.adopted ? ' is-adopted' : '');
+
+    var meta = document.createElement('div');
+    meta.className = 'card__meta';
+    meta.appendChild(document.createTextNode('第' + version.version_no + '版'));
+
+    if (version.adopted) {
+      meta.appendChild(chipOf('adopted', '採用'));
+    }
+
+    if (version.edited_by_user) {
+      meta.appendChild(chipOf('edited', '手直し'));
+    }
+
+    card.appendChild(meta);
+
+    var body = document.createElement('textarea');
+    body.className = 'card__body';
+    body.rows = Math.min(16, Math.max(3, version.body.split('\n').length + 1));
+    body.value = version.body;
+    card.appendChild(body);
+
+    card.appendChild(counterFor(stage, body));
+
+    var row = document.createElement('p');
+    row.className = 'row';
+
+    var save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'quiet';
+    save.textContent = '手直しを保存';
+    save.addEventListener('click', function () {
+      call('issoEditBody', [version.version_id, body.value], function () { reload(); });
+    });
+    row.appendChild(save);
+
+    /*
+     * 台本だけシーン一覧を添える。
+     * **保存し直すとここも読み直される**ので、本文と食い違わない。
+     */
+    if (version.scenes) {
+      card.appendChild(sceneList(version.scenes));
+    }
+
+    if (!version.adopted) {
+      var adopt = document.createElement('button');
+      adopt.type = 'button';
+      adopt.className = 'adopt';
+      adopt.textContent = 'この案を採用';
+      adopt.addEventListener('click', function () {
+        call('issoAdopt', [version.version_id], function () { reload(); });
+      });
+      row.appendChild(adopt);
+    }
+
+    card.appendChild(row);
+
+    if (stage.id === 'threads' || stage.id === 'x') {
+      card.appendChild(postBlock(stage, version));
+    }
+
+    return card;
+  }
+
+  /**
+   * 投稿の欄（Threads / X）。
+   *
+   * **採用していない案にはボタンを出さない。** 出すと、選ぶ前のものが
+   * 公開されうる。サーバー側でも同じ判定をしているが、
+   * **押せてしまう時点で事故に近い**ので画面でも出さない。
+   */
+  function postBlock(stage, version) {
+    var box = document.createElement('div');
+
+    box.className = 'post';
+
+    /* 済んでいるなら、そう見せる。**再投稿の口は作らない。** */
+    if (version.posted && version.posted.ok) {
+      var done = document.createElement('p');
+      done.className = 'post__done';
+      done.textContent = '投稿済み（' + version.posted.posted_at.slice(0, 16).replace('T', ' ') + '）';
+      box.appendChild(done);
+
+      if (version.posted.url) {
+        var link = document.createElement('a');
+        link.href = version.posted.url;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = '投稿を見る';
+        box.appendChild(link);
+      }
+
+      return box;
+    }
+
+    /* 失敗しているなら、相手の理由をそのまま出す（言い換えない）。 */
+    if (version.posted && version.posted.error) {
+      var failed = document.createElement('p');
+      failed.className = 'error';
+      failed.textContent = version.posted.error;
+      box.appendChild(failed);
+    }
+
+    if (!version.adopted) {
+      return box;
+    }
+
+    var row = document.createElement('p');
+    row.className = 'row';
+
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = stage.label + ' へ投稿する';
+
+    button.addEventListener('click', function () {
+      /*
+       * **投稿は取り消せない。** 消せても、見た人には見えている。
+       * ここだけ確認を挟む（ほかの操作はシートに残るだけなので挟まない）。
+       */
+      if (!window.confirm(stage.label + ' へ投稿します。取り消せません。よろしいですか。')) {
+        return;
+      }
+
+      button.disabled = true;
+
+      call('issoPost', [version.version_id, stage.id], function (post) {
+        if (post.status !== '成功') {
+          showError(post.error);
+        }
+
+        reload();
+      });
+    });
+
+    row.appendChild(button);
+    box.appendChild(row);
+
+    return box;
+  }
+
+  /**
+   * 台本のシーン一覧（AC-09 を目で確かめられるようにする）。
+   *
+   * **読むだけで、ここからは直せない。**
+   * 原本は本文（versions.body）で、シーンはそこから読み取った構造。
+   * 両方から直せるようにすると、どちらが正か分からなくなる。
+   * 直すときは上の本文を書き換えて「手直しを保存」を押す。
+   */
+  function sceneList(scenes) {
+    var box = document.createElement('div');
+
+    box.className = 'scenes';
+
+    var head = document.createElement('p');
+    head.className = 'scenes__head';
+    head.textContent = 'シーン ' + scenes.length + '件';
+    box.appendChild(head);
+
+    scenes.forEach(function (scene, i) {
+      var item = document.createElement('div');
+      item.className = 'scene';
+
+      var no = document.createElement('span');
+      no.className = 'scene__no';
+      no.textContent = String(i + 1);
+      item.appendChild(no);
+
+      var lines = document.createElement('div');
+
+      lines.appendChild(sceneLine('ナレーション', scene.narration, 'narration'));
+      lines.appendChild(sceneLine('映像', scene.visual_prompt, 'visual'));
+
+      if (scene.subtitle) {
+        lines.appendChild(sceneLine('字幕', scene.subtitle, 'subtitle'));
+      }
+
+      item.appendChild(lines);
+      box.appendChild(item);
+    });
+
+    return box;
+  }
+
+  function sceneLine(label, text, kind) {
+    var line = document.createElement('p');
+
+    line.className = 'scene__line scene__line--' + kind;
+
+    var tag = document.createElement('span');
+    tag.className = 'scene__tag';
+    tag.textContent = label;
+
+    line.appendChild(tag);
+    line.appendChild(document.createTextNode(text));
+
+    return line;
+  }
+
+  function chipOf(kind, text) {
+    var chip = document.createElement('span');
+
+    chip.className = 'chip ' + kind;
+    chip.textContent = text;
+
+    return chip;
+  }
+
+  /**
+   * 文字数。媒体の目安に対する比率を出す。
+   *
+   * 目安は「50〜150字」のような文言なので、**上限だけを読み取る。**
+   * 読み取れなければ字数だけ出す（設定を自由に書けるようにしてあるため）。
+   */
+  function counterFor(stage, area) {
+    var hint = state.settings[stage.id + '.lengthHint'] || '';
+    var numbers = hint.replace(/,/g, '').match(/[0-9]+/g);
+    var limit = numbers ? Number(numbers[numbers.length - 1]) : 0;
+
+    var out = document.createElement('p');
+    out.className = 'count';
+
+    function update() {
+      var length = area.value.length;
+
+      out.textContent = limit > 0
+        ? length + ' / ' + limit + ' 字'
+        : length + ' 字';
+      out.classList.toggle('over', limit > 0 && length > limit);
+    }
+
+    area.addEventListener('input', update);
+    update();
+
+    return out;
+  }
+
+  /* ---------------------------------------------------------------
+   * 設定
+   * --------------------------------------------------------------- */
+
+  function showSettings() {
+    show('settings');
+
+    var box = $('settings-fields');
+
+    box.textContent = '';
+
+    Object.keys(state.settings).sort().forEach(function (key) {
+      var label = document.createElement('label');
+      label.setAttribute('for', 'set-' + key);
+      label.textContent = key;
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'set-' + key;
+      input.value = state.settings[key];
+      input.dataset.key = key;
+
+      box.appendChild(label);
+      box.appendChild(input);
+    });
+  }
+
+  function saveSettings() {
+    var values = {};
+
+    Array.prototype.forEach.call(
+      $('settings-fields').querySelectorAll('input[data-key]'),
+      function (input) { values[input.dataset.key] = input.value; }
+    );
+
+    call('issoSaveSettings', [values], function (saved) {
+      state.settings = saved;
+      showSettings();
+    });
+  }
+
+  /**
+   * Threads の長期トークンを更新する。
+   *
+   * **60日ごとの作業なので、画面から押せるようにしてある**
+   * （エディタを開いて関数を選ぶより忘れにくい）。
+   * 失敗したときは例外がそのまま画面に出る——期限切れなら
+   * 手順書 §D-3 からやり直す必要があり、それは文面に書いてある。
+   */
+  function refreshThreadsToken() {
+    call('issoRefreshThreadsToken', [], function (result) {
+      window.alert('トークンを更新しました。あと ' + result.expiresInDays + ' 日です。');
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', ready);
+}());
+</script>
