@@ -18,6 +18,7 @@ import {
   clearSessionToken,
   redirectIfSignedIn,
   readNextParam,
+  readNextParams,
   goToScreen,
   isStorageAvailable,
 } from '../auth/session.js';
@@ -48,6 +49,15 @@ attachPasswordToggle(toggleButton, passwordInput);
 /* ログイン後の戻り先。既知の画面名だけを受け付ける。 */
 const nextName = readNextParam();
 
+/*
+ * 戻り先へ引き継ぐクエリ。**画面ごとの許可リストを通したものだけ**が入る
+ * （session.js の NEXT_PARAM_RULES / 仕様 §6）。
+ *
+ * これが無いと、カレンダー通知から未ログインで開いた利用者は、
+ * ログイン後に「どの予定の通知だったのか」が分からない画面へ着く。
+ */
+const nextParams = readNextParams(nextName);
+
 /* 申し込み導線にも戻り先を持たせない（料金プラン画面は認証不要）。 */
 document.getElementById('login-signup')?.setAttribute('href', screenPath('pricing'));
 
@@ -55,7 +65,7 @@ document.getElementById('login-signup')?.setAttribute('href', screenPath('pricin
  * すでに有効なセッションがあれば Portal へ送る。
  * 「トークンがある」ではなく「サーバーが有効と答えた」ときだけ遷移する。
  */
-redirectIfSignedIn(nextName).catch(() => {
+redirectIfSignedIn(nextName, nextParams).catch(() => {
   /* 確認できなければログインフォームを出したままにする。 */
 });
 
@@ -151,7 +161,7 @@ form.addEventListener('submit', async (event) => {
       return;
     }
 
-    goToScreen(nextName);
+    goToScreen(nextName, nextParams);
   } catch (error) {
     passwordInput.value = '';
 

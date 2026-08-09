@@ -110,11 +110,64 @@ export function clearSessionToken() {
  * 受け付けるのは SCREENS に定義済みの画面名だけにする。
  * 任意のURLを受け取ると、ログイン直後に外部サイトへ飛ばす
  * オープンリダイレクトの踏み台になる。
+ *
+ * 画面を足すときは SCREENS（config.js）とここの両方へ書く。
+ * 仕様: docs/specs/login-page-detailed-spec-v3.md §6
  */
-const ALLOWED_NEXT = ['portal'];
+const ALLOWED_NEXT = ['portal', 'voiceRecorder'];
 
 export function safeNextName(value) {
   return ALLOWED_NEXT.includes(value) ? value : 'portal';
+}
+
+/*
+ * ==================================================================
+ * クエリの引き継ぎは「画面ごとの許可リスト」で行う
+ * ==================================================================
+ * 元URLのクエリをそのまま持ち回らない。**任意URL・任意パスを受け取らない**
+ * という原則（仕様 §6）を、パラメータ側でも崩さないためである。
+ *
+ * 引き継ぐのは、下に名前と形を書いたものだけ。
+ * 形に合わない値は「無かったこと」にする（丸めたり直したりしない）。
+ *
+ * きっかけ: カレンダー通知から未ログインで開くと `?eventId=` が失われ、
+ * ログイン後に「どの予定の通知だったのか」が画面に出せなかった。
+ * ==================================================================
+ */
+const NEXT_PARAM_RULES = Object.freeze({
+  voiceRecorder: Object.freeze({
+    /*
+     * Google カレンダーの予定ID。base32hex 由来の英数字で、
+     * 繰り返し予定の各回には `_20260810T010000Z` が付く。
+     * 記号を許すと、ここが別のクエリを差し込む口になる。
+     */
+    eventId: /^[A-Za-z0-9_-]{1,512}$/,
+  }),
+});
+
+/*
+ * 画面名に対して引き継いでよいパラメータだけを取り出す。
+ *
+ * source は URLSearchParams でも素のオブジェクトでもよい。
+ * 戻り値は必ず素のオブジェクト（該当が無ければ空）。
+ */
+export function safeNextParams(nextName, source) {
+  const rules = NEXT_PARAM_RULES[safeNextName(nextName)];
+  const out = {};
+
+  if (!rules || !source) {
+    return out;
+  }
+
+  for (const [name, pattern] of Object.entries(rules)) {
+    const raw = typeof source.get === 'function' ? source.get(name) : source[name];
+
+    if (typeof raw === 'string' && pattern.test(raw)) {
+      out[name] = raw;
+    }
+  }
+
+  return out;
 }
 
 export function readNextParam() {
@@ -126,7 +179,22 @@ export function readNextParam() {
   }
 }
 
-export function goToLogin({ next = null } = {}) {
+/* いまのURLから、next 画面へ引き継いでよいパラメータを読む。 */
+export function readNextParams(nextName = readNextParam()) {
+  try {
+    return safeNextParams(nextName, new URLSearchParams(globalThis.location?.search ?? ''));
+  } catch {
+    return {};
+  }
+}
+
+function applyParams(url, nextName, params) {
+  for (const [name, value] of Object.entries(safeNextParams(nextName, params))) {
+    url.searchParams.set(name, value);
+  }
+}
+
+export function goToLogin({ next = null, params = null } = {}) {
   if (typeof globalThis.location === 'undefined') {
     return;
   }
@@ -134,18 +202,25 @@ export function goToLogin({ next = null } = {}) {
   const url = new URL(screenPath('login'), globalThis.location.href);
 
   if (next) {
-    url.searchParams.set('next', safeNextName(next));
+    const name = safeNextName(next);
+
+    url.searchParams.set('next', name);
+    applyParams(url, name, params);
   }
 
   globalThis.location.replace(url.href);
 }
 
-export function goToScreen(name) {
+export function goToScreen(name, params = null) {
   if (typeof globalThis.location === 'undefined') {
     return;
   }
 
-  globalThis.location.replace(new URL(screenPath(name), globalThis.location.href).href);
+  const url = new URL(screenPath(name), globalThis.location.href);
+
+  applyParams(url, name, params);
+
+  globalThis.location.replace(url.href);
 }
 
 /* ---------- 保護対象ページの入口 ---------- */
@@ -164,11 +239,11 @@ export function goToScreen(name) {
  * 「オフラインなら通す」という妥協はしない。
  * 確認できていない状態を「ログイン済み」と扱わないため。
  */
-export async function guardPage({ next = 'portal' } = {}) {
+export async function guardPage({ next = 'portal', params = null } = {}) {
   const token = readSessionToken();
 
   if (!token) {
-    goToLogin({ next });
+    goToLogin({ next, params });
     return null;
   }
 
@@ -177,7 +252,7 @@ export async function guardPage({ next = 'portal' } = {}) {
 
     if (!data?.user) {
       clearSessionToken();
-      goToLogin({ next });
+      goToLogin({ next, params });
       return null;
     }
 
@@ -192,19 +267,22 @@ export async function guardPage({ next = 'portal' } = {}) {
       clearSessionToken();
     }
 
-    goToLogin({ next });
+    goToLogin({ next, params });
     return null;
   }
 }
 
 /*
  * ログイン画面で使う。
- * すでに有効なセッションがあれば Portal へ送る。
+ * すでに有効なセッションがあれば ?next= の画面（既定は Portal）へ送る。
  *
  * ここでも「トークンがあるから」ではなく、
  * サーバーが有効と答えたときだけ遷移する。
+ *
+ * params は goToLogin が載せた引き継ぎ値。ログイン画面を素通りする経路でも
+ * 落とさないよう、ここでも同じ許可リストを通して持って行く。
  */
-export async function redirectIfSignedIn(nextName = 'portal') {
+export async function redirectIfSignedIn(nextName = 'portal', params = null) {
   const token = readSessionToken();
 
   if (!token) {
@@ -215,7 +293,7 @@ export async function redirectIfSignedIn(nextName = 'portal') {
     const data = await verifySessionApi(token);
 
     if (data?.user) {
-      goToScreen(safeNextName(nextName));
+      goToScreen(safeNextName(nextName), params);
       return true;
     }
   } catch (error) {

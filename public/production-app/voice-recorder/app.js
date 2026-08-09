@@ -47,7 +47,7 @@ import {
 import { Recorder, RecorderErrorCode, RecorderState } from './recorder/recorder.js';
 import { cleanupStaleFiles } from './recorder/opfs-storage.js';
 
-import { mountNotifier } from './notifier-panel.js';
+import { currentEventIdFromUrl, mountNotifier } from './notifier-panel.js';
 
 setScreenDepth(SCREEN_DEPTH);
 
@@ -640,8 +640,25 @@ async function main() {
    * 静的配信のため、この画面のHTMLとJSの取得自体は防げない。
    * 守られているのは Drive のデータであり、それを守るのは OAuth である
    * （SECURITY_NOTES.md / CLAUDE.md）。
+   *
+   * ------------------------------------------------------------------
+   * 戻り先は Portal ではなくこの画面にする
+   * ------------------------------------------------------------------
+   * カレンダー通知は `?eventId=` 付きでこの画面を開く。未ログインだと
+   * ログイン画面を挟むが、そこで next を 'portal' にしていたため、
+   * ログイン後に Portal へ着き、**どの予定の通知だったのかが消えていた**
+   * （実機検証で確認）。
+   *
+   * eventId は guardPage() へ渡す。持ち回れるのは
+   * session.js の画面ごとの許可リストに載せた値だけで、
+   * 元URLをそのまま引き継ぐわけではない
+   * （docs/specs/login-page-detailed-spec-v3.md §6）。
+   * ------------------------------------------------------------------
    */
-  const user = await guardPage({ next: 'portal' });
+  const user = await guardPage({
+    next: 'voiceRecorder',
+    params: { eventId: currentEventIdFromUrl() },
+  });
 
   if (!user) {
     return; /* すでにログイン画面へ遷移している。ここで描画を止める。 */

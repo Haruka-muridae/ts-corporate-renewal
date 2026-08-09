@@ -186,4 +186,7 @@ POST の本文は `text/plain` の JSON 文字列。プリフライトを避け�
 - (c) needsAction の予定 → 出る（AC-03）
 - (d) 終日予定 → 出ない（AC-04）
 
-ブラウザを完全に閉じた状態での受信（NFR-03）も必ず含める。
+**録音アプリのタブを閉じた状態での受信（NFR-03）も必ず含める。**
+ブラウザのプロセスまで終了させた場合は、`TTL: 300` の範囲（通知予定時刻から5分以内）に
+復帰したときだけ届く。利用者向けの説明は
+[docs/calendar-notifier-setup.md](../docs/calendar-notifier-setup.md) §9。

@@ -75,8 +75,21 @@ function makeEvent({
   return event;
 }
 
+/*
+ * notifier-panel.js は location を読む。読み込み前に偽物を置く
+ * （置かなくても import は通るが、値を変えて確かめられない）。
+ */
+let currentSearch = '';
+
+globalThis.location = {
+  get href() { return `https://tsam-ai.example/production-app/voice-recorder/${currentSearch}`; },
+  get search() { return currentSearch; },
+  get origin() { return 'https://tsam-ai.example'; },
+};
+
 try {
   const messages = await import('../../public/production-app/voice-recorder/notifier-messages.js');
+  const panel = await import('../../public/production-app/voice-recorder/notifier-panel.js');
 
   /* ================================================================ */
   section('§6 通知対象の判定（decideEvent_）');
@@ -312,7 +325,14 @@ try {
     check('送信先は購読のエンドポイント', env.fetchCalls[0].url === 'https://push.example.test/aaa');
     check('★本文を送らない（tickle）', env.fetchCalls[0].options.payload === undefined);
     check('POST で送る', env.fetchCalls[0].options.method === 'post');
-    check('TTL ヘッダーを付ける', env.fetchCalls[0].options.headers.TTL === '300');
+    /*
+     * ★TTL は利用者から見える挙動（届かなかった通知が5分で破棄される）。
+     * 変えるなら docs/calendar-notifier-setup.md §9 も直す。
+     */
+    check('TTL ヘッダーは300秒（5分）', env.fetchCalls[0].options.headers.TTL === '300');
+    check('★TTL の意図が手順書に書かれている',
+      readFileSync(join(REPO_ROOT, 'docs/calendar-notifier-setup.md'), 'utf8')
+        .includes('最大5分だけ預けられます'));
     check('Authorization は vapid スキーム',
       env.fetchCalls[0].options.headers.Authorization.indexOf('vapid t=') === 0);
     check('公開鍵を k= で添える',
@@ -636,6 +656,51 @@ try {
     check('★テスト環境の同名アプリも自分の窓ではない',
       messages.isAppClientUrl('https://tsam-ai.com/apps/voice-recorder/', scope) === false);
     check('スコープが空なら自分の窓とみなさない', messages.isAppClientUrl(scope, '') === false);
+  }
+
+  /* ================================================================ */
+  section('未ログインで通知を開いた経路（?eventId= の復元）');
+
+  {
+    /*
+     * 実機で踏んだ不具合: 未ログインで通知をクリックすると、
+     * ログイン画面を挟んだ時点で ?eventId= が消え、戻ってきても
+     * 「どの予定の通知だったのか」を出せなかった。
+     *
+     * 引き継ぎの本体は public/auth/session.js にあり、その検証は
+     * frontend スイート（「ログイン画面への往復」）が持つ。
+     * ここでは録音アプリ側が正しく渡しているかだけを見る。
+     */
+    currentSearch = '?eventId=abc123';
+    check('URLから eventId を読める', panel.currentEventIdFromUrl() === 'abc123');
+
+    currentSearch = '';
+    check('eventId が無ければ空文字', panel.currentEventIdFromUrl() === '');
+
+    currentSearch = '?debug=1';
+    check('別のクエリだけなら空文字', panel.currentEventIdFromUrl() === '');
+
+    currentSearch = '';
+
+    const app = readApp('app.js');
+
+    check('★戻り先を録音アプリにしている（Portal ではない）',
+      app.includes("next: 'voiceRecorder'"));
+    check('★guardPage へ eventId を渡している',
+      app.includes('params: { eventId: currentEventIdFromUrl() }'));
+    check('★guardPage より前に eventId を読む（認証で消える前に拾う）',
+      app.indexOf('currentEventIdFromUrl()') < app.indexOf('if (!user)'));
+    check('★元URLをそのまま引き継ぐ実装になっていない（任意URLを渡さない）',
+      !app.includes('location.href') || !app.includes('next: location'));
+
+    const session = readFileSync(join(REPO_ROOT, 'public/auth/session.js'), 'utf8');
+
+    check('録音アプリが next の許可リストに入っている',
+      session.includes("ALLOWED_NEXT = ['portal', 'voiceRecorder']"));
+    check('★引き継ぐクエリは画面ごとの許可リストで縛っている',
+      session.includes('NEXT_PARAM_RULES'));
+    check('★eventId の形を正規表現で縛っている',
+      session.includes('/^[A-Za-z0-9_-]{1,512}$/'));
   }
 
   /* ================================================================ */

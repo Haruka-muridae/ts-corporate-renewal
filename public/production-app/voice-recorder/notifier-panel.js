@@ -567,7 +567,14 @@ async function showEvent(eventId) {
   }
 }
 
-function currentEventIdFromUrl() {
+/*
+ * いまのURLの `?eventId=`。
+ *
+ * app.js が guardPage() へ渡すためにも使う（**認証より前に読む**）。
+ * 未ログインで通知から開かれた場合、ログイン画面へ飛ぶ時点でこの値を
+ * 渡しておかないと、戻ってきたときには消えている。
+ */
+export function currentEventIdFromUrl() {
   return new URLSearchParams(globalThis.location?.search ?? '').get('eventId') ?? '';
 }
 
