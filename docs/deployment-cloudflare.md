@@ -215,16 +215,21 @@ curl -sI https://tsam-ai.com/event/apply/                   # 200 かつ x-openn
 
 ```bash
 curl -sI https://tsam-ai.com/production-app/voice-recorder/sw.js
-#   200 / content-type: application/javascript
+#   200 / content-type: text/javascript（または application/javascript）
 
 curl -sI https://tsam-ai.com/production-app/voice-recorder/manifest.webmanifest
 #   200 / content-type: application/manifest+json
 ```
 
-- [ ] `sw.js` が 200 かつ `application/javascript`
+- [ ] `sw.js` が 200 かつ **`text/javascript` または `application/javascript`**
 - [ ] `manifest.webmanifest` が 200 かつ `application/manifest+json`
 - [ ] 録音アプリを開き、devtools → Application → Service Workers に
       `/production-app/voice-recorder/` スコープで **activated** が出る
+
+> **`text/javascript` でも正しい。** 2026-08-09 の本番実測値は `text/javascript`
+> だった（`npm run dev` のローカルでは `application/javascript`）。
+> どちらも JavaScript の正式な MIME タイプで、Service Worker の登録に支障はない。
+> **HTMLが返っていないこと**が見たい点であって、2つのうちどちらかではない。
 
 **なぜここを個別に見るか**: この2つは
 [next.config.ts](../next.config.ts) の fallback rewrite（`/:path*/` →
@@ -232,8 +237,8 @@ curl -sI https://tsam-ai.com/production-app/voice-recorder/manifest.webmanifest
 **登録は「失敗」ではなく「意味の無い Service Worker が登録された」状態**になる。
 症状は「通知だけが来ない」で、原因が非常に見えにくい。
 
-`Content-Type` が違う場合も同様に登録が拒否される。ブラウザは
-Service Worker のスクリプトに JavaScript の MIME タイプを要求する。
+`Content-Type` が JavaScript 以外（`text/html` 等）の場合は登録が拒否される。
+ブラウザは Service Worker のスクリプトに JavaScript の MIME タイプを要求する。
 
 利用者向けの説明は
 [calendar-notifier-setup.md](./calendar-notifier-setup.md)、

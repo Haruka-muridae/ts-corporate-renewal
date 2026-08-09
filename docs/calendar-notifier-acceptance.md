@@ -77,21 +77,40 @@ Googleカレンダー通知（[gas-notifier/](../gas-notifier/) と Service Work
 
 ---
 
-## 残っている確認
+## 本番（Cloudflare Workers）での確認
 
-この記録の範囲外。**本番デプロイ後に実施すること。**
-
-- [ ] `https://tsam-ai.com/production-app/voice-recorder/sw.js`
-      が 200 かつ `application/javascript`
-- [ ] `https://tsam-ai.com/production-app/voice-recorder/manifest.webmanifest`
-      が 200 かつ `application/manifest+json`
-- [ ] devtools → Application → Service Workers に
-      `/production-app/voice-recorder/` スコープで activated
-- [ ] 本番オリジンで通知を1件受信（Push の購読は**オリジンごと**に作られるため、
-      localhost の購読はそのまま使えない。利用者は本番URLで接続テストをやり直す）
-
+デプロイ日: **2026年8月9日** ／ 対象: `https://tsam-ai.com/`
 手順は [deployment-cloudflare.md](./deployment-cloudflare.md) §5。
+
+| 項目 | 結果 | 実測・備考 |
+|---|---|---|
+| `/production-app/voice-recorder/sw.js` | ✓ | 200 / `content-type: text/javascript` |
+| `/production-app/voice-recorder/manifest.webmanifest` | ✓ | 200 / `content-type: application/manifest+json` |
+| `/login/` → Portal の導線 | ✓ | 認証共通層（`session.js` / `config.js` / `login.js`）の変更による回帰なし |
+| `/potenitas/profile/` | **報告待ち** | 同時に公開された別ワークストリームの新規ページ |
+| `/apps/voice-recorder/`（テスト環境）の回帰 | ✓ | 本番側の変更が波及していないことを確認 |
+| 本番URLでの接続テスト5項目＋通知1件の着信・クリック遷移 | **報告待ち** | 確認日時とあわせて記入する |
+
+> **`sw.js` の Content-Type が `text/javascript` なのは正しい。**
+> ローカル（`npm run dev`）では `application/javascript` だが、
+> どちらも JavaScript の正式な MIME タイプで、Service Worker の登録に支障はない。
+> 見たいのは「HTMLが返っていないこと」であって、2つのうちどちらかではない
+> （[deployment-cloudflare.md](./deployment-cloudflare.md) §5）。
 
 > **オリジンが変わると購読は作り直しになる。** localhost で登録した Push 購読は
 > 本番では使えない。本番公開後、利用者には録音アプリの「接続テスト」を
 > もう一度押してもらう（同じ接続コードのまま、この端末の登録だけが作り直される）。
+
+---
+
+## 本番検証で見つかり、宿題へ送ったもの
+
+修正はしていない。理由と着手条件は [backlog.md](./backlog.md) に記載。
+
+| # | 事象 | 送り先 |
+|---|---|---|
+| 1 | 端末を2台以上登録していると、片方に「通知の内容を取得できませんでした」というフォールバック表示が出る。`sent_log` の取得済み管理が `fetchedAt` 列ひとつで、最初に取りに来た端末が全部さらうため | [backlog.md](./backlog.md) B-04 |
+| 2 | 送信済みの予定がリスケされても再通知されない。重複判定キーが `eventId\|timing` で開始時刻を含まないことをコードで確定 | [backlog.md](./backlog.md) B-05 |
+
+どちらも**通知そのものは届いており**、本機能の受け入れ（AC-01〜09 / NFR-03）を
+妨げるものではないため、公開を止める理由とはしなかった。
