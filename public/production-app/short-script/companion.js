@@ -104,8 +104,11 @@ export async function fetchEngineStatus() {
 
 /*
  * 音声エンジンの起動を依頼する（冪等。起動済みなら何もせず成功が返る）。
- * 戻り値: { ok, status } 。status は HTTP ステータス（404＝この API を持たない
- * 旧版の ai-video-app の検出に使う）。通信断は status=0。
+ * 戻り値: { ok, status, reason, downloadUrl } 。status は HTTP ステータス
+ * （404＝この API を持たない旧版の ai-video-app の検出に使う）。通信断は status=0。
+ * reason / downloadUrl は失敗応答（非2xx）のボディから取り出す。409（not_installed）
+ * のときに「未インストール」を即時に案内し、公式サイトへ誘導するために要る。
+ * ボディが JSON でない・無い場合は null（旧版の404など。解釈は呼び出し側に任せる）。
  * 補助サービス側は応答まで最大60秒かかりうるため、ここでは打ち切らない
  * （打ち切っても起動処理は止まらず、待つ側の状態だけが分からなくなる）。
  */
@@ -115,15 +118,32 @@ export async function startEngine() {
       method: 'POST',
       credentials: 'omit',
     });
-    return { ok: res.ok, status: res.status };
+
+    let reason = null;
+    let downloadUrl = null;
+    if (!res.ok) {
+      try {
+        const body = await res.json();
+        reason = typeof body?.reason === 'string' ? body.reason : null;
+        downloadUrl = typeof body?.downloadUrl === 'string' ? body.downloadUrl : null;
+      } catch {
+        /* JSON でないエラー応答。理由不明のまま status だけで判断してもらう。 */
+      }
+    }
+
+    return { ok: res.ok, status: res.status, reason, downloadUrl };
   } catch {
-    return { ok: false, status: 0 };
+    return { ok: false, status: 0, reason: null, downloadUrl: null };
   }
 }
 
 /*
  * エンジンが online になるまで fetchEngineStatus を繰り返す。
  * 戻り値: { online } 。期限を超えたら { online: false }。
+ * ai-video-app 自体への到達失敗（ok=false）が2回連続したら、期限を待たずに
+ * { online: false, unreachable: true } で抜ける。ポーリング中にアプリが落ちたのに
+ * 30秒待たせた末「VOICEVOX のインストール確認」という誤った案内になっていたため。
+ * 1回だけの失敗では抜けない（起動直後の瞬断・タイムアウトの揺れがありうる）。
  *
  * setInterval を使わず await で直列に回す。fetch のタイムアウト（4秒）が
  * 間隔（2秒）より長く、setInterval だと前の確認が終わる前に次が重なるため。
@@ -137,12 +157,23 @@ export async function waitForEngineOnline({
   onTick,
 } = {}) {
   const deadline = Date.now() + timeoutMs;
+  let consecutiveUnreachable = 0;
 
   for (;;) {
-    const { online } = await fetchEngineStatus();
+    const { ok, online } = await fetchEngineStatus();
 
     if (online) {
       return { online: true };
+    }
+
+    if (ok) {
+      /* アプリには届いている（エンジンがまだなだけ）。断のカウントを戻す。 */
+      consecutiveUnreachable = 0;
+    } else {
+      consecutiveUnreachable += 1;
+      if (consecutiveUnreachable >= 2) {
+        return { online: false, unreachable: true };
+      }
     }
 
     if (typeof onTick === 'function') {

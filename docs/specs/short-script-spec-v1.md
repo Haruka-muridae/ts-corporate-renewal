@@ -15,7 +15,7 @@
 | 1.2 | 2026-08-07 | 第2段階＝音声・動画をローカル補助サービス連携（方式A）で実装（§3・§5・§13）。台本からナレーション付き縦型動画を生成。CORS/PNA・CSP・未起動案内を含む。 |
 | 1.3 | 2026-08-07 | 背景画像のアップロード（任意・複数可）に対応。補助サービスは背景を `public/bg` より優先し、シーンごとにローテ。全背景に Ken Burns（ゆっくりズーム/パン）を適用（§13）。 |
 | 1.4 | 2026-08-07 | セグメント編集を追加（§3・§7.7）。各セグメントに〔文＋背景画像〕を指定し順に並べる。補助サービスは画像がシーン数と同数なら1シーン1枚で対応づけ（§13.1）。時間は実音声長で自動。 |
-| 1.5 | 2026-08-09 | エンジン状態の判定を `X-Engine-Status` ベースへ乗り換え（§13.1）。補助サービスの状態を3状態（offline / engine-offline / online）で出し分け、画面から VOICEVOX を起動する「エンジンを起動」ボタンを追加（§13.3）。 |
+| 1.5 | 2026-08-09 | エンジン状態の判定を `X-Engine-Status` ベースへ乗り換え（§13.1）。補助サービスの状態を3状態（offline / engine-offline / online）で出し分け、画面から VOICEVOX を起動する「エンジンを起動」ボタンを追加（§13.3）。起動依頼が 409（VOICEVOX 未インストール）ならポーリングせず即時に案内し、ポーリング中のアプリ断は2回連続の到達失敗で早期検出して offline 表示へ流す（§13.3）。 |
 
 > 本書は**実装済みの挙動を規定する仕様書**である（[README.md](./README.md) の区分）。
 > コードと本書が食い違う場合、既定ではコードのほうが間違いとみなす。
@@ -290,7 +290,7 @@ object-src 'none'; base-uri 'none'; form-action 'none'
 * 背景画像は `backgrounds`（data URL の配列。png/jpeg/webp）で任意に渡せる。**渡された場合は補助サービスの `public/bg` より優先**。マッピングは要素数で決まる：**シーン数とちょうど同数なら「1シーン1枚」で対応づけ**（空要素はそのシーンだけ既定へフォールバック。セグメント編集で使う）、それ以外は**ローテーション**（アップロード欄で数枚渡す場合）。無ければ `public/bg`（同梱グラデ）→ 単色。いずれの背景にも **Ken Burns（ゆっくりズーム/パン）** が自動で付く（補助サービス側の処理。FFmpeg zoompan・完全ローカル）。
 * `GET /api/speakers` … 話者一覧（`{ id, label }` の配列）。声設定の充填に使う。エンジン未起動でもフォールバック一覧が返るため、**応答があったことを「エンジンが使える」証拠にしない**。実態はレスポンスヘッダ `X-Engine-Status: online | offline | mock`（`Access-Control-Expose-Headers` で公開）で返る。**ヘッダ欠落＝このヘッダを持たない旧版の補助サービスで、後方互換のため online 相当として扱う**（従来は speakers の成否だけで判定していたため、旧版の利用者を弾かない）。
 * `GET /api/engine/status` … 音声エンジン（VOICEVOX）の稼働状況。**接続可否の判定はこちらが正。** `running` は実際に VOICEVOX へ疎通した結果のみが入る（`{ installed, running, version, mock }`）。
-* `POST /api/engine/start` … エンジンの起動を依頼する（冪等。起動済みなら何もせず成功）。ボディは読まれない。応答まで最大60秒かかりうる。404 は当該 API を持たない旧版の検出に使う。
+* `POST /api/engine/start` … エンジンの起動を依頼する（冪等。起動済みなら何もせず成功）。ボディは読まれない。応答まで最大60秒かかりうる。404 は当該 API を持たない旧版の検出に使う。**409（`reason: not_installed`）は VOICEVOX 未インストール**で、応答ボディに公式サイトの `downloadUrl` が付く（`companion.js` は非2xx応答の `reason` / `downloadUrl` を呼び出し側へ透過する。ボディが JSON でなければ null）。
 * `GET /api/video/:id` … 完成MP4（Range 対応）。
 
 ### 13.2 通信とセキュリティ
@@ -314,6 +314,8 @@ object-src 'none'; base-uri 'none'; form-action 'none'
 * 押すと `POST /api/engine/start` を送り、`GET /api/engine/status` を **2秒間隔・最大30秒**（`config.js` の `ENGINE_START_POLL_INTERVAL_MS` / `ENGINE_START_TIMEOUT_MS`。実測7.9秒の約4倍のマージン）でポーリングして online を待つ。ポーリングは `setInterval` ではなく await の直列（fetch のタイムアウト4秒＞間隔2秒で確認が重なるため）。
 * 実行中は起動・再確認の両ボタンを無効化し、多重クリックを防ぐ（`engineStarting` フラグ）。進行文言は `aria-live` 領域に出す。
 * 通信断（起動依頼が届かない）は疎通確認をやり直して offline の案内へ。**404 は当該 API を持たない旧版**なので「ai-video-app が古いため画面からは起動できない。VOICEVOX を手動起動して再確認」を案内する。
+* **409（`reason: not_installed`）は VOICEVOX 未インストール**なので、ポーリングせず**即座に**「VOICEVOX がインストールされていません。公式サイトからインストールして再確認」を案内する（待たせても起動しないため。以前は30秒待った末に汎用のタイムアウト文言になっていた）。応答の `downloadUrl` が http(s) の URL なら案内の「公式サイト」をリンクにする（`innerHTML` は使わず DOM 操作で生成。`rel="noopener"`）。
+* ポーリング中に `/api/engine/status` への**到達失敗（ok=false）が2回連続**したら、ai-video-app 自体が落ちたとみなして期限を待たずに打ち切り（`waitForEngineOnline` が `unreachable: true` を返す）、疎通確認をやり直して offline 表示へ収束させる。そのまま offline なら「ai-video-app への接続が失われました。起動し直して再確認」を案内する（エンジンではなくアプリ側の問題に、誤って「VOICEVOX のインストール確認」を案内しないため）。1回だけの失敗（瞬断）では打ち切らない。
 * タイムアウト時は「起動を確認できませんでした。VOICEVOX のインストールを確認のうえ手動起動して再確認」を案内する。
 * 成功時の画面遷移は `refreshCompanion()` の呼び直しに集約する（online へ直接書き換える経路を作らない）。
 

@@ -211,10 +211,47 @@ try {
   }
 
   {
+    /* 409＝VOICEVOX 未インストール。ボディの reason / downloadUrl を透過する
+       （呼び出し側が待たずに未インストールの案内＋公式サイトへの誘導を出すため）。 */
+    installFetchStub([
+      jsonResponse(
+        { ok: false, reason: 'not_installed', downloadUrl: 'https://voicevox.hiroshiba.jp/' },
+        { status: 409 },
+      ),
+    ]);
+    const result = await companion.startEngine();
+
+    check('**409 は ok=false / status=409（未インストール検出）**', result.ok === false && result.status === 409);
+    check('**409 の reason を透過する**', result.reason === 'not_installed');
+    check('**409 の downloadUrl を透過する**', result.downloadUrl === 'https://voicevox.hiroshiba.jp/');
+    restoreFetch();
+  }
+
+  {
+    /* エラー応答のボディが JSON でない場合。reason / downloadUrl は null に落とす。 */
+    installFetchStub([
+      {
+        ok: false,
+        status: 504,
+        headers: { get: () => null },
+        json: async () => {
+          throw new Error('not json');
+        },
+      },
+    ]);
+    const result = await companion.startEngine();
+
+    check('**JSON でないボディは reason=null / downloadUrl=null**', result.reason === null && result.downloadUrl === null);
+    check('JSON でなくても status は返す', result.status === 504);
+    restoreFetch();
+  }
+
+  {
     installFetchStub([new Error('connection refused')]);
     const result = await companion.startEngine();
 
     check('通信断は status=0', result.ok === false && result.status === 0);
+    check('通信断も reason=null / downloadUrl=null', result.reason === null && result.downloadUrl === null);
     restoreFetch();
   }
 
@@ -257,6 +294,37 @@ try {
     const result = await companion.waitForEngineOnline({ intervalMs: 0, timeoutMs: 0 });
 
     check('到達不可でも例外にしない', result.online === false);
+    restoreFetch();
+  }
+
+  {
+    /* アプリ断が2回連続。期限（ここでは5秒）を待たずに unreachable で抜ける。 */
+    const calls = installFetchStub([
+      new Error('connection refused'),
+      new Error('connection refused'),
+    ]);
+    const result = await companion.waitForEngineOnline({ intervalMs: 0, timeoutMs: 5000 });
+
+    check(
+      '**ok:false が2回連続したら unreachable で早期終了する**',
+      result.online === false && result.unreachable === true,
+    );
+    check('2回目の失敗で打ち切る（期限まで待たない）', calls.length === 2, String(calls.length));
+    restoreFetch();
+  }
+
+  {
+    /* 1回だけの失敗（瞬断）→復帰。早期終了せず online まで待つ。 */
+    const calls = installFetchStub([
+      new Error('connection refused'),
+      jsonResponse({ running: false }),
+      jsonResponse({ running: true }),
+    ]);
+    const result = await companion.waitForEngineOnline({ intervalMs: 0, timeoutMs: 5000 });
+
+    check('**1回だけの失敗では早期終了しない（復帰後に online へ到達する）**', result.online === true);
+    check('瞬断を挟んでも確認を続ける', calls.length === 3, String(calls.length));
+    check('復帰した場合 unreachable は付かない', result.unreachable !== true);
     restoreFetch();
   }
 
@@ -374,6 +442,34 @@ try {
     check(
       'タイムアウトの文言（インストール確認と手動起動へ誘導する）',
       appSource.includes('起動を確認できませんでした。VOICEVOX が正しくインストールされているかを確認のうえ、手動で起動してから「再確認する」を押してください。'),
+    );
+  }
+
+  {
+    /* 409（未インストール）とアプリ断（unreachable）の分岐・文言の実在。 */
+    check(
+      '**409 はポーリングせず即時に案内する分岐がある**',
+      /if \(status === 409\)/.test(appSource),
+    );
+    check(
+      '**409 の文言（インストールへ誘導する）**',
+      appSource.includes('VOICEVOX がインストールされていません。公式サイトからインストールしてから「再確認する」を押してください。'),
+    );
+    check(
+      'downloadUrl のリンクは rel=noopener を付ける（別タブで開くため）',
+      appSource.includes("rel = 'noopener"),
+    );
+    check(
+      'downloadUrl は http(s) 形式だけを href に入れる',
+      appSource.includes('/^https?:\\/\\//.test(downloadUrl)'),
+    );
+    check(
+      '**unreachable（ポーリング中のアプリ断）を offline 表示へ流す分岐がある**',
+      /if \(unreachable\) \{[\s\S]{0,400}await refreshCompanion\(\);/.test(appSource),
+    );
+    check(
+      '**アプリ断の文言（ai-video-app の起動し直しへ誘導する）**',
+      appSource.includes('ai-video-app への接続が失われました。ai-video-app を起動し直してから「再確認する」を押してください。'),
     );
   }
 

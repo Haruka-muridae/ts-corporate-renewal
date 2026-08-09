@@ -672,6 +672,32 @@ async function refreshCompanion() {
 }
 
 /*
+ * VOICEVOX 未インストール（409 not_installed）の案内。
+ * downloadUrl が http(s) の URL なら「公式サイト」をリンクにする。既存の流儀どおり
+ * innerHTML は使わず、textContent ベースの DOM 操作で組む（replaceChildren の
+ * 文字列引数はテキストノードになる）。downloadUrl は補助サービス由来の値だが、
+ * javascript: 等を href に入れないよう形式だけは確かめる。
+ */
+function showEngineNotInstalled(downloadUrl) {
+  if (typeof downloadUrl === 'string' && /^https?:\/\//.test(downloadUrl)) {
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = '公式サイト';
+    dom.companionText.replaceChildren(
+      'VOICEVOX がインストールされていません。',
+      link,
+      'からインストールしてから「再確認する」を押してください。',
+    );
+    return;
+  }
+
+  dom.companionText.textContent =
+    'VOICEVOX がインストールされていません。公式サイトからインストールしてから「再確認する」を押してください。';
+}
+
+/*
  * 「エンジンを起動」。起動を依頼し、online になるまで待って画面を戻す。
  * 成功時の状態遷移は refreshCompanion() の呼び直しに集約する
  * （ここで直接 online へ書き換える経路を作ると、遷移が2系統になり追えなくなる）。
@@ -694,7 +720,7 @@ async function handleEngineStart() {
     '音声エンジン（VOICEVOX）を起動しています…（30秒ほどかかることがあります）';
 
   try {
-    const { status } = await startEngine();
+    const { status, downloadUrl } = await startEngine();
 
     if (status === 0) {
       /* 通信断＝ai-video-app 自体が落ちた。判定は refreshCompanion に任せて offline へ。 */
@@ -709,11 +735,35 @@ async function handleEngineStart() {
       return;
     }
 
+    if (status === 409) {
+      /*
+       * VOICEVOX 未インストール（reason: not_installed）。ポーリングしても起動しない
+       * ため、30秒待たせず即座に案内する（待った末の汎用文言になっていた）。
+       */
+      showEngineNotInstalled(downloadUrl);
+      return;
+    }
+
     /*
      * 起動依頼は届いた（エラー応答でも、起動が遅れているだけの場合があるため
      * ここでは打ち切らず）、online になるまでポーリングで待つ。
      */
-    const { online } = await waitForEngineOnline();
+    const { online, unreachable } = await waitForEngineOnline();
+
+    if (unreachable) {
+      /*
+       * ポーリング中に ai-video-app 自体が落ちた。エンジンではなくアプリ側の
+       * 問題なので、refreshCompanion に流して offline 表示へ収束させる。
+       * そのまま offline なら、汎用の接続案内より状況が分かる専用文言に差し替える
+       * （瞬断から復帰していた場合は refreshCompanion の判定を尊重して触らない）。
+       */
+      await refreshCompanion();
+      if (companionState === 'offline') {
+        dom.companionText.textContent =
+          'ai-video-app への接続が失われました。ai-video-app を起動し直してから「再確認する」を押してください。';
+      }
+      return;
+    }
 
     if (online) {
       await refreshCompanion();
