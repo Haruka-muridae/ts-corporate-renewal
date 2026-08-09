@@ -209,6 +209,36 @@ curl -sI https://tsam-ai.com/event/apply/                   # 200 かつ x-openn
 - [ ] 交流会の申込（`/event/apply/`）が開く ← **サーバー側が動いている証拠**
 - [ ] ブラウザの devtools で、更新したはずのファイルが**新しい内容**になっている
 
+### Service Worker とマニフェスト（録音アプリのカレンダー通知）
+
+**Content-Type まで見る。** 200 が返るだけでは足りない。
+
+```bash
+curl -sI https://tsam-ai.com/production-app/voice-recorder/sw.js
+#   200 / content-type: application/javascript
+
+curl -sI https://tsam-ai.com/production-app/voice-recorder/manifest.webmanifest
+#   200 / content-type: application/manifest+json
+```
+
+- [ ] `sw.js` が 200 かつ `application/javascript`
+- [ ] `manifest.webmanifest` が 200 かつ `application/manifest+json`
+- [ ] 録音アプリを開き、devtools → Application → Service Workers に
+      `/production-app/voice-recorder/` スコープで **activated** が出る
+
+**なぜここを個別に見るか**: この2つは
+[next.config.ts](../next.config.ts) の fallback rewrite（`/:path*/` →
+`index.html`）に飲まれうる位置にある。飲まれると `sw.js` の中身が HTML になり、
+**登録は「失敗」ではなく「意味の無い Service Worker が登録された」状態**になる。
+症状は「通知だけが来ない」で、原因が非常に見えにくい。
+
+`Content-Type` が違う場合も同様に登録が拒否される。ブラウザは
+Service Worker のスクリプトに JavaScript の MIME タイプを要求する。
+
+利用者向けの説明は
+[calendar-notifier-setup.md](./calendar-notifier-setup.md)、
+GAS 側の構成は [gas-notifier/README.md](../gas-notifier/README.md)。
+
 ### キャッシュが古い場合
 
 `CF-Cache-Status: HIT` が返るとおり、エッジにキャッシュされる。

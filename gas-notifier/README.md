@@ -190,3 +190,8 @@ POST の本文は `text/plain` の JSON 文字列。プリフライトを避け�
 ブラウザのプロセスまで終了させた場合は、`TTL: 300` の範囲（通知予定時刻から5分以内）に
 復帰したときだけ届く。利用者向けの説明は
 [docs/calendar-notifier-setup.md](../docs/calendar-notifier-setup.md) §9。
+
+本番へデプロイしたあとは、`sw.js` と `manifest.webmanifest` が
+**正しい Content-Type で配信されているか**を必ず確認する
+（[docs/deployment-cloudflare.md](../docs/deployment-cloudflare.md) §5）。
+ここが崩れると「登録は成功しているのに通知だけ来ない」状態になる。
