@@ -18,6 +18,37 @@
 | Google Identity Services（GIS） | `https://accounts.google.com/gsi/client`（Google本体） | `public/production-app/card-ocr/`（名刺OCRアプリ） | Drive / Sheets API を呼ぶための OAuth トークン取得（トークンモデル） | 2026-08-03 |
 | `@playwright/test` | npm（devDependency） | `tests/e2e/` のみ | ブラウザ録音アプリの E2E（実マイク入力・OPFS・メモリ計測） | 2026-08-06 |
 | `@opennextjs/cloudflare` / `wrangler` | npm（devDependency） | ビルドとデプロイのみ | 本番配信（Cloudflare Workers）に必要。**既に本番で使われている構成を、設定ごとリポジトリへ入れたもの** | 2026-08-06 |
+| jsrsasign | 公式配布の `jsrsasign-all-min.js`（MIT）。**利用者のApps Scriptプロジェクトへ手で貼る同梱物** | `gas-notifier/lib_jsrsasign.gs` のみ | Web Push の VAPID 署名（ES256 / ECDSA P-256）。Apps Script 標準に ES256 が無い | 2026-08-09 |
+
+### 1-4. jsrsasign（録音アプリのカレンダー通知）
+
+**承認の範囲**: 録音アプリのカレンダー通知が使う GAS（[gas-notifier/](../gas-notifier/)）に限る。
+**`package.json` の dependencies には足さない。** 配信物（`public/`）にも入らない。
+貼り付け先は利用者自身の Apps Script プロジェクトであり、運営のサーバーには置かない。
+
+**なぜ必要か**: Web Push は VAPID の JWT を **ES256（ECDSA P-256）で署名**する必要がある。
+Apps Script の `Utilities` が持つのは HMAC-SHA256 と各種ダイジェストだけで、**ECDSA 署名が無い**。
+
+**なぜ自前で書かないか**: 楕円曲線の署名は、nonce の質・DER/JOSE のエンコード・
+定数時間性のいずれを外しても秘密鍵が漏れうる。ここは自作しない領域である。
+
+**なぜ依存が1つで済むか**: 本文つき Push にすると、これとは別に AES128GCM の
+ペイロード暗号化（ECDH + HKDF）が要る。**本文なし Push（tickle）**にしたため、
+GAS 側に要るのは VAPID 署名だけで、通知の中身は Service Worker が GAS へ取りに行く。
+
+**制約**:
+
+- `lib_jsrsasign.gs` の**先頭に GAS 用スタブを置き、その下に本体を貼る**。
+  順序を入れ替えると `navigator is not defined` で失敗する。
+  スタブの `window.crypto.getRandomValues` は `Utilities.getUuid()` 由来にしてある。
+  jsrsasign は `window.crypto` が無いと `Math.random()` へ落ちるため、
+  そのままでは ECDSA の nonce が弱い乱数になる。
+- MIT ライセンス表記を [gas-notifier/README.md](../gas-notifier/README.md) と
+  `lib_jsrsasign.gs` の冒頭に残す。
+- **自動テストは本体を読み込まない。** `tests/helpers/gas-notifier-harness.mjs` が
+  `KEYUTIL` / `KJUR` の偽物を差し込む（実物は数百KBのミニファイ済みJSで、
+  Node 上で読ませても検証できることが増えない）。実物で署名が通ることは、
+  利用者の環境で `verifyJsrsasign()` を1回実行して確かめる。
 
 ### 1-3. OpenNext（Cloudflare）と wrangler
 
