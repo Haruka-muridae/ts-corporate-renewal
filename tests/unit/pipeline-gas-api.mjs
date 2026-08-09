@@ -155,6 +155,22 @@ section('通し：依頼 → 手で貼る → 取り込み → 採用');
   check('**プロンプトは一覧に含めない**（長いので往復を重くしない）',
     ws.stages[0].request.prompt === undefined);
 
+  /*
+   * 一覧に含めない以上、**あとから引ける口が要る。**
+   * 依頼直後の返り値だけに頼ると、再読み込みした瞬間にプロンプトが
+   * 画面から消え、手で貼る運用（Flow 抜き）が成立しなくなる。
+   * 2026-08-09 に実際にそうなった。
+   */
+  const again = gas.IssoApi_promptFor(store, request.request_id);
+
+  check('**あとからプロンプトを引ける**（再読み込みしても取り直せる）',
+    again.prompt === request.prompt);
+  check('段階も返る', again.stage === 'threads');
+  check('google.script.run で渡せる形', isTransferable(again).length === 0);
+
+  check('無い依頼は落ちる',
+    throws(() => gas.IssoApi_promptFor(store, 'req_none')) instanceof Error);
+
   /* 2. まだ結果が無いうちに更新を押しても壊れない */
   const early = gas.IssoApi_refresh(store, request.request_id, deps);
 

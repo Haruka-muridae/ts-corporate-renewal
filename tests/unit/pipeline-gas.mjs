@@ -294,4 +294,105 @@ check('Helper への引き渡しの状態がある',
 check('既定の settings がある',
   gas.ISSO_DEFAULT_SETTINGS['threads.lengthHint'] === '50〜150字');
 
+/* ================================================================ */
+section('「=」で始まる文字列を数式にしない');
+
+/*
+ * ==================================================================
+ * メモリ実装では捕まえられなかった不具合
+ * ==================================================================
+ * Sheets は setValue に渡された「=」始まりの文字列を数式として解釈する。
+ * メモリ実装は素通りさせるため、テストは通るのに**実シートでだけ壊れた**。
+ *
+ * 2026-08-09、note の本文（「=== タイトル候補 ===」で始まる）が
+ * セル上で #ERROR! になり、**元の文章が復元できなくなった。**
+ *
+ * ここでは**その解釈を再現する土台**を用意して、往復が壊れないことを見る。
+ * ==================================================================
+ */
+
+/** 「=」始まりを数式扱いする、Sheets に似せた土台。 */
+function formulaEatingTables() {
+  const inner = gas.IssoSheets_memoryTables();
+
+  const eat = (row) => row.map((cell) =>
+    (typeof cell === 'string' && cell.indexOf('=') === 0 ? '#ERROR!' : cell));
+
+  return {
+    read: inner.read,
+    create: (name, header) => inner.create(name, eat(header)),
+    append: (name, row) => inner.append(name, eat(row)),
+    writeAt: (name, i, row) => inner.writeAt(name, i, eat(row)),
+    deleteAt: inner.deleteAt,
+    dump: inner.dump,
+  };
+}
+
+check('「=」始まりは書くときに逃がす',
+  gas.IssoSheets_toCell('string', '=== タイトル候補 ===') === "'=== タイトル候補 ===");
+check('普通の文字列はそのまま',
+  gas.IssoSheets_toCell('string', 'こんにちは') === 'こんにちは');
+check('途中の「=」は触らない',
+  gas.IssoSheets_toCell('string', 'a = b') === 'a = b');
+check('読むときに「\'=」だけ外す',
+  gas.IssoSheets_coerce('string', "'=== 本文 ===") === '=== 本文 ===');
+check('**「\'」単体は外さない**（普通の引用符を壊さない）',
+  gas.IssoSheets_coerce('string', "'こんにちは") === "'こんにちは");
+
+{
+  const values = [
+    '=== タイトル候補 ===\n1. 見出し\n=== 本文 ===\n本文です。',
+    '=== シーン1 ===\nナレーション: あ\n映像: い',
+    '=SUM(A1:A2)',
+    'ふつうの文章',
+    'a = b という式',
+    '',
+  ];
+
+  let ok = true;
+
+  for (const v of values) {
+    if (gas.IssoSheets_coerce('string', gas.IssoSheets_toCell('string', v)) !== v) {
+      ok = false;
+    }
+  }
+
+  check('**書いて読むと必ず元へ戻る**', ok);
+}
+
+{
+  /* 実シートに近い土台で、note の本文が生き残るか。 */
+  const tables = formulaEatingTables();
+  const store = gas.IssoSheets_create(tables);
+
+  store.ensureSheets();
+
+  const body = '=== タイトル候補 ===\n1. 見出し案\n=== 本文 ===\n本文です。';
+
+  const theme = gas.IssoThemes_create(store, { source_text: '着想' });
+  const version = gas.IssoVersions_create(
+    store, { theme_id: theme.theme_id, stage: 'note', body }, {},
+  );
+
+  const read = store.findById(gas.ISSO_SHEET.VERSIONS, version.version_id);
+
+  check('**note の本文が #ERROR! にならない**', read.body !== '#ERROR!', read.body);
+  check('本文がそのまま戻る', read.body === body, read.body);
+
+  /* 台本も同じ形で始まる。こちらも壊れないこと。 */
+  const script = gas.IssoVersions_create(
+    store,
+    { theme_id: theme.theme_id, stage: 'script', body: '=== シーン1 ===\nナレーション: あ\n映像: い' },
+    {},
+  );
+
+  check('**台本の本文も壊れない**',
+    store.findById(gas.ISSO_SHEET.VERSIONS, script.version_id).body.indexOf('=== シーン1 ===') === 0);
+
+  /* 生成結果（generation_queue.result）も同じ経路を通る。 */
+  gas.IssoVersions_adopt(store, version.version_id);
+
+  check('見出し行も壊れない', tables.dump().versions[0][0] === 'version_id');
+}
+
 finish();

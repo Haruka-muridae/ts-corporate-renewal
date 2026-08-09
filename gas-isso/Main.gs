@@ -65,6 +65,10 @@ function issoRequestGeneration(themeId, stage) {
   return IssoApi_requestGeneration(IssoMain_store(), themeId, stage);
 }
 
+function issoPrompt(requestId) {
+  return IssoApi_promptFor(IssoMain_store(), requestId);
+}
+
 function issoRefresh(requestId) {
   return IssoApi_refresh(IssoMain_store(), requestId);
 }

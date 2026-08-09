@@ -203,6 +203,30 @@ function IssoApi_requestGeneration(store, themeId, stage, deps) {
 }
 
 /**
+ * 依頼のプロンプトを取り出す。
+ *
+ * **依頼した直後の返り値だけに頼らない。**
+ * 画面はサーバーの状態から描き直すので、再読み込みや別端末で開いたときに
+ * 直後の返り値は残っていない。**手で Gemini へ貼る運用（Flow 抜き）では
+ * プロンプトが取れないと先へ進めない**ので、あとからでも引ける口を用意する。
+ *
+ * ワークスペース一覧には含めない（長いので往復が重くなる）。**要るときだけ引く。**
+ */
+function IssoApi_promptFor(store, requestId) {
+  var request = store.findById(ISSO_SHEET.QUEUE, requestId);
+
+  if (request === null) {
+    throw new Error('依頼が見つかりません: ' + requestId);
+  }
+
+  return {
+    request_id: request.request_id,
+    stage: request.stage,
+    prompt: request.prompt
+  };
+}
+
+/**
  * 依頼の様子を見て、完了していれば取り込む。
  *
  * 画面の「更新」ボタンがこれを呼ぶ。**完了していなければ何もしない。**

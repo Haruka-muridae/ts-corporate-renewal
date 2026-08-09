@@ -302,7 +302,13 @@
     button.disabled = stage.canGenerate !== true;
 
     button.addEventListener('click', function () {
-      call('issoRequestGeneration', [state.theme.theme_id, stage.id], function () {
+      call('issoRequestGeneration', [state.theme.theme_id, stage.id], function (request) {
+        /*
+         * **返ってきたプロンプトを捨てない。**
+         * 再描画はサーバーの状態から作り直すので、ここで持っておかないと
+         * 手で貼る運用のときにプロンプトが画面から消える。
+         */
+        state.lastPrompt = { requestId: request.request_id, prompt: request.prompt };
         reload();
       });
     });
@@ -354,6 +360,8 @@
       box.appendChild(error);
     }
 
+    box.appendChild(promptBlock(request));
+
     var label = document.createElement('label');
     label.setAttribute('for', 'paste-result');
     label.textContent = '結果を手で貼る（Flow を使わない場合）';
@@ -384,6 +392,118 @@
     box.appendChild(row);
 
     return box;
+  }
+
+  /**
+   * 依頼のプロンプト（Flow を使わないとき、これを Gemini へ貼る）。
+   *
+   * **依頼した直後は返り値をそのまま出し、それ以外はボタンで引く。**
+   * 一覧に含めていないのは長いからで、要るときだけ往復させる。
+   * 再読み込みしてもボタンから取り直せる。
+   */
+  function promptBlock(request) {
+    var box = document.createElement('div');
+
+    box.className = 'prompt';
+
+    if (state.lastPrompt && state.lastPrompt.requestId === request.request_id) {
+      box.appendChild(promptBody(state.lastPrompt.prompt));
+      return box;
+    }
+
+    var show = document.createElement('button');
+
+    show.type = 'button';
+    show.className = 'quiet';
+    show.textContent = 'プロンプトを表示';
+    show.addEventListener('click', function () {
+      call('issoPrompt', [request.request_id], function (result) {
+        box.textContent = '';
+        box.appendChild(promptBody(result.prompt));
+      });
+    });
+
+    var row = document.createElement('p');
+    row.className = 'row';
+    row.appendChild(show);
+    box.appendChild(row);
+
+    return box;
+  }
+
+  function promptBody(text) {
+    var wrap = document.createElement('div');
+
+    var label = document.createElement('label');
+    label.textContent = 'これを Gemini へ貼ってください';
+    wrap.appendChild(label);
+
+    var area = document.createElement('textarea');
+    area.rows = 8;
+    area.readOnly = true;
+    area.value = text;
+    /* 触れたら全選択。スマホで長押し選択させるより速い。 */
+    area.addEventListener('focus', function () { area.select(); });
+    wrap.appendChild(area);
+
+    var row = document.createElement('p');
+    row.className = 'row';
+
+    var copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'quiet';
+    copy.textContent = 'コピー';
+    copy.addEventListener('click', function () {
+      copyFrom(area, copy);
+    });
+
+    row.appendChild(copy);
+    wrap.appendChild(row);
+
+    return wrap;
+  }
+
+  /**
+   * テキスト欄の中身をコピーする。
+   *
+   * **HTML Service は iframe の中で動く。** `navigator.clipboard` は
+   * 権限ポリシーで塞がれることがあるので、**先に execCommand を試す**
+   * （古い API だが iframe 内で通りやすい）。両方だめなら、
+   * 選択済みにしたうえで手で写してもらう——**黙って失敗させない。**
+   */
+  function copyFrom(area, button) {
+    var label = button.textContent;
+
+    function done(message) {
+      button.textContent = message;
+      window.setTimeout(function () { button.textContent = label; }, 2000);
+    }
+
+    area.focus();
+    area.select();
+
+    var ok = false;
+
+    try {
+      ok = document.execCommand('copy');
+    } catch (error) {
+      ok = false;
+    }
+
+    if (ok) {
+      done('コピーしました');
+      return;
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(area.value).then(
+        function () { done('コピーしました'); },
+        function () { done('選択しました'); },
+      );
+      return;
+    }
+
+    done('選択しました');
   }
 
   /** 版1件のカード。 */
