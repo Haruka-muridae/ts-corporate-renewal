@@ -4,6 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>主催者について | Potenitas</title>
+<meta name="description" content="Potenitas主催 / Chief AI Officer(CAIO)Yuki Saitoのプロフィール。AI・生成AIの設計、実装、業務導入を専門とし、認知心理学、教育、IT、業務設計を横断して、人と組織の可能性を仕組みにする活動をしています。">
+
+<link rel="canonical" href="https://tsam-ai.com/potenitas/profile/">
+
+<!-- OGP。文言は上の title / description をそのまま使う（新しいコピーを作らない）。 -->
+<meta property="og:type" content="profile">
+<meta property="og:url" content="https://tsam-ai.com/potenitas/profile/">
+<meta property="og:title" content="主催者について | Potenitas">
+<meta property="og:description" content="Potenitas主催 / Chief AI Officer(CAIO)Yuki Saitoのプロフィール。AI・生成AIの設計、実装、業務導入を専門とし、認知心理学、教育、IT、業務設計を横断して、人と組織の可能性を仕組みにする活動をしています。">
+<meta property="og:locale" content="ja_JP">
+<!-- TODO: このページ用のOGP画像が用意できたら og:image を追加する -->
+<meta name="twitter:card" content="summary_large_image">
+
+<!--
+  favicon はサイト共通の資産を流用する。/potenitas/ 自身は link を1つも
+  持っておらず、ブラウザの既定である /favicon.ico へ暗黙に落ちている。
+  ここでは他ページ（/login/ など）と同じ4点を明示する。
+-->
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
@@ -90,7 +113,12 @@ header{border-bottom:1px solid var(--line-soft);}
 }
 
 /* ---------- section accordion ---------- */
-main{padding-bottom:24px;}
+/*
+ * かつて main{padding-bottom:24px;} を置いていたが、`<main class="wrap">` に
+ * 対しては .wrap の padding（クラス＝詳細度が上）に負けて効いていなかった。
+ * hero を main の中へ入れる際に main が裸になり、突然効き始めて 24px 伸びる
+ * ので削除した。下の余白は .closing の padding-bottom:120px が担っている。
+ */
 details.sec{border-top:1px solid var(--line-soft);}
 details.sec:last-of-type{border-bottom:1px solid var(--line-soft);}
 details.sec > summary{
@@ -189,6 +217,8 @@ details.tl > summary:hover .tl-year{color:var(--ai);}
   font-weight:600;letter-spacing:.22em;
   color:var(--ai-deep);
   margin-bottom:20px;
+  /* 375px で「仕組みにす／る。」と最後に1文字だけ残るのを防ぐ。 */
+  text-wrap:balance;
 }
 .closing-sub{font-size:.9rem;color:var(--ink-soft);letter-spacing:.1em;}
 
@@ -210,10 +240,12 @@ footer{
 
 <header>
   <div class="header-inner">
-    <a class="brand" href="#">Potenitas</a>
+    <a class="brand" href="/potenitas/">Potenitas</a>
     <span class="header-label">主催者について</span>
   </div>
 </header>
+
+<main>
 
 <div class="hero">
   <div class="hero-main">
@@ -231,7 +263,7 @@ footer{
   <div class="hero-tate">可能性を、仕組みにする。</div>
 </div>
 
-<main class="wrap">
+<div class="wrap">
 
 <details class="sec" open>
   <summary>
@@ -518,6 +550,8 @@ footer{
 <div class="closing">
   <p class="closing-copy">可能性を、仕組みにする。</p>
   <p class="closing-sub">それが、Potenitasのテーマです。</p>
+</div>
+
 </div>
 
 </main>
