@@ -16,7 +16,13 @@ import { setScreenDepth } from '../../auth/config.js';
 import { KeyStore, PROVIDERS, isKeyStoreAvailable } from '../../auth/keystore.js';
 import { generateScript, describeGeminiError } from './gemini.js';
 import { buildPastedScript, estimateSeconds } from './paste.js';
-import { fetchSpeakers, renderVideo, videoUrl } from './companion.js';
+import {
+  fetchSpeakers,
+  startEngine,
+  waitForEngineOnline,
+  renderVideo,
+  videoUrl,
+} from './companion.js';
 import { DURATIONS, DEFAULT_DURATION, THEME_MAX_LENGTH, APP_VERSION } from './config.js';
 import { PROMPT_VERSION } from './prompt.js';
 
@@ -59,6 +65,7 @@ const dom = {
   companionGuidance: el('ss-companion-guidance'),
   companionText: el('ss-companion-text'),
   companionRetry: el('ss-companion-retry'),
+  engineStart: el('ss-engine-start'),
   speaker: el('ss-speaker'),
   speed: el('ss-speed'),
   speedVal: el('ss-speed-val'),
@@ -77,8 +84,23 @@ let currentScript = null;
 let activeController = null;
 /* 動画生成中の中止に使う。 */
 let renderController = null;
-/* 補助サービスが応答したか。 */
+
+/*
+ * 補助サービスの状態。'checking' | 'offline' | 'engine-offline' | 'online'。
+ *   offline        … ai-video-app 自体に到達できない
+ *   engine-offline … ai-video-app は応答するが VOICEVOX が使えない（mock 含む）
+ * 「アプリの失敗」と「エンジンの失敗」を1本の真偽値に潰さないための3状態。
+ */
+let companionState = 'checking';
+/* 補助サービスが使えるか。companionState === 'online' の導出値（既存参照箇所を壊さない）。 */
 let companionReady = false;
+/* 「エンジンを起動」の多重実行防止。 */
+let engineStarting = false;
+
+function setCompanionState(state) {
+  companionState = state;
+  companionReady = state === 'online';
+}
 
 /* ---------- 小さなヘルパー ---------- */
 
@@ -586,26 +608,54 @@ function handleDownload() {
 /* ---------- 音声・動画（ローカル補助サービス） ---------- */
 
 /*
- * 補助サービスの状態を確かめ、話者を埋める／未起動なら案内を出す。
- * 未起動でも画面は壊さない（起動して「再確認」で復帰できる）。
+ * 補助サービスの状態を確かめ、話者を埋める／使えないなら案内を出す。
+ * どの状態でも画面は壊さない（起動して「再確認」で復帰できる）。
+ * 状態遷移はこの関数だけが行う（起動ハンドラも最後はここへ戻す）。
  */
 async function refreshCompanion() {
+  setCompanionState('checking');
   dom.render.disabled = true;
   dom.renderDetail.textContent = '生成サービスを確認しています…';
   show(dom.renderDetail);
 
-  const { ok, speakers } = await fetchSpeakers();
-  companionReady = ok;
+  const { ok, speakers, engineStatus } = await fetchSpeakers();
   hide(dom.renderDetail);
 
   if (!ok) {
+    /* ai-video-app 自体に到達できない。起動ボタンは出さない（押しても届かない）。 */
+    setCompanionState('offline');
     dom.companionText.textContent =
-      'お使いのPCの動画生成サービス（ai-video-app）に接続できません。サービスと VOICEVOX を起動してから「再確認する」を押してください。';
+      'お使いのPCの動画生成サービス（ai-video-app）に接続できません。ai-video-app を起動してから「再確認する」を押してください。';
+    hide(dom.engineStart);
     show(dom.companionGuidance);
     dom.render.disabled = true;
     return;
   }
 
+  if (engineStatus === 'offline' || engineStatus === 'mock') {
+    /*
+     * アプリは応答するがエンジンが使えない。話者一覧はフォールバックが
+     * 返ってくるが、それで生成させると無音・失敗の動画になる。
+     * mock も online にしない：ダミー音声（無音）の動画を黙って生成させない。
+     * 気づくのは書き出し後で、利用者の時間を最も無駄にする失敗だからである。
+     */
+    setCompanionState('engine-offline');
+    dom.companionText.textContent =
+      '動画生成サービス（ai-video-app）は起動していますが、音声エンジン（VOICEVOX）が停止しています。「エンジンを起動」を押すと、この画面から起動できます（30秒ほどかかることがあります）。';
+    show(dom.engineStart);
+    show(dom.companionGuidance);
+    dom.render.disabled = true;
+    return;
+  }
+
+  /*
+   * engineStatus === 'online' のほか null も online として扱う。
+   * null はヘッダ欠落＝X-Engine-Status を持たない旧版の ai-video-app で、
+   * 旧版は従来どおり「speakers が返れば使える」前提で動いていた。
+   * ここで弾くと旧版の利用者が一律に生成不能になるため、後方互換で通す。
+   */
+  setCompanionState('online');
+  hide(dom.engineStart);
   hide(dom.companionGuidance);
 
   /* 話者を埋め直す。応答が空でも既定の1件は出す。 */
@@ -619,6 +669,114 @@ async function refreshCompanion() {
   }
 
   dom.render.disabled = false;
+}
+
+/*
+ * VOICEVOX 未インストール（409 not_installed）の案内。
+ * downloadUrl が http(s) の URL なら「公式サイト」をリンクにする。既存の流儀どおり
+ * innerHTML は使わず、textContent ベースの DOM 操作で組む（replaceChildren の
+ * 文字列引数はテキストノードになる）。downloadUrl は補助サービス由来の値だが、
+ * javascript: 等を href に入れないよう形式だけは確かめる。
+ */
+function showEngineNotInstalled(downloadUrl) {
+  if (typeof downloadUrl === 'string' && /^https?:\/\//.test(downloadUrl)) {
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = '公式サイト';
+    dom.companionText.replaceChildren(
+      'VOICEVOX がインストールされていません。',
+      link,
+      'からインストールしてから「再確認する」を押してください。',
+    );
+    return;
+  }
+
+  dom.companionText.textContent =
+    'VOICEVOX がインストールされていません。公式サイトからインストールしてから「再確認する」を押してください。';
+}
+
+/*
+ * 「エンジンを起動」。起動を依頼し、online になるまで待って画面を戻す。
+ * 成功時の状態遷移は refreshCompanion() の呼び直しに集約する
+ * （ここで直接 online へ書き換える経路を作ると、遷移が2系統になり追えなくなる）。
+ */
+async function handleEngineStart() {
+  /*
+   * 多重実行の防止と状態の確認。ボタンは engine-offline のときだけ表示して
+   * いるが、再確認と競合して隠れる直前のクリックが届くことがあるため、
+   * 表示制御だけに頼らず状態でも防ぐ。
+   */
+  if (engineStarting || companionState !== 'engine-offline') {
+    return;
+  }
+
+  engineStarting = true;
+  dom.engineStart.disabled = true;
+  dom.companionRetry.disabled = true;
+  /* #ss-companion-guidance は aria-live="polite"。進行状況も読み上げられる。 */
+  dom.companionText.textContent =
+    '音声エンジン（VOICEVOX）を起動しています…（30秒ほどかかることがあります）';
+
+  try {
+    const { status, downloadUrl } = await startEngine();
+
+    if (status === 0) {
+      /* 通信断＝ai-video-app 自体が落ちた。判定は refreshCompanion に任せて offline へ。 */
+      await refreshCompanion();
+      return;
+    }
+
+    if (status === 404) {
+      /* /api/engine/start を持たない旧版。押し直しても直らないので手動起動を案内する。 */
+      dom.companionText.textContent =
+        'お使いの ai-video-app が古いため、この画面からは起動できません。VOICEVOX を手動で起動してから「再確認する」を押してください。';
+      return;
+    }
+
+    if (status === 409) {
+      /*
+       * VOICEVOX 未インストール（reason: not_installed）。ポーリングしても起動しない
+       * ため、30秒待たせず即座に案内する（待った末の汎用文言になっていた）。
+       */
+      showEngineNotInstalled(downloadUrl);
+      return;
+    }
+
+    /*
+     * 起動依頼は届いた（エラー応答でも、起動が遅れているだけの場合があるため
+     * ここでは打ち切らず）、online になるまでポーリングで待つ。
+     */
+    const { online, unreachable } = await waitForEngineOnline();
+
+    if (unreachable) {
+      /*
+       * ポーリング中に ai-video-app 自体が落ちた。エンジンではなくアプリ側の
+       * 問題なので、refreshCompanion に流して offline 表示へ収束させる。
+       * そのまま offline なら、汎用の接続案内より状況が分かる専用文言に差し替える
+       * （瞬断から復帰していた場合は refreshCompanion の判定を尊重して触らない）。
+       */
+      await refreshCompanion();
+      if (companionState === 'offline') {
+        dom.companionText.textContent =
+          'ai-video-app への接続が失われました。ai-video-app を起動し直してから「再確認する」を押してください。';
+      }
+      return;
+    }
+
+    if (online) {
+      await refreshCompanion();
+      return;
+    }
+
+    dom.companionText.textContent =
+      '起動を確認できませんでした。VOICEVOX が正しくインストールされているかを確認のうえ、手動で起動してから「再確認する」を押してください。';
+  } finally {
+    engineStarting = false;
+    dom.engineStart.disabled = false;
+    dom.companionRetry.disabled = false;
+  }
 }
 
 /* 台本ができたら動画パネルを出し、補助サービスを確認する。 */
@@ -771,6 +929,7 @@ async function init() {
   dom.render.addEventListener('click', handleRender);
   dom.renderCancel.addEventListener('click', handleRenderCancel);
   dom.companionRetry.addEventListener('click', refreshCompanion);
+  dom.engineStart.addEventListener('click', handleEngineStart);
   dom.speed.addEventListener('input', () => {
     dom.speedVal.textContent = Number(dom.speed.value).toFixed(2);
   });

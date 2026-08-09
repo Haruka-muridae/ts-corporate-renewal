@@ -189,10 +189,15 @@
           ナレーション音声つきの縦型動画を作ります。
         </p>
 
-        <!-- 補助サービスが未起動のときの案内。 -->
+        <!--
+          補助サービスが未起動のときの案内。
+          「エンジンを起動」は既定 hidden。出すのはエンジン停止（engine-offline）の
+          ときだけで、表示制御は app.js のみが行う。
+        -->
         <div id="ss-companion-guidance" class="ss-subpanel ss-subpanel--guidance" aria-live="polite" hidden>
           <p class="ss-guidance-text" id="ss-companion-text"></p>
           <div class="ss-actions">
+            <button id="ss-engine-start" type="button" class="auth-button" hidden>エンジンを起動</button>
             <button id="ss-companion-retry" type="button" class="auth-button auth-button--ghost">再確認する</button>
           </div>
         </div>
