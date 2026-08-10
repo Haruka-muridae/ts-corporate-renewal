@@ -26,7 +26,7 @@
 import {
   AUTH_GAS_TIMEOUT_MS,
   LICENSE_CACHE_TTL_MS,
-  LICENSE_GRACE_MAX_MS,
+  LICENSE_CONTINUATION_MAX_MS,
   LICENSE_GRACE_RECHECK_MS,
   LICENSE_STATE,
 } from './constants.mjs';
@@ -196,7 +196,11 @@ export async function resolveLicense({ licenseKey, env, nowMs, fetchImpl = fetch
       state,
       plan: verified.plan,
       checkedAt: nowMs,
-      graceStartedAt: 0,
+      /*
+       * 猶予の唯一の起点。**照会が成功したときにしか動かない。**
+       * 無効と答えられた場合は 0（猶予の対象ではない）。
+       */
+      activeConfirmedAt: state === LICENSE_STATE.ACTIVE ? nowMs : 0,
     }, Math.floor(LICENSE_CACHE_TTL_MS / 1000));
 
     return { state, plan: verified.plan, reason: 'verified' };
@@ -210,29 +214,67 @@ export async function resolveLicense({ licenseKey, env, nowMs, fetchImpl = fetch
     return { state: LICENSE_STATE.EXPIRED, plan: '', reason: 'unverified' };
   }
 
-  const graceStartedAt = Number(record.graceStartedAt) > 0 ? Number(record.graceStartedAt) : nowMs;
-  const remainingMs = LICENSE_GRACE_MAX_MS - (nowMs - graceStartedAt);
+  const decided = graceOrExpired(record, nowMs, 'grace');
+
+  if (decided.state === LICENSE_STATE.EXPIRED) {
+    /*
+     * 猶予が尽きている。**ここでは書かない。** 期限切れを書き直しても
+     * 同じ答えを返し続けるだけで、認証系が復帰したときは
+     * レコードが無い（＝素直に verified からやり直せる）ほうがよい。
+     */
+    return decided;
+  }
+
+  const confirmedAt = activeConfirmedAt(record);
 
   await writeRecord(kv, cacheKey, {
     v: 1,
     state: LICENSE_STATE.GRACE,
     plan: String(record.plan || ''),
     checkedAt: nowMs,
-    graceStartedAt,
-  /*
-   * 猶予が尽きたら短い TTL で消えるに任せる。残しておいても
-   * 「期限切れ」を返し続けるだけで、認証系が復帰したときは
-   * レコードが無いほうが素直に verified からやり直せる。
-   */
-  }, Math.max(60, Math.floor(remainingMs / 1000)));
+    /*
+     * **読んだ値をそのまま写す。** ここで nowMs を入れると、KV の反映待ちで
+     * 古いレコードを読んだ colo が起点を後ろへずらし、猶予の打ち切り時刻が
+     * 非決定的になる（constants.mjs の LICENSE_CONTINUATION_MAX_MS の説明）。
+     */
+    activeConfirmedAt: confirmedAt,
+  }, Math.max(60, Math.floor((LICENSE_CONTINUATION_MAX_MS - (nowMs - confirmedAt)) / 1000)));
 
-  return graceOrExpired({ ...record, graceStartedAt }, nowMs, 'grace');
+  return decided;
+}
+
+/**
+ * レコードから「最後に active を確認できた時刻」を取り出す。
+ *
+ * 旧形式（この項目を持たないレコード）が KV に残っていても壊れないよう、
+ * active のレコードに限り checkedAt で代用する（active の checkedAt は
+ * 確認できた時刻そのもの）。それ以外は NaN＝起点なしとして扱う。
+ */
+function activeConfirmedAt(record) {
+  const explicit = Number(record.activeConfirmedAt);
+
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+
+  if (record.state === LICENSE_STATE.ACTIVE) {
+    const checked = Number(record.checkedAt);
+
+    return Number.isFinite(checked) && checked > 0 ? checked : NaN;
+  }
+
+  return NaN;
 }
 
 function graceOrExpired(record, nowMs, reason) {
-  const graceStartedAt = Number(record.graceStartedAt) > 0 ? Number(record.graceStartedAt) : nowMs;
+  const confirmedAt = activeConfirmedAt(record);
 
-  if (nowMs - graceStartedAt >= LICENSE_GRACE_MAX_MS) {
+  /* 起点が分からないレコードは猶予に入れない（fail closed）。 */
+  if (!Number.isFinite(confirmedAt)) {
+    return { state: LICENSE_STATE.EXPIRED, plan: '', reason: 'unverified' };
+  }
+
+  if (nowMs - confirmedAt >= LICENSE_CONTINUATION_MAX_MS) {
     return { state: LICENSE_STATE.EXPIRED, plan: '', reason: 'grace-exhausted' };
   }
 

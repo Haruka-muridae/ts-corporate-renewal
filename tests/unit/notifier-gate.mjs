@@ -20,7 +20,7 @@ import { check, section, finish, fatal } from '../../public/apps/tests/helpers/a
 import {
   DEFAULT_SETTINGS,
   LICENSE_CACHE_TTL_MS,
-  LICENSE_GRACE_MAX_MS,
+  LICENSE_CONTINUATION_MAX_MS,
   RENOTIFY_THRESHOLD_MS,
 } from '../../workers/notifier-gate/src/constants.mjs';
 import {
@@ -414,36 +414,116 @@ async function run() {
       check('認証系が復帰したら active へ戻る', recovered.state === 'active', JSON.stringify(recovered));
 
       const record = JSON.parse(await env.LICENSE_CACHE.get(licenseCacheKey(await hashLicenseKey(key))));
-      check('復帰時に猶予の起点は消える', record.graceStartedAt === 0, JSON.stringify(record));
+      check('復帰時に猶予の起点が引き直される', record.activeConfirmedAt === graceAt + 11 * MINUTE, JSON.stringify(record));
     }
 
     {
-      /* 猶予の上限（72時間）。 */
+      /* 猶予の上限。起点は「最後に active を確認できた時刻」。 */
       const env = baseEnv();
       const key = makeLicenseKey('5');
 
       await resolveLicense({ licenseKey: key, env, nowMs: NOW, fetchImpl: createAuthGas({ valid: true }).fetchImpl });
 
       const down = createAuthGas({ throws: true });
-      const graceStart = NOW + LICENSE_CACHE_TTL_MS + MINUTE;
 
-      await resolveLicense({ licenseKey: key, env, nowMs: graceStart, fetchImpl: down.fetchImpl });
+      await resolveLicense({ licenseKey: key, env, nowMs: NOW + LICENSE_CACHE_TTL_MS + MINUTE, fetchImpl: down.fetchImpl });
 
       const withinGrace = await resolveLicense({
         licenseKey: key,
         env,
-        nowMs: graceStart + LICENSE_GRACE_MAX_MS - HOUR,
+        nowMs: NOW + LICENSE_CONTINUATION_MAX_MS - HOUR,
         fetchImpl: down.fetchImpl,
       });
-      check('72時間以内なら grace のまま', withinGrace.state === 'grace', JSON.stringify(withinGrace));
+      check('上限内なら grace のまま', withinGrace.state === 'grace', JSON.stringify(withinGrace));
 
       const exhausted = await resolveLicense({
         licenseKey: key,
         env,
-        nowMs: graceStart + LICENSE_GRACE_MAX_MS + MINUTE,
+        nowMs: NOW + LICENSE_CONTINUATION_MAX_MS + MINUTE,
         fetchImpl: down.fetchImpl,
       });
-      check('72時間を超えたら expired', exhausted.state === 'expired' && exhausted.reason === 'grace-exhausted', JSON.stringify(exhausted));
+      check(
+        '上限を超えたら expired',
+        exhausted.state === 'expired' && exhausted.reason === 'grace-exhausted',
+        JSON.stringify(exhausted),
+      );
+      check(
+        '猶予切れのレコードは書き直さない（復帰時にやり直せるように）',
+        JSON.parse(await env.LICENSE_CACHE.get(licenseCacheKey(await hashLicenseKey(key)))).state === 'grace',
+      );
+    }
+
+    {
+      /*
+       * KV の結果整合性。反映待ちで**古いレコードを読んだ colo**が
+       * 猶予の起点を後ろへずらさないこと。
+       *
+       * 起点を「照会に失敗した時刻」にしていた実装では、ここで
+       * 打ち切り時刻が伸び、不通が続くかぎり失効しなくなっていた。
+       */
+      const env = baseEnv();
+      const key = makeLicenseKey('J');
+      const cacheKey = licenseCacheKey(await hashLicenseKey(key));
+
+      await resolveLicense({ licenseKey: key, env, nowMs: NOW, fetchImpl: createAuthGas({ valid: true }).fetchImpl });
+
+      /* 反映前のレコード（照会成功時のもの）を控えておく。 */
+      const staleRecord = await env.LICENSE_CACHE.get(cacheKey);
+
+      const down = createAuthGas({ throws: true });
+
+      /* colo A が猶予を書き込む。 */
+      await resolveLicense({ licenseKey: key, env, nowMs: NOW + LICENSE_CACHE_TTL_MS + MINUTE, fetchImpl: down.fetchImpl });
+
+      /* colo B はまだ古いレコードを読む。しかも上限の直前に。 */
+      await env.LICENSE_CACHE.put(cacheKey, staleRecord);
+
+      const late = await resolveLicense({
+        licenseKey: key,
+        env,
+        nowMs: NOW + LICENSE_CONTINUATION_MAX_MS - MINUTE,
+        fetchImpl: down.fetchImpl,
+      });
+      check('古いレコードを読んでも grace のまま（起点は動かない）', late.state === 'grace', JSON.stringify(late));
+
+      const written = JSON.parse(await env.LICENSE_CACHE.get(cacheKey));
+      check(
+        '古いレコードを読んだ colo も同じ起点を書く',
+        written.activeConfirmedAt === NOW,
+        JSON.stringify(written),
+      );
+
+      const afterLimit = await resolveLicense({
+        licenseKey: key,
+        env,
+        nowMs: NOW + LICENSE_CONTINUATION_MAX_MS + MINUTE,
+        fetchImpl: down.fetchImpl,
+      });
+      check(
+        '打ち切り時刻は伸びない',
+        afterLimit.state === 'expired' && afterLimit.reason === 'grace-exhausted',
+        JSON.stringify(afterLimit),
+      );
+    }
+
+    {
+      /* 起点を持たない壊れたレコードは猶予に入れない（fail closed）。 */
+      const env = baseEnv();
+      const key = makeLicenseKey('K');
+
+      await env.LICENSE_CACHE.put(
+        licenseCacheKey(await hashLicenseKey(key)),
+        JSON.stringify({ v: 1, state: 'grace', plan: 'basic', checkedAt: NOW, activeConfirmedAt: 0 }),
+      );
+
+      const result = await resolveLicense({
+        licenseKey: key,
+        env,
+        nowMs: NOW + HOUR,
+        fetchImpl: createAuthGas({ throws: true }).fetchImpl,
+      });
+
+      check('起点の無い grace レコードは expired', result.state === 'expired' && result.reason === 'unverified', JSON.stringify(result));
     }
 
     {
@@ -592,7 +672,13 @@ async function run() {
     async function seedLicense(key, state) {
       await kv.put(
         licenseCacheKey(await hashLicenseKey(key)),
-        JSON.stringify({ v: 1, state, plan: 'basic', checkedAt: Date.now(), graceStartedAt: 0 }),
+        JSON.stringify({
+          v: 1,
+          state,
+          plan: 'basic',
+          checkedAt: Date.now(),
+          activeConfirmedAt: state === 'expired' ? 0 : Date.now(),
+        }),
       );
     }
 
