@@ -23,6 +23,8 @@ import { guardPage } from '../../auth/session.js';
 
 import { BCC_BATCH_SIZE, isClientIdConfigured } from './config.js';
 import {
+  DriveAuthError,
+  DriveAuthErrorCode,
   clearAccessToken,
   describeDriveAuthError,
   ensureAccessToken,
@@ -69,6 +71,43 @@ let batchesDone = 0;
 
 let sending = false;
 
+/*
+ * 次の連携で同意画面を出し直すか。
+ *
+ * 同意画面でチェックを片方外されると SCOPE_NOT_GRANTED で弾くが、
+ * そのまま連携し直しても GIS が前回の部分許可を返すことがある。
+ * 一度スコープ不足を見たら、次は同意画面を強制して付け直させる。
+ */
+let needsConsent = false;
+
+/* 送信途中（一部の束だけ送信済みで、まだ残りがある）か。 */
+function isMidCampaign() {
+  const total = chunkRecipients(recipients).length;
+
+  return recipients.length > 0 && batchesDone > 0 && batchesDone < total;
+}
+
+/*
+ * トークンを用意する。失敗したら案内を出して null。
+ *
+ * **利用者のボタン押下から呼ぶこと**（ポップアップブロック対策）。
+ */
+async function acquireToken() {
+  try {
+    const token = await ensureAccessToken({ forceConsent: needsConsent });
+    needsConsent = false;
+    return token;
+  } catch (error) {
+    if (error instanceof DriveAuthError && error.code === DriveAuthErrorCode.SCOPE_NOT_GRANTED) {
+      needsConsent = true;
+    }
+
+    const described = describeDriveAuthError(error);
+    showMessage(`${described.text}（${described.errorCode}）`, { isError: true });
+    return null;
+  }
+}
+
 /* ---------- 表示の道具（innerHTML を使わない） ---------- */
 
 function showMessage(text, { isError = false } = {}) {
@@ -106,8 +145,15 @@ function renderInvalidList(invalid) {
 
 /* 送信ボタンを押せる条件がそろっているかを見直す。 */
 function refreshSendButton() {
+  /*
+   * 全束を送り終えたら押せなくする。押せるままにすると、押しても
+   * 何も起きない「無反応なボタン」になる。次の配信は「宛先を
+   * 読み込み直す」から始める（完了メッセージでも案内する）。
+   */
+  const remainingChunks = chunkRecipients(recipients).length - batchesDone;
+
   const ready = !sending
-    && recipients.length > 0
+    && remainingChunks > 0
     && el['cm-subject'].value.trim() !== ''
     && el['cm-body'].value.trim() !== ''
     && el['cm-legal-check'].checked;
@@ -127,20 +173,70 @@ function describeAnyError(error) {
   return describeDriveAuthError(error);
 }
 
+/* ---------- 連携ボタン ---------- */
+
+/*
+ * 「Googleと連携する」の入口。
+ *
+ * **送信途中の再認可と、宛先の読み込みを分ける。** 送信途中（401で
+ * トークンが切れた等）にここから loadRecipients へ入れると、再開位置
+ * （batchesDone）がリセットされ、案内どおりに操作しただけで送信済みの
+ * 相手へ同じメールがもう一度届く。途中ならトークンだけ取り直す。
+ */
+async function connectPressed() {
+  if (sending) {
+    return;
+  }
+
+  if (isMidCampaign()) {
+    const token = await acquireToken();
+
+    if (!token) {
+      return;
+    }
+
+    const remaining = chunkRecipients(recipients)
+      .slice(batchesDone)
+      .reduce((sum, chunk) => sum + chunk.length, 0);
+
+    setGuidance('');
+    showMessage(`連携し直しました。「送信する」を押すと、残りの ${remaining} 件から再開します。`);
+    refreshSendButton();
+    return;
+  }
+
+  await loadRecipients();
+}
+
 /* ---------- 宛先の読み込み ---------- */
 
 async function loadRecipients() {
-  /*
-   * ポップアップブロックを避けるため、ensureAccessToken は
-   * ボタン押下の直後（このハンドラの先頭）で呼ぶ。
-   */
-  let token;
+  if (sending) {
+    return;
+  }
 
-  try {
-    token = await ensureAccessToken();
-  } catch (error) {
-    const described = describeDriveAuthError(error);
-    showMessage(`${described.text}（${described.errorCode}）`, { isError: true });
+  /*
+   * 送信途中に読み込み直すと再開位置が失われる。黙って進めず、
+   * 二重送信のおそれを伝えたうえで利用者に選ばせる。
+   */
+  if (isMidCampaign()) {
+    const proceed = globalThis.confirm(
+      '送信の途中です。宛先を読み込み直すと再開位置が失われ、'
+      + '送信済みの相手へ重複して送るおそれがあります。読み込み直しますか？',
+    );
+
+    if (!proceed) {
+      return;
+    }
+  }
+
+  /*
+   * ポップアップブロックを避けるため、トークンの用意は
+   * ボタン押下の直後（このハンドラの先頭側）で行う。
+   */
+  const token = await acquireToken();
+
+  if (!token) {
     return;
   }
 
@@ -190,6 +286,12 @@ async function loadRecipients() {
 
     const described = describeAnyError(error);
     el['cm-recipients-state'].textContent = '';
+
+    /* 読み込めていないのに集計の枠だけ出ていると、無反応に見える。 */
+    if (recipients.length === 0) {
+      el['cm-recipients'].hidden = true;
+    }
+
     showMessage(`${described.text}（${described.errorCode}）`, { isError: true });
   }
 
@@ -219,6 +321,8 @@ async function send() {
   const chunks = allChunks.slice(batchesDone);
 
   if (chunks.length === 0) {
+    /* refreshSendButton がボタンを無効にするため通常は来ない。防衛的に案内する。 */
+    showMessage('すべての宛先へ送信済みです。別の内容を送るには「宛先を読み込み直す」を押してください。');
     return;
   }
 
@@ -233,6 +337,15 @@ async function send() {
 
   sending = true;
   refreshSendButton();
+
+  /*
+   * 送信中は宛先の読み込み直しと連携解除も止める。
+   * 進行中に recipients や batchesDone を書き換えられると、
+   * 送信済み位置が実態とずれ、飛ばし漏れ・二重送信につながる。
+   */
+  el['cm-reload'].disabled = true;
+  el['cm-disconnect'].disabled = true;
+
   showMessage('');
 
   try {
@@ -249,7 +362,11 @@ async function send() {
 
     batchesDone = allChunks.length;
     showProgress('');
-    showMessage(`送信が完了しました（${recipients.length} 件 / ${allChunks.length} 通）。送信内容はGmailの「送信済み」で確認できます。`);
+    showMessage(
+      `送信が完了しました（${recipients.length} 件 / ${allChunks.length} 通）。`
+      + '送信内容はGmailの「送信済み」で確認できます。'
+      + '別の内容を送るには「宛先を読み込み直す」からやり直してください。',
+    );
   } catch (error) {
     /*
      * **どこまで送れたかを必ず見せる。** 送ったメールは取り消せない。
@@ -278,6 +395,8 @@ async function send() {
     );
   } finally {
     sending = false;
+    el['cm-reload'].disabled = false;
+    el['cm-disconnect'].disabled = false;
     refreshSendButton();
   }
 }
@@ -301,7 +420,7 @@ async function boot() {
 
   setGuidance('Googleと連携すると、名刺管理シートの宛先を読み込みます。', { showConnect: true });
 
-  el['cm-connect'].addEventListener('click', loadRecipients);
+  el['cm-connect'].addEventListener('click', connectPressed);
   el['cm-reload'].addEventListener('click', loadRecipients);
   el['cm-send'].addEventListener('click', send);
 
@@ -312,6 +431,10 @@ async function boot() {
   el['cm-legal-check'].addEventListener('change', refreshSendButton);
 
   el['cm-disconnect'].addEventListener('click', () => {
+    if (sending) {
+      return; /* ボタンは無効化してあるが、二重の守り。 */
+    }
+
     clearAccessToken();
     recipients = [];
     batchesDone = 0;

@@ -54,15 +54,20 @@ export function toBase64Url(text) {
 
 /*
  * ヘッダーに改行を入れられると、任意のヘッダーや別の宛先を差し込まれる。
- * 値に改行・空白があれば送信前に止める。
+ * 改行だけでなく、制御文字全般・空白・カンマ・セミコロンも止める。
+ *
+ * カンマは Bcc の区切りそのものなので、1つの宛先に紛れ込むと宛先の
+ * 水増しになる。アプリの経路では recipients.js の形式検査が先に弾くが、
+ * ここは**最後の関門**として、呼び出し元に関わらず二重に守る
+ * （将来、検証を経ない呼び出しが足されても通さないため）。
  */
 function assertHeaderValue(value, label) {
   if (typeof value !== 'string' || value === '') {
     throw new TypeError(`${label}が空です`);
   }
 
-  if (/[\r\n ]/.test(value)) {
-    throw new TypeError(`${label}に改行や空白を含めることはできません`);
+  if (/[\x00-\x20\x7f,;]/.test(value)) {
+    throw new TypeError(`${label}に使用できない文字（改行・空白・区切り記号）が含まれています`);
   }
 }
 
@@ -108,8 +113,14 @@ export function encodeHeaderWord(value) {
     words.push(`${prefix}${base64FromUtf8(buffer.join(''))}${suffix}`);
   }
 
-  /* 折り返しは空白1つ。受信側が連結して元の文字列に戻す。 */
-  return words.join(' ');
+  /*
+   * **CRLF+空白で折り返す（RFC 5322 の folding）。**
+   * 空白1つで連結すると Subject が1行のまま伸び続け、日本語で約200文字を
+   * 超えたあたりで1行998文字の上限を破る（送信そのものが400で失敗する）。
+   * 隣接する encoded-word 間の折り返し空白は、受信側が復号時に無視する
+   * （RFC 2047 §6.2）ので、件名の中身は変わらない。
+   */
+  return words.join('\r\n ');
 }
 
 /*
@@ -252,8 +263,22 @@ export async function sendAllBatches({
   let sentCount = 0;
   let batchesDone = 0;
 
+  /*
+   * 進捗表示は装飾であって、送信の位置管理を巻き込ませない。
+   * ここで例外を握りつぶさないと、表示側の不具合で「どこまで送れたか」
+   * の情報（batchesDone）が付かない例外が飛び、再送の全件二重送信に
+   * つながる。
+   */
+  const notifyProgress = (done) => {
+    try {
+      onProgress?.(done, chunks.length);
+    } catch {
+      /* 表示の失敗で送信計画を壊さない。 */
+    }
+  };
+
   for (const chunk of chunks) {
-    onProgress?.(batchesDone, chunks.length);
+    notifyProgress(batchesDone);
 
     try {
       await sendBatch({ subject, text, bcc: chunk, token, fetchImpl, signal });
@@ -270,7 +295,7 @@ export async function sendAllBatches({
     batchesDone += 1;
   }
 
-  onProgress?.(batchesDone, chunks.length);
+  notifyProgress(batchesDone);
 
   return { sentCount, batchCount: batchesDone };
 }

@@ -57,6 +57,11 @@ import {
 
 import { hasRequiredScopes } from '../../public/production-app/card-mail/drive-auth.js';
 
+import {
+  DriveErrorCode,
+  mapHttpErrorToCode,
+} from '../../public/production-app/card-mail/drive-api.js';
+
 const many = (count) => Array.from({ length: count }, (_, i) => `user${i}@example.com`);
 
 /* base64url を復号する（Gmail へ渡る raw の中身を検査するため）。 */
@@ -301,6 +306,8 @@ try {
       Boolean(columnCall), stub.calls.map((c) => c.url).join('\n'));
     check('タブ名は名刺データ',
       stub.calls.some((call) => call.url.includes(encodeURIComponent(`'${DATA_TAB_NAME}'`))));
+    check('読み取りもGETのみ（書き込み系のリクエストを出さない）',
+      stub.calls.every((call) => call.method === 'GET'));
   }
 
   {
@@ -392,6 +399,105 @@ try {
       failure !== null
         && !`${failure.message} ${failure.cause?.message ?? ''} ${failure.cause?.detail ?? ''}`
           .includes('ya29.secret-token'));
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('レビュー指摘の回帰');
+
+  {
+    /*
+     * 件名の折り返し（レビュー所見3）。入力欄が許す上限（250文字）の
+     * 日本語件名で、Subject 行が RFC 5322 の998文字を超えないこと。
+     */
+    const raw = buildRawMessage({ subject: '長'.repeat(250), text: '本文です。', bcc: ['a@ex.jp'] });
+    const lines = raw.split('\r\n');
+
+    check('250文字の日本語件名でも全行998文字以内（Subjectの折り返し）',
+      lines.every((line) => line.length <= 998),
+      `最長 ${Math.max(...lines.map((l) => l.length))} 文字`);
+    check('折り返した件名の継続行は空白で始まる（folding）',
+      lines.filter((line) => line.startsWith(' =?UTF-8?B?')).length > 0);
+    check('Cc ヘッダーも無い', !/^Cc:/m.test(raw));
+  }
+
+  {
+    /* ヘッダー最終関門の強化（レビュー所見7）。検証を経ない呼び出しでも通さない。 */
+    const rejectsBcc = (address) => {
+      try {
+        buildBccHeader([address]);
+        return false;
+      } catch (error) {
+        return error instanceof TypeError;
+      }
+    };
+
+    check('カンマ入りの宛先はヘッダー組み立てでも止める（宛先の水増し）',
+      rejectsBcc('a@b.jp,c@d.jp'));
+    check('タブ入りの宛先も止める', rejectsBcc('a@b\t.jp'));
+    check('セミコロン入りの宛先も止める', rejectsBcc('a@b.jp;c@d.jp'));
+  }
+
+  {
+    /*
+     * 401/403 の分類（レビュー指摘のテストの穴）。card-mail は
+     * drive-api.js を独自に複製しているため、「403でトークンを捨てない」
+     * 判定の土台をここで固定する。
+     */
+    check('401 は UNAUTHORIZED（トークンを捨ててよい唯一の分類）',
+      mapHttpErrorToCode(401) === DriveErrorCode.UNAUTHORIZED);
+    check('403+rateLimitExceeded は RATE_LIMITED（待てば直る）',
+      mapHttpErrorToCode(403, 'userRateLimitExceeded') === DriveErrorCode.RATE_LIMITED);
+    check('403+storageQuotaExceeded は STORAGE_FULL',
+      mapHttpErrorToCode(403, 'storageQuotaExceeded') === DriveErrorCode.STORAGE_FULL);
+    check('素の403 は FORBIDDEN',
+      mapHttpErrorToCode(403, 'insufficientPermissions') === DriveErrorCode.FORBIDDEN);
+  }
+
+  {
+    /* localStorage に入るのがファイルIDだけであることの表明。 */
+    const store = new Map();
+
+    globalThis.localStorage = {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => { store.set(key, String(value)); },
+      removeItem: (key) => { store.delete(key); },
+    };
+
+    try {
+      const stub = buildDriveStub({
+        folders: { 'TSAM AI': 'root-folder-id', '名刺データ': 'app-folder-id' },
+        sheetId: 'sheet-id-123456',
+      });
+
+      await resolveLedger({ token: 'ya29.secret-token', fetchImpl: stub.fetchImpl });
+
+      check('localStorage に入るのはファイルIDの形の値だけ',
+        store.size > 0 && [...store.values()].every((value) => isFileId(value)),
+        JSON.stringify([...store.entries()]));
+      check('localStorage にトークンが入らない',
+        ![...store.values()].some((value) => value.includes('ya29')));
+    } finally {
+      delete globalThis.localStorage;
+    }
+  }
+
+  {
+    /* 進捗表示の失敗が送信計画を壊さないこと（レビュー所見6）。 */
+    const stub = buildGmailStub();
+
+    const result = await sendAllBatches({
+      subject: 'ご挨拶',
+      text: '本文です。',
+      chunks: chunkRecipients(many(150)),
+      token: 'ya29.secret-token',
+      fetchImpl: stub.fetchImpl,
+      onProgress: () => {
+        throw new Error('表示側の不具合');
+      },
+    });
+
+    check('進捗コールバックが例外を投げても送信は完走する',
+      result.sentCount === 150 && result.batchCount === 2);
   }
 
   finish();

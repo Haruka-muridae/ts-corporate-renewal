@@ -139,10 +139,16 @@
         <div class="cm-actions">
           <button id="cm-send" type="button" class="auth-button" disabled>送信する</button>
         </div>
-
-        <p id="cm-progress" class="cm-guidance-text" aria-live="polite" hidden></p>
-        <p id="cm-message" class="cm-message" aria-live="polite" hidden></p>
       </section>
+
+      <!--
+        進捗と結果・エラーの表示。**どのセクションの中にも入れない。**
+        読み込み失敗の案内（「先に名刺OCRで登録」等）もここへ出るため、
+        「読み込みが成功したときだけ表示される要素」の中に置くと、
+        肝心の失敗時に案内ごと消えてしまう。
+      -->
+      <p id="cm-progress" class="cm-guidance-text" aria-live="polite" hidden></p>
+      <p id="cm-message" class="cm-message" aria-live="polite" hidden></p>
 
       <div class="cm-actions cm-actions--footer">
         <button id="cm-disconnect" type="button" class="auth-button auth-button--ghost" hidden>連携を解除する</button>

@@ -58,6 +58,7 @@ const SUITES = [
   { name: 'voice-recorder-notifier', file: 'unit/voice-recorder-notifier.mjs', kind: 'unit' },
   { name: 'short-script-companion', file: 'unit/short-script-companion.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
+  { name: 'browser:card-mail', file: 'browser/card-mail.mjs', kind: 'browser' },
 ];
 
 const mode = process.argv[2] ?? 'all';
