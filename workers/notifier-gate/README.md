@@ -2,7 +2,7 @@
 
 カレンダー通知 V2 のライセンスゲート兼判定サーバー（Cloudflare Workers）。
 
-公開先: `https://api.potenitas.com`
+公開先: `https://notifier-gate.potenitas-lp.workers.dev`
 
 ---
 
@@ -195,14 +195,7 @@ jsrsasign（利用者に手で貼らせていた約500KB）は不要になった
    `AUTH_GAS_SHARED_SECRET` は認証系 GAS のスクリプトプロパティへ同じ値を入れる
    （gas-auth 側の手順は docs/gas-deployment-log.md）。
 
-3. **`potenitas.com` のゾーンを Cloudflare へ追加する**
-
-   ゾーンが未追加のまま deploy すると、`routes` の Custom Domain 作成で失敗する。
-   ゾーン追加が済むまでは [wrangler.jsonc](wrangler.jsonc) の `routes` を
-   一時的に外し、`notifier-gate.<account>.workers.dev` で動かしてもよい。
-   その場合は録音アプリの CSP と GAS 側の接続先も暫定 URL にそろえること。
-
-4. **deploy する**
+3. **deploy する**
 
    ```powershell
    npm run deploy:notifier-gate
@@ -210,11 +203,20 @@ jsrsasign（利用者に手で貼らせていた約500KB）は不要になった
 
    `npm run deploy`（サイト本体）はこの Worker を更新しない。逆も同じ。
 
-5. **疎通を見る**
+   DNS もゾーンの設定も要らない。公開先は workers.dev の既定ドメインで、
+   `https://<サービス名>.<アカウントのサブドメイン>.workers.dev` になる。
+   **deploy 後、出力されたURLが
+   `https://notifier-gate.potenitas-lp.workers.dev` と一致することを確認すること。**
+   違っていた場合はアカウントのサブドメインが想定と違うので、
+   [origin.mjs](origin.mjs) を直してテストを通してから作業を続ける。
+
+4. **疎通を見る**
 
    ```powershell
-   curl https://api.potenitas.com/v1/health
+   curl https://notifier-gate.potenitas-lp.workers.dev/v1/health
    ```
+
+5. **録音アプリの CSP を変更する**（§9 の変更案。**承認を得てから**行う）
 
 ---
 
@@ -259,3 +261,73 @@ node tests/run.mjs notifier-gate
 判定・ライセンス状態遷移・VAPID 署名・匿名化の検査を Node 上で実行する
 （Workers ランタイムも Chrome も不要）。`src/*.mjs` は Workers 固有の API を
 使っていないため、テストから直接 import できる。
+
+公開オリジンが4か所でずれていないことも、このスイートが見ている（§8）。
+
+---
+
+## 8. 公開オリジンの管理と、独自ドメインへの移行
+
+### いまの公開先と、その決め方
+
+```
+https://notifier-gate.potenitas-lp.workers.dev
+```
+
+当初は独自ドメインのサブドメイン（`api.potenitas.com`）を充てる案だったが、
+ゾーンの追加を待たずに出せることを優先し、workers.dev の既定ドメインにした
+（2026-08-10 決定）。
+
+### 正本は1か所
+
+このURLは4つの場所に現れる。別の実行環境にあるため、import で1つの値を
+共有することはできない（GAS は ES モジュールを読めず、CSP は HTML の属性である）。
+
+そこで **「正本を1つ決め、ずれたらテストが落ちる」** 形にしてある。
+正本は [origin.mjs](origin.mjs) の `NOTIFIER_GATE_ORIGIN` で、
+参照する場所は同ファイルの `GATE_ORIGIN_FILES` に列挙されている。
+`node tests/run.mjs notifier-gate` が一致を検査するので、
+**どこか1か所だけ書き換えるとテストが落ちる。**
+
+参照する場所を増やしたときは `GATE_ORIGIN_FILES` にも足すこと。
+
+### 独自ドメインへ移すとき（将来）
+
+**workers.dev の既定ドメインは、Custom Domain を後から足しても
+無効にならず、並行して有効なまま**である。したがって移行は次の順で行える。
+
+1. Cloudflare にゾーンを追加し、`wrangler.jsonc` に
+   `routes: [{ pattern: "…", custom_domain: true }]` を足して deploy する
+   （`workers_dev` は残しておく）
+2. [origin.mjs](origin.mjs) の値を新URLへ変え、テストの指示に従って4か所を揃える
+3. 新しくセットアップする利用者から新URLを使う
+
+**すでにセットアップを終えている利用者は、何もしなくてよい。**
+古い workers.dev のURLが動き続けるため、テンプレートの貼り直しも
+録音アプリの再設定も不要である。
+
+移行後に workers.dev を止めたくなった場合だけ、`workers_dev: false` にする。
+そのときは**先に全利用者の接続先を切り替える必要がある**（止めた瞬間に、
+古いURLを持つテンプレートからの通知が全部止まる）。
+
+---
+
+## 9. 録音アプリの CSP 変更案（**未適用**）
+
+録音アプリのフロントは `/v1/health` を直接叩くため、`connect-src` に
+このオリジンを足す必要がある。**CSP の変更は影響が大きいため、
+案を示して承認を得てから適用する**という取り決めに従い、まだ適用していない。
+
+対象: [public/production-app/voice-recorder/index.html](../../public/production-app/voice-recorder/index.html)
+
+```diff
+- connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com;
++ connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com https://notifier-gate.potenitas-lp.workers.dev;
+```
+
+- 足すのは `connect-src` の1ディレクティブ **だけ**。
+  `script-src` には足さない（このオリジンからスクリプトは読み込まない）
+- ワイルドカード（`*.workers.dev`）にはしない。
+  **他人の Worker まで許可することになる。** workers.dev は誰でも使える共有ドメインで、
+  サブドメインの持ち主を Cloudflare のアカウント名でしか区別できない
+- push の送信はサーバー側（GAS）が行うため、push サービスのオリジンは足さなくてよい

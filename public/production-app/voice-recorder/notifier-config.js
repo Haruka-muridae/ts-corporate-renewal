@@ -33,6 +33,27 @@ export const CONNECTION_KEY = 'connection';
 export const SETTINGS_CACHE_KEY = 'tsam-vr-notifier-settings';
 
 /*
+ * カレンダー通知のライセンスゲート（Cloudflare Workers）のオリジン。
+ *
+ * ------------------------------------------------------------------
+ * ここに直書きせず、必ずこの定数を使うこと
+ * ------------------------------------------------------------------
+ * 同じURLが Workers の設定・利用者の Apps Script・この定数・index.html の
+ * CSP（connect-src）の4か所に現れる。実行環境が違うため import では
+ * 共有できないので、**正本を1つ決めてテストで一致を見張る**形にしてある。
+ *
+ * 正本は workers/notifier-gate/origin.mjs の NOTIFIER_GATE_ORIGIN。
+ * 値を変えるときは、そちらを直してから
+ * `node tests/run.mjs notifier-gate` の指示に従って全部を揃える。
+ *
+ * 独自ドメインへ移しても、この workers.dev のURLは並行して有効なままなので、
+ * 既にセットアップ済みの利用者に再設定を求める必要はない
+ * （workers/notifier-gate/README.md §8）。
+ * ------------------------------------------------------------------
+ */
+export const NOTIFIER_GATE_ORIGIN = 'https://notifier-gate.potenitas-lp.workers.dev';
+
+/*
  * テンプレートシートのコピーURL。
  * 開くとコピー画面になる（`/copy` 付き）。作り方は gas-notifier/README.md §1。
  */

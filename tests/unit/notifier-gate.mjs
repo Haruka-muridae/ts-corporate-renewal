@@ -15,6 +15,10 @@
  * ==================================================================
  */
 
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 
 import {
@@ -43,6 +47,11 @@ import {
   signJwt,
 } from '../../workers/notifier-gate/src/vapid.mjs';
 import worker from '../../workers/notifier-gate/src/index.mjs';
+import {
+  FORBIDDEN_GATE_ORIGINS,
+  GATE_ORIGIN_FILES,
+  NOTIFIER_GATE_ORIGIN,
+} from '../../workers/notifier-gate/origin.mjs';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -91,7 +100,54 @@ function makeLicenseKey(suffix) {
   return `LK${'x'.repeat(40)}${suffix}`;
 }
 
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
 async function run() {
+  section('公開オリジン — 4か所でずれていないこと');
+
+  {
+    /*
+     * 実行環境が違うため import で共有できない値を、テストで縛る。
+     * どこか1か所だけ書き換えたら、ここで落ちる。
+     */
+    check(
+      '正本は workers.dev の既定ドメイン',
+      NOTIFIER_GATE_ORIGIN === 'https://notifier-gate.potenitas-lp.workers.dev',
+      NOTIFIER_GATE_ORIGIN,
+    );
+    check('末尾にスラッシュを付けない', NOTIFIER_GATE_ORIGIN.endsWith('/') === false);
+
+    for (const entry of GATE_ORIGIN_FILES) {
+      const text = readFileSync(join(REPO_ROOT, entry.path), 'utf8');
+
+      check(
+        `${entry.path} が正本と一致している`,
+        text.includes(NOTIFIER_GATE_ORIGIN),
+        entry.note,
+      );
+
+      for (const forbidden of FORBIDDEN_GATE_ORIGINS) {
+        check(
+          `${entry.path} に古い公開先（${forbidden}）が残っていない`,
+          text.includes(forbidden) === false,
+        );
+      }
+
+      /*
+       * 別の workers.dev サブドメインが紛れ込んでいないか。
+       * 「サービス名を変えたのに1か所だけ直し忘れた」を捕まえる。
+       */
+      const others = (text.match(/https:\/\/[\w.-]+\.workers\.dev/g) || [])
+        .filter((found) => found !== NOTIFIER_GATE_ORIGIN);
+
+      check(
+        `${entry.path} に別の workers.dev URL が無い`,
+        others.length === 0,
+        others.join(','),
+      );
+    }
+  }
+
   section('判定 — 要件書 §6 の順序');
 
   {
@@ -684,7 +740,7 @@ async function run() {
 
     function post(path, body, headers = {}) {
       return worker.fetch(
-        new Request(`https://api.potenitas.com${path}`, {
+        new Request(`https://notifier-gate.potenitas-lp.workers.dev${path}`, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8', ...headers },
           body: JSON.stringify(body),
@@ -694,19 +750,19 @@ async function run() {
     }
 
     {
-      const response = await worker.fetch(new Request('https://api.potenitas.com/v1/health'), env);
+      const response = await worker.fetch(new Request('https://notifier-gate.potenitas-lp.workers.dev/v1/health'), env);
       const body = await response.json();
       check('health は版を返す', response.status === 200 && body.ok === true && typeof body.version === 'string', JSON.stringify(body));
       check('health に予定の情報は無い', Object.keys(body).join(',') === 'ok,version', Object.keys(body).join(','));
     }
 
     {
-      const response = await worker.fetch(new Request('https://api.potenitas.com/v1/unknown', { method: 'POST', body: '{}' }), env);
+      const response = await worker.fetch(new Request('https://notifier-gate.potenitas-lp.workers.dev/v1/unknown', { method: 'POST', body: '{}' }), env);
       check('未知のパスは 404', response.status === 404);
     }
 
     {
-      const response = await worker.fetch(new Request('https://api.potenitas.com/v1/evaluate'), env);
+      const response = await worker.fetch(new Request('https://notifier-gate.potenitas-lp.workers.dev/v1/evaluate'), env);
       check('evaluate への GET は 405', response.status === 405);
     }
 
@@ -832,7 +888,7 @@ async function run() {
       check('licenseKey が無ければ 401', response.status === 401);
 
       const broken = await worker.fetch(
-        new Request('https://api.potenitas.com/v1/evaluate', { method: 'POST', body: 'これは JSON ではない' }),
+        new Request('https://notifier-gate.potenitas-lp.workers.dev/v1/evaluate', { method: 'POST', body: 'これは JSON ではない' }),
         env,
       );
       check('本文が JSON でなければ 400', broken.status === 400);
@@ -840,7 +896,7 @@ async function run() {
 
     {
       const response = await worker.fetch(
-        new Request('https://api.potenitas.com/v1/evaluate', {
+        new Request('https://notifier-gate.potenitas-lp.workers.dev/v1/evaluate', {
           method: 'OPTIONS',
           headers: { Origin: 'https://tsam-ai.com' },
         }),

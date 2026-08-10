@@ -34,16 +34,21 @@
 	 */
 
 	/*
-	 * 公開先。
+	 * 公開先は workers.dev の既定ドメイン（2026-08-10 決定）。
 	 *
-	 * potenitas.com のゾーンを Cloudflare へ追加したうえで、
-	 * Custom Domain として割り当てる。**ゾーンが未追加のまま deploy すると
-	 * ここで失敗する。** その場合は一時的にこの routes を外して
-	 * workers.dev で動かし、ゾーン追加後に戻すこと（README.md §5）。
+	 *   https://notifier-gate.potenitas-lp.workers.dev
+	 *   （= https://<name>.<アカウントのサブドメイン>.workers.dev）
+	 *
+	 * 当初は独自ドメインのサブドメインを充てる案だったが、ゾーンの追加を
+	 * 待たずに出せることを優先した（MVP 方針）。URL の正本は
+	 * workers/notifier-gate/origin.mjs にあり、参照する4か所の一致は
+	 * tests/unit/notifier-gate.mjs が検査する。
+	 *
+	 * **routes は書かない。** Custom Domain を後から足しても workers.dev の
+	 * URL は並行して有効なままなので、移行時に既存利用者の再セットアップは
+	 * 要らない（README.md §8）。
 	 */
-	"routes": [
-		{ "pattern": "api.potenitas.com", "custom_domain": true }
-	],
+	"workers_dev": true,
 
 	/*
 	 * ライセンス判定のキャッシュとレート制限のカウンタ。
