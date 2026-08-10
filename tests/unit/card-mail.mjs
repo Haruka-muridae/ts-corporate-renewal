@@ -1,72 +1,68 @@
 /*
- * 名刺メール配信API（lib/card-mail/）の検証。
+ * 名刺メール配信アプリ（public/production-app/card-mail/）の検証。
  *
  * ==================================================================
  * 特に確かめること
  * ==================================================================
- *   - 宛先の検証と重複排除（OCR由来の壊れたアドレスを送信前に止める）
- *   - 不正な宛先が1件でもあれば全体を止め、どれが不正かを返すこと
+ *   - 宛先の検証と重複排除（OCR由来の壊れたアドレスを送信対象にしない）
+ *   - 100件ずつの分割と、途中失敗時に「どこまで送れたか」が分かること
  *   - BCCヘッダーに改行を差し込めないこと（メールヘッダーインジェクション）
- *   - BCCが長くてもヘッダー1行が RFC 5322 の998文字を超えないこと
- *   - 分割送信の境界（90件/通）と、途中失敗時に送信済み件数が分かること
- *   - APIトークンの照合（一致・不一致・未設定は全拒否）
- *   - 資格情報が例外メッセージへ漏れないこと
+ *   - BCCが100件でもヘッダー1行が RFC 5322 の998文字を超えないこと
+ *   - To・From を付けないこと（宛先を晒さない・送信者はGmailが入れる）
+ *   - 台帳の解決が**検索だけ**で、見つからなくても作らないこと
+ *   - メール列を見出しから探し、その列だけを読むこと
+ *   - drive.file と gmail.send の**両方**の付与を検証すること
+ *   - トークンが例外・画面用文言に漏れないこと
  * ==================================================================
+ *
+ * ブラウザ用モジュールを Node からそのまま import する（card-ocr の
+ * テストと同じやり方）。TextEncoder と btoa は Node にもある。
  */
 
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 
 import {
-  MAX_RECIPIENTS_PER_REQUEST,
   BCC_BATCH_SIZE,
+  DATA_TAB_NAME,
+  EMAIL_COLUMN_HEADER,
+  GMAIL_SEND_ENDPOINT,
+  REQUIRED_SCOPES,
+} from '../../public/production-app/card-mail/config.js';
+
+import {
+  chunkRecipients,
   isValidEmail,
   normalizeRecipients,
-  parseSendRequest,
-  chunkRecipients,
-  extractBearerToken,
-  tokenEquals,
-  sendBulkMail,
-} from '../../lib/card-mail/bulk.mjs';
+} from '../../public/production-app/card-mail/recipients.js';
 
-import { buildBccHeader, buildRawMessage } from '../../lib/card-mail/gmail.mjs';
+import {
+  base64FromUtf8,
+  buildBccHeader,
+  buildRawMessage,
+  encodeHeaderWord,
+  sendAllBatches,
+  toBase64Url,
+} from '../../public/production-app/card-mail/mail.js';
 
-import { apiToken, gmailConfig } from '../../lib/card-mail/config.mjs';
+import {
+  LedgerError,
+  LedgerErrorCode,
+  columnLetter,
+  findEmailColumnIndex,
+  isFileId,
+  quoteTabTitle,
+  readEmailColumn,
+  resolveLedger,
+} from '../../public/production-app/card-mail/ledger.js';
 
-const CREDENTIALS = { clientId: 'c', clientSecret: 's', refreshToken: 'r' };
+import { hasRequiredScopes } from '../../public/production-app/card-mail/drive-auth.js';
 
-/* Gmail API の偽物。トークン発行と送信を受け、送信内容を記録する。 */
-function buildFetchStub({ failAtSendCall = Infinity } = {}) {
-  const sentPayloads = [];
-  let sendCalls = 0;
+const many = (count) => Array.from({ length: count }, (_, i) => `user${i}@example.com`);
 
-  const fetchImpl = async (url, options) => {
-    if (String(url).includes('oauth2.googleapis.com')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ access_token: 'ya29.test-token' }),
-      };
-    }
-
-    sendCalls += 1;
-
-    if (sendCalls >= failAtSendCall) {
-      return { ok: false, status: 429, json: async () => ({}) };
-    }
-
-    const raw = JSON.parse(options.body).raw;
-    /* base64url を base64 に戻して復号する。 */
-    const base64 = raw.replace(/-/g, '+').replace(/_/g, '/');
-    sentPayloads.push(Buffer.from(base64, 'base64').toString('utf8'));
-
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ id: `msg-${sendCalls}`, threadId: `thread-${sendCalls}` }),
-    };
-  };
-
-  return { fetchImpl, sentPayloads };
+/* base64url を復号する（Gmail へ渡る raw の中身を検査するため）。 */
+function decodeRaw(raw) {
+  const base64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(base64, 'base64').toString('utf8');
 }
 
 try {
@@ -74,7 +70,7 @@ try {
   section('メールアドレスの検証');
 
   check('普通のアドレスを通す', isValidEmail('taro@example.com'));
-  check('サブドメインを通す', isValidEmail('taro.yamada+tag@mail.example.co.jp'));
+  check('サブアドレス付きを通す', isValidEmail('taro.yamada+tag@mail.example.co.jp'));
   check('@なしを弾く', !isValidEmail('example.com'));
   check('TLDなしを弾く', !isValidEmail('taro@localhost'));
   check('空白入りを弾く', !isValidEmail('taro @example.com'));
@@ -92,7 +88,6 @@ try {
       'taro@EXAMPLE.com',
       'hanako@example.jp',
       'こわれた宛先',
-      '',
     ]);
 
     check('前後の空白を落とす', result.recipients.includes('Taro@example.com'));
@@ -100,97 +95,32 @@ try {
       JSON.stringify(result.recipients));
     check('最初に現れた表記を送信に使う', result.recipients[0] === 'Taro@example.com');
     check('重複の件数を数える', result.duplicateCount === 1);
-    check('不正な宛先を原形のまま集める',
-      result.invalid.length === 2 && result.invalid.includes('こわれた宛先'),
+    check('不正な宛先を原形のまま集める（利用者に見せるため）',
+      result.invalid.length === 1 && result.invalid[0] === 'こわれた宛先',
       JSON.stringify(result.invalid));
   }
 
   /* ---------------------------------------------------------------- */
-  section('リクエストの検証');
+  section('分割の境界（要件: 100件ずつ）');
 
-  const VALID_BODY = {
-    subject: 'ご挨拶',
-    text: '本文です。',
-    recipients: ['taro@example.com', 'hanako@example.jp'],
-  };
-
-  {
-    const parsed = parseSendRequest(VALID_BODY);
-    check('正しい本文を通す', parsed.recipients.length === 2 && parsed.subject === 'ご挨拶');
-    check('dryRun の既定は false', parsed.dryRun === false);
-    check('replyTo の既定は null', parsed.replyTo === null);
-  }
-
-  check('dryRun: true を読み取る',
-    parseSendRequest({ ...VALID_BODY, dryRun: true }).dryRun === true);
-
-  /* 「truthyなら有効」にしない。文字列 "false" が有効扱いになる事故を防ぐ。 */
-  check('dryRun が真偽値でなければ無効扱い',
-    parseSendRequest({ ...VALID_BODY, dryRun: 'true' }).dryRun === false);
-
-  function rejects(body, fragment) {
-    try {
-      parseSendRequest(body);
-      return false;
-    } catch (error) {
-      return error instanceof TypeError && error.message.includes(fragment);
-    }
-  }
-
-  check('オブジェクト以外を弾く', rejects(null, 'JSON') && rejects([], 'JSON'));
-  check('件名なしを弾く', rejects({ ...VALID_BODY, subject: ' ' }, '件名'));
-  check('本文なしを弾く', rejects({ ...VALID_BODY, text: '' }, '本文'));
-  check('宛先なしを弾く', rejects({ ...VALID_BODY, recipients: [] }, '宛先'));
-  check('宛先の上限超過を弾く',
-    rejects(
-      { ...VALID_BODY, recipients: Array.from({ length: MAX_RECIPIENTS_PER_REQUEST + 1 }, (_, i) => `u${i}@ex.jp`) },
-      '多すぎます',
-    ));
-  check('不正な replyTo を弾く', rejects({ ...VALID_BODY, replyTo: 'こわれた' }, '返信先'));
-
-  {
-    let caught = null;
-
-    try {
-      parseSendRequest({ ...VALID_BODY, recipients: ['taro@example.com', 'こわれた宛先'] });
-    } catch (error) {
-      caught = error;
-    }
-
-    check('不正な宛先が混ざると全体を止める', caught instanceof TypeError);
-    check('どの宛先が不正かを例外に載せる',
-      caught !== null && Array.isArray(caught.invalidRecipients)
-        && caught.invalidRecipients.includes('こわれた宛先'),
-      JSON.stringify(caught?.invalidRecipients));
-  }
+  check('1通の宛先数は100（無償Gmailの1通100宛先に、Toなしで収まる）',
+    BCC_BATCH_SIZE === 100);
+  check('100件は1通', chunkRecipients(many(100)).length === 1);
+  check('101件は2通', chunkRecipients(many(101)).length === 2);
+  check('250件は3通（100/100/50）',
+    chunkRecipients(many(250)).map((c) => c.length).join(',') === '100,100,50');
+  check('分割しても全宛先が残る', chunkRecipients(many(250)).flat().length === 250);
 
   /* ---------------------------------------------------------------- */
-  section('分割の境界');
+  section('メッセージの組み立て');
 
-  const many = (count) => Array.from({ length: count }, (_, i) => `user${i}@example.com`);
-
-  check('90件は1通', chunkRecipients(many(BCC_BATCH_SIZE)).length === 1);
-  check('91件は2通', chunkRecipients(many(BCC_BATCH_SIZE + 1)).length === 2);
-  check('分割しても全宛先が残る',
-    chunkRecipients(many(200)).flat().length === 200);
-
-  /* ---------------------------------------------------------------- */
-  section('APIトークンの照合');
-
-  check('Bearer トークンを取り出す', extractBearerToken('Bearer abc123') === 'abc123');
-  check('Bearer 以外の形式は null', extractBearerToken('Basic abc123') === null);
-  check('ヘッダーなしは null', extractBearerToken(null) === null);
-
-  check('一致するトークンを通す', tokenEquals('secret-token', 'secret-token'));
-  check('不一致を弾く', !tokenEquals('secret-tokem', 'secret-token'));
-  check('長さ違いを弾く', !tokenEquals('secret', 'secret-token'));
-  check('期待値が空なら常に拒否（未設定＝全拒否）', !tokenEquals('', '') && !tokenEquals('x', ''));
-
-  /* ---------------------------------------------------------------- */
-  section('BCCヘッダーの組み立て');
-
-  check('Bcc ヘッダーを組み立てる',
-    buildBccHeader(['a@ex.jp', 'b@ex.jp']).startsWith('Bcc: a@ex.jp'));
+  check('日本語をUTF-8でbase64にする',
+    Buffer.from(base64FromUtf8('こんにちは'), 'base64').toString('utf8') === 'こんにちは');
+  check('base64url に + / = が現れない', !/[+/=]/.test(toBase64Url('日本語テキスト???>>>')));
+  check('ASCIIだけの件名はそのまま', encodeHeaderWord('Hello') === 'Hello');
+  check('日本語の件名は encoded-word になる', encodeHeaderWord('ご挨拶').startsWith('=?UTF-8?B?'));
+  check('encoded-word は1語75文字以内',
+    encodeHeaderWord('長い件名'.repeat(30)).split(' ').every((word) => word.length <= 75));
 
   {
     let injected = null;
@@ -206,109 +136,262 @@ try {
 
   {
     const raw = buildRawMessage({
-      from: 'architect@potenitas.com',
-      to: 'architect@potenitas.com',
       subject: 'ご挨拶',
       text: '本文です。',
       bcc: many(BCC_BATCH_SIZE),
     });
 
-    check('BCC付きメッセージに Bcc ヘッダーが入る', raw.includes('Bcc: user0@example.com'));
-    check('全宛先がヘッダーに入る', raw.includes('user89@example.com'));
+    check('Bcc に全宛先が入る',
+      raw.includes('user0@example.com') && raw.includes('user99@example.com'));
+    check('To を付けない（宛先を晒さない）', !/^To:/m.test(raw));
+    check('From を付けない（Gmailが本人のアドレスを入れる）', !/^From:/m.test(raw));
     check('どの行も998文字を超えない（RFC 5322）',
       raw.split('\r\n').every((line) => line.length <= 998),
       `最長 ${Math.max(...raw.split('\r\n').map((l) => l.length))} 文字`);
+    check('本文がbase64で入る', raw.includes(base64FromUtf8('本文です。')));
   }
 
-  check('BCCなしなら Bcc ヘッダーを付けない',
-    !buildRawMessage({
-      from: 'a@ex.jp', to: 'b@ex.jp', subject: 's', text: 't',
-    }).includes('Bcc:'));
+  {
+    let subjectInjected = null;
+
+    try {
+      buildRawMessage({ subject: '件名\r\nBcc: x@y.jp', text: '本文', bcc: ['a@ex.jp'] });
+    } catch (error) {
+      subjectInjected = error;
+    }
+
+    check('件名への改行差し込みを止める', subjectInjected instanceof TypeError);
+  }
+
+  check('件名なしを弾く', (() => {
+    try {
+      buildRawMessage({ subject: ' ', text: '本文', bcc: ['a@ex.jp'] });
+      return false;
+    } catch (error) {
+      return error instanceof TypeError;
+    }
+  })());
+
+  check('本文なしを弾く', (() => {
+    try {
+      buildRawMessage({ subject: '件名', text: '', bcc: ['a@ex.jp'] });
+      return false;
+    } catch (error) {
+      return error instanceof TypeError;
+    }
+  })());
+
+  /* ---------------------------------------------------------------- */
+  section('スコープの検証');
+
+  const SCOPE_STRING = REQUIRED_SCOPES.join(' ');
+
+  check('必要な2スコープは drive.file と gmail.send',
+    SCOPE_STRING.includes('drive.file') && SCOPE_STRING.includes('gmail.send')
+      && REQUIRED_SCOPES.length === 2);
+  check('両方付与されていれば通す', hasRequiredScopes({ scope: SCOPE_STRING }));
+  check('drive.file だけでは弾く（読めるのに送れない事故を防ぐ）',
+    !hasRequiredScopes({ scope: REQUIRED_SCOPES[0] }));
+  check('gmail.send だけでは弾く',
+    !hasRequiredScopes({ scope: REQUIRED_SCOPES[1] }));
+  check('scope が無ければ弾く', !hasRequiredScopes({}));
+
+  /* ---------------------------------------------------------------- */
+  section('台帳の解決（検索のみ・作らない）');
+
+  check('列番号をA1記法にする（0→A、26→AA）',
+    columnLetter(0) === 'A' && columnLetter(25) === 'Z' && columnLetter(26) === 'AA');
+  check("タブ名の ' を '' にする", quoteTabTitle("名刺'データ") === "'名刺''データ'");
+  check('ファイルIDの形を検査する',
+    isFileId('abcDEF123456789_-x') && !isFileId('short') && !isFileId(null));
+
+  check('見出しからメール列を探す',
+    findEmailColumnIndex(['record_id', '氏名', EMAIL_COLUMN_HEADER, 'URL']) === 2);
+  check('見出しの前後空白は許す',
+    findEmailColumnIndex([` ${EMAIL_COLUMN_HEADER} `]) === 0);
+  check('似た別の見出しは採らない（誤読は「見つからない」より深刻）',
+    findEmailColumnIndex(['メール', 'メールアドレス2']) === -1);
+
+  /* Drive/Sheets の偽物。検索と読み取りだけ応答し、呼び出しを記録する。 */
+  function buildDriveStub({ folders = {}, sheetId = null, header = [], column = [] } = {}) {
+    const calls = [];
+
+    const fetchImpl = async (url, options = {}) => {
+      const urlText = String(url);
+      calls.push({ url: urlText, method: options.method ?? 'GET' });
+
+      const json = (body) => ({ ok: true, status: 200, json: async () => body });
+
+      if (urlText.startsWith('https://www.googleapis.com/drive/v3/files?')) {
+        const q = new URL(urlText).searchParams.get('q') ?? '';
+
+        for (const [name, entry] of Object.entries(folders)) {
+          if (q.includes(`name='${name}'`)) {
+            return json({ files: entry ? [{ id: entry }] : [] });
+          }
+        }
+
+        if (q.includes("name='名刺管理'")) {
+          return json({ files: sheetId ? [{ id: sheetId }] : [] });
+        }
+
+        return json({ files: [] });
+      }
+
+      if (urlText.includes('sheets.googleapis.com')) {
+        if (urlText.includes(encodeURIComponent('1:1'))) {
+          return json({ values: [header] });
+        }
+
+        return json({ values: column.map((value) => [value]) });
+      }
+
+      return { ok: false, status: 404, json: async () => ({}) };
+    };
+
+    return { fetchImpl, calls };
+  }
+
+  {
+    const stub = buildDriveStub({
+      folders: { 'TSAM AI': 'root-folder-id', '名刺データ': 'app-folder-id' },
+      sheetId: 'sheet-id-123456',
+    });
+
+    const id = await resolveLedger({ token: 'ya29.secret-token', fetchImpl: stub.fetchImpl });
+
+    check('TSAM AI／名刺データ／名刺管理 の順で解決する', id === 'sheet-id-123456');
+    check('作成のPOSTを一度も発行しない（読み取り専用）',
+      stub.calls.every((call) => call.method === 'GET'),
+      JSON.stringify(stub.calls.map((c) => c.method)));
+  }
+
+  {
+    const stub = buildDriveStub({
+      folders: { 'TSAM AI': 'root-folder-id', '名刺データ': null },
+    });
+
+    let missing = null;
+
+    try {
+      await resolveLedger({ token: 'ya29.secret-token', fetchImpl: stub.fetchImpl });
+    } catch (error) {
+      missing = error;
+    }
+
+    check('台帳が無ければ LEDGER_NOT_FOUND（作らない）',
+      missing instanceof LedgerError && missing.code === LedgerErrorCode.LEDGER_NOT_FOUND);
+    check('例外にトークンを含めない',
+      missing !== null && !`${missing.message} ${missing.detail}`.includes('ya29'));
+  }
+
+  {
+    const stub = buildDriveStub({
+      header: ['record_id', '氏名', EMAIL_COLUMN_HEADER],
+      column: [' taro@example.com ', '', 'hanako@example.jp'],
+    });
+
+    const values = await readEmailColumn('sheet-id-123456', { token: 't', fetchImpl: stub.fetchImpl });
+
+    check('メール列の値を上から順に読む（空セルは除く）',
+      values.join(',') === 'taro@example.com,hanako@example.jp', JSON.stringify(values));
+
+    const columnCall = stub.calls.find((call) => call.url.includes(encodeURIComponent('C2:C')));
+    check('見出しで見つけた列（C列）だけを読む（他の個人情報の列を取得しない）',
+      Boolean(columnCall), stub.calls.map((c) => c.url).join('\n'));
+    check('タブ名は名刺データ',
+      stub.calls.some((call) => call.url.includes(encodeURIComponent(`'${DATA_TAB_NAME}'`))));
+  }
+
+  {
+    const stub = buildDriveStub({ header: ['record_id', '氏名'] });
+
+    let noColumn = null;
+
+    try {
+      await readEmailColumn('sheet-id-123456', { token: 't', fetchImpl: stub.fetchImpl });
+    } catch (error) {
+      noColumn = error;
+    }
+
+    check('メール列が無ければ COLUMN_NOT_FOUND',
+      noColumn instanceof LedgerError && noColumn.code === LedgerErrorCode.COLUMN_NOT_FOUND);
+  }
 
   /* ---------------------------------------------------------------- */
   section('一斉送信の実行');
 
-  {
-    const { fetchImpl, sentPayloads } = buildFetchStub();
+  /* Gmail API の偽物。送信内容を記録し、指定した通で失敗させられる。 */
+  function buildGmailStub({ failAtCall = Infinity } = {}) {
+    const sent = [];
+    let calls = 0;
 
-    const result = await sendBulkMail({
-      subject: 'ご挨拶',
-      text: '本文です。',
-      recipients: many(200),
-      from: 'architect@potenitas.com',
-      credentials: CREDENTIALS,
-      fetchImpl,
-    });
+    const fetchImpl = async (url, options = {}) => {
+      if (String(url) !== GMAIL_SEND_ENDPOINT) {
+        return { ok: false, status: 404, json: async () => ({}) };
+      }
 
-    check('200件は3通に分かれる', result.batches.length === 3,
-      JSON.stringify(result.batches));
-    check('送信済み件数が全宛先数に一致する', result.sentCount === 200);
-    check('通ごとの宛先数が 90/90/20 になる',
-      result.batches.map((b) => b.recipientCount).join(',') === '90,90,20');
-    check('メッセージIDが記録される', result.batches[0].messageId === 'msg-1');
-    check('To が送信元自身になる（宛先を晒さない）',
-      sentPayloads.every((p) => p.includes('To: architect@potenitas.com')));
-    check('各通に宛先がBCCで入る',
-      sentPayloads[0].includes('user0@example.com')
-        && sentPayloads[2].includes('user199@example.com'));
+      calls += 1;
+
+      if (calls >= failAtCall) {
+        return { ok: false, status: 429, json: async () => ({}) };
+      }
+
+      sent.push(decodeRaw(JSON.parse(options.body).raw));
+
+      return { ok: true, status: 200, json: async () => ({ id: `msg-${calls}` }) };
+    };
+
+    return { fetchImpl, sent };
   }
 
   {
-    const { fetchImpl } = buildFetchStub({ failAtSendCall: 2 });
+    const stub = buildGmailStub();
+    const chunks = chunkRecipients(many(250));
+    const progress = [];
+
+    const result = await sendAllBatches({
+      subject: 'ご挨拶',
+      text: '本文です。',
+      chunks,
+      token: 'ya29.secret-token',
+      fetchImpl: stub.fetchImpl,
+      onProgress: (done, total) => progress.push(`${done}/${total}`),
+    });
+
+    check('250件は3通で送られる', result.batchCount === 3 && stub.sent.length === 3);
+    check('送信済み件数が全宛先数に一致する', result.sentCount === 250);
+    check('1通目に user0、3通目に user249 が入る',
+      stub.sent[0].includes('user0@example.com') && stub.sent[2].includes('user249@example.com'));
+    check('進捗が通ごとに知らされる', progress.join(' ') === '0/3 1/3 2/3 3/3', progress.join(' '));
+  }
+
+  {
+    const stub = buildGmailStub({ failAtCall: 3 });
+    const chunks = chunkRecipients(many(250));
     let failure = null;
 
     try {
-      await sendBulkMail({
+      await sendAllBatches({
         subject: 'ご挨拶',
         text: '本文です。',
-        recipients: many(200),
-        from: 'architect@potenitas.com',
-        credentials: CREDENTIALS,
-        fetchImpl,
+        chunks,
+        token: 'ya29.secret-token',
+        fetchImpl: stub.fetchImpl,
       });
     } catch (error) {
       failure = error;
     }
 
     check('途中失敗を例外にする', failure instanceof Error);
-    check('送信済み件数が例外に載る（1通目の90件）', failure?.sentCount === 90,
+    check('送信済みの通数が例外に載る（3通中2通）', failure?.batchesDone === 2,
+      String(failure?.batchesDone));
+    check('送信済みの件数が例外に載る（200件）', failure?.sentCount === 200,
       String(failure?.sentCount));
-    check('例外メッセージで進捗が分かる', failure?.message.includes('90 件'));
-    check('例外に資格情報とトークンを含めない',
+    check('例外にトークンを含めない',
       failure !== null
-        && !failure.message.includes('ya29.test-token')
-        && !failure.message.includes(CREDENTIALS.clientSecret));
-  }
-
-  /* ---------------------------------------------------------------- */
-  section('環境変数の読み取り');
-
-  {
-    /* このスイートは別プロセスで走るため、process.env を直接書き換えてよい。 */
-    process.env.CARD_MAIL_API_TOKEN = '\ufeff token-with-bom \n';
-    check('BOMと前後空白を落とす', apiToken() === 'token-with-bom');
-
-    delete process.env.CARD_MAIL_API_TOKEN;
-
-    let missing = null;
-
-    try {
-      apiToken();
-    } catch (error) {
-      missing = error;
-    }
-
-    check('未設定なら変数名入りの例外にする',
-      missing instanceof Error && missing.message.includes('CARD_MAIL_API_TOKEN'));
-
-    process.env.GOOGLE_CLIENT_ID = 'cid';
-    process.env.GOOGLE_CLIENT_SECRET = 'csec';
-    process.env.GMAIL_REFRESH_TOKEN = 'rtok';
-    process.env.MAIL_FROM = 'architect@potenitas.com';
-
-    const config = gmailConfig();
-    check('Gmail の設定を組み立てる',
-      config.from === 'architect@potenitas.com' && config.credentials.clientId === 'cid');
+        && !`${failure.message} ${failure.cause?.message ?? ''} ${failure.cause?.detail ?? ''}`
+          .includes('ya29.secret-token'));
   }
 
   finish();

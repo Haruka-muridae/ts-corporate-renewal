@@ -20,7 +20,6 @@
 | [receipt-ocr-v2.md](./receipt-ocr-v2.md) | 領収書スキャナ（`public/production-app/receipt-ocr/`。アプリID `receipt-ocr`）。利用者のドライブに保存し、当社サーバーを通さない | v2.0（ドラフト） |
 | [receipt-ocr-v1.3.md](./receipt-ocr-v1.3.md) | 上の前身。**抽出・検証の仕様（10・11・13・14・15・16.1・18.2章）は現役**で、v2.0 がここを参照する | v1.3 |
 | [short-script-spec-v1.md](./short-script-spec-v1.md) | ショート動画 台本メーカー（`public/production-app/short-script/`。アプリID `short-script`）。テーマ/貼り付け/セグメントから台本を作り、ローカル補助サービスで音声・動画化 | v1.4 |
-| [card-mail-api-v1.md](./card-mail-api-v1.md) | 名刺メール配信API（`app/api/card-mail/` ＋ `lib/card-mail/`）。保存済み名刺の宛先へBCCで一斉送信するサーバーAPI | v1.0 |
 
 > `receipt-ocr-v1.3.md` にはサーバー（GAS）前提の記述が残っています。
 > **アーキテクチャは v2.0 が正**であり、v1.3 のうち参照してよいのは
@@ -44,7 +43,7 @@
 | 要件定義書 | 対象範囲 | 版 |
 | --- | --- | --- |
 | [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.5 |
-| [card-mail-requirements-v1.md](./card-mail-requirements-v1.md) | 名刺メール配信APIの背景・仕組み・運用手順。**例外的に実装済みの機能に対する文書**で、細部（リクエスト形式・制限値）の正は上の仕様書 [card-mail-api-v1.md](./card-mail-api-v1.md)。食い違う場合は仕様書が正 | v1.0 |
+| [card-mail-requirements-v1.md](./card-mail-requirements-v1.md) | 名刺メール配信アプリ（`public/production-app/card-mail/`。アプリID `card-mail`）。名刺OCRの台帳から宛先を読み、利用者自身のGmailからBCCで一斉送信する | v1.1 |
 
 要件定義書も**実装の正**です。上の仕様書と同じく、コードと食い違う場合は
 コードのほうが間違っているとみなします。
