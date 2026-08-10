@@ -38,6 +38,7 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 | `/`、`/apps/`、`/legal/`、`/login/`、`/portal/`、`/pricing/` など | `public/` 配下の静的HTML（ビルドしない従来サイト） |
 | `/event/` | `public/event/index.html`（静的のまま） |
 | `/event/apply/` 以降、`/event/admin/`、`/event/api/` | Next.js のルート（`app/event/`） |
+| `/api/card-mail/` | Next.js のルート（`app/api/card-mail/`。名刺メール配信API。仕様は [docs/specs/card-mail-api-v1.md](docs/specs/card-mail-api-v1.md)、部品は `lib/card-mail/`） |
 
 [next.config.ts](next.config.ts) の要点は次の2つ。どちらも過去に実害が出た結果なので、変更前にファイル冒頭のコメントを読むこと。
 
@@ -74,6 +75,10 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 
 - マイグレーションは [supabase/migrations/](supabase/migrations/) にあり、Supabase CLI（`supabase db push`）で適用する。ダッシュボードのSQL Editorは使わない。**適用済みのファイルは編集せず、新しいマイグレーションを追加する。**
 - 全表で RLS を有効にし、ポリシーを1つも作っていない。加えてテーブル権限を `service_role` にのみ付与している（権限判定は RLS より前に走るため、これが無いと service_role でも permission denied になる）。読み書きは必ずサーバー側を通る。
+
+## 名刺メール配信API（`app/api/card-mail/` + `lib/card-mail/`）
+
+保存済み名刺の宛先へBCCで一斉送信するサーバーAPI。仕様は [docs/specs/card-mail-api-v1.md](docs/specs/card-mail-api-v1.md)。交流会アプリと同じ流儀（`.mjs` + `.d.mts`、外部SDKなし、環境変数は `lib/card-mail/config.mjs` 経由）だが、**`lib/event/` とは相互に import しない**（複製）。サーバーは名刺台帳（利用者のスプレッドシート）を読めないため、宛先はリクエストで受け取る。認証は `CARD_MAIL_API_TOKEN`（未設定なら全拒否）。テストは `tests/unit/card-mail.mjs`。
 
 ## 生成物・退避物（手で編集しない／デプロイされない）
 
