@@ -53,6 +53,7 @@ const SUITES = [
   { name: 'receipt-ocr-phase3', file: 'unit/receipt-ocr-phase3.mjs', kind: 'unit' },
   { name: 'receipt-ocr-review', file: 'unit/receipt-ocr-review.mjs', kind: 'unit' },
   { name: 'card-ocr', file: 'unit/card-ocr.mjs', kind: 'unit' },
+  { name: 'card-mail', file: 'unit/card-mail.mjs', kind: 'unit' },
   { name: 'voice-recorder', file: 'unit/voice-recorder.mjs', kind: 'unit' },
   { name: 'voice-recorder-notifier', file: 'unit/voice-recorder-notifier.mjs', kind: 'unit' },
   { name: 'notifier-gate', file: 'unit/notifier-gate.mjs', kind: 'unit' },
@@ -60,6 +61,7 @@ const SUITES = [
   { name: 'notifier-template', file: 'unit/notifier-template.mjs', kind: 'unit' },
   { name: 'short-script-companion', file: 'unit/short-script-companion.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
+  { name: 'browser:card-mail', file: 'browser/card-mail.mjs', kind: 'browser' },
 ];
 
 const mode = process.argv[2] ?? 'all';

@@ -75,6 +75,10 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 - マイグレーションは [supabase/migrations/](supabase/migrations/) にあり、Supabase CLI（`supabase db push`）で適用する。ダッシュボードのSQL Editorは使わない。**適用済みのファイルは編集せず、新しいマイグレーションを追加する。**
 - 全表で RLS を有効にし、ポリシーを1つも作っていない。加えてテーブル権限を `service_role` にのみ付与している（権限判定は RLS より前に走るため、これが無いと service_role でも permission denied になる）。読み書きは必ずサーバー側を通る。
 
+## 名刺メール配信アプリ（`public/production-app/card-mail/`）
+
+名刺OCRの台帳「名刺管理」から宛先を読み、**利用者自身のGmail**からBCCで一斉送信するブラウザ完結アプリ（サーバーコードなし）。要件は [docs/specs/card-mail-requirements-v1.md](docs/specs/card-mail-requirements-v1.md)。card-ocr と**同じクライアントIDを意図的に共用**する（drive.file はクライアントIDごとに見える範囲が分かれ、card-ocr が作った台帳を読むには同じIDが要る）。スコープは `drive.file` + `gmail.send` の2つのみで、**台帳は読むだけ・作らない・書かない**。トークンはメモリ上のみ。公開前に Google Cloud 側で gmail.send スコープの追加と審査が必要（同要件書 §6）。テストは `tests/unit/card-mail.mjs`。
+
 ## 生成物・退避物（手で編集しない／デプロイされない）
 
 - `public/legal/{terms,privacy,tokusho}/index.html` は**スプレッドシート「TSAM AI 法務文書」からの生成物**。手編集は次の `publishLegalDocs()` で失われる。条文はスプレッドシートを直す。手編集を含む変更はレビューで差し戻す（[docs/specs/legal-cms-spec-v1.md](docs/specs/legal-cms-spec-v1.md)）。`docs/legal-source/*.md` は初期移行の原本で現在の正ではない。

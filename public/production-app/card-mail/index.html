@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>名刺メール配信｜TSAM AI</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy（card-ocr と同じ meta 方式）
+  ==================================================================
+  next.config.ts の headers() ではなく meta で宣言する。
+  next.config.ts は public/ 全体の配信に効くため、このアプリのために
+  触ると本体サイトを巻き込む。
+
+  connect-src はこのアプリの通信先そのもの:
+    www.googleapis.com     … Drive（台帳の検索・検証）
+    sheets.googleapis.com  … Sheets（メール列の読み取り）
+    gmail.googleapis.com   … Gmail（送信）
+    script.google.com / script.googleusercontent.com … TSAM AI 認証系
+  **ここへ他のホストを足さないこと**（要件定義書 §12）。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self'; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://gmail.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../css/style.css">
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <!--
+      guardPage() が利用者を返すまで中身を出さない。
+      hidden を外すのは app.js だけ。
+    -->
+    <p id="cm-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="cm-content" hidden>
+
+      <header class="cm-header">
+        <h1 class="cm-title">名刺メール配信</h1>
+        <p class="cm-lead">
+          名刺OCRで保存した宛先へ、<strong>あなた自身のGmail</strong>からBCCで一斉送信します。
+          宛先どうしのアドレスは互いに見えません。
+        </p>
+      </header>
+
+      <!--
+        利用上の明示事項。card-ocr と同じく <details>（既定は閉・任意で開）。
+        JavaScript を書かず、ブラウザ標準の開閉に任せる。
+      -->
+      <details class="cm-panel cm-panel--notice">
+        <summary class="cm-notice-summary">ご利用の前に</summary>
+        <ul class="cm-notice-list">
+          <li>宛先は<strong>あなたのGoogleドライブの「名刺管理」シート</strong>から読み込みます。当社サーバーへは宛先も本文も送信されません。</li>
+          <li>メールは<strong>あなたのGmailアカウントから、あなたの名義で</strong>送信されます。送信済みメールはGmailの「送信済み」に残ります。</li>
+          <li>広告・宣伝を含むメールには、特定電子メール法により<strong>送信者の氏名・名称と、受信拒否の連絡先の表示が義務付けられています</strong>。本文に必ず記載してください。</li>
+          <li>受信拒否の申出があった相手には、以後送信しないでください（名刺管理シート側での管理をおすすめします）。</li>
+          <li>Gmailには1日あたりの送信上限があります。上限を超えるとGoogleにより一時的に送信が止められることがあります。</li>
+          <li>送信したメールは取り消せません。送信前に宛先件数と本文をご確認ください。</li>
+        </ul>
+      </details>
+
+      <!-- 誘導。該当するものだけを1つ出す。中身は app.js が textContent で入れる。 -->
+      <section id="cm-guidance" class="cm-panel cm-panel--guidance" aria-live="polite" hidden>
+        <p id="cm-guidance-text" class="cm-guidance-text"></p>
+        <div class="cm-actions">
+          <button id="cm-connect" type="button" class="auth-button" hidden>Googleと連携する</button>
+        </div>
+      </section>
+
+      <!-- 宛先の読み込み結果。 -->
+      <section id="cm-recipients" class="cm-panel" aria-live="polite" hidden>
+        <h2 class="cm-panel-title">宛先</h2>
+        <p id="cm-recipients-state" class="cm-guidance-text"></p>
+
+        <dl class="cm-status">
+          <dt class="cm-status-label">送信できる宛先</dt>
+          <dd id="cm-count-valid" class="cm-status-value">–</dd>
+          <dt class="cm-status-label">送信通数</dt>
+          <dd id="cm-count-batches" class="cm-status-value">–</dd>
+          <dt class="cm-status-label">重複（1件にまとめ済み）</dt>
+          <dd id="cm-count-duplicates" class="cm-status-value">–</dd>
+          <dt class="cm-status-label">形式が正しくない宛先（送信されません）</dt>
+          <dd id="cm-count-invalid" class="cm-status-value">–</dd>
+        </dl>
+
+        <details id="cm-invalid-panel" class="cm-panel cm-sub" hidden>
+          <summary class="cm-sub-summary">形式が正しくない宛先の一覧</summary>
+          <ul id="cm-invalid-list" class="cm-notice-list"></ul>
+        </details>
+
+        <div class="cm-actions">
+          <button id="cm-reload" type="button" class="auth-button auth-button--ghost">宛先を読み込み直す</button>
+        </div>
+      </section>
+
+      <!-- 件名・本文と送信。 -->
+      <section id="cm-compose" class="cm-panel" hidden>
+        <h2 class="cm-panel-title">メールの内容</h2>
+
+        <div class="cm-field">
+          <label class="cm-field-label" for="cm-subject">件名</label>
+          <input id="cm-subject" class="cm-field-input" type="text" maxlength="250" autocomplete="off">
+        </div>
+
+        <div class="cm-field">
+          <label class="cm-field-label" for="cm-body">本文（テキストメール）</label>
+          <textarea id="cm-body" class="cm-field-input cm-field-textarea" rows="12"></textarea>
+        </div>
+
+        <!--
+          特定電子メール法の表示義務の確認。
+          アプリは本文の中身を検査しない（できない）ため、
+          記載したことを利用者自身に確認してもらう。
+        -->
+        <div class="cm-field cm-field--check">
+          <label class="cm-check-label">
+            <input id="cm-legal-check" type="checkbox">
+            本文に「送信者の氏名・名称」と「受信拒否の連絡先」を記載しました
+          </label>
+        </div>
+
+        <div class="cm-actions">
+          <button id="cm-send" type="button" class="auth-button" disabled>送信する</button>
+        </div>
+      </section>
+
+      <!--
+        進捗と結果・エラーの表示。**どのセクションの中にも入れない。**
+        読み込み失敗の案内（「先に名刺OCRで登録」等）もここへ出るため、
+        「読み込みが成功したときだけ表示される要素」の中に置くと、
+        肝心の失敗時に案内ごと消えてしまう。
+      -->
+      <p id="cm-progress" class="cm-guidance-text" aria-live="polite" hidden></p>
+      <p id="cm-message" class="cm-message" aria-live="polite" hidden></p>
+
+      <div class="cm-actions cm-actions--footer">
+        <button id="cm-disconnect" type="button" class="auth-button auth-button--ghost" hidden>連携を解除する</button>
+        <a class="auth-button auth-button--ghost" href="../../portal/">ポータルへ戻る</a>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
