@@ -1,0 +1,113 @@
+{
+  "cacheName": "short-script-vendor-v1",
+  "generatedAt": "2026-08-10T02:58:22.736Z",
+  "maxAssetBytes": 26214400,
+  "assets": [
+    {
+      "id": "piper-plus.js",
+      "path": "piper/src/index.js",
+      "note": "piper-plus 本体(ESM。相対importで同ディレクトリ内の他ファイルを参照するため単一ファイルではない。src/配下一式を静的配信する代表として登録)",
+      "bytes": 32782,
+      "sha256": "cc5f6b2314311dec073e4d8a20823f16e2e49f8fc88961b177bee3c545273df5",
+      "parts": [
+        {
+          "path": "piper/src/index.js",
+          "bytes": 32782,
+          "sha256": "cc5f6b2314311dec073e4d8a20823f16e2e49f8fc88961b177bee3c545273df5"
+        }
+      ]
+    },
+    {
+      "id": "piper-plus.g2p-wasm",
+      "path": "piper/dist/rust-wasm/piper_plus_wasm_bg.wasm",
+      "note": "Rust製G2P(OpenJTalk+NAIST-JDIC同梱)。25MiB超のため分割対象。",
+      "bytes": 59961638,
+      "sha256": "1b7f004c79305920d2439b2273eb4dd0fd7be03b7a73c25da86f0314658bbb9b",
+      "parts": [
+        {
+          "path": "piper/dist/rust-wasm/piper_plus_wasm_bg.wasm.part1",
+          "bytes": 20971520,
+          "sha256": "c961449d8a558fd11baa4eff5cf0fc95eebd28151ef4dae5c20c4ec9f788957c"
+        },
+        {
+          "path": "piper/dist/rust-wasm/piper_plus_wasm_bg.wasm.part2",
+          "bytes": 20971520,
+          "sha256": "beb7e6e27c01470aac5e71186051f01cf26e2e41130718b23009c13f9755f14e"
+        },
+        {
+          "path": "piper/dist/rust-wasm/piper_plus_wasm_bg.wasm.part3",
+          "bytes": 18018598,
+          "sha256": "4828ad5fd7a38fb6a8d61ddaa10105f0b4b03649581d660bd06bf9a8d70d9837"
+        }
+      ]
+    },
+    {
+      "id": "onnxruntime-web.wasm",
+      "path": "ort/ort-wasm-simd-threaded.wasm",
+      "note": "単スレッドで動作可(§2.2)。COOP/COEP不要。",
+      "bytes": 13479978,
+      "sha256": "d1ab1b94b16a65b29d710d0b587b29e7bed336827577623913479b8afe8113e6",
+      "parts": [
+        {
+          "path": "ort/ort-wasm-simd-threaded.wasm",
+          "bytes": 13479978,
+          "sha256": "d1ab1b94b16a65b29d710d0b587b29e7bed336827577623913479b8afe8113e6"
+        }
+      ]
+    },
+    {
+      "id": "jassub.wasm",
+      "path": "jassub/dist/wasm/jassub-worker.wasm",
+      "note": "libassのwasm移植。modern(SIMD最適化)版は同梱せず標準版のみ採用(逸脱として報告)。",
+      "bytes": 2063740,
+      "sha256": "498432ae31549a37007699fd3cb09a95a359584e09618c7f21c02032d8bd481d",
+      "parts": [
+        {
+          "path": "jassub/dist/wasm/jassub-worker.wasm",
+          "bytes": 2063740,
+          "sha256": "498432ae31549a37007699fd3cb09a95a359584e09618c7f21c02032d8bd481d"
+        }
+      ]
+    },
+    {
+      "id": "noto-sans-jp.font",
+      "path": "fonts/NotoSansJP-Variable.ttf",
+      "note": "Variable Font(1ウェイト運用。既定インスタンスがRegular)。10MB未満のためサブセット化しない(逸脱として報告)。",
+      "bytes": 9589900,
+      "sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+      "parts": [
+        {
+          "path": "fonts/NotoSansJP-Variable.ttf",
+          "bytes": 9589900,
+          "sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f"
+        }
+      ]
+    },
+    {
+      "id": "mediabunny.js",
+      "path": "mediabunny/mediabunny.min.mjs",
+      "note": "単一バンドル。",
+      "bytes": 647081,
+      "sha256": "29cf21f0f46102a63d246a3b0c63f7421ddde93fcbadc20d66b9319d0a508b38",
+      "parts": [
+        {
+          "path": "mediabunny/mediabunny.min.mjs",
+          "bytes": 647081,
+          "sha256": "29cf21f0f46102a63d246a3b0c63f7421ddde93fcbadc20d66b9319d0a508b38"
+        }
+      ]
+    },
+    {
+      "id": "tsukuyomi.model",
+      "path": "model/tsukuyomi-chan-6lang-fp16.onnx",
+      "unavailable": true,
+      "reason": "つくよみちゃんONNXモデルの配布元は Hugging Face(ayousanz/piper-plus-tsukuyomi-chan)のみ。このセッションの egress ポリシーが huggingface.co を全面遮断しており(403 policy denial)、代替配布元(GitHub Releases等)も確認できなかった。偽のバイト列は置かない。"
+    },
+    {
+      "id": "tsukuyomi.model-config",
+      "path": "model/config.json",
+      "unavailable": true,
+      "reason": "tsukuyomi.model と同じ理由(同一リポジトリの config.json)。"
+    }
+  ]
+}

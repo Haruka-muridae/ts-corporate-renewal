@@ -19,6 +19,51 @@
 | `@playwright/test` | npm（devDependency） | `tests/e2e/` のみ | ブラウザ録音アプリの E2E（実マイク入力・OPFS・メモリ計測） | 2026-08-06 |
 | `@opennextjs/cloudflare` / `wrangler` | npm（devDependency） | ビルドとデプロイのみ | 本番配信（Cloudflare Workers）に必要。**既に本番で使われている構成を、設定ごとリポジトリへ入れたもの** | 2026-08-06 |
 | jsrsasign | 公式配布の `jsrsasign-all-min.js`（MIT）。**利用者のApps Scriptプロジェクトへ手で貼る同梱物** | `gas-notifier/lib_jsrsasign.gs` のみ | Web Push の VAPID 署名（ES256 / ECDSA P-256）。Apps Script 標準に ES256 が無い | 2026-08-09 |
+| piper-plus / onnxruntime-web / JASSUB / Mediabunny / Noto Sans JP | npm registry（piper-plus / onnxruntime-web / jassub / mediabunny）・Google Fonts公式GitHub（Noto Sans JP） | `public/production-app/short-script/mobile-lab/`（スマホ完結版 体験試作 M1）のみ | 端末内での音声合成（piper-plus + onnxruntime-web）・字幕ラスタライズ（JASSUB）・MP4多重化（Mediabunny）・字幕フォント（Noto Sans JP）。すべて同梱・同一オリジン配信で、外部CDN・外部APIは使わない | 2026-08-10 |
+
+### 1-5. piper-plus / onnxruntime-web / JASSUB / Mediabunny / Noto Sans JP（スマホ完結版 体験試作 M1）
+
+**承認の範囲**: `public/production-app/short-script/mobile-lab/`（一時検証ページ。
+M2で本体へ統合後に削除予定）に限る。`package.json` の dependencies には足さない
+（`vendor/` へ実物を同梱し、ESモジュールとして同一オリジンから配信する。
+交流会申込アプリと同じ「外部SDKを使わない」方針とは別枠 — こちらは
+サーバーではなくブラウザ内で動くクライアント資産）。
+
+**根拠**: [docs/specs/short-script-mobile-video-plan-v1.md](./specs/short-script-mobile-video-plan-v1.md)
+§2・§4・§5。
+
+**内訳・版・ライセンス・同梱ファイルの詳細**は
+[public/production-app/short-script/vendor/NOTICE.md](../public/production-app/short-script/vendor/NOTICE.md)
+に集約している（5点まとめて記載。整合確認は `npm run check:vendor:short-script-mobile`）。
+概要のみここに記す。
+
+| 依存 | 版 | ライセンス | 用途 |
+| --- | --- | --- | --- |
+| piper-plus | 0.6.0 | MIT（wasm内にOpenJTalk等BSD-3-Clauseが静的リンク） | 日本語TTS本体 |
+| onnxruntime-web | 1.27.0 | MIT | ONNX推論（piper-plusのVITSモデル実行） |
+| JASSUB | 2.5.14 | MIT（wasm内にlibass等LGPL-2.1-or-later等が静的リンク） | ASS字幕のラスタライズ |
+| Mediabunny | 1.53.0 | **MPL-2.0**（本書§4.3で「要確認」としていたものを実物のLICENSEで確認・確定） | MP4への多重化 |
+| Noto Sans JP | Google Fonts配布版（Variable Font） | SIL OFL 1.1 | 字幕フォント |
+
+**つくよみちゃんONNXモデルは未取得**（Hugging Face `ayousanz/piper-plus-tsukuyomi-chan`
+が唯一の配布元だが、この試作の作成環境からは huggingface.co への通信が
+組織のegressポリシーで全面遮断されており取得できなかった）。偽のモデル
+データは同梱していない。詳細と今後の対応は
+[public/production-app/short-script/vendor/NOTICE.md](../public/production-app/short-script/vendor/NOTICE.md)
+の該当項目、および本書の「未解決事項」として記録する。
+
+**制約**:
+
+- 25MiB超のファイル（piper-plusのRust製G2P wasm、約58MB）は機械的な
+  バイト分割で同梱し、`vendor-manifest.json` とブラウザ側の結合ローダーで
+  SHA-256検証してから使う（Cloudflare Workers の静的アセット1ファイル
+  25MiB上限への対処。docs/specs/short-script-mobile-video-plan-v1.md §4.2）。
+- CSPは `mobile-lab/index.html` 専用のmetaで `script-src` に
+  `'wasm-unsafe-eval'`、`worker-src` に `'self' blob:` を追加している。
+  **既存の `short-script/index.html` のCSPは変更していない。**
+- モデル・wasm・フォントのダウンロードは、利用者の明示操作
+  （「音声データを準備する」ボタン）でのみ開始する。画面を開いただけで
+  通信は発生しない。
 
 ### 1-4. jsrsasign（録音アプリのカレンダー通知）
 

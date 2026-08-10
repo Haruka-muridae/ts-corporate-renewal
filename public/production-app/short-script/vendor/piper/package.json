@@ -1,0 +1,97 @@
+{
+  "name": "piper-plus",
+  "version": "0.6.0",
+  "description": "Browser-based multilingual neural TTS with VITS. Supports Japanese, English, Chinese, Korean, Spanish, French, Portuguese, and Swedish.",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./timing": {
+      "types": "./types/index.d.ts",
+      "import": "./src/timing.js"
+    },
+    "./phonemizer": {
+      "import": "./src/phonemizer-compat.js"
+    },
+    "./streaming": {
+      "import": "./src/streaming-pipeline.js"
+    },
+    "./wasm/multilingual": {
+      "import": "./dist/rust-wasm/piper_plus_wasm.js"
+    },
+    "./wasm/ja": {
+      "import": "./dist/rust-wasm-ja/piper_plus_wasm.js"
+    },
+    "./wasm/ja-lite": {
+      "import": "./dist/rust-wasm-ja-lite/piper_plus_wasm.js"
+    }
+  },
+  "files": [
+    "src/**/*.js",
+    "dist/rust-wasm/**",
+    "types/",
+    "THIRD-PARTY-LICENSES.md",
+    "LICENSE.md",
+    "README.npm.md"
+  ],
+  "scripts": {
+    "test": "node --test test/js/test-piper-plus.js test/js/test-npm-package.js",
+    "test:optimization": "node --test test/js/test-benchmark-runner.js test/js/test-memory-pool.js test/js/test-resampler.js test/js/test-webgpu-session.js test/js/test-streaming-pipeline.js test/js/test-cache-manager.js test/js/test-audio-backend.js test/js/test-phase2-integration.js",
+    "test:optimization:phase1": "node --test test/js/test-benchmark-runner.js test/js/test-cache-manager.js",
+    "test:optimization:phase2": "node --test test/js/test-resampler.js test/js/test-webgpu-session.js test/js/test-audio-backend.js",
+    "test:optimization:phase3": "node --test test/js/test-streaming-pipeline.js test/js/test-memory-pool.js",
+    "test:optimization:integration": "node --test test/js/test-phase2-integration.js",
+    "test:importmap": "node --test test/js/test-importmap.js",
+    "test:npm-package": "node --test test/js/test-npm-package.js",
+    "test:wasm-g2p": "node --test test/js/test-piper-plus-wasm-g2p.js",
+    "test:npm-package:all": "node --test test/js/test-audio-result.js test/js/test-audio-result-wav-edge.js test/js/test-audio-result-timing.js test/js/test-piper-plus.js test/js/test-piper-plus-boundary.js test/js/test-piper-plus-init-success.js test/js/test-piper-plus-init-integration.js test/js/test-piper-plus-synthesize-flow.js test/js/test-piper-plus-g2p-init.js test/js/test-piper-plus-wasm-g2p.js test/js/test-piper-plus-timing.js test/js/test-phoneme-timing.js test/js/test-importmap.js test/js/test-model-manager.js test/js/test-model-manager-load.js test/js/test-model-manager-cache.js test/js/test-model-manager-boundary.js test/js/test-dictionary-cache.js test/js/test-g2p-golden.js test/js/test-npm-package.js",
+    "setup:wasm": "echo 'Downloading pre-built WASM from GitHub Releases...' && mkdir -p dist/rust-wasm && echo 'Run: gh release download --repo ayutaz/piper-plus --pattern piper-plus-wasm-* -D dist/rust-wasm' && echo 'Or build locally: npm run build:wasm:multilingual'",
+    "build:wasm": "cd ../../rust/piper-wasm && wasm-pack build --target web --release --out-dir ../../wasm/openjtalk-web/dist/rust-wasm",
+    "build:wasm:multilingual": "cd ../../rust/piper-wasm && wasm-pack build --target web --release --features multilingual --out-dir ../../../src/wasm/openjtalk-web/dist/rust-wasm",
+    "build:wasm:ja": "cd ../../rust/piper-wasm && wasm-pack build --target web --release --features ja --out-dir ../../../src/wasm/openjtalk-web/dist/rust-wasm-ja",
+    "build:wasm:ja-lite": "cd ../../rust/piper-wasm && wasm-pack build --target web --release --no-default-features --features ja-external --out-dir ../../../src/wasm/openjtalk-web/dist/rust-wasm-ja-lite",
+    "build:debug": "cd build && ./build-safe.sh",
+    "build:production": "cd build && ./build-production.sh",
+    "build": "npm run build:production",
+    "serve": "python3 -m http.server 8081",
+    "clean": "rm -rf dist build/build-*",
+    "prepublishOnly": "echo 'Ready to publish'"
+  },
+  "dependencies": {
+    "@piper-plus/g2p": "^0.4.0"
+  },
+  "peerDependencies": {
+    "onnxruntime-web": ">=1.21.0"
+  },
+  "keywords": [
+    "tts",
+    "text-to-speech",
+    "speech-synthesis",
+    "japanese",
+    "korean",
+    "hangul",
+    "multilingual",
+    "vits",
+    "onnx",
+    "webassembly",
+    "wasm",
+    "piper",
+    "openjtalk",
+    "neural-tts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ayutaz/piper-plus"
+  },
+  "homepage": "https://ayutaz.github.io/piper-plus/",
+  "author": "ayutaz",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

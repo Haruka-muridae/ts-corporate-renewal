@@ -28,3 +28,9 @@ public/apps/vendor/NOTICE-supabase-auth-js.md text eol=lf
 public/legal/terms/index.html text eol=lf
 public/legal/privacy/index.html text eol=lf
 public/legal/tokusho/index.html text eol=lf
+
+# スマホ完結版 体験試作(mobile-lab)が同梱する第三者ライブラリ・モデル・
+# フォント一式。vendor-manifest.json のSHA-256で整合を守っているため、
+# 改行変換で1バイトでもずれると検証が壊れる。ディレクトリ全体を
+# 改行変換の対象外にする(lamejs / supabase-auth-js と同じ方針)。
+public/production-app/short-script/vendor/** -text

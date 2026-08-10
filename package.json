@@ -34,7 +34,8 @@
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:whoami": "wrangler whoami",
     "cf:versions": "wrangler versions list",
-    "check:vendor": "node public/apps/vendor/check-updates.mjs"
+    "check:vendor": "node public/apps/vendor/check-updates.mjs",
+    "check:vendor:short-script-mobile": "node scripts/short-script-vendor/check-vendor.mjs"
   },
   "dependencies": {
     "next": "16.2.11",
