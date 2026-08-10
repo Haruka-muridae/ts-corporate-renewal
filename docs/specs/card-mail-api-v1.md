@@ -3,6 +3,7 @@
 - 版: v1.0（2026-08-10 初版）
 - 対象: `app/api/card-mail/send/route.ts` ＋ `lib/card-mail/`
 - 関連: [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md)（名刺データの保存側）
+- 背景と運用手順の説明: [card-mail-requirements-v1.md](./card-mail-requirements-v1.md)（実装を読まずに全体像を掴むための文書。細部は本書が正）
 
 ---
 

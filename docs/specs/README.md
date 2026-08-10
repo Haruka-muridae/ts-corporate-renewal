@@ -44,6 +44,7 @@
 | 要件定義書 | 対象範囲 | 版 |
 | --- | --- | --- |
 | [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.5 |
+| [card-mail-requirements-v1.md](./card-mail-requirements-v1.md) | 名刺メール配信APIの背景・仕組み・運用手順。**例外的に実装済みの機能に対する文書**で、細部（リクエスト形式・制限値）の正は上の仕様書 [card-mail-api-v1.md](./card-mail-api-v1.md)。食い違う場合は仕様書が正 | v1.0 |
 
 要件定義書も**実装の正**です。上の仕様書と同じく、コードと食い違う場合は
 コードのほうが間違っているとみなします。
