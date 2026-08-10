@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>スマホ完結版 体験試作(M1)｜ショート動画 台本メーカー｜TSAM AI</title>
+
+<!-- 一時検証ページ。M2で本体へ統合後に削除する(docs/specs/short-script-mobile-video-plan-v1.md §5)。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy(このページ専用)
+  ==================================================================
+  既存の ../index.html の CSP は変更しない(このファイルにだけ効くmeta)。
+
+  script-src に 'wasm-unsafe-eval' … onnxruntime-web / piper-plus(Rust wasm) /
+    JASSUB(libass wasm)を 'unsafe-eval' なしで動かすため。
+  worker-src 'self' blob: … JASSUBが専用Workerを起動するため
+    (docs/specs/short-script-mobile-video-plan-v1.md §2.2)。
+  connect-src … 同梱アセット(vendor/配下)は 'self' で足りるが、
+    guardPage() のセッション確認(§2.4「そのまま」= 本番認証系のApps Script
+    への fetch)はこのページでも必須のため、../index.html と同じ認証系の
+    2ドメインだけ残す。Gemini(generativelanguage.googleapis.com)はこの
+    ページでは呼ばないため含めない。
+  img-src に blob: … 合成した音声/動画のプレビューや保存導線がBlob URLを
+    使うため。data: は使わない(背景はCanvas生成のグラデーションのみで、
+    データURIの画像を埋め込まない)。
+  media-src 'self' blob: … <audio>/<video> のプレビュー再生がBlob URLのため。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../../css/style.css">
+<link rel="stylesheet" href="../../../auth/auth.css">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="./mobile-lab.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <!-- guardPage() が利用者を返すまで中身を出さない(既存アプリと同じ約束)。 -->
+    <p id="ml-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="ml-content" hidden>
+
+      <header class="ss-header">
+        <h1 class="ss-title">スマホ完結版 体験試作(M1)</h1>
+        <p class="ss-lead">
+          固定の短い台本を、この端末の中だけで音声・字幕つき縦型動画にします。
+          通信は最初の「音声データを準備する」操作のときだけで、それ以降は
+          何も外部へ送信しません。
+        </p>
+        <p class="ss-lead"><a href="../">台本メーカーへ戻る</a></p>
+      </header>
+
+      <!-- 台本(固定・シーン3つ・合計約30秒相当)。 -->
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">この試作で使う台本(固定)</h2>
+        <ol id="ml-script-scenes" class="ss-scenes"></ol>
+      </section>
+
+      <!-- 手順1: 重量級アセットの取得。明示ボタンでのみ通信する。 -->
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">手順1: 音声・字幕・動画エンジンの準備</h2>
+        <p class="ss-guidance-text">
+          音声合成(piper-plus)・字幕描画(JASSUB)・動画多重化(Mediabunny)に
+          必要なファイルを、この端末に保存します(初回のみ)。
+          Wi-Fi環境を推奨します。
+        </p>
+        <p id="ml-prepare-size" class="ss-guidance-text"></p>
+        <div id="ml-unavailable" class="ss-subpanel ss-subpanel--guidance" role="status" hidden></div>
+        <div class="ss-actions">
+          <button id="ml-prepare" type="button" class="auth-button">音声データを準備する</button>
+        </div>
+        <progress id="ml-prepare-progress" class="ml-progress" value="0" max="1" hidden></progress>
+        <p id="ml-prepare-status" class="ss-guidance-text" role="status" aria-live="polite" hidden></p>
+      </section>
+
+      <!-- 手順2: 音声合成。 -->
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">手順2: 音声を作る</h2>
+        <div class="ss-actions">
+          <button id="ml-synthesize" type="button" class="auth-button" disabled>音声を合成する</button>
+        </div>
+        <p id="ml-synthesize-status" class="ss-guidance-text" role="status" aria-live="polite" hidden></p>
+        <audio id="ml-audio" controls hidden></audio>
+      </section>
+
+      <!-- 手順3: 動画の書き出し。 -->
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">手順3: 動画を書き出す</h2>
+        <p id="ml-route-status" class="ss-guidance-text"></p>
+        <div class="ss-actions">
+          <button id="ml-render" type="button" class="auth-button" disabled>動画を作る</button>
+        </div>
+        <p id="ml-render-status" class="ss-guidance-text" role="status" aria-live="polite" hidden></p>
+        <p id="ml-wake-lock-status" class="ss-guidance-text" hidden></p>
+
+        <div id="ml-video-out" hidden>
+          <div class="ss-phone">
+            <video id="ml-video-el" controls playsinline muted></video>
+          </div>
+          <div class="ss-actions">
+            <button id="ml-save" type="button" class="auth-button">保存する</button>
+            <a id="ml-video-download" class="auth-button auth-button--ghost" download hidden>MP4をダウンロード</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- 生成過程のログ。実機確認の記録づくりを助ける(§5 完了条件)。 -->
+      <section class="ss-panel">
+        <h2 class="ss-panel-title">ログ</h2>
+        <ol id="ml-log" class="ml-log"></ol>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<canvas id="ml-canvas" width="1080" height="1920" hidden></canvas>
+
+<script type="module" src="./app.js"></script>
+
+</body>
+</html>
