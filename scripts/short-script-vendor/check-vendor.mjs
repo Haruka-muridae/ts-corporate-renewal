@@ -7,6 +7,12 @@
  *      (分割ファイルはパートごと・結合後の両方)
  *   2. npm 配布のものは、同梱している版がnpmの最新版と同じか
  *
+ * このスクリプトが検証するのは manifest との自己整合(同梱ファイルの実バイトと
+ * manifest記載のSHA-256が一致するか)と npm の最新版番号のみであり、
+ * 「同梱している版のバイト列がnpm配布物そのものと一致するか」は検証しない
+ * (npm配布物のダウンロード・ハッシュ比較は行っていない)。その一致確認は
+ * 独立レビューで実施済み(2026-08-10)。
+ *
  * 実行: node scripts/short-script-vendor/check-vendor.mjs
  */
 
@@ -23,7 +29,10 @@ const NPM_PACKAGES = {
   'piper-plus.js': { name: 'piper-plus', version: '0.6.0' },
   'piper-plus.g2p-wasm': { name: 'piper-plus', version: '0.6.0' },
   'onnxruntime-web.wasm': { name: 'onnxruntime-web', version: '1.27.0' },
+  'onnxruntime-web.js': { name: 'onnxruntime-web', version: '1.27.0' },
   'jassub.wasm': { name: 'jassub', version: '2.5.14' },
+  'jassub.js': { name: 'jassub', version: '2.5.14' },
+  'jassub.worker-js': { name: 'jassub', version: '2.5.14' },
   'mediabunny.js': { name: 'mediabunny', version: '1.53.0' },
 };
 

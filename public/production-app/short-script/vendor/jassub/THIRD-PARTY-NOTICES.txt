@@ -1,3 +1,61 @@
+# The following lists all copyright notices and licenses for the work
+# contained in JASSUB(jassub-worker.wasm)per upstream project.
+#
+# jassub-worker.wasm は jassub 本体(TypeScript/emscripten glue)に加え、
+# 下記5つの上流ライブラリのソースをコンパイルして含む(ThaUnknown/jassub の
+# .gitmodules・Makefile_licence の LIB_LICENSES 一覧と同じ組み合わせ)。
+# 本来は同リポジトリの `make dist/license/all`(licensecheck をソースツリー全体に
+# かけてファイル単位の著作権表示を集約する)が生成する節だが、この同梱物には
+# その節が欠落していたため、各プロジェクトの LICENSE/COPYING を直接取得して
+# 手動で補った(下のSourceが取得元)。licensecheck の機械的な全ファイル走査ではなく
+# 各プロジェクトの代表的な著作権表示のみを転記している点に注意。
+#
+# Project: jassub
+License: Expat
+Copyright: 2021-2022 JASSUB contributors; 2017-2021 JavascriptSubtitlesOctopus contributors
+Source: https://github.com/ThaUnknown/jassub/blob/master/LICENSE
+
+# Project: libass
+License: ISC
+Copyright: 2006-2016 libass contributors
+Source: https://github.com/libass/libass/blob/master/COPYING
+
+# Project: freetype
+License: FTL
+Copyright: 1996-2002, 2006 by David Turner, Robert Wilhelm, and Werner Lemberg
+Source: https://github.com/freetype/freetype/blob/master/docs/FTL.TXT
+  (上流本家は https://gitlab.freedesktop.org/freetype/freetype 、内容はGitHubミラーと同一)
+
+# Project: fribidi
+License: LGPL-2.1+
+Copyright: 2004 Sharif FarsiWeb, Inc
+Source: https://github.com/fribidi/fribidi/blob/master/lib/fribidi.h
+  (COPYINGファイル自体にはライセンス全文のみで著作権表示がないため、代表ソースファイルのヘッダから採取)
+  https://github.com/fribidi/fribidi/blob/master/COPYING
+
+# Project: harfbuzz
+License: MIT~old
+Copyright: 2010-2022 Google, Inc.; 2015-2020 Ebrahim Byagowi; 2019-2020 Facebook, Inc.;
+  2012,2015 Mozilla Foundation; 2011 Codethink Limited;
+  2008,2010 Nokia Corporation and/or its subsidiary(-ies); 2009 Keith Stribley;
+  2011 Martin Hosken and SIL International; 2007 Chris Wilson;
+  2005,2006,2020-2023 Behdad Esfahbod; 2004,2007-2010,2013,2021-2023 Red Hat, Inc.;
+  1998-2005 David Turner and Werner Lemberg; 2016 Igalia S.L.; 2022 Matthias Clasen;
+  2018,2021 Khaled Hosny; 2018-2020 Adobe, Inc.
+Source: https://github.com/harfbuzz/harfbuzz/blob/main/COPYING
+
+# Project: expat
+License: Expat
+Copyright: 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper; 2001-2025 Expat maintainers
+Source: https://github.com/libexpat/libexpat/blob/master/expat/COPYING
+
+# Project: brotli
+License: Expat
+Copyright: 2009, 2010, 2013-2016 by the Brotli Authors
+Source: https://github.com/google/brotli/blob/master/LICENSE
+#
+# ------------------------------------------------------------------
+#
 # The following section contains the full license text or
 # where permitted a shorter notice for all works contained
 # in JASSUB listed above
