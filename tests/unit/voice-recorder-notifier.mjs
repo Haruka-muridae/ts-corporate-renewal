@@ -23,6 +23,7 @@ import { join } from 'node:path';
 
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { REPO_ROOT } from '../helpers/gas-notifier-harness.mjs';
+import { NOTIFIER_GATE_ORIGIN } from '../../workers/notifier-gate/origin.mjs';
 
 const APP_DIR = join(REPO_ROOT, 'public/production-app/voice-recorder');
 
@@ -192,6 +193,132 @@ try {
     check('sw.js の複製が同じ DB 名を使う', sw.includes("DB_NAME = 'tsam-vr-notifier'"));
     check('★sw.js の複製が同じ本文を作る',
       sw.includes('から開始します。録音しますか？'));
+  }
+
+  /* ================================================================ */
+  section('★引き継ぎリンクの受け口（#setup=）');
+
+  {
+    const config = await import('../../public/production-app/voice-recorder/notifier-config.js');
+
+    function link(payload) {
+      return `#setup=${Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')}`;
+    }
+
+    const valid = config.parseSetupFragment(link({
+      execUrl: 'https://script.google.com/macros/s/AKfake123/exec',
+      connectKey: 'k'.repeat(43),
+    }));
+
+    check('正しいリンクを読める', valid !== null && valid.key === 'k'.repeat(43), JSON.stringify(valid));
+    check('URLは /exec まで', valid.url === 'https://script.google.com/macros/s/AKfake123/exec');
+
+    /*
+     * ★このリンクは誰でも作れる。信じて保存すると、以後この端末の
+     * Service Worker が予定の内容を攻撃者のサーバーへ取りに行くことになる。
+     */
+    check('★別ドメインの execUrl を受け付けない',
+      config.parseSetupFragment(link({
+        execUrl: 'https://evil.example.com/macros/s/AK/exec',
+        connectKey: 'k'.repeat(43),
+      })) === null);
+    check('★script.google.com に見せかけたドメインも受け付けない',
+      config.parseSetupFragment(link({
+        execUrl: 'https://script.google.com.evil.example/macros/s/AK/exec',
+        connectKey: 'k'.repeat(43),
+      })) === null);
+    check('★http は受け付けない',
+      config.parseSetupFragment(link({
+        execUrl: 'http://script.google.com/macros/s/AK/exec',
+        connectKey: 'k'.repeat(43),
+      })) === null);
+    check('★/exec 以外のパスを受け付けない',
+      config.parseSetupFragment(link({
+        execUrl: 'https://script.google.com/macros/s/AK/dev',
+        connectKey: 'k'.repeat(43),
+      })) === null);
+    check('接続キーが空なら受け付けない',
+      config.parseSetupFragment(link({
+        execUrl: 'https://script.google.com/macros/s/AK/exec',
+        connectKey: '',
+      })) === null);
+    check('壊れた base64 は受け付けない', config.parseSetupFragment('#setup=%%%') === null);
+    check('#setup= が無ければ null', config.parseSetupFragment('#other=1') === null);
+
+    check('ライセンスキーの形を見る',
+      config.isLicenseKeyShaped('L'.repeat(43)) === true
+      && config.isLicenseKeyShaped('short') === false);
+  }
+
+  /* ================================================================ */
+  section('★フロントの配線（Phase 4）');
+
+  {
+    const panel = readApp('notifier-panel.js');
+    const client = readApp('notifier-client.js');
+    const sw = readApp('sw.js');
+    const html = readApp('index.html');
+
+    check('★読み取り直後にフラグメントを消す',
+      panel.includes('clearSetupFragment') && panel.includes('history.replaceState'));
+    /* mountNotifier の中での順序を見る（定義位置ではなく呼び出し順）。 */
+    const mount = panel.slice(panel.indexOf('export async function mountNotifier'));
+
+    check('★引き継ぎ後に接続テストを自動実行する',
+      mount.indexOf('applySetupFragment()') !== -1
+      && mount.indexOf('applySetupFragment()') < mount.indexOf('await runChecks()'),
+      String(mount.indexOf('applySetupFragment()')));
+    check('★ライセンスは接続確立後に GAS へ渡す',
+      panel.includes('pushLicenseToGas') && client.includes("'saveLicense'"));
+    check('★渡せなかったらブラウザ側のキーを消さない',
+      panel.includes('キーは消さない'));
+    check('★渡し終えたらブラウザ側から消す', panel.includes('clearLicenseKey()'));
+    check('認証系からライセンスを受け取る',
+      panel.includes('issueNotifierLicense(sessionToken)'));
+    check('★未ログインでも行き止まりにしない（案内を出す）',
+      panel.includes('ログインし直してください'));
+    check('★entitlement が無くても手続きは進める',
+      panel.includes("result.entitled !== true"));
+
+    check('直近の通知予定を出す', panel.includes('fetchUpcoming') && html.includes('vr-nf-upcoming'));
+    check('テスト通知のボタンがある', panel.includes('handleTestNotification') && html.includes('vr-nf-test'));
+    check('★通知が許可されていなければテスト通知を送らない',
+      panel.includes("Notification.permission !== 'granted'"));
+    check('ライセンス状態を出す', html.includes('vr-nf-license-state'));
+    check('★expired のときだけ料金ページへ誘導する',
+      panel.includes("link.hidden = summary.state !== 'expired'"));
+    check('チェッカーは6項目', (html.match(/vr-nf-state-/g) || []).length === 6,
+      String((html.match(/vr-nf-state-/g) || []).length));
+
+    check('★Service Worker が endpoint を添えて pending を呼ぶ',
+      sw.includes("gasGet(connection, 'pending', { endpoint: subscription.endpoint })"));
+    check('★購読が無ければ pending を呼ばない', sw.includes('if (!subscription)'));
+
+    check('★予定名は textContent で入れる（innerHTML を使わない）',
+      /\.innerHTML/.test(panel) === false);
+  }
+
+  /* ================================================================ */
+  section('★CSP（承認済みの変更案どおり）');
+
+  {
+    const html = readApp('index.html');
+    const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
+    const connectSrc = csp.split(';').map((part) => part.trim()).find((part) => part.startsWith('connect-src'));
+
+    check('connect-src に通知ゲートを足した', connectSrc.includes(NOTIFIER_GATE_ORIGIN), connectSrc);
+    check('★ワイルドカードにしない（他人の Worker を許可しない）',
+      csp.includes('*.workers.dev') === false);
+    check('★script-src には足していない',
+      csp.split(';').map((part) => part.trim()).find((part) => part.startsWith('script-src'))
+        .includes('workers.dev') === false);
+    check('既存の接続先を落としていない',
+      connectSrc.includes('https://www.googleapis.com')
+      && connectSrc.includes('https://script.google.com')
+      && connectSrc.includes('https://script.googleusercontent.com'));
+    check('足したのは1オリジンだけ',
+      connectSrc.split(/\s+/).filter((value) => value.startsWith('https://')).length === 4,
+      connectSrc);
   }
 
   finish();

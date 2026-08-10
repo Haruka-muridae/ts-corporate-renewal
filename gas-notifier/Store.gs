@@ -52,6 +52,9 @@ var PROP = {
   PENDING_VERSION: 'PENDING_VERSION',
   /** 実際に公開されているバージョン番号（記録用）。 */
   DEPLOYED_VERSION: 'DEPLOYED_VERSION',
+  /** ゲートが最後に返したライセンスの状態と、その時刻（画面表示用）。 */
+  LICENSE_STATE: 'LICENSE_STATE',
+  LICENSE_CHECKED_AT: 'LICENSE_CHECKED_AT',
   /* ゲートから受け取った VAPID 情報のキャッシュ（Gate.gs）。 */
   VAPID_PUBLIC: 'VAPID_PUBLIC_B64URL',
   VAPID_JWTS: 'VAPID_JWTS_JSON',

@@ -324,11 +324,24 @@ function buildHealth_() {
   };
 }
 
-/** ライセンスの状態。**キーそのものは返さない。** */
+/**
+ * ライセンスの状態。**キーそのものは返さない。**
+ *
+ * state はゲートが最後に返した値（同期のたびに更新される）。
+ * まだ一度も同期していない間は `unknown` になる。
+ */
 function licenseSummary_() {
+  var present = getProperty_(PROP.LICENSE_KEY) !== '';
+  var recorded = getProperty_(PROP.LICENSE_STATE);
+
+  if (!present) {
+    return { present: false, state: LICENSE_STATE.EXPIRED, checkedAt: '' };
+  }
+
   return {
-    present: getProperty_(PROP.LICENSE_KEY) !== '',
-    state: getProperty_(PROP.LICENSE_KEY) === '' ? LICENSE_STATE.EXPIRED : LICENSE_STATE.UNKNOWN
+    present: true,
+    state: recorded === '' ? LICENSE_STATE.UNKNOWN : recorded,
+    checkedAt: toIsoOrEmpty_(getProperty_(PROP.LICENSE_CHECKED_AT))
   };
 }
 

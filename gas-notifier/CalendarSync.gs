@@ -114,6 +114,15 @@ function applyCalendarItems_(items, nowMs) {
     sentDigest: buildSentDigest_(nowMs)
   });
 
+  if (evaluated.ok) {
+    /*
+     * 画面へ出すために覚えておく。**ここでしか本当の状態は分からない**
+     * （ライセンスの判定は運営のゲートが行い、テンプレートは結果を見るだけ）。
+     */
+    setProperty_(PROP.LICENSE_STATE, evaluated.licenseState);
+    setProperty_(PROP.LICENSE_CHECKED_AT, String(nowMs));
+  }
+
   if (!evaluated.ok) {
     /*
      * 判定を受け取れなかった。**キューには触らない。**
