@@ -19,20 +19,15 @@
  */
 {
 	"$schema": "../../node_modules/wrangler/config-schema.json",
-
 	"name": "notifier-gate",
 	"account_id": "4a71eb14d3889124d4afedd48c1458d8",
-
 	"main": "src/index.mjs",
-
 	/* 直下の Worker と同じ日付にそろえてある（実績のある値を使う）。 */
 	"compatibility_date": "2026-08-05",
-
 	/*
 	 * nodejs_compat は付けない。署名は WebCrypto（crypto.subtle）だけで
 	 * 行っており、Node の API を使っていないため。
 	 */
-
 	/*
 	 * 公開先は workers.dev の既定ドメイン（2026-08-10 決定）。
 	 *
@@ -49,7 +44,6 @@
 	 * 要らない（README.md §8）。
 	 */
 	"workers_dev": true,
-
 	/*
 	 * ライセンス判定のキャッシュとレート制限のカウンタ。
 	 *
@@ -58,9 +52,11 @@
 	 * 出力された id をここへ貼る。
 	 */
 	"kv_namespaces": [
-		{ "binding": "LICENSE_CACHE", "id": "TODO_KV_NAMESPACE_ID" }
+		{
+			"binding": "LICENSE_CACHE",
+			"id": "0a5422c832c84757b52bbae161202bf6"
+		}
 	],
-
 	/*
 	 * 平文の環境変数。**秘密は入れない**（VAPID の秘密鍵と共有シークレットは
 	 * wrangler secret put で登録する。README.md §5）。
@@ -75,13 +71,11 @@
 		 * 使っていたが、V2 では鍵が運営のものなので運営の連絡先を書く。
 		 */
 		"VAPID_SUBJECT": "https://tsam-ai.com/production-app/voice-recorder/",
-
 		/*
 		 * CORS を許すオリジン（カンマ区切り）。ブラウザから来るのは
 		 * 録音アプリのヘルスチェックだけなので、その配信元だけでよい。
 		 */
 		"ALLOWED_ORIGINS": "https://tsam-ai.com",
-
 		/*
 		 * 認証系 GAS（gas-auth）の /exec URL。
 		 * **public/auth/config.js の apiUrl と同じ値にすること。**
@@ -89,7 +83,6 @@
 		 */
 		"AUTH_GAS_URL": "https://script.google.com/macros/s/AKfycbwK-Kw9ynTbDpUG7e5pHgXSPLFg1ur62ukbHLHdHBogqcz3YT0Hn3nQg74SpHOzvXAN/exec"
 	},
-
 	"observability": {
 		"enabled": true,
 		"head_sampling_rate": 1,

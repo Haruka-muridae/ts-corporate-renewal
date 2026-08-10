@@ -34,6 +34,7 @@ Apps Script プロジェクトはリポジトリの外にある。
 | 日付 | 反映ファイル | setupAuthSystem() | デプロイ更新 | 報告者確認 |
 | --- | --- | --- | --- | --- |
 | 2026-07-31 | Consent.gs / Legal.gs / LegalSeed.gs（新規3）<br>Config.gs / Main.gs / Setup.gs / Store.gs / Stripe.gs（上書き5） | 実行済み | 済み | `/pricing/` で同意チェックボックス4件が表示され、テスト決済の Checkout イベントに metadata（`tos_version` / `tos_agreed_at` / `agreed_items`）が記録された<br>「TSAM AI 法務文書」スプレッドシートが作成され、terms 24行 / privacy 17行 / tokusho 26行が投入された |
+| 2026-08-10 | Notifier.gs（新規1）<br>Config.gs / Main.gs / Users.gs / Setup.gs（上書き4） | 実行済み | 済み | `users` シートのヘッダーが17列になり、末尾Q列に `notifier_license_key` が追加された（既存A〜P列の位置は不変）<br>Script Properties に `NOTIFIER_SHARED_SECRET` を設定（Cloudflare の `AUTH_GAS_SHARED_SECRET` と同値） |
 
 ---
 

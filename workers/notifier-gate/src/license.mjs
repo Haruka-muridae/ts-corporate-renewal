@@ -197,6 +197,24 @@ export async function resolveLicense({ licenseKey, env, nowMs, fetchImpl = fetch
 
   const verified = await verifyWithAuthGas({ licenseKey: key, env, fetchImpl });
 
+  /*
+   * ------------------------------------------------------------------
+   * 照会の結果を1行だけ残す（`wrangler tail` で読む用）
+   * ------------------------------------------------------------------
+   * 応答本文からは「無効なキー」と「共有シークレットが合っていない」を
+   * 区別できない。どちらも expired になるからで、これは意図的である
+   * （区別できると、このエンドポイントがキーの総当たり確認に使える）。
+   *
+   * その代わり、**運用者だけが見られる場所**へ理由を出す。これが無いと、
+   * 立ち上げ時に「片方にしかシークレットを入れていない」ことに
+   * 実際の契約者が試すまで気づけない。
+   *
+   * **キーもハッシュも出さない。** status は認証系が返す語
+   * （active / canceled / not_found / plan_mismatch など）で、個人情報を含まない。
+   * ------------------------------------------------------------------
+   */
+  console.log(`license verify: reachable=${verified.reachable} valid=${verified.valid} status=${verified.status}`);
+
   if (verified.reachable) {
     const state = verified.valid ? LICENSE_STATE.ACTIVE : LICENSE_STATE.EXPIRED;
 

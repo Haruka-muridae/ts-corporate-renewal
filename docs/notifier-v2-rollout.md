@@ -8,11 +8,16 @@ V2（ライセンスゲート＋セットアップ自動化）を本番へ出す
 > **上から順に実行すること。** 前の作業が終わっていないと次が失敗する形に並べてある。
 > 途中で止めた場合も、この表の ☐ を見れば「どこから再開すればよいか」が分かる。
 
+> **進捗（2026-08-10 の報告時点）: R-1〜R-18 まで完了の連絡あり。**
+> このうち外部から確かめられたのは R-5（`/v1/health` が
+> `{"ok":true,"version":"2.0.0"}` を返す）と、`/v1/evaluate` が正常応答すること。
+> それ以外は報告に基づく記録である（リポジトリの外で起きたことは観測できない）。
+
 | | |
 | --- | --- |
 | コード | ブランチ `feat/notifier-v2-license-gate` |
 | Workers | [workers/notifier-gate/README.md](../workers/notifier-gate/README.md) |
-| 認証系 GAS | [gas-deployment-log.md](./gas-deployment-log.md)「未反映の予定: カレンダー通知 V2」 |
+| 認証系 GAS | [gas-deployment-log.md](./gas-deployment-log.md)「カレンダー通知 V2 の貼り替え」 |
 | テンプレート | [gas-notifier/README.md](../gas-notifier/README.md) |
 | 実機確認 | [notifier-v2-acceptance-checklist.md](./notifier-v2-acceptance-checklist.md) |
 | 設計の理由 | [notifier-design-notes.md](./notifier-design-notes.md) |
@@ -31,10 +36,10 @@ V2 では「判定」と「VAPID JWT の発行」を運営の Workers へ移し�
 
 ```
 [Cloudflare Workers: notifier-gate]  ← R-1〜R-5 で用意する
-        ↕ 共有シークレット
-[認証系 GAS: gas-auth]                ← R-6〜R-7 で用意する
+        ↕ 共有シークレット（R-10b で一致を確かめる）
+[認証系 GAS: gas-auth]                ← R-6〜R-10 で用意する
         ↑ ライセンスキーの発行
-[録音アプリ] → [利用者のテンプレート] ← R-8〜R-9 で用意する
+[録音アプリ] → [利用者のテンプレート] ← R-11〜R-21 で用意する
 ```
 
 **この3つのどれかが欠けると通知は動かない。** 順番に意味があるのはそのためで、
@@ -49,11 +54,11 @@ V2 では「判定」と「VAPID JWT の発行」を運営の Workers へ移し�
 
 | # | 作業 | 完了 | 参照 |
 | --- | --- | --- | --- |
-| R-1 | KV namespace を作る<br>`npx wrangler kv namespace create LICENSE_CACHE --config workers/notifier-gate/wrangler.jsonc` | ☐ | README §5-1 |
-| R-2 | 出力された id を `workers/notifier-gate/wrangler.jsonc` の `TODO_KV_NAMESPACE_ID` へ貼り、コミットする | ☐ | ― |
-| R-3 | VAPID の鍵を作る<br>`node workers/notifier-gate/scripts/generate-vapid-keys.mjs` | ☐ | README §4 |
-| R-4 | シークレットを3件登録する<br>`VAPID_PRIVATE_KEY` / `VAPID_PUBLIC_KEY` / `AUTH_GAS_SHARED_SECRET` | ☐ | README §5-2 |
-| R-5 | デプロイして URL を確かめる<br>`npm run deploy:notifier-gate` → `curl https://notifier-gate.potenitas-lp.workers.dev/v1/health` | ☐ | README §5-3・§5-4 |
+| R-1 | KV namespace を作る<br>`npx wrangler kv namespace create LICENSE_CACHE --config workers/notifier-gate/wrangler.jsonc` | ☑ | README §5-1 |
+| R-2 | 出力された id を `workers/notifier-gate/wrangler.jsonc` の `TODO_KV_NAMESPACE_ID` へ貼り、コミットする | ☑ | ― |
+| R-3 | VAPID の鍵を作る<br>`node workers/notifier-gate/scripts/generate-vapid-keys.mjs` | ☑ | README §4 |
+| R-4 | シークレットを3件登録する<br>`VAPID_PRIVATE_KEY` / `VAPID_PUBLIC_KEY` / `AUTH_GAS_SHARED_SECRET` | ☑ | README §5-2 |
+| R-5 | デプロイして URL を確かめる<br>`npm run deploy:notifier-gate` → `curl https://notifier-gate.potenitas-lp.workers.dev/v1/health` | ☑ | README §5-3・§5-4 |
 
 > **R-3 の秘密鍵をファイルへ保存しない。** 画面の値をそのまま
 > `wrangler secret put` へ貼る。リポジトリへは絶対に入れない。
@@ -71,11 +76,12 @@ V2 では「判定」と「VAPID JWT の発行」を運営の Workers へ移し�
 
 | # | 作業 | 完了 | 参照 |
 | --- | --- | --- | --- |
-| R-6 | 5ファイルを貼り替える<br>`Notifier.gs`（新規）/ `Config.gs` / `Main.gs` / `Users.gs` / `Setup.gs` | ☐ | [gas-deployment-log.md](./gas-deployment-log.md) |
-| R-7 | Script Property `NOTIFIER_SHARED_SECRET` に **R-4 と同じ値**を入れる | ☐ | 同上 |
-| R-8 | `setupAuthSystem()` を実行する（`users` シートのヘッダーを17列へ広げる） | ☐ | 同上 |
-| R-9 | 「デプロイを管理」からバージョンを更新する（**新しいデプロイを作らない**） | ☐ | 同上 |
-| R-10 | 反映結果を [gas-deployment-log.md](./gas-deployment-log.md) の履歴表へ追記する | ☐ | 同上 |
+| R-6 | 5ファイルを貼り替える<br>`Notifier.gs`（新規）/ `Config.gs` / `Main.gs` / `Users.gs` / `Setup.gs` | ☑ | [gas-deployment-log.md](./gas-deployment-log.md) |
+| R-7 | Script Property `NOTIFIER_SHARED_SECRET` に **R-4 と同じ値**を入れる | ☑ | 同上 |
+| R-8 | `setupAuthSystem()` を実行する（`users` シートのヘッダーを17列へ広げる） | ☑ | 同上 |
+| R-9 | 「デプロイを管理」からバージョンを更新する（**新しいデプロイを作らない**） | ☑ | 同上 |
+| R-10 | 反映結果を [gas-deployment-log.md](./gas-deployment-log.md) の履歴表へ追記する | ☑ | 同上 |
+| R-10b | **共有シークレットが両側で一致しているかを確かめる**（下記） | ☐ | 下記 |
 
 > **R-8 で既存の利用者データは上書きされない。** 増えるのは
 > `users` の Q列（`notifier_license_key`。既存行は空欄のまま）と、
@@ -85,17 +91,47 @@ V2 では「判定」と「VAPID JWT の発行」を運営の Workers へ移し�
 > そうなると `public/auth/config.js` と `workers/notifier-gate/wrangler.jsonc` の
 > `AUTH_GAS_URL` を両方直すことになる。既存デプロイのバージョン更新を選ぶこと。
 
+#### R-10b: 共有シークレットの一致を確かめる
+
+**応答本文からは確かめられない。** 「無効なキー」と「シークレットが合っていない」は
+どちらも `expired` になる（区別できると、このエンドポイントがキーの総当たり確認に
+使えてしまうため、意図的にそうしてある）。
+
+そこで運用者だけが見られるログで確かめる。
+
+```powershell
+# 1) ログを流したまま待つ
+npx wrangler tail notifier-gate --format pretty
+
+# 2) 別のウィンドウから、実在しないキーで1回叩く
+curl -X POST https://notifier-gate.potenitas-lp.workers.dev/v1/evaluate `
+  -H "Content-Type: application/json" `
+  -d '{\"licenseKey\":\"ZZdiagnosticNotARealKeyZZZZZZZZZZZZZZZZZZZZ\",\"settings\":{},\"events\":[],\"sentDigest\":[]}'
+```
+
+ログの1行を読む。
+
+| ログ | 意味 | すること |
+| --- | --- | --- |
+| `reachable=true valid=false status=not_found` | **正常。** 認証系まで届き、そんなキーは無いと答えた | ― |
+| `reachable=true valid=false status=not-configured` | Workers 側に `AUTH_GAS_SHARED_SECRET` が入っていない | R-4 をやり直す |
+| `reachable=false ... status=malformed` | 認証系が `success:false` を返した。**シークレット不一致**の疑いが濃い | R-4 と R-7 の値を突き合わせる |
+| `reachable=false ... status=unreachable` | 認証系へ届かない | `AUTH_GAS_URL` と、GAS のデプロイ状態を確認する |
+
+> **ログにライセンスキーもハッシュも出ない。** `status` は認証系が返す語で、
+> 個人情報を含まない（自動テストで見張っている）。
+
 ### テンプレート（gas-notifier v2）
 
 | # | 作業 | 完了 | 参照 |
 | --- | --- | --- | --- |
-| R-11 | 新しいスプレッドシートを作る（例:「TSAM AI 録音通知 v2」） | ☐ | [gas-notifier/README.md](../gas-notifier/README.md) §1 |
-| R-12 | `.gs` 7ファイルと `SidebarSetup.html` を同じ名前で貼り付ける | ☐ | 同上 |
-| R-13 | `appsscript.json` を置き換える（**スコープは7つ**） | ☐ | 同上 §1-1 |
-| R-14 | Calendar の Advanced Service（v3・識別子 `Calendar`）を有効にする | ☐ | 同上 |
-| R-15 | **`setupNotifier()` を実行しない**（運営者の鍵とトリガーがテンプレートに残るため） | ☐ | 同上 |
-| R-16 | 共有を「リンクを知っている全員: 閲覧者」にする | ☐ | 同上 |
-| R-17 | URL の末尾を `/edit...` → `/copy` にしたものを控える | ☐ | 同上 |
+| R-11 | 新しいスプレッドシートを作る（例:「TSAM AI 録音通知 v2」） | ☑ | [gas-notifier/README.md](../gas-notifier/README.md) §1 |
+| R-12 | `.gs` 7ファイルと `SidebarSetup.html` を同じ名前で貼り付ける | ☑ | 同上 |
+| R-13 | `appsscript.json` を置き換える（**スコープは7つ**） | ☑ | 同上 §1-1 |
+| R-14 | Calendar の Advanced Service（v3・識別子 `Calendar`）を有効にする | ☑ | 同上 |
+| R-15 | **`setupNotifier()` を実行しない**（運営者の鍵とトリガーがテンプレートに残るため） | ☑ | 同上 |
+| R-16 | 共有を「リンクを知っている全員: 閲覧者」にする | ☑ | 同上 |
+| R-17 | URL の末尾を `/edit...` → `/copy` にしたものを控える | ☑ | 同上 |
 
 > **R-12 のファイルは7つ**: `Api.gs` / `CalendarSync.gs` / `Code.gs` / `Gate.gs` /
 > `Push.gs` / `Setup.gs` / `Store.gs`。
@@ -105,7 +141,7 @@ V2 では「判定」と「VAPID JWT の発行」を運営の Workers へ移し�
 
 | # | 作業 | 完了 | 参照 |
 | --- | --- | --- | --- |
-| R-18 | `notifier-config.js` の `TEMPLATE_COPY_URL` を R-17 の URL にしてコミットする | ☐ | ― |
+| R-18 | `notifier-config.js` の `TEMPLATE_COPY_URL` を R-17 の URL にしてコミットする | ☑ | ― |
 | R-19 | ブランチを `main` へマージする | ☐ | ― |
 | R-20 | サイトを公開する<br>`npm run deploy` | ☐ | [deployment-cloudflare.md](./deployment-cloudflare.md) |
 | R-21 | `sw.js` と `manifest.webmanifest` の Content-Type を確認する | ☐ | 同上 §5 |
@@ -146,7 +182,7 @@ V2 では「判定」と「VAPID JWT の発行」を運営の Workers へ移し�
 
 | 症状 | 最初に見る場所 |
 | --- | --- |
-| 録音アプリの「ご契約」が「確認できません」 | R-4 と R-7 の値が一致しているか。片方だけの設定が最も多い |
+| 録音アプリの「ご契約」が「確認できません」 | **R-10b を実行する。** R-4 と R-7 の値が一致しているか。片方だけの設定が最も多い |
 | 「ご契約」が「未確認」のまま | まだ一度も同期していない。5分待つか［接続テスト］を押す |
 | 「通知の鍵」が × | ゲートが応答しているか（`/v1/health`）。次にライセンスが渡っているか |
 | 公開ボタンで 403 | Apps Script API が未許可（利用者側の設定。ウィザードが誘導する） |

@@ -66,7 +66,7 @@ export const NOTIFIER_GATE_ORIGIN = 'https://notifier-gate.potenitas-lp.workers.
  * 開くとコピー画面になる（`/copy` 付き）。作り方は gas-notifier/README.md §1。
  */
 export const TEMPLATE_COPY_URL =
-  'https://docs.google.com/spreadsheets/d/1weeur2CAR6YmeY6dqXyfAJdPj4di5oAfircsytoa3XM/copy';
+  'https://docs.google.com/spreadsheets/d/1rSLxEvuhfP_1d8w61t8J_hkhV_ysmmR74JwXVC6hMA8/copy';
 
 /* 通知タイミング（FR-10）。値は「何分前か」。0 は開始時刻ちょうど。 */
 export const TIMING_OPTIONS = Object.freeze([

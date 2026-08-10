@@ -248,6 +248,16 @@ try {
     check('ライセンスキーの形を見る',
       config.isLicenseKeyShaped('L'.repeat(43)) === true
       && config.isLicenseKeyShaped('short') === false);
+
+    /*
+     * ★テンプレートのコピーURL。
+     * `/edit` のURLを貼ると、利用者が**運営のテンプレートを直接開いてしまう**
+     * （閲覧者権限なので壊れはしないが、コピーが作られず先へ進めない）。
+     * 差し替えのたびに間違えうるので、形で縛る。
+     */
+    check('テンプレートのコピーURLは /copy で終わる',
+      /^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+\/copy$/.test(config.TEMPLATE_COPY_URL),
+      config.TEMPLATE_COPY_URL);
   }
 
   /* ================================================================ */

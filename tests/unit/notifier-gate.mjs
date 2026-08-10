@@ -610,6 +610,37 @@ async function run() {
     }
 
     {
+      /*
+       * 立ち上げ時の切り分け用に、照会の結果をログへ1行残していること。
+       * 応答本文では「無効なキー」と「シークレット不一致」を区別できないため、
+       * ここが唯一の手掛かりになる。
+       */
+      const env = baseEnv();
+      const lines = [];
+      const original = console.log;
+
+      console.log = (...args) => { lines.push(args.join(' ')); };
+
+      try {
+        await resolveLicense({
+          licenseKey: makeLicenseKey('L'),
+          env,
+          nowMs: NOW,
+          fetchImpl: createAuthGas({ valid: false }).fetchImpl,
+        });
+      } finally {
+        console.log = original;
+      }
+
+      const logged = lines.join(' | ');
+
+      check('照会の結果をログへ残す', logged.includes('license verify:'), logged);
+      check('届いたかどうかが分かる', logged.includes('reachable=true'));
+      check('有効かどうかが分かる', logged.includes('valid=false'));
+      check('★ログにライセンスキーを出さない', logged.includes(makeLicenseKey('L')) === false, logged);
+    }
+
+    {
       const env = baseEnv();
       const called = [];
       const result = await resolveLicense({
