@@ -31,6 +31,19 @@ export function findAsset(manifest, id) {
   return manifest.assets.find((a) => a.id === id) ?? null;
 }
 
+/**
+ * アセットのCache Storageキー(結合後の論理パスを絶対URL化したもの)を返す。
+ *
+ * 指摘1(独立レビュー): prepareAllAssets は結合後の論理パス(asset.path)を
+ * キーに cache.put していたが、呼び出し側の一部(旧 loadPiperWasmModule)が
+ * 分割パート(part.path)をキーに cache.match していたため常に miss していた。
+ * put/match の双方が必ずこの関数を通るようにして、キーを asset.path 基準に
+ * 一本化する(§4.4改訂 0.2)。
+ */
+export function assetVirtualUrl(asset, baseUrl) {
+  return new URL(asset.path, baseUrl).toString();
+}
+
 /** 取得可能な(unavailableでない)アセットの合計バイト数。ダウンロード見積り表示に使う。 */
 export function totalDownloadBytes(manifest) {
   return manifest.assets
@@ -183,7 +196,7 @@ export async function prepareAllAssets({ manifest, baseUrl, cache, onProgress, f
   const results = {};
   for (const asset of manifest.assets) {
     if (asset.unavailable) continue;
-    const virtualUrl = new URL(asset.path, baseUrl).toString();
+    const virtualUrl = assetVirtualUrl(asset, baseUrl);
     results[asset.id] = await downloadAndCacheAsset({
       asset,
       baseUrl,
@@ -194,4 +207,43 @@ export async function prepareAllAssets({ manifest, baseUrl, cache, onProgress, f
     });
   }
   return results;
+}
+
+/**
+ * manifest内の1アセットを「検証済みのバイト列」として取得する単一の入口
+ * (指摘1 修正方針a)。
+ *
+ * assetVirtualUrl で prepareAllAssets と同じキーを作るため、handlePrepare が
+ * 事前にCache Storageへ保存していれば必ずヒットし(2回目以降ネットワーク不要)、
+ * 未保存ならこの呼び出し自身が取得→結合→SHA-256検証→Cache Storage保存まで行う。
+ * バイナリ資産(wasm・フォント)はこの関数を経由させ、「manifestで検証済みの
+ * バイト列」と「実行時に使うバイト列」を同一にする。
+ */
+export async function getVerifiedAssetBytes({ manifest, assetId, baseUrl, cache, fetchImpl = fetch }) {
+  const asset = findAsset(manifest, assetId);
+  if (!asset) {
+    throw new Error(`${assetId}: vendor-manifest.json にアセットが見つかりません`);
+  }
+  const virtualUrl = assetVirtualUrl(asset, baseUrl);
+  const response = await downloadAndCacheAsset({ asset, baseUrl, virtualUrl, cache, fetchImpl });
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+/**
+ * 検証済みバイト列を Blob URL にして返す。
+ *
+ * ライブラリ側がURLしか受け付けない箇所(JASSUBのwasmUrl・availableFontsなど)
+ * 向けの入口で、fetch()や`new Worker()`にBlob URLを渡すことで「manifestで
+ * 検証したバイト列」と「実際に読み込まれるバイト列」を一致させる
+ * (ArrayBufferを直接渡せる場合はそちらを優先する。呼び出し側の判断は
+ * mobile-lab/app.js のコメントを参照)。
+ *
+ * 呼び出し側は使い終わったら URL.revokeObjectURL() で解放できるが、
+ * このアプリは1回きりのローカル処理でページ寿命も短いため、M1では
+ * 明示的な revoke を必須にしていない。
+ */
+export async function getVerifiedAssetBlobUrl({ manifest, assetId, baseUrl, cache, mimeType, fetchImpl = fetch }) {
+  const bytes = await getVerifiedAssetBytes({ manifest, assetId, baseUrl, cache, fetchImpl });
+  const blob = new Blob([bytes], mimeType ? { type: mimeType } : undefined);
+  return URL.createObjectURL(blob);
 }

@@ -1,12 +1,12 @@
 {
   "cacheName": "short-script-vendor-v1",
-  "generatedAt": "2026-08-10T02:58:22.736Z",
+  "generatedAt": "2026-08-10T03:49:16.532Z",
   "maxAssetBytes": 26214400,
   "assets": [
     {
       "id": "piper-plus.js",
       "path": "piper/src/index.js",
-      "note": "piper-plus 本体(ESM。相対importで同ディレクトリ内の他ファイルを参照するため単一ファイルではない。src/配下一式を静的配信する代表として登録)",
+      "note": "piper-plus 本体(ESM。相対importで同ディレクトリ内の他ファイルを参照するため単一ファイルではない。src/配下一式を静的配信する代表として登録)。実行時のimportは同一オリジン再取得になる(独立レビュー指摘1対応。§4.4)。",
       "bytes": 32782,
       "sha256": "cc5f6b2314311dec073e4d8a20823f16e2e49f8fc88961b177bee3c545273df5",
       "parts": [
@@ -56,6 +56,20 @@
       ]
     },
     {
+      "id": "onnxruntime-web.js",
+      "path": "ort/ort.wasm.min.mjs",
+      "note": "onnxruntime-webのグルーJS(ESM)。実行時のimportは同一オリジン再取得になる(独立レビュー指摘1対応。§4.4 M1の到達点)。",
+      "bytes": 50069,
+      "sha256": "9608e98a3fba9716f0cbd0bca0c94808b71dae2e9265ca3fe742ddc393a53ebc",
+      "parts": [
+        {
+          "path": "ort/ort.wasm.min.mjs",
+          "bytes": 50069,
+          "sha256": "9608e98a3fba9716f0cbd0bca0c94808b71dae2e9265ca3fe742ddc393a53ebc"
+        }
+      ]
+    },
+    {
       "id": "jassub.wasm",
       "path": "jassub/dist/wasm/jassub-worker.wasm",
       "note": "libassのwasm移植。modern(SIMD最適化)版は同梱せず標準版のみ採用(逸脱として報告)。",
@@ -66,6 +80,34 @@
           "path": "jassub/dist/wasm/jassub-worker.wasm",
           "bytes": 2063740,
           "sha256": "498432ae31549a37007699fd3cb09a95a359584e09618c7f21c02032d8bd481d"
+        }
+      ]
+    },
+    {
+      "id": "jassub.js",
+      "path": "jassub/dist/jassub.js",
+      "note": "JASSUB本体(ESM)。Worker生成とfont/wasmのURL解決を行う。実行時のimportは同一オリジン再取得になる(独立レビュー指摘1対応。§4.4)。",
+      "bytes": 11227,
+      "sha256": "3969478ee14b12cd2f13b6320d67454c8cc5e9e5b2df0b62ca5cba034ba84a52",
+      "parts": [
+        {
+          "path": "jassub/dist/jassub.js",
+          "bytes": 11227,
+          "sha256": "3969478ee14b12cd2f13b6320d67454c8cc5e9e5b2df0b62ca5cba034ba84a52"
+        }
+      ]
+    },
+    {
+      "id": "jassub.worker-js",
+      "path": "jassub/dist/worker/worker.js",
+      "note": "JASSUBのWorker本体(ESM)。同ディレクトリのrenderers/*.js・../wasm/jassub-worker.jsを相対importする一式の代表として登録(piper-plus.jsと同じ扱い。§4.4)。",
+      "bytes": 9482,
+      "sha256": "53667162fbc4f3989600995e751bdc86391aa03a0d8eeeb24019da7904922eda",
+      "parts": [
+        {
+          "path": "jassub/dist/worker/worker.js",
+          "bytes": 9482,
+          "sha256": "53667162fbc4f3989600995e751bdc86391aa03a0d8eeeb24019da7904922eda"
         }
       ]
     },
@@ -86,7 +128,7 @@
     {
       "id": "mediabunny.js",
       "path": "mediabunny/mediabunny.min.mjs",
-      "note": "単一バンドル。",
+      "note": "単一バンドル。実行時のimportは同一オリジン再取得になる(独立レビュー指摘1対応。§4.4)。",
       "bytes": 647081,
       "sha256": "29cf21f0f46102a63d246a3b0c63f7421ddde93fcbadc20d66b9319d0a508b38",
       "parts": [

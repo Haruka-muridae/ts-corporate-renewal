@@ -31,9 +31,9 @@ import {
   totalDownloadBytes,
   unavailableAssets,
   formatMegabytes,
-  combineParts,
-  verifyAsset,
   prepareAllAssets,
+  getVerifiedAssetBytes,
+  getVerifiedAssetBlobUrl,
 } from './vendor-loader.mjs';
 import { selectRoute, negotiateResolution, ROUTE_FAST, ROUTE_UNSUPPORTED } from './route-selection.mjs';
 import { computeSceneTimeline, kenBurnsScaleForFrame, frameCountForDuration } from './timeline.mjs';
@@ -218,21 +218,21 @@ async function handlePrepare() {
  * コードを一切書き換えずに、分割ファイルを結合したバイト列を渡せる。
  * (options.wasmUrl 経由だと `import(url)` の後 `fetch(既定パス)` が単一
  * ファイルを前提にしてしまい、分割ファイルとかみ合わない。)
+ *
+ * 指摘1(独立レビュー)修正: 以前はここで part.path をキーに cache.match して
+ * いたが、handlePrepare(prepareAllAssets)は結合後の論理パス(asset.path)を
+ * キーに cache.put するため常に不一致(cache miss)になり、合成のたびに
+ * 約58MBを再取得していた。vendor-loader.mjs の getVerifiedAssetBytes に
+ * 取得・結合・SHA-256検証・キー解決を一本化し、キーを asset.path 基準に
+ * 統一した(assetVirtualUrl)。
  */
 async function loadPiperWasmModule() {
-  const manifest = state.manifest;
-  const asset = findAsset(manifest, 'piper-plus.g2p-wasm');
-  const partBuffers = [];
-  for (const part of asset.parts) {
-    const partUrl = new URL(part.path, VENDOR_BASE_URL);
-    const cached = await state.cache.match(partUrl);
-    const buf = cached
-      ? new Uint8Array(await cached.arrayBuffer())
-      : new Uint8Array(await (await fetch(partUrl)).arrayBuffer());
-    partBuffers.push(buf);
-  }
-  const combined = combineParts(partBuffers);
-  await verifyAsset(asset, combined);
+  const combined = await getVerifiedAssetBytes({
+    manifest: state.manifest,
+    assetId: 'piper-plus.g2p-wasm',
+    baseUrl: VENDOR_BASE_URL,
+    cache: state.cache,
+  });
 
   const glueUrl = new URL('../vendor/piper/dist/rust-wasm/piper_plus_wasm.js', import.meta.url);
   const glue = await import(/* @vite-ignore */ glueUrl.href);
@@ -246,12 +246,29 @@ async function handleSynthesize() {
 
   const startedAt = performance.now();
   try {
+    // ort.wasm.min.mjs(グルーJS)は manifest でSHA-256検証済みだが、この
+    // import() 自体は同一オリジンへの再取得になる(独立レビュー指摘1 修正方針b。
+    // 実行バイトの完全一致保証はM3のService Workerで行う。§4.4改訂0.2)。
     const ortUrl = new URL('../vendor/ort/ort.wasm.min.mjs', import.meta.url);
     const ort = await import(/* @vite-ignore */ ortUrl.href);
     // 単スレッドwasm(SharedArrayBuffer不要。§2.2)。
     ort.env.wasm.numThreads = 1;
-    ort.env.wasm.wasmPaths = new URL('../vendor/ort/', import.meta.url).href;
+    // wasm本体(.wasm)はcache.matchで検証済みバイト列を取得し、
+    // env.wasm.wasmBinary(ort.wasm.min.mjs が公式に読む Module.wasmBinary 相当。
+    // 同梱ort.wasm.min.mjs のソースで `l=e.wasmBinary` → `m.wasmBinary=l` を
+    // 確認済み)へ直接渡す。これによりwasm本体側はURL経由のfetchが一切発生せず、
+    // 検証済みバイト列がそのまま実行される(指摘1 修正方針a)。
+    ort.env.wasm.wasmBinary = await getVerifiedAssetBytes({
+      manifest: state.manifest,
+      assetId: 'onnxruntime-web.wasm',
+      baseUrl: VENDOR_BASE_URL,
+      cache: state.cache,
+    });
 
+    // piper-plus本体もmanifestでSHA-256検証済みだが、相対importで同ディレクトリ内の
+    // 他ファイル(webgpu-session-manager.js等)を参照するため、Blob URL化すると
+    // それらの相対解決が壊れる。ort.wasm.min.mjs と同じ理由で同一オリジン再取得
+    // のまま残す(§4.4改訂0.2)。
     const piperUrl = new URL('../vendor/piper/src/index.js', import.meta.url);
     const { PiperPlus } = await import(/* @vite-ignore */ piperUrl.href);
 
@@ -492,12 +509,35 @@ async function setupSubtitleRenderer({ width, height }) {
   }));
   const assText = buildAss(scenesForAss);
 
+  // jassub.js自体はmanifestでSHA-256検証済みだが、importは同一オリジン再取得に
+  // なる(独立レビュー指摘1 修正方針b。§4.4改訂0.2)。
   const jassubUrl = new URL('../vendor/jassub/dist/jassub.js', import.meta.url);
   const { default: JASSUB } = await import(/* @vite-ignore */ jassubUrl.href);
 
   const subtitleCanvas = document.createElement('canvas');
-  const fontUrl = new URL('../vendor/fonts/NotoSansJP-Variable.ttf', import.meta.url).href;
-  const wasmUrl = new URL('../vendor/jassub/dist/wasm/jassub-worker.wasm', import.meta.url).href;
+  // フォント・wasmはJASSUBのWorker内で `_fetch(url)` により取得される
+  // (jassub.js/worker.jsのソースで確認済み。importではなくfetchなのでBlob URLを
+  // 受け付ける)。検証済みバイト列からBlob URLを作り、実行バイトを一致させる
+  // (指摘1 修正方針a)。
+  const fontUrl = await getVerifiedAssetBlobUrl({
+    manifest: state.manifest,
+    assetId: 'noto-sans-jp.font',
+    baseUrl: VENDOR_BASE_URL,
+    cache: state.cache,
+    mimeType: 'font/ttf',
+  });
+  const wasmUrl = await getVerifiedAssetBlobUrl({
+    manifest: state.manifest,
+    assetId: 'jassub.wasm',
+    baseUrl: VENDOR_BASE_URL,
+    cache: state.cache,
+    mimeType: 'application/wasm',
+  });
+  // worker.js は同ディレクトリの renderers/*.js 等を相対importするため、
+  // Blob URL化すると相対解決が壊れる。`new Worker(workerUrl)` はメインスレッド
+  // 自身が生成するため同一オリジンのままで問題なく、jassub.worker-js として
+  // manifestでSHA-256検証はしているが、importは同一オリジン再取得のまま残す
+  // (piper-plus.js・ort.wasm.min.mjsと同じ理由。§4.4改訂0.2)。
   const workerUrl = new URL('../vendor/jassub/dist/worker/worker.js', import.meta.url).href;
 
   const sub = new JASSUB({
@@ -556,6 +596,8 @@ async function renderFastRoute({ resolution, sampleRate }) {
 
   const { sub, subtitleCanvas, timeline } = await setupSubtitleRenderer({ width, height });
 
+  // mediabunny.min.mjsは単一バンドル・manifestでSHA-256検証済みだが、importは
+  // 同一オリジン再取得になる(独立レビュー指摘1 修正方針b。§4.4改訂0.2)。
   const mediabunnyUrl = new URL('../vendor/mediabunny/mediabunny.min.mjs', import.meta.url);
   const mb = await import(/* @vite-ignore */ mediabunnyUrl.href);
 

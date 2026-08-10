@@ -40,7 +40,8 @@ const ASSETS = [
   {
     id: 'piper-plus.js',
     path: 'piper/src/index.js',
-    note: 'piper-plus 本体(ESM。相対importで同ディレクトリ内の他ファイルを参照するため単一ファイルではない。src/配下一式を静的配信する代表として登録)',
+    note: 'piper-plus 本体(ESM。相対importで同ディレクトリ内の他ファイルを参照するため単一ファイルではない。src/配下一式を静的配信する代表として登録)。' +
+      '実行時のimportは同一オリジン再取得になる(独立レビュー指摘1対応。§4.4)。',
   },
   {
     id: 'piper-plus.g2p-wasm',
@@ -53,9 +54,25 @@ const ASSETS = [
     note: '単スレッドで動作可(§2.2)。COOP/COEP不要。',
   },
   {
+    id: 'onnxruntime-web.js',
+    path: 'ort/ort.wasm.min.mjs',
+    note: 'onnxruntime-webのグルーJS(ESM)。実行時のimportは同一オリジン再取得になる(独立レビュー指摘1対応。§4.4 M1の到達点)。',
+  },
+  {
     id: 'jassub.wasm',
     path: 'jassub/dist/wasm/jassub-worker.wasm',
     note: 'libassのwasm移植。modern(SIMD最適化)版は同梱せず標準版のみ採用(逸脱として報告)。',
+  },
+  {
+    id: 'jassub.js',
+    path: 'jassub/dist/jassub.js',
+    note: 'JASSUB本体(ESM)。Worker生成とfont/wasmのURL解決を行う。実行時のimportは同一オリジン再取得になる(独立レビュー指摘1対応。§4.4)。',
+  },
+  {
+    id: 'jassub.worker-js',
+    path: 'jassub/dist/worker/worker.js',
+    note: 'JASSUBのWorker本体(ESM)。同ディレクトリのrenderers/*.js・../wasm/jassub-worker.jsを相対importする一式の代表として登録' +
+      '(piper-plus.jsと同じ扱い。§4.4)。',
   },
   {
     id: 'noto-sans-jp.font',
@@ -65,7 +82,7 @@ const ASSETS = [
   {
     id: 'mediabunny.js',
     path: 'mediabunny/mediabunny.min.mjs',
-    note: '単一バンドル。',
+    note: '単一バンドル。実行時のimportは同一オリジン再取得になる(独立レビュー指摘1対応。§4.4)。',
   },
   {
     id: 'tsukuyomi.model',
@@ -120,6 +137,41 @@ async function splitIfNeeded(assetPath) {
   return { bytes: buf.length, sha256: combinedSha256, parts };
 }
 
+/**
+ * 既に `*.part1` `*.part2` ... へ分割済み(元ファイルは削除済み)の場合に、
+ * パートを読んで結合バイト数・SHA-256を再計算する。
+ *
+ * このスクリプトは新しいアセットを ASSETS に追加するたびに再実行する運用のため、
+ * 既に分割済みのアセット(piper-plus.g2p-wasm)についても毎回 stat/readFile を通す
+ * 必要がある。分割・削除は初回のみで、2回目以降はこちらの経路を通り、
+ * 既存のパートファイルを再利用する(再分割・再削除はしない)。
+ */
+async function combineExistingParts(assetPath) {
+  const parts = [];
+  let partIndex = 1;
+  for (;;) {
+    const partPath = `${assetPath}.part${partIndex}`;
+    const abs = join(vendorRoot, partPath);
+    let info;
+    try {
+      info = await stat(abs);
+    } catch {
+      break;
+    }
+    const buf = await readFile(abs);
+    parts.push({ path: partPath, bytes: info.size, sha256: sha256(buf), buf });
+    partIndex += 1;
+  }
+  if (parts.length === 0) return null;
+
+  const combined = Buffer.concat(parts.map((p) => p.buf));
+  return {
+    bytes: combined.length,
+    sha256: sha256(combined),
+    parts: parts.map((p) => ({ path: p.path, bytes: p.bytes, sha256: p.sha256 })),
+  };
+}
+
 async function main() {
   const assets = [];
 
@@ -147,9 +199,12 @@ async function main() {
     if (already) {
       result = await splitIfNeeded(def.path);
     } else {
-      // 既に分割済み(*.part1 等)で元ファイルが無いケース。
-      // part ファイルを走査して結合サイズ・ハッシュを出す。
-      throw new Error(`${def.path} が見つかりません(未配置か、既に分割済みで再実行が必要)。`);
+      // 元ファイルが無い場合、既に分割済み(*.part1 等)であることを期待して
+      // パートファイルを走査する(再分割・再削除はしない。冪等な再実行のため)。
+      result = await combineExistingParts(def.path);
+      if (!result) {
+        throw new Error(`${def.path} が見つかりません(未配置か、想定外の状態です)。`);
+      }
     }
 
     assets.push({

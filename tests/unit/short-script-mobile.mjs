@@ -6,10 +6,11 @@
  * §6「実機頼みのもの」)。
  *   1. subtitle.mjs(複製)の純関数
  *   2. 分割ローダーの純関数(マニフェスト解釈・結合・SHA-256不一致拒否)
+ *   2.5. 検証済み取得の単一入口(キー統一。独立レビュー指摘1の固定)
  *   3. 経路選択・解像度ネゴシエーションの純関数
  *   4. タイムライン計算の純関数
- *   5. vendor-manifest.json と実ファイルのSHA-256整合(ベンダー整合)
- *   6. ソース静的検証(CSP・innerHTML不使用・WakeLock呼び出しの実在)
+ *   5. vendor-manifest.json と実ファイルのSHA-256整合(ベンダー整合。JSモジュールを含む)
+ *   6. ソース静的検証(CSP・innerHTML不使用・WakeLock呼び出しの実在・part.pathでのcache.match不使用)
  */
 
 import { readFile, stat } from 'node:fs/promises';
@@ -171,6 +172,113 @@ async function main() {
   }
 
   /* ---------------------------------------------------------------- */
+  section('vendor-loader.mjs: キー統一(独立レビュー指摘1)');
+  /* ---------------------------------------------------------------- */
+  {
+    // 指摘1の核心: prepareAllAssets は結合後の論理パス(asset.path)をキーに
+    // cache.put するが、修正前の loadPiperWasmModule は分割パート(part.path)を
+    // キーに cache.match していたため、常に別のキーを見ていた(=常にmiss)。
+    const baseUrl = 'https://example.test/vendor/';
+    const partsData = [new Uint8Array([1, 2, 3, 4, 5]), new Uint8Array([6, 7, 8])];
+    const combinedBytes = loader.combineParts(partsData);
+    const combinedHash = await loader.sha256Hex(combinedBytes);
+    const part1Hash = await loader.sha256Hex(partsData[0]);
+    const part2Hash = await loader.sha256Hex(partsData[1]);
+
+    const asset = {
+      id: 'fake.multi',
+      path: 'fake/combined.bin',
+      bytes: combinedBytes.length,
+      sha256: combinedHash,
+      parts: [
+        { path: 'fake/combined.bin.part1', bytes: partsData[0].length, sha256: part1Hash },
+        { path: 'fake/combined.bin.part2', bytes: partsData[1].length, sha256: part2Hash },
+      ],
+    };
+    const manifest = { cacheName: 'test', assets: [asset] };
+
+    const combinedKey = loader.assetVirtualUrl(asset, baseUrl);
+    const partKey = new URL(asset.parts[0].path, baseUrl).toString();
+    check(
+      'asset.pathとpart.pathは異なるURLになる(だからこそキーの一本化が要る)',
+      combinedKey !== partKey
+    );
+
+    let fetchCount = 0;
+    const fakeFetch = async (url) => {
+      fetchCount += 1;
+      const path = String(url);
+      const idx = asset.parts.findIndex((p) => path.endsWith(p.path));
+      if (idx === -1) throw new Error(`想定外のURLへfetchした: ${path}`);
+      return new Response(partsData[idx]);
+    };
+
+    // 実際の Cache Storage の match() は呼ぶたびに未読状態の新しい Response を返す
+    // (bodyを消費済みでも次のmatch()には影響しない)。ここでもclone()して同じ
+    // 挙動にする(そうしないと2回目のgetVerifiedAssetBytes呼び出しで
+    // 「Body has already been read」になり、テストが実挙動と乖離する)。
+    class FakeCache {
+      constructor() {
+        this.store = new Map();
+      }
+      async match(key) {
+        const stored = this.store.get(String(key));
+        return stored ? stored.clone() : undefined;
+      }
+      async put(key, response) {
+        this.store.set(String(key), response.clone());
+      }
+    }
+    const cache = new FakeCache();
+
+    // handlePrepare が呼ぶ prepareAllAssets は asset.path 基準のキーで保存する。
+    await loader.prepareAllAssets({ manifest, baseUrl, cache, fetchImpl: fakeFetch });
+    check('prepareAllAssets: パート数だけfetchする(2パート)', fetchCount === 2);
+    check(
+      'prepareAllAssets: 結合後キー(assetVirtualUrl)でcache.matchがヒットする',
+      !!(await cache.match(combinedKey))
+    );
+    check(
+      'prepareAllAssets: パートキーではcache.matchがヒットしない(結合前バイト列を別物として保存していない)',
+      !(await cache.match(partKey))
+    );
+
+    // getVerifiedAssetBytes(修正後の loadPiperWasmModule 等が使う統一入口)は
+    // 同じ assetVirtualUrl を使うため、ここでは新規fetchが発生しない
+    // (2回目以降ネットワーク不要という§4.4の前提が、この経路でも成立することの固定)。
+    const fetchCountBeforeSecondAccess = fetchCount;
+    const bytes = await loader.getVerifiedAssetBytes({
+      manifest,
+      assetId: 'fake.multi',
+      baseUrl,
+      cache,
+      fetchImpl: fakeFetch,
+    });
+    check(
+      'getVerifiedAssetBytes: cache.putと同じキーを使うためfetchが増えない(修正前は毎回2パート再取得していた)',
+      fetchCount === fetchCountBeforeSecondAccess
+    );
+    check(
+      'getVerifiedAssetBytes: 結合済みの検証済みバイト列が返る',
+      JSON.stringify(Array.from(bytes)) === JSON.stringify(Array.from(combinedBytes))
+    );
+
+    const blobUrl = await loader.getVerifiedAssetBlobUrl({
+      manifest,
+      assetId: 'fake.multi',
+      baseUrl,
+      cache,
+      fetchImpl: fakeFetch,
+      mimeType: 'application/octet-stream',
+    });
+    check('getVerifiedAssetBlobUrl: blob: スキームのURLを返す', blobUrl.startsWith('blob:'));
+    check(
+      'getVerifiedAssetBlobUrl: Blob URL取得でも新規fetchは発生しない',
+      fetchCount === fetchCountBeforeSecondAccess
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
   section('route-selection.mjs: 経路選択');
   /* ---------------------------------------------------------------- */
   {
@@ -255,6 +363,19 @@ async function main() {
       'vendor-manifest.json: maxAssetBytesが25MiB(26,214,400)',
       manifest.maxAssetBytes === 26214400
     );
+
+    // 指摘1 修正方針b: 実行時にimportされるJSモジュール一式もmanifestの
+    // 検証対象に含める(バイナリだけでなく、実行バイトのSHA-256を確認できる形にする)。
+    const assetIds = new Set(manifest.assets.map((a) => a.id));
+    for (const jsAssetId of [
+      'piper-plus.js',
+      'onnxruntime-web.js',
+      'jassub.js',
+      'jassub.worker-js',
+      'mediabunny.js',
+    ]) {
+      check(`vendor-manifest.json: ${jsAssetId}(JSモジュール)が検証対象に含まれる`, assetIds.has(jsAssetId));
+    }
 
     for (const asset of manifest.assets) {
       if (asset.unavailable) {
@@ -348,6 +469,37 @@ async function main() {
 
     const subtitleSource = await readFile(new URL('subtitle.mjs', LAB_DIR), 'utf8');
     check('subtitle.mjs は innerHTML を使わない', !/\.innerHTML\s*=/.test(subtitleSource));
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('ソース静的検証: app.js が part.path で cache.match していない(独立レビュー指摘1)');
+  /* ---------------------------------------------------------------- */
+  {
+    const appSource = await readFile(new URL('app.js', LAB_DIR), 'utf8');
+    // コメント(// ... / * ... * /)を除いた実コードだけを対象にする。
+    // 修正内容を説明する日本語コメント自体に「part.path」「cache.match」という
+    // 字面が出てくるため、コメントを含めたまま素朴に正規表現をかけると
+    // 誤検知する(このテストを書く過程で実際に踏んだ)。
+    const codeOnly = appSource
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    // 修正前のバグ: `for (const part of asset.parts) { ... state.cache.match(partUrl) ... }`
+    // という「partを起点にcache.matchする」パターンが再発していないかを固定する。
+    // (cache.match自体は許容するが、直前でpartのURLを組み立てて渡す形を禁じる)
+    check(
+      'app.js は cache.match(...) に part.path 由来のURLを渡していない',
+      !/part\.path[\s\S]{0,80}cache\.match|cache\.match\([^)]*part(?:Url|\.path)/i.test(codeOnly)
+    );
+    check(
+      'app.js は結合前パートを対象にした cache.match ループを持たない',
+      !/for\s*\(\s*const\s+part\s+of\s+asset\.parts\s*\)\s*\{[\s\S]{0,200}cache\.match/.test(codeOnly)
+    );
+    check('app.js のコード本体はもう state.cache.match(...) を直接呼んでいない', !/state\.cache\.match\(/.test(codeOnly));
+    check(
+      'app.js は検証済み取得の単一入口(getVerifiedAssetBytes/getVerifiedAssetBlobUrl)を使っている',
+      appSource.includes('getVerifiedAssetBytes') && appSource.includes('getVerifiedAssetBlobUrl')
+    );
   }
 
   finish();

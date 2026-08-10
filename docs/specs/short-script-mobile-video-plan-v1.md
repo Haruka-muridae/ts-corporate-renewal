@@ -2,7 +2,7 @@
 
 文書作成日:2026年8月10日
 対象システム:ショート動画 台本メーカー(アプリID `short-script`)の第3段階=スマホ端末内での音声・字幕・動画生成
-バージョン:0.1(ドラフト)
+バージョン:0.2(ドラフト)
 
 ---
 
@@ -11,6 +11,7 @@
 | 版 | 日付 | 内容 |
 | --- | --- | --- |
 | 0.1 | 2026-08-10 | 初版ドラフト。スマホ(ブラウザ/PWA)完結の動画生成方式を規定。VOICEVOX/ずんだもん断念と piper-plus/つくよみちゃん採用、ffmpeg.wasm 不採用、Windows 配布凍結を記録(§7)。 |
+| 0.2 | 2026-08-10 | M1実装で判明した事項の反映(独立レビュー指摘への対応。§4.4)。①バイナリ資産(piper G2P wasm・onnxruntime-web wasm・JASSUB wasm・フォント)は検証済みキャッシュ経由に一本化し、2回目以降はネットワーク不要であることを実装で担保、②JSモジュール(ort.wasm.min.mjs・jassub.js・jassub Worker本体・mediabunny.min.mjs・piper-plus本体)はmanifestでSHA-256検証はするが、実行時のimportは同一オリジンへの再取得になり得る残存ギャップがあり、完全なオフライン化と実行バイトの完全一致保証はM3のService Workerで行う、③初回ダウンロード実測81.8MB(§4.3の見積り約70MBとの差分は、piperのG2P wasmが日本語専用ではなく多言語一体配布のため約58MBに達したこと)。 |
 
 > 本書は**まだ実装が存在しない機能について「何を作るか」を決めた要件定義書**である(docs/specs/README.md の区分)。実装済み範囲を規定する short-script-spec-v1.md(v1.5)の下位ではなく、その §13(ローカル補助サービス連携)を**置き換える方針**を定める。実装が固まった範囲は、そのとき仕様書へ移す。
 
@@ -173,10 +174,21 @@ AGENTS.md の「外部ライブラリ追加は事前承認」に従い、承認�
 
 ### 4.4 初回ダウンロード量とキャッシュ戦略
 
-* 初回合計は**約70MB前後**(実測で確定)。Wi-Fi 推奨の旨と進捗バー(バイト数ベース)を必ず出し、**利用者の明示操作(「音声データを準備する」ボタン)で開始する**。画面を開いただけで 70MB を落とし始めない(GIS 承認記録 1-1 の「無条件に外部通信を発生させない」と同じ規律。同一オリジンでも通信量への配慮は同じ)。
+* 初回合計は**実測81.8MB**(§4.3の見積り約70MBより増えた分は、piperのG2P wasmがOpenJTalk+NAIST-JDICを含む多言語一体配布のため約58MBに達したこと。日本語のみに絞った軽量版は上流に無い)。Wi-Fi 推奨の旨と進捗バー(バイト数ベース)を必ず出し、**利用者の明示操作(「音声データを準備する」ボタン)で開始する**。画面を開いただけで 70MB を落とし始めない(GIS 承認記録 1-1 の「無条件に外部通信を発生させない」と同じ規律。同一オリジンでも通信量への配慮は同じ)。
 * キャッシュは **Cache Storage** に versioned キー(`short-script-vendor-v1`)で保存し、2回目以降はネットワークへ行かない。Service Worker は M3 の PWA 化で導入し、それまでは fetch→Cache Storage 直書きのローダーで足りる(Service Worker なしでも Cache Storage API は使える)。
 * iOS はサイト未訪問が続くと(目安7日)スクリプト書き込みのストレージを削除しうる。**消えても再ダウンロードで復旧するだけ**であり、整合性は SHA-256 検証(§4.2)が守る。ヘルプに「しばらく使わないと再ダウンロードが発生する」旨を書く。
 * PWA 化(M3)では Service Worker はアプリシェル(HTML/CSS/JS)を precache し、巨大アセットは上記 Cache Storage 運用のまま(SW の precache に 70MB を入れると更新のたびに再取得の危険があるため分離する)。
+
+#### 4.4.1 M1実装で判明した事項(独立レビュー指摘への対応。改訂履歴0.2)
+
+M1の初回実装では、上記の「2回目以降はネットワークへ行かない」が実際には成立していなかった(独立レビューで確定)。原因と対応を以下に記録する。
+
+* **キーの不一致(修正済み)**: `prepareAllAssets`(手順1「音声データを準備する」)は結合後の論理パス(`asset.path`)をキーに `cache.put` していたが、`loadPiperWasmModule`(piperの分割wasmを読む処理)は分割パート(`part.path`)をキーに `cache.match` していたため、キーが一致せず常にmissし、合成のたびに約58MBを再取得していた。`mobile-lab/vendor-loader.mjs` の `assetVirtualUrl()` にキー計算を一本化し、`getVerifiedAssetBytes()` / `getVerifiedAssetBlobUrl()` という単一の取得入口(初回: 分割fetch→結合→SHA-256検証→Cache Storage保存、2回目以降: `cache.match`)を経由させることで解消した。バイナリ資産(piper G2P wasm・onnxruntime-web wasm・JASSUB wasm・フォント)は例外なくこの入口を通り、**2回目以降は実測どおりネットワーク不要**になる。
+  * onnxruntime-web(wasm本体)は `env.wasm.wasmBinary` に検証済みバイト列を直接渡す(URLを経由しないため取得漏れが起きない)。
+  * JASSUBのwasm・フォントは検証済みバイト列から Blob URL を作り、`wasmUrl`/`modernWasmUrl`/`availableFonts` に渡す(JASSUBのWorkerは `fetch(受け取ったURL)` でこれらを取得する実装であることをソースで確認済み。Blob URLはfetch可能)。
+  * piper G2P wasmは既存どおり `wasmLoader` DI(ArrayBuffer直渡し)を使う。
+* **JSモジュールの残存ギャップ(検証は追加、実行経路は未解消)**: `ort.wasm.min.mjs`・`jassub.js`・JASSUBのWorker本体(`worker.js`)・`mediabunny.min.mjs`・piper-plus本体(`src/index.js`)は、いずれも `vendor-manifest.json` の検証対象に追加し、手順1の時点でバイト取得とSHA-256検証を行うようにした。ただし**実行そのもの(`import()`)は同一オリジンへの再取得のままであり、「検証したバイト列」と「実行したバイト列」が完全に一致する保証はまだ無い**。これはBlob URL化すると相対import(同ディレクトリ内の他ファイル参照)が壊れるためで、jassub.js・piper-plus本体・onnxruntime-web(グルーJS)のいずれも同様の理由でこの経路を採る。**完全なオフライン化と実行バイトの完全一致保証はM3のService Worker導入時に行う**(§5 M3)。
+* **初回ダウンロード実測**: 81.8MB(バイナリ資産のみ。上記のJS検証対象追加により合計は約81.9MBへ微増したが、増分は数十KB程度でJSファイル自体は小さい)。
 
 ---
 
