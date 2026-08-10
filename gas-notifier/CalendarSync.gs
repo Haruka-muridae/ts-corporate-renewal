@@ -1,40 +1,35 @@
 /**
- * カレンダーの同期と、通知対象かどうかの判定。
+ * カレンダーの同期。
  *
- * ------------------------------------------------------------------
- * 判定の順序は要件書 §6 のとおりに固定する
- * ------------------------------------------------------------------
- *   1. 削除済み（status === 'cancelled'）      → キューから消す（FR-14）
- *   2. 終日予定（start.dateTime が無い）        → 「時間指定のみ」ONなら除外（FR-03/07）
- *   3. 自分の出欠（attendees の self === true） → 取得（FR-04）
- *   4. その出欠が設定でONか                     → OFFなら除外（FR-05/09）
+ * V2 では**判定を行わない。** ここがするのは3つだけ。
  *
- * 順序を入れ替えると、削除済みの終日予定が「終日だから除外」で止まり、
- * キューに残ったままになる。
- * ------------------------------------------------------------------
+ *   1. Advanced Calendar Service で予定を取る
+ *   2. 予定を「骨格」へ落とす（匿名化。予定名はシートに残し、外へ出さない）
+ *   3. ゲートの判定結果（notify / remove）を notify_queue へ反映する
  *
- * 判定そのもの（decideEvent_）は純関数にしてある。Calendar API も
- * シートも触らないので、Node のテストからそのまま呼べる。
+ * 判定の中身（出欠フィルタ・終日の扱い・再通知の閾値）は
+ * workers/notifier-gate/src/evaluate.mjs にある。
+ * この分離の理由は docs/notifier-design-notes.md §1。
  */
 
 /* 同期の間隔。tick() は毎分動くが、Calendar API を叩くのは5分に1回でよい。 */
 var SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
-/* 先読みする範囲。24時間より先の予定は次の同期で拾えばよい。 */
+/* 先読みする範囲。24時間より先の予定は次の同期で拾う。 */
 var SYNC_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/* キューの保持期間。開始時刻がこれより古い行は消す（DR-03）。 */
+/* キューと sent_log の保持期間。 */
 var QUEUE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-
-/* sent_log の保持期間。二重送信の判定に使う期間より十分長くとる。 */
 var SENT_LOG_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/* ゲートへ渡す送信済み一覧の範囲。再通知の判定に使う（design-notes §4）。 */
+var SENT_DIGEST_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * 毎分のトリガーから呼ばれる唯一の入口。
  *
- * ここで LockService を取るのは、前の実行が長引いたときに次の実行が
- * 重なって二重送信になるのを防ぐため。取れなければ黙って帰る
- * （次の1分後にまた来るので、待つ意味がない）。
+ * LockService を取るのは、前の実行が長引いたときに重なって二重送信になるのを
+ * 防ぐため。取れなければ黙って帰る（1分後にまた来る）。
  */
 function tick() {
   var lock = LockService.getScriptLock();
@@ -64,68 +59,209 @@ function tick() {
 }
 
 /**
- * 1件の予定を通知対象にするか決める（純関数）。
+ * カレンダーを同期して notify_queue を更新する。
  *
- * 戻り値は { include, reason, responseStatus }。
- * reason は include === false のときだけ意味を持ち、ログとテストで使う。
+ * CalendarApp では responseStatus を取れないため Advanced Service を使う
+ * （要件 FR-04）。
  */
-function decideEvent_(event, settings) {
-  if (!event || typeof event !== 'object') {
-    return { include: false, reason: 'invalid', responseStatus: '' };
-  }
+function syncCalendar_(nowMs) {
+  var response = Calendar.Events.list('primary', {
+    timeMin: new Date(nowMs).toISOString(),
+    timeMax: new Date(nowMs + SYNC_WINDOW_MS).toISOString(),
+    singleEvents: true,
+    showDeleted: true,
+    maxResults: 250,
+    orderBy: 'startTime'
+  });
 
-  /* 1. 削除済み。ここを最初に見る（下の除外に先回りされないため）。 */
-  if (String(event.status || '') === 'cancelled') {
-    return { include: false, reason: 'cancelled', responseStatus: '' };
-  }
+  return applyCalendarItems_((response && response.items) || [], nowMs);
+}
 
-  var start = event.start || {};
-  var timed = typeof start.dateTime === 'string' && start.dateTime !== '';
+/**
+ * 取得した予定をゲートへ渡し、返ってきた予定表をキューへ反映する。
+ *
+ * 戻り値は { added, updated, removed, skipped, licenseState, error }。
+ */
+function applyCalendarItems_(items, nowMs) {
+  var settings = readSettings_();
+  var skeletons = [];
+  var byEid = {};
 
-  /* 2. 終日予定。「時間指定の予定のみ」が ON なら通知しない（AC-04）。 */
-  if (!timed) {
-    if (settings.timedOnly) {
-      return { include: false, reason: 'all-day', responseStatus: '' };
+  for (var i = 0; i < items.length; i++) {
+    var event = items[i] || {};
+    var id = String(event.id || '');
+
+    if (id === '') {
+      continue;
     }
 
-    if (typeof start.date !== 'string' || start.date === '') {
-      return { include: false, reason: 'no-start', responseStatus: '' };
-    }
+    var eid = eventEid_(id);
+
+    skeletons.push(buildEventSkeleton_(event, eid));
+    byEid[eid] = event;
   }
 
-  /* 3. 自分の出欠。 */
-  var status = selfResponseStatus_(event);
+  var evaluated = gateEvaluate_({
+    settings: {
+      accepted: settings.accepted,
+      tentative: settings.tentative,
+      needsAction: settings.needsAction,
+      declined: settings.declined,
+      timedOnly: settings.timedOnly,
+      timingMin: settings.timing
+    },
+    events: skeletons,
+    sentDigest: buildSentDigest_(nowMs)
+  });
 
-  if (status === '') {
+  if (!evaluated.ok) {
     /*
-     * 自分が出席者として載っていない予定。
-     *
-     * 他人のカレンダーから流れてきた予定や、共有カレンダーの予定が
-     * ここに来る。要件書 §6 補足の推奨方針どおり通知対象外とする。
-     * ただし attendees 自体が無い自作の単独予定は organizer.self で拾う
-     * （拾わないと「一人で入れた作業予定」が全部通知されない）。
+     * 判定を受け取れなかった。**キューには触らない。**
+     * 触ると、通信が一度失敗しただけで予定表が消える。
      */
-    return { include: false, reason: 'not-attendee', responseStatus: '' };
+    return {
+      added: 0, updated: 0, removed: 0, skipped: skeletons.length,
+      licenseState: evaluated.licenseState, error: evaluated.error
+    };
   }
 
-  /* 4. その出欠が設定で ON か（AC-01/02/03）。 */
-  if (settings[status] !== true) {
-    return { include: false, reason: 'status-off', responseStatus: status };
+  var summary = applyGateDecision_(evaluated, byEid, nowMs);
+
+  summary.licenseState = evaluated.licenseState;
+  summary.error = '';
+
+  return summary;
+}
+
+/** ゲートの notify / remove を notify_queue へ落とす。 */
+function applyGateDecision_(evaluated, byEid, nowMs) {
+  var rows = tableRead_(SHEET.QUEUE);
+  var byKey = {};
+
+  for (var r = 0; r < rows.length; r++) {
+    byKey[String(rows[r].key)] = rows[r];
   }
 
-  return { include: true, reason: 'ok', responseStatus: status };
+  var keep = {};
+  var summary = { added: 0, updated: 0, removed: 0, skipped: 0 };
+
+  for (var i = 0; i < evaluated.notify.length; i++) {
+    var item = evaluated.notify[i] || {};
+    var eid = String(item.eid || '');
+    var event = byEid[eid];
+
+    if (eid === '' || !event) {
+      /* 渡していない eid が返ってきた。無視する（キューを壊さない）。 */
+      summary.skipped++;
+      continue;
+    }
+
+    var key = queueKey_(eid, item.timing);
+    var record = {
+      key: key,
+      eid: eid,
+      eventId: String(event.id || ''),
+      feature: String(item.feature || 'calendar'),
+      timing: Number(item.timing),
+      title: eventTitle_(event),
+      startTime: toMs_(Date.parse(String(item.startAt || ''))),
+      notifyAt: toMs_(Date.parse(String(item.notifyAt || ''))),
+      updatedAt: nowMs
+    };
+
+    keep[key] = true;
+
+    if (byKey[key]) {
+      tableUpdate_(SHEET.QUEUE, byKey[key].__row, record);
+      summary.updated++;
+    } else {
+      tableAppend_(SHEET.QUEUE, record);
+      summary.added++;
+    }
+  }
+
+  /* remove は eid の一覧。timing が違う行もまとめて消す。 */
+  var removeSet = {};
+
+  for (var d = 0; d < evaluated.remove.length; d++) {
+    removeSet[String(evaluated.remove[d])] = true;
+  }
+
+  /*
+   * 掃除は追加・更新を終えた状態を読み直して1回だけ行う。
+   * 途中で消すと行番号がずれ、別の行を巻き添えにする。
+   */
+  var fresh = tableRead_(SHEET.QUEUE);
+  var targets = [];
+
+  for (var q = 0; q < fresh.length; q++) {
+    var row = fresh[q];
+    var startAt = toMs_(row.startTime);
+
+    if (!isFinite(startAt) || startAt < nowMs - QUEUE_RETENTION_MS) {
+      targets.push(row.__row);
+      continue;
+    }
+
+    if (removeSet[String(row.eid)] === true && keep[String(row.key)] !== true) {
+      targets.push(row.__row);
+    }
+  }
+
+  summary.removed = deleteRowsByNumbers_(SHEET.QUEUE, targets);
+
+  purgeSentLog_(nowMs);
+
+  return summary;
+}
+
+/**
+ * 予定を「骨格」へ落とす（純関数）。
+ *
+ * **ここに列挙した項目しか外へ出ない。** 予定名・説明・参加者・カレンダーIDを
+ * 足さないこと。足しても Workers 側が要求ごと拒否する（design-notes §3）。
+ */
+function buildEventSkeleton_(event, eid) {
+  var start = (event && event.start) || {};
+  var timed = typeof start.dateTime === 'string' && start.dateTime !== '';
+  var startMs = eventStartMs_(event);
+
+  return {
+    eid: eid,
+    feature: 'calendar',
+    startAt: isFinite(startMs) ? new Date(startMs).toISOString() : '',
+    status: selfResponseStatus_(event),
+    allDay: !timed,
+    cancelled: String((event && event.status) || '') === 'cancelled'
+  };
+}
+
+/**
+ * 予定IDを運営へ渡せる形（eid）にする。
+ *
+ * 端末ごとの秘密鍵で HMAC-SHA256 にかけるため、同じ予定でも利用者が違えば
+ * 別の値になり、運営側では突き合わせられない（design-notes §3）。
+ */
+function eventEid_(eventId) {
+  var key = getProperty_(PROP.EID_HMAC_KEY);
+
+  if (key === '') {
+    throw new Error('EID_HMAC_KEY がありません。セットアップを実行してください。');
+  }
+
+  var bytes = Utilities.computeHmacSha256Signature(String(eventId), key);
+
+  return stripBase64Padding_(Utilities.base64EncodeWebSafe(bytes));
 }
 
 /**
  * 自分の responseStatus を取り出す（純関数）。取れなければ ''。
  *
- * Google は主催者本人の attendees 行に responseStatus を入れないことがある。
- * その場合は 'accepted' ではなく 'needsAction' 扱いにする
- * （既定では両方 ON なので通知は出る。declined だけを外す設定でも
- * 主催者の予定が消えない、という側に倒している）。
+ * 主催者本人の attendees 行には responseStatus が入らないことがあるため
+ * 'needsAction' 扱いにする。attendees が無い単独予定は organizer/creator で拾う。
  */
 function selfResponseStatus_(event) {
-  var attendees = event.attendees;
+  var attendees = event && event.attendees;
 
   if (Object.prototype.toString.call(attendees) === '[object Array]' && attendees.length > 0) {
     for (var i = 0; i < attendees.length; i++) {
@@ -145,9 +281,8 @@ function selfResponseStatus_(event) {
     return '';
   }
 
-  /* attendees が無い＝自分だけの予定。作成者が自分なら参加扱いにする。 */
-  var organizer = event.organizer || {};
-  var creator = event.creator || {};
+  var organizer = (event && event.organizer) || {};
+  var creator = (event && event.creator) || {};
 
   if (organizer.self === true || creator.self === true) {
     return 'accepted';
@@ -166,11 +301,7 @@ function eventStartMs_(event) {
   }
 
   if (typeof start.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(start.date)) {
-    /*
-     * 終日予定。'2026-08-10' を new Date() に渡すと UTC の0時になり、
-     * 日本時間では前日9時になってしまう。スクリプトのタイムゾーンでの
-     * 0時が欲しいので、数値3つの形で組み立てる。
-     */
+    /* 終日予定。UTC 0時ではなくスクリプトのタイムゾーンの0時が欲しい。 */
     var parts = start.date.split('-');
     return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
   }
@@ -178,141 +309,41 @@ function eventStartMs_(event) {
   return NaN;
 }
 
-/** 通知予定時刻（純関数）。timing は「何分前か」。0 なら開始時刻ちょうど。 */
-function computeNotifyAt_(startMs, timingMinutes) {
-  return startMs - timingMinutes * 60 * 1000;
-}
-
-/** 予定名。空なら既定の文言にする（通知のタイトルが空になるのを防ぐ）。 */
+/** 予定名。空なら既定の文言にする。**この値は外へ出ない。** */
 function eventTitle_(event) {
   var summary = String((event && event.summary) || '').trim();
   return summary === '' ? '（タイトルなし）' : summary;
 }
 
 /**
- * カレンダーを同期して notify_queue を更新する。
+ * ゲートへ渡す送信済み一覧。
  *
- * Advanced Service（Calendar v3）を使う。CalendarApp では responseStatus を
- * 取れないため、こちらでなければ FR-04 が満たせない。
+ * 送るのは eid / feature / timing / 開始時刻だけ。予定名は含めない。
+ * リスケの再通知判定に使う（design-notes §4）。
  */
-function syncCalendar_(nowMs) {
-  var settings = readSettings_();
-  var response = Calendar.Events.list('primary', {
-    timeMin: new Date(nowMs).toISOString(),
-    timeMax: new Date(nowMs + SYNC_WINDOW_MS).toISOString(),
-    singleEvents: true,
-    showDeleted: true,
-    maxResults: 250,
-    orderBy: 'startTime'
-  });
+function buildSentDigest_(nowMs) {
+  var rows = tableRead_(SHEET.SENT_LOG);
+  var out = [];
 
-  var items = (response && response.items) || [];
+  for (var i = 0; i < rows.length; i++) {
+    var sentAt = toMs_(rows[i].sentAt);
 
-  return applyCalendarItems_(items, settings, nowMs);
+    if (!isFinite(sentAt) || sentAt < nowMs - SENT_DIGEST_WINDOW_MS) {
+      continue;
+    }
+
+    out.push({
+      eid: String(rows[i].eid),
+      feature: String(rows[i].feature || 'calendar'),
+      timing: Number(rows[i].timing),
+      startAt: toIsoOrEmpty_(rows[i].startTime)
+    });
+  }
+
+  return out;
 }
 
-/**
- * 同期結果をキューへ反映する。Calendar API から切り離してあるので、
- * テストは items を直接渡して判定と upsert をまとめて確かめられる。
- */
-function applyCalendarItems_(items, settings, nowMs) {
-  var rows = tableRead_(SHEET.QUEUE);
-  var byKey = {};
-
-  for (var r = 0; r < rows.length; r++) {
-    byKey[String(rows[r].key)] = rows[r];
-  }
-
-  /*
-   * seen … 今回の同期に出てきた予定ID。
-   * keep … 残すべきキュー行のキー。
-   *
-   * 「出てきたのに keep に無い」行だけを消す。**出てこなかった行は消さない。**
-   * timeMin が現在時刻なので、開始済みの予定はもう一覧に載らない。
-   * 一覧に無いことを削除の根拠にすると、通知直前の予定が消える。
-   */
-  var seen = {};
-  var keep = {};
-  var summary = { added: 0, updated: 0, removed: 0, skipped: 0 };
-
-  for (var i = 0; i < items.length; i++) {
-    var event = items[i] || {};
-    var id = String(event.id || '');
-
-    if (id === '') {
-      continue;
-    }
-
-    seen[id] = true;
-
-    var decision = decideEvent_(event, settings);
-    var startMs = decision.include ? eventStartMs_(event) : NaN;
-
-    if (!decision.include || !isFinite(startMs)) {
-      /*
-       * 対象外になった予定は、過去に入れたキュー行ごと消す（下の掃除で拾う）。
-       * 削除（FR-14）だけでなく、出欠を辞退へ変えた場合や、
-       * 設定を OFF にした場合もここを通る。
-       */
-      summary.skipped++;
-      continue;
-    }
-
-    var wanted = queueKey_(id, settings.timing);
-
-    /* timing を変えたときは、古い timing の行が keep に入らず消える。 */
-    keep[wanted] = true;
-
-    var record = {
-      key: wanted,
-      eventId: id,
-      timing: settings.timing,
-      title: eventTitle_(event),
-      startTime: startMs,
-      notifyAt: computeNotifyAt_(startMs, settings.timing),
-      updatedAt: nowMs
-    };
-
-    if (byKey[wanted]) {
-      /* 開始時刻が動いていれば通知予定時刻も引き直す（FR-13）。 */
-      tableUpdate_(SHEET.QUEUE, byKey[wanted].__row, record);
-      summary.updated++;
-    } else {
-      tableAppend_(SHEET.QUEUE, record);
-      summary.added++;
-    }
-  }
-
-  /*
-   * 掃除は最後に1回だけ、追加・更新を終えた状態を読み直して行う。
-   * 途中で消すと行番号がずれ、別の行を巻き添えにする。
-   */
-  var fresh = tableRead_(SHEET.QUEUE);
-  var targets = [];
-
-  for (var q = 0; q < fresh.length; q++) {
-    var row = fresh[q];
-    var startAt = toMs_(row.startTime);
-
-    /* 古すぎる行（DR-03）。開始時刻が読めない壊れた行もここで消える。 */
-    if (!isFinite(startAt) || startAt < nowMs - QUEUE_RETENTION_MS) {
-      targets.push(row.__row);
-      continue;
-    }
-
-    if (seen[String(row.eventId)] === true && keep[String(row.key)] !== true) {
-      targets.push(row.__row);
-    }
-  }
-
-  summary.removed = deleteRowsByNumbers_(SHEET.QUEUE, targets);
-
-  purgeSentLog_(nowMs);
-
-  return summary;
-}
-
-/** sent_log の古い行を消す。放置すると行数が増え続けて読み書きが遅くなる。 */
+/** sent_log の古い行を消す。放置すると読み書きが遅くなる。 */
 function purgeSentLog_(nowMs) {
   var rows = tableRead_(SHEET.SENT_LOG);
   var targets = [];

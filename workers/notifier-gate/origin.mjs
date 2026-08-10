@@ -60,6 +60,11 @@ export const GATE_ORIGIN_FILES = [
     note: 'フロントの接続先（ヘルスチェックとライセンス状態の表示）',
     expectOrigin: true,
   },
+  {
+    path: 'gas-notifier/Gate.gs',
+    note: '利用者のテンプレートからゲートを呼ぶときの接続先',
+    expectOrigin: true,
+  },
 ];
 
 /**

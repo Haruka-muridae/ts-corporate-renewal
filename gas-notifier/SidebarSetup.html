@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <style>
   /*
-    サイドバーは幅300px前後しかない。詰め込まず、1画面に1手順だけ出す。
+    サイドバーは幅300px前後しかない。詰め込まず、いま必要な1手順だけ出す。
     色は Apps Script の既定UIに寄せる（利用者が別アプリと感じないように）。
   */
   body {
@@ -17,27 +17,16 @@
     padding: 12px;
   }
 
-  h1 { font-size: 15px; margin: 0 0 4px; }
-  h2 { font-size: 13px; margin: 18px 0 6px; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  h2 { font-size: 13px; margin: 0 0 6px; }
   p  { margin: 0 0 8px; }
 
-  ol.steps { padding-left: 1.2em; margin: 0 0 8px; }
-  ol.steps li { margin-bottom: 4px; }
-
-  .status { list-style: none; padding: 0; margin: 0 0 12px; }
-  .status li {
-    display: flex;
-    gap: 8px;
-    padding: 3px 0;
-    border-bottom: 1px solid #eee;
-  }
-  .status .mark { width: 1.2em; font-weight: 700; }
-  .status .mark[data-ok='true']  { color: #137333; }
-  .status .mark[data-ok='false'] { color: #c5221f; }
+  ol { padding-left: 1.2em; margin: 0 0 8px; }
+  ol li { margin-bottom: 4px; }
 
   button {
     font: inherit;
-    padding: 6px 12px;
+    padding: 8px 14px;
     border: 1px solid #1a73e8;
     border-radius: 4px;
     background: #1a73e8;
@@ -46,6 +35,17 @@
   }
   button[disabled] { opacity: 0.5; cursor: default; }
   button.ghost { background: #fff; color: #1a73e8; }
+
+  a.button-link {
+    display: inline-block;
+    font: inherit;
+    padding: 8px 14px;
+    border: 1px solid #1a73e8;
+    border-radius: 4px;
+    background: #1a73e8;
+    color: #fff;
+    text-decoration: none;
+  }
 
   .note {
     background: #f8f9fa;
@@ -59,114 +59,240 @@
     padding: 8px 10px;
     margin: 0 0 10px;
   }
-  .code {
-    font-family: 'Roboto Mono', Consolas, monospace;
-    font-size: 11px;
-    word-break: break-all;
-    background: #f1f3f4;
-    border-radius: 3px;
-    padding: 6px;
-    margin: 0 0 8px;
+
+  .steps { list-style: none; padding: 0; margin: 0 0 14px; }
+  .steps li {
+    display: flex;
+    gap: 8px;
+    padding: 3px 0;
+    color: #5f6368;
   }
-  .msg { margin: 8px 0 0; min-height: 1.7em; }
+  .steps li[data-state='done'] { color: #137333; }
+  .steps li[data-state='current'] { color: #202124; font-weight: 700; }
+  .steps .mark { width: 1.2em; }
+
+  .msg { margin: 10px 0 0; min-height: 1.7em; }
   .msg[data-kind='error'] { color: #c5221f; }
   .msg[data-kind='ok'] { color: #137333; }
+
+  details { margin-top: 16px; border-top: 1px solid #eee; padding-top: 10px; }
+  summary { cursor: pointer; color: #5f6368; }
+  details ol { margin-top: 8px; }
+
+  .hidden { display: none; }
 </style>
 </head>
 <body>
 
 <h1>録音通知のセットアップ</h1>
-<p>上から順に進めてください。②は何度実行しても同じ結果になります。</p>
 
-<h2>いまの状態</h2>
-<ul class="status" id="status">
-  <li><span class="mark" id="mark-jsrsasign">…</span><span>jsrsasign（署名ライブラリ）</span></li>
-  <li><span class="mark" id="mark-sheets">…</span><span>シート4種</span></li>
-  <li><span class="mark" id="mark-keys">…</span><span>通知の鍵（VAPID）</span></li>
-  <li><span class="mark" id="mark-connectKey">…</span><span>接続キー</span></li>
-  <li><span class="mark" id="mark-trigger">…</span><span>毎分トリガー</span></li>
-  <li><span class="mark" id="mark-deployed">…</span><span>ウェブアプリの公開</span></li>
+<ul class="steps" id="steps">
+  <li data-step="setup"><span class="mark">・</span><span>準備（シート・鍵・トリガー）</span></li>
+  <li data-step="deploy"><span class="mark">・</span><span>公開</span></li>
+  <li data-step="handoff"><span class="mark">・</span><span>録音アプリで仕上げ</span></li>
 </ul>
 
-<h2>① 承認</h2>
-<p class="warn">
-  ②を押すと「このアプリは Google で確認されていません」という警告が出ます。
-  <strong>これは正常です。</strong>あなた自身が書いた（コピーした）スクリプトを、
-  あなた自身が承認する操作だからです。「詳細」→「（プロジェクト名）に移動」で続行してください。
-</p>
+<!-- 状態1: 読み込み中 -->
+<section id="panel-loading">
+  <p>状態を確認しています…</p>
+</section>
 
-<h2>② トリガー・鍵の作成</h2>
-<p>シート・VAPID の鍵・接続キー・毎分トリガーを用意します。</p>
-<p>
-  <button type="button" id="run-setup">セットアップを実行</button>
-</p>
+<!-- 状態2: 準備がまだ -->
+<section id="panel-setup" class="hidden">
+  <h2>まず準備をします</h2>
+  <p class="warn">
+    ボタンを押すと「このアプリは Google で確認されていません」という警告が出ます。
+    <strong>これは正常です。</strong>あなた自身がコピーしたスクリプトを、
+    あなた自身が承認する操作です。「詳細」→「（プロジェクト名）に移動」で続行してください。
+  </p>
+  <p><button type="button" id="run-setup">セットアップを実行</button></p>
+</section>
 
-<h2>③ 公開（デプロイ）</h2>
-<p class="note">
-  この操作だけは Google の画面で行います。<br>
-  「デプロイ」→「新しいデプロイ」→ 種類「ウェブアプリ」→
-  <strong>アクセスできるユーザー: 全員</strong> ／
-  <strong>次のユーザーとして実行: 自分</strong> → デプロイ。
-</p>
-<p>
-  <button type="button" class="ghost" id="reload-status">状態を読み直す</button>
-</p>
+<!-- 状態3: Apps Script API が未許可 -->
+<section id="panel-api" class="hidden">
+  <h2>あと1回だけ、設定の許可が要ります</h2>
+  <p class="note">
+    公開を自動で行うために、Google 側で「Apps Script API」をオンにしてください。
+    <strong>この操作は最初の1回だけ</strong>です。
+  </p>
+  <p>
+    <a class="button-link" id="open-settings" href="https://script.google.com/home/usersettings" target="_blank" rel="noopener">
+      設定ページを開く
+    </a>
+  </p>
+  <ol>
+    <li>開いたページで「Google Apps Script API」を<strong>オン</strong>にする</li>
+    <li>このサイドバーへ戻る（自動で次へ進みます）</li>
+  </ol>
+  <p id="api-waiting">オンになるのを待っています…</p>
+</section>
 
-<h2>④ 接続コード</h2>
-<p>録音アプリの「Googleカレンダー連携」へ貼り付けてください。</p>
-<div id="code-area" hidden>
-  <p>GAS の URL</p>
-  <div class="code" id="code-url"></div>
-  <p>接続キー（第三者へ渡さないでください）</p>
-  <div class="code" id="code-key"></div>
-</div>
-<p>
-  <button type="button" class="ghost" id="show-code">接続コードを表示</button>
-</p>
+<!-- 状態4: 公開できる -->
+<section id="panel-deploy" class="hidden">
+  <h2>公開します</h2>
+  <p>ウェブアプリとして公開し、録音アプリから通知を受け取れるようにします。</p>
+  <p><button type="button" id="run-deploy">🚀 公開する</button></p>
+  <p id="deploy-progress" class="hidden">公開しています…</p>
+</section>
+
+<!-- 状態5: 引き継ぎ -->
+<section id="panel-handoff" class="hidden">
+  <h2>最後に、録音アプリで仕上げます</h2>
+  <p>下のボタンから録音アプリを開くと、接続とライセンスの設定が自動で完了します。</p>
+  <p><a class="button-link" id="open-recorder" href="#" target="_blank" rel="noopener">📱 録音アプリで仕上げる</a></p>
+  <p class="note">このリンクには接続キーが含まれます。第三者へ渡さないでください。</p>
+</section>
+
+<!-- 状態6: 完了 -->
+<section id="panel-done" class="hidden">
+  <h2>設定は完了しています</h2>
+  <p>通知の内容と受け取り方は、録音アプリの設定画面から変更できます。</p>
+  <p><a class="button-link ghost" id="open-recorder-done" href="#" target="_blank" rel="noopener">録音アプリを開く</a></p>
+  <p><button type="button" class="ghost" id="reload-status">状態を読み直す</button></p>
+</section>
 
 <p class="msg" id="msg" role="status"></p>
 
+<!--
+  行き止まりを作らない。自動公開が失敗しても、ここから手で公開できる。
+-->
+<details id="manual">
+  <summary>うまくいかないときは（手動で公開する）</summary>
+  <ol>
+    <li>上部メニューの「デプロイ」→「新しいデプロイ」</li>
+    <li>種類の選択（歯車）→「ウェブアプリ」</li>
+    <li>「次のユーザーとして実行」＝<strong>自分</strong></li>
+    <li>「アクセスできるユーザー」＝<strong>全員</strong></li>
+    <li>「デプロイ」→ 表示されたら、このサイドバーで［状態を読み直す］</li>
+  </ol>
+  <p class="note">
+    すでに公開したことがある場合は、「新しいデプロイ」ではなく
+    「デプロイを管理」→ 既存のものを編集 → バージョンを「新バージョン」にして更新してください。
+    新しいデプロイを作るとURLが変わり、録音アプリ側の設定をやり直すことになります。
+  </p>
+</details>
+
 <script>
   /*
-    innerHTML は使わない。接続キーとURLはこの画面にしか出ない値であり、
-    textContent 以外で入れる理由が無い。
+    innerHTML は使わない。ここに出る値（引き継ぎリンク）は接続キーを含むため、
+    textContent と href 以外の入れ方をしない。
   */
-  var MARK_IDS = ['jsrsasign', 'sheets', 'keys', 'connectKey', 'trigger', 'deployed'];
+  var PANELS = ['loading', 'setup', 'api', 'deploy', 'handoff', 'done'];
+  var apiPollTimer = null;
 
   function setMessage(text, kind) {
     var node = document.getElementById('msg');
-    node.textContent = text;
+    node.textContent = text || '';
     node.dataset.kind = kind || '';
   }
 
-  function renderStatus(status) {
-    for (var i = 0; i < MARK_IDS.length; i++) {
-      var name = MARK_IDS[i];
-      var node = document.getElementById('mark-' + name);
-      var ok = status[name] === true;
-
-      node.textContent = ok ? '○' : '×';
-      node.dataset.ok = String(ok);
+  function showPanel(name) {
+    for (var i = 0; i < PANELS.length; i++) {
+      document.getElementById('panel-' + PANELS[i]).classList.toggle('hidden', PANELS[i] !== name);
     }
+  }
+
+  function markSteps(status) {
+    var setupDone = status.sheets && status.connectKey && status.eidKey && status.trigger;
+    var state = {
+      setup: setupDone ? 'done' : 'current',
+      deploy: status.deployed ? 'done' : (setupDone ? 'current' : 'todo'),
+      handoff: status.license ? 'done' : (status.deployed ? 'current' : 'todo')
+    };
+
+    var items = document.querySelectorAll('.steps li');
+
+    for (var i = 0; i < items.length; i++) {
+      var step = items[i].dataset.step;
+      items[i].dataset.state = state[step];
+      items[i].querySelector('.mark').textContent = state[step] === 'done' ? '✓' : '・';
+    }
+
+    return setupDone;
+  }
+
+  function render(status) {
+    var setupDone = markSteps(status);
+
+    if (!setupDone) {
+      showPanel('setup');
+      return;
+    }
+
+    if (!status.deployed) {
+      showPanel('deploy');
+      return;
+    }
+
+    if (!status.license) {
+      loadHandoff('handoff');
+      return;
+    }
+
+    loadHandoff('done');
+  }
+
+  function loadHandoff(panel) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result.ok) {
+          document.getElementById('open-recorder').href = result.link;
+          document.getElementById('open-recorder-done').href = result.link;
+        }
+
+        showPanel(panel);
+      })
+      .withFailureHandler(function (err) {
+        setMessage(String(err.message || err), 'error');
+        showPanel(panel);
+      })
+      .getHandoffLink();
   }
 
   function loadStatus() {
     google.script.run
-      .withSuccessHandler(renderStatus)
+      .withSuccessHandler(render)
       .withFailureHandler(function (err) { setMessage(String(err.message || err), 'error'); })
       .getSetupStatus();
+  }
+
+  /* API の許可はこのサイドバーからは見えないので、数秒ごとに公開を試して検出する。 */
+  function startApiPolling() {
+    if (apiPollTimer) {
+      return;
+    }
+
+    apiPollTimer = setInterval(function () {
+      google.script.run
+        .withSuccessHandler(function (result) {
+          if (result.ok) {
+            stopApiPolling();
+            setMessage(result.message, 'ok');
+            loadStatus();
+          }
+        })
+        .withFailureHandler(function () { /* 待ち続ける。 */ })
+        .deployWebApp();
+    }, 5000);
+  }
+
+  function stopApiPolling() {
+    if (apiPollTimer) {
+      clearInterval(apiPollTimer);
+      apiPollTimer = null;
+    }
   }
 
   document.getElementById('run-setup').addEventListener('click', function () {
     var button = this;
     button.disabled = true;
-    setMessage('実行しています…');
+    setMessage('準備しています…');
 
     google.script.run
       .withSuccessHandler(function (status) {
         button.disabled = false;
-        renderStatus(status);
-        setMessage('完了しました。③の公開へ進んでください。', 'ok');
+        setMessage('');
+        render(status);
       })
       .withFailureHandler(function (err) {
         button.disabled = false;
@@ -175,27 +301,45 @@
       .setupNotifier();
   });
 
-  document.getElementById('reload-status').addEventListener('click', function () {
-    setMessage('');
-    loadStatus();
-  });
-
-  document.getElementById('show-code').addEventListener('click', function () {
+  document.getElementById('run-deploy').addEventListener('click', function () {
+    var button = this;
+    button.disabled = true;
+    document.getElementById('deploy-progress').classList.remove('hidden');
     setMessage('');
 
     google.script.run
-      .withSuccessHandler(function (code) {
-        if (!code.url) {
-          setMessage('まだ公開されていません。③のデプロイを先に行ってください。', 'error');
+      .withSuccessHandler(function (result) {
+        button.disabled = false;
+        document.getElementById('deploy-progress').classList.add('hidden');
+
+        if (result.ok) {
+          setMessage(result.message, 'ok');
+          loadStatus();
           return;
         }
 
-        document.getElementById('code-url').textContent = code.url;
-        document.getElementById('code-key').textContent = code.key;
-        document.getElementById('code-area').hidden = false;
+        if (result.status === 'API_DISABLED') {
+          showPanel('api');
+          startApiPolling();
+          return;
+        }
+
+        /* それ以外は行き止まりにせず、手動の手順を開く。 */
+        setMessage('自動で公開できませんでした（' + result.message + '）。下の手順で公開できます。', 'error');
+        document.getElementById('manual').open = true;
       })
-      .withFailureHandler(function (err) { setMessage(String(err.message || err), 'error'); })
-      .getConnectionCode();
+      .withFailureHandler(function (err) {
+        button.disabled = false;
+        document.getElementById('deploy-progress').classList.add('hidden');
+        setMessage(String(err.message || err), 'error');
+        document.getElementById('manual').open = true;
+      })
+      .deployWebApp();
+  });
+
+  document.getElementById('reload-status').addEventListener('click', function () {
+    setMessage('');
+    loadStatus();
   });
 
   loadStatus();

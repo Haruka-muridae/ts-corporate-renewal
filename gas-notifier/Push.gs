@@ -1,113 +1,32 @@
 /**
- * Web Push の送信（VAPID 署名つき・本文なし）。
+ * Web Push の送信（本文なし・署名はゲートが発行したもの）。
  *
- * ==================================================================
- * 本文を送らない
- * ==================================================================
- * Web Push の本文は、購読ごとの鍵（p256dh / auth）から ECDH + HKDF で
- * 導いた鍵で AES128GCM 暗号化する決まりになっている。Apps Script には
- * ECDH も HKDF も無く、実装すれば jsrsasign の外へさらに暗号処理が要る。
+ * 本文を送らないのは Apps Script に ECDH / HKDF が無いためで、通知の中身は
+ * Service Worker が `action=pending` で取りに来る（要件 FR-15/16）。
+ * 1回の tick につき1購読あたり Push は最大1通。
+ * 理由は docs/notifier-design-notes.md §6。
  *
- * 本文なしの Push（tickle）なら、必要なのは VAPID の ES256 署名だけで済む。
- * 通知の中身は Service Worker が `action=pending` で取りに来る（FR-15/16）。
- * ==================================================================
- *
- * ==================================================================
- * 1回の tick につき、1購読あたり Push は最大1通
- * ==================================================================
- * 本文なし Push は「取りに来い」という合図でしかない。Service Worker は
- * pending をまとめて受け取るので、期限が来た通知が3件あっても合図は1回でよい。
- *
- * 件数分送ると、2通目以降の push イベントでは pending が空になり、
- * Service Worker 側のフォールバック（汎用通知）が誤って表示される
- * （userVisibleOnly の約束を守るため、空でも1件は出す実装になっている）。
- * public/production-app/voice-recorder/sw.js の push ハンドラと対で読むこと。
- * ==================================================================
+ * V2 では ES256 の署名を自前で行わない。JWT はゲート（notifier-gate）が
+ * 発行し、Gate.gs が期限まで使い回す。**ライセンスが切れれば JWT が出ず、
+ * その時点で送信そのものができなくなる。**
  */
 
-/* VAPID JWT の有効期間。RFC 8292 の上限は24時間だが、短めに12時間とする。 */
-var VAPID_JWT_TTL_MS = 12 * 60 * 60 * 1000;
-
-/*
- * Push サービスに預ける時間（秒）。
- *
- * ブラウザが受け取れない間（プロセス終了・電源断・スリープ）、Push サービスは
- * この秒数だけ通知を預かる。**5分を過ぎた分は破棄される。**
- *
- * 短くしているのは意図的である。「10:55に知らせてほしい」通知が12時に届いても、
- * 会議はもう始まっており、役に立たないどころか混乱のもとになる。
- * **遅れて届くくらいなら届かないほうがよい。**
- *
- * この挙動は利用者から見えるため、docs/calendar-notifier-setup.md §9 に
- * 同じ説明を書いてある。値を変えるなら、そちらも直すこと。
+/**
+ * Push サービスに預ける時間（秒）。5分を過ぎた分は破棄される。
+ * 遅れて届くくらいなら届かないほうがよい、という判断（design-notes §6-2）。
+ * 利用者向けの説明が docs/calendar-notifier-setup.md にあるので、変えるなら両方直す。
  */
 var PUSH_TTL_SECONDS = 300;
 
 /**
- * VAPID の `sub`（連絡先）。
- *
- * RFC 8292 は `mailto:` と `https:` の URI を許す。
- * メールアドレスを取るために userinfo.email スコープを足すと、**利用者の
- * データへ届く範囲が広がる**（要件 NFR-02 の最小権限に反する）。
- * スコープは増やさず、Session.getEffectiveUser() が空を返す環境では
- * https の連絡先URIへ落とす。
- *
- * 現在のスコープ一覧とその理由は gas-notifier/README.md §1-1。
- */
-var CONTACT_URI = 'https://tsam-ai.com/production-app/voice-recorder/';
-
-function vapidSubject_() {
-  try {
-    var email = Session.getEffectiveUser().getEmail();
-
-    if (email && String(email).indexOf('@') !== -1) {
-      return 'mailto:' + email;
-    }
-  } catch (err) {
-    /* 権限が無い環境では例外になる。連絡先URIへ落とすだけでよい。 */
-  }
-
-  return CONTACT_URI;
-}
-
-/** エンドポイントURLの origin（scheme + host）。JWT の aud に使う。 */
-function endpointOrigin_(endpoint) {
-  var match = String(endpoint).match(/^(https?:\/\/[^\/?#]+)/);
-
-  if (!match) {
-    throw new Error('Push エンドポイントの形式が不正です。');
-  }
-
-  return match[1];
-}
-
-/** VAPID の JWT を作る。署名は jsrsasign（lib_jsrsasign.gs）が行う。 */
-function buildVapidJwt_(audience, nowMs) {
-  var privatePem = getProperty_(PROP.VAPID_PRIVATE);
-
-  if (privatePem === '') {
-    throw new Error('VAPID の鍵がありません。セットアップを実行してください。');
-  }
-
-  var header = { typ: 'JWT', alg: 'ES256' };
-  var claims = {
-    aud: audience,
-    exp: Math.floor((nowMs + VAPID_JWT_TTL_MS) / 1000),
-    sub: vapidSubject_()
-  };
-
-  return KJUR.jws.JWS.sign('ES256', JSON.stringify(header), JSON.stringify(claims), privatePem);
-}
-
-/**
  * 期限の来た通知を送る。
  *
- * 1. notify_queue から `notifyAt <= now` かつ sent_log に無い行を集める（FR-12 / AC-08）
- * 2. 1件でもあれば、購読ごとに **1通だけ** Push を送る
- * 3. 1つでも届いたら sent_log へ記録する
+ * 1. notify_queue から `notifyAt <= now` の行を集める（FR-12 / AC-08）
+ * 2. 1件でもあれば、購読ごとに1通だけ Push を送る
+ * 3. 1つでも届いたら sent_log へ記録し、キューから外す
  *
- * 3で「届いてから記録する」順にしているのは、送信に失敗した通知を
- * 次の tick でもう一度試せるようにするため（NFR-04 の自然なリトライ）。
+ * 「届いてから記録する」順にしているのは、送信に失敗した通知を次の tick で
+ * もう一度試せるようにするため（NFR-04）。
  */
 function sendDueNotifications_(nowMs) {
   var due = collectDueRows_(nowMs);
@@ -119,37 +38,46 @@ function sendDueNotifications_(nowMs) {
   var result = sendTickle_(nowMs);
 
   if (result.delivered === 0) {
-    /*
-     * 誰にも届かなかった。**sent_log へは書かない。**
-     * 書いてしまうと、購読が復活しても二度と送られない。
-     */
+    /* 誰にも届かなかった。sent_log へは書かない（購読が復活したら送れるように）。 */
     return { due: due.length, delivered: 0, recorded: 0, removed: result.removed };
   }
+
+  var sentRows = [];
 
   for (var i = 0; i < due.length; i++) {
     tableAppend_(SHEET.SENT_LOG, {
       key: due[i].key,
+      eid: due[i].eid,
       eventId: due[i].eventId,
+      feature: due[i].feature,
       timing: due[i].timing,
       title: due[i].title,
       startTime: due[i].startTime,
       sentAt: nowMs,
       purpose: 'calendar',
-      fetchedAt: ''
+      fetchedBy: ''
     });
+
+    sentRows.push(due[i].__row);
   }
+
+  /*
+   * 送った行はキューから外す。V2 のキューは「これから出す通知」だけを持ち、
+   * 送信済みかどうかは sent_log が持つ（ゲートへ渡す sentDigest の出どころ）。
+   */
+  var removedFromQueue = deleteRowsByNumbers_(SHEET.QUEUE, sentRows);
 
   return {
     due: due.length,
     delivered: result.delivered,
     recorded: due.length,
-    removed: result.removed
+    removed: result.removed,
+    dequeued: removedFromQueue
   };
 }
 
 /** 送信すべき行（純粋な絞り込み。ここでは何も書かない）。 */
 function collectDueRows_(nowMs) {
-  var sent = sentKeySet_();
   var rows = tableRead_(SHEET.QUEUE);
   var due = [];
 
@@ -161,13 +89,12 @@ function collectDueRows_(nowMs) {
       continue;
     }
 
-    if (sent[String(row.key)] === true) {
-      continue;
-    }
-
     due.push({
+      __row: row.__row,
       key: String(row.key),
+      eid: String(row.eid),
       eventId: String(row.eventId),
+      feature: String(row.feature || 'calendar'),
       timing: row.timing,
       title: String(row.title),
       startTime: toMs_(row.startTime)
@@ -185,7 +112,33 @@ function collectDueRows_(nowMs) {
  */
 function sendTickle_(nowMs) {
   var rows = tableRead_(SHEET.SUBSCRIPTIONS);
-  var publicKey = getProperty_(PROP.VAPID_PUBLIC);
+
+  if (rows.length === 0) {
+    return { delivered: 0, removed: 0, total: 0 };
+  }
+
+  var audiences = [];
+
+  for (var a = 0; a < rows.length; a++) {
+    try {
+      var origin = endpointOrigin_(String(rows[a].endpoint));
+
+      if (audiences.indexOf(origin) === -1) {
+        audiences.push(origin);
+      }
+    } catch (err) {
+      /* 壊れた endpoint。下のループで同じ例外に当たり、行が記録される。 */
+    }
+  }
+
+  var vapid = gateVapid_(audiences, nowMs);
+
+  if (!vapid.ok) {
+    /* 署名を得られなければ1通も送れない。キューはそのままで次の tick に任せる。 */
+    Logger.log('vapid unavailable: ' + vapid.error);
+    return { delivered: 0, removed: 0, total: rows.length };
+  }
+
   var delivered = 0;
   var gone = [];
 
@@ -195,16 +148,17 @@ function sendTickle_(nowMs) {
     var message = '';
 
     try {
-      var jwt = buildVapidJwt_(endpointOrigin_(endpoint), nowMs);
+      var jwt = vapid.jwts[endpointOrigin_(endpoint)];
 
-      /*
-       * payload を渡さない。UrlFetchApp は本文なしの POST を
-       * Content-Length: 0 で送る（Web Push の本文なし要求と同じ形）。
-       */
+      if (!jwt) {
+        throw new Error('この Push サービス向けの署名がありません。');
+      }
+
+      /* payload を渡さない（本文なしの POST になる）。 */
       var response = UrlFetchApp.fetch(endpoint, {
         method: 'post',
         headers: {
-          Authorization: 'vapid t=' + jwt + ', k=' + publicKey,
+          Authorization: 'vapid t=' + jwt + ', k=' + vapid.publicKey,
           TTL: String(PUSH_TTL_SECONDS),
           Urgency: 'high'
         },
@@ -223,6 +177,7 @@ function sendTickle_(nowMs) {
     if (code >= 200 && code < 300) {
       delivered++;
       tableUpdate_(SHEET.SUBSCRIPTIONS, rows[i].__row, {
+        subId: rows[i].subId,
         endpoint: endpoint,
         p256dh: rows[i].p256dh,
         auth: rows[i].auth,
@@ -235,7 +190,6 @@ function sendTickle_(nowMs) {
     }
 
     if (code === 404 || code === 410) {
-      /* 購読が失効している。残しても毎分エラーになるだけなので消す。 */
       gone.push(rows[i].__row);
       continue;
     }
@@ -243,6 +197,7 @@ function sendTickle_(nowMs) {
     Logger.log('push failed: ' + code + ' ' + message);
 
     tableUpdate_(SHEET.SUBSCRIPTIONS, rows[i].__row, {
+      subId: rows[i].subId,
       endpoint: endpoint,
       p256dh: rows[i].p256dh,
       auth: rows[i].auth,
@@ -256,4 +211,42 @@ function sendTickle_(nowMs) {
   var removed = deleteRowsByNumbers_(SHEET.SUBSCRIPTIONS, gone);
 
   return { delivered: delivered, removed: removed, total: rows.length };
+}
+
+/**
+ * テスト通知を1件出す（設定画面のボタンから）。
+ *
+ * ゲートに許可を取ってから、sent_log へ1行入れて Push を送る。
+ * 通知の中身はカレンダーの通知と同じ経路（pending）で取りに来るため、
+ * Service Worker 側に専用の分岐は要らない。
+ */
+function sendTestNotification_(nowMs) {
+  var allowed = gateTestNotify_();
+
+  if (!allowed.ok) {
+    return { ok: false, error: allowed.error };
+  }
+
+  var subscriptions = tableRead_(SHEET.SUBSCRIPTIONS);
+
+  if (subscriptions.length === 0) {
+    return { ok: false, error: 'NO_SUBSCRIPTION' };
+  }
+
+  tableAppend_(SHEET.SENT_LOG, {
+    key: 'test|' + nowMs,
+    eid: '',
+    eventId: '',
+    feature: 'test',
+    timing: 0,
+    title: 'テスト通知',
+    startTime: nowMs,
+    sentAt: nowMs,
+    purpose: 'test',
+    fetchedBy: ''
+  });
+
+  var result = sendTickle_(nowMs);
+
+  return { ok: result.delivered > 0, delivered: result.delivered, error: result.delivered > 0 ? '' : 'NOT_DELIVERED' };
 }

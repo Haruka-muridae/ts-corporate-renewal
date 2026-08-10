@@ -10,26 +10,36 @@
 
 ## 0. これは何か（読まずに触らないこと）
 
-**運営のサーバーは無い。** 通知の仕組みは、利用者ひとりひとりが自分の
-Google アカウントの中に持つ。運営が預かるものは、鍵もデータも1つも無い。
+**V2 では、判定と署名を運営の Workers が行う。** テンプレートは配管である。
 
 ```
 [利用者のGoogleアカウント内]
   テンプレートシートのコピー（このコードが同梱されている）
     ├─ 毎分トリガー tick()
-    │    ├─ 5分ごと: Calendar API で同期 → 判定 → notify_queue を更新
+    │    ├─ 5分ごと: Calendar API で取得 → 匿名化 → ゲートへ判定を依頼
+    │    │            → 返ってきた予定表で notify_queue を更新
     │    └─ 毎分: 期限の来た通知があれば「本文なしPush」を1通だけ送る
+    │             （署名 JWT はゲートが発行したもの）
     └─ Webアプリ（doGet/doPost）= 録音アプリ・Service Worker との窓口
+
+[運営: notifier-gate（Cloudflare Workers）]
+    ├─ ライセンス検証（認証系GASへ照会）
+    ├─ 判定（何を通知するか）
+    └─ VAPID JWT の発行
 
 [利用者のブラウザ]
   録音アプリ（/production-app/voice-recorder/）
-    ├─ 設定画面（接続・フィルタ・通知タイミング）
+    ├─ 設定画面（フィルタ・通知タイミング・直近の通知予定・テスト通知）
     ├─ Service Worker: Push受信 → GASから内容を取得 → 表示
     └─ 通知クリック → ?eventId= 付きで録音画面へ
 ```
 
+**運営へ渡るのは予定の骨格だけ。** 予定名・説明・参加者・カレンダーIDは
+利用者のスプレッドシートから出ない。設計の理由は
+[docs/notifier-design-notes.md](../docs/notifier-design-notes.md)。
+
 **リポジトリ上のこのディレクトリは配信されない。** `gas-auth/` と同じ扱いで、
-中身は利用者の Apps Script エディタへ貼り付けて使う。
+中身は利用者の Apps Script エディタへ貼り付けて使う（テンプレートを作る運営者だけ）。
 
 ---
 
@@ -39,13 +49,12 @@ Google アカウントの中に持つ。運営が預かるものは、鍵もデ�
    利用者がコピー後に見て分かるものにする。
 2. 「拡張機能」→「Apps Script」を開く。
 3. このディレクトリの `.gs` / `.html` を**同じ名前で**貼り付ける。
-   - `Code.gs` / `Setup.gs` / `Api.gs` / `CalendarSync.gs` / `Push.gs` / `Store.gs`
+   - `Code.gs` / `Setup.gs` / `Api.gs` / `CalendarSync.gs` / `Push.gs` / `Store.gs` / `Gate.gs`
    - `SidebarSetup.html`
-   - `lib_jsrsasign.gs`（§2 のとおり本体を貼る）
 4. `appsscript.json` は、プロジェクトの設定で
    「`appsscript.json` マニフェスト ファイルをエディタで表示する」を ON にしてから、
    このディレクトリの内容で**置き換える**。
-   - **スコープは5つだけ**（要件 NFR-02）。理由は §1-1。増やさないこと。
+   - **スコープは7つだけ**（要件 NFR-02）。理由は §1-1。増やさないこと。
    - `Calendar` の Advanced Service が必要。`CalendarApp` では
      `responseStatus`（自分の出欠）が取れず、FR-04 が満たせない。
 5. 「サービス」から Google Calendar API（v3、識別子 `Calendar`）を追加する。
@@ -59,7 +68,7 @@ Google アカウントの中に持つ。運営が預かるものは、鍵もデ�
    `public/production-app/voice-recorder/notifier-config.js` の
    `TEMPLATE_COPY_URL` へ設定する。
 
-### 1-1. スコープが5つある理由（`script.container.ui` を含む）
+### 1-1. スコープが7つある理由（`script.container.ui` を含む）
 
 `appsscript.json` に `oauthScopes` を書くと、**Apps Script の自動スコープ判定が無効になる。**
 以後は「コードが実際に使う権限」を1つ残らず自分で列挙しなければならず、
@@ -83,67 +92,65 @@ Exception: 指定された権限では Ui.showSidebar を呼び出すことが�
 | `script.scriptapp` | 毎分トリガーの作成・確認（`ScriptApp`） |
 | `spreadsheets.currentonly` | 設定と記録の保存。**このスプレッドシートだけ** |
 | `script.container.ui` | メニューとセットアップサイドバーの表示（`SpreadsheetApp.getUi()`） |
+| `script.projects` | ワンボタン公開で、自分自身のバージョンを作る |
+| `script.deployments` | ワンボタン公開で、自分自身のデプロイを作る・更新する |
 
 **データへ届く範囲は増えていない。** `script.container.ui` は
 「このスクリプトが紐づいた画面に UI を出してよい」という権限であって、
 カレンダー・ドライブ・他のスプレッドシートのどれにも新しい経路を作らない。
-NFR-02（最小権限）は、依然として上の5つで満たしている。
+
+V2 で足した `script.projects` / `script.deployments` も同じ性質で、
+**このスクリプト自身を公開する**ためだけに使う。これが無いと、利用者は
+「デプロイ」→「新しいデプロイ」→ 種類の選択 → アクセス設定という
+Google 側の画面を踏むことになり、1つ間違えると動かない。
+利用者にエディタを開かせないという V2 の目的を、権限1つで買っている。
+NFR-02（最小権限）は、依然として上の7つで満たしている。
 
 **追加するときは、それが「データへの経路」か「UIの表示」かを分けて考えること。**
 前者なら要件の見直しが要る。後者ならここへ1行足して理由を書く。
 
 ---
 
-## 2. jsrsasign の入手と貼り付け
+## 2. 外部ライブラリは使わない
 
-Web Push の VAPID は JWT を **ES256（ECDSA P-256）** で署名する。
-Apps Script の `Utilities` は HMAC-SHA256 しか持たず、ECDSA が無い。
-そのため jsrsasign（MIT）を同梱する。
-承認の記録は [docs/external-dependency-approvals.md](../docs/external-dependency-approvals.md) §1-4。
+V1 は VAPID の ES256 署名のために jsrsasign（約500KB）を利用者に手で貼らせていた。
+Apps Script の `Utilities` は HMAC-SHA256 しか持たず、ECDSA が無いためである。
 
-1. https://github.com/kjur/jsrsasign の releases から `jsrsasign-all-min.js` を入手する。
-2. `lib_jsrsasign.gs` を開く。**冒頭のスタブを消さない。**
-3. 「ここから下へ貼る」のコメントより**下**へ、入手したファイルの中身をまるごと貼る。
-4. メニュー「録音通知」→「jsrsasign を検証」を実行し、成功メッセージを確かめる。
+**V2 ではこの工程が丸ごと消えた。** 署名は運営の Workers（`notifier-gate`）が
+WebCrypto で行い、テンプレートは発行済みの JWT を受け取って送るだけになった。
+副作用として、貼り忘れ・順序違い・途中で切れたといった
+「通知が届かない」の原因が1つ減っている。
 
-> **スタブが本体より上にある必要がある。**
-> jsrsasign は読み込み時に `navigator` を参照する。順序を入れ替えると
-> `navigator is not defined` で失敗する。
-> スタブの `window.crypto.getRandomValues` は `Utilities.getUuid()` 由来。
-> これが無いと jsrsasign は `Math.random()` へ落ち、ECDSA の nonce が弱くなる。
-
-MIT ライセンス表記は、配布物の先頭に含まれている。貼り付けるときに消さないこと。
-
----
+同梱する外部ライブラリは**無い**。
 
 ## 3. ファイルの役割
 
 | ファイル | 役割 |
 | --- | --- |
-| `Code.gs` | メニュー（セットアップ・接続コード・jsrsasign検証） |
-| `Setup.gs` | 冪等なセットアップ、VAPID鍵・接続キーの生成、トリガー作成、`verifyJsrsasign()` |
+| `Code.gs` | メニュー（セットアップ・引き継ぎリンク） |
+| `Setup.gs` | 冪等なセットアップ、匿名化の鍵と接続キーの生成、トリガー作成、`deployWebApp()` |
+| `Gate.gs` | ゲート（notifier-gate）のクライアント。判定依頼・JWT取得・テスト通知の許可 |
 | `Api.gs` | `doGet` / `doPost`（action ホワイトリスト、接続キー検証） |
-| `CalendarSync.gs` | `tick()`、カレンダー同期、通知対象の判定（純関数 `decideEvent_`） |
-| `Push.gs` | VAPID 署名と本文なし Push の送信 |
+| `CalendarSync.gs` | `tick()`、カレンダー取得、匿名化、判定結果のキューへの反映 |
+| `Push.gs` | 本文なし Push の送信（署名はゲート発行の JWT） |
 | `Store.gs` | シートI/O、設定の正規化、定数 |
-| `SidebarSetup.html` | セットアップウィザード |
-| `lib_jsrsasign.gs` | jsrsasign の同梱先（スタブのみ同梱） |
+| `SidebarSetup.html` | セットアップウィザード（ワンボタン公開・引き継ぎリンク） |
 
 ## 4. シート
 
 | シート | 内容 |
 | --- | --- |
 | `settings` | 出欠フィルタ・時間指定のみ・通知タイミング（key / value の2列） |
-| `subscriptions` | Push 購読（endpoint / p256dh / auth と送信結果） |
-| `notify_queue` | 通知予定（eventId / 予定名 / 開始時刻 / 通知予定時刻） |
-| `sent_log` | 送信記録（二重送信の防止と `pending` の受け渡し） |
+| `subscriptions` | Push 購読（subId / endpoint / p256dh / auth と送信結果） |
+| `notify_queue` | これから出す通知（eid / eventId / 予定名 / 開始時刻 / 通知予定時刻） |
+| `sent_log` | 送信記録。`fetchedBy` に**取りに来た購読の subId**を並べる（宿題 B-04） |
 
 **時刻の列はすべてエポックミリ秒の数値**で持つ。ISO 文字列を書くと
 スプレッドシートが日時として解釈し、読み戻した値の比較が静かに壊れるため
 （`Store.gs` の HEADERS 上のコメント）。
 
-**秘密鍵と接続キーはシートに無い。** Script Properties にだけ置く。
-シートは「リンクを知っている全員／閲覧者」で共有される想定である。
+**接続キー・ライセンスキー・匿名化の鍵はシートに無い。** Script Properties に
+だけ置く。シートは「リンクを知っている全員／閲覧者」で共有される想定である。
 
 ## 5. API
 
@@ -157,8 +164,13 @@ MIT ライセンス表記は、配布物の先頭に含まれている。貼り�
 | `getSettings` | GET | 設定の取得 |
 | `saveSettings` | POST | 設定の保存（サーバー側で正規化する） |
 | `saveSubscription` | POST | Push 購読の upsert |
-| `pending` | GET | 未取得の通知を返し、取得済みにする（直近10分以内） |
+| `pending` | GET | 未取得の通知を返し、**その購読について**取得済みにする（`endpoint` 必須・直近10分以内） |
 | `event` | GET | `id` 指定で予定名と開始時刻（通知から開いた画面の表示用） |
+| `upcoming` | GET | 直近の通知予定（設定画面の「次に届く通知」） |
+| `saveLicense` | POST | 録音アプリからライセンスキーを受け取る |
+| `syncNow` | POST | 手動同期（エディタから `tick` を実行させないための正式な代替） |
+| `sendTestNotification` | POST | テスト通知を1件送る（ゲートが1日1回に制限） |
+| `regenerateConnectKey` | POST | 接続キーの作り直し（誤って共有したときの失効手段） |
 
 POST の本文は `text/plain` の JSON 文字列。プリフライトを避けるためで、
 `notifier-client.js` の実装と対になっている。
