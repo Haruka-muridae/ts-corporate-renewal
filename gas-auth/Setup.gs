@@ -124,7 +124,9 @@ function ensureDefaultSettings_(sheet) {
     TOS_VERSION: '同意を取得した利用規約の版。改訂したら上げる（古い版の同意は無効になる）',
     CONSENT_WARNING_TEXT: '申込み前に赤枠で表示する警告文',
     GITHUB_REPO: '法務ページの公開先リポジトリ（owner/repo）',
-    GITHUB_BRANCH: '法務ページをコミットするブランチ'
+    GITHUB_BRANCH: '法務ページをコミットするブランチ',
+    NOTIFIER_ENTITLEMENT: 'カレンダー通知を使える範囲。all_active（契約中の会員すべて）'
+      + ' または plan:<Stripeの価格ID>。解釈できない値を書くと全員が使えなくなる'
   };
 
   var keys = Object.keys(DEFAULT_SETTINGS);

@@ -24,7 +24,9 @@ function rowToUser_(rowNumber, values) {
     lockedUntilMs: parseTimeMs_(values[USER_COL.LOCKED_UNTIL - 1]),
     passwordUpdatedAt: trimStr_(values[USER_COL.PASSWORD_UPDATED_AT - 1]),
     createdAt: trimStr_(values[USER_COL.CREATED_AT - 1]),
-    updatedAt: trimStr_(values[USER_COL.UPDATED_AT - 1])
+    updatedAt: trimStr_(values[USER_COL.UPDATED_AT - 1]),
+    /* 列を足す前に作られた行では空文字になる（未発行と同じ扱いでよい）。 */
+    notifierLicenseKey: trimStr_(values[USER_COL.NOTIFIER_LICENSE_KEY - 1])
   };
 }
 
@@ -127,6 +129,8 @@ function createUser_(attributes) {
   row[USER_COL.PASSWORD_UPDATED_AT - 1] = '';
   row[USER_COL.CREATED_AT - 1] = now;
   row[USER_COL.UPDATED_AT - 1] = now;
+  /* ライセンスキーは本人が通知のセットアップを始めたときに発行する。 */
+  row[USER_COL.NOTIFIER_LICENSE_KEY - 1] = '';
 
   appendRow_(SHEETS.USERS, row);
 

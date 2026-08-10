@@ -116,11 +116,20 @@ export async function verifyWithAuthGas({ licenseKey, env, fetchImpl = fetch }) 
 
     const body = await response.json();
 
-    if (!body || body.ok !== true || !body.data) {
+    /*
+     * gas-auth の成功応答は `{ success: true, data: {...} }`
+     * （gas-auth/Response.gs の ok_）。gas-notifier の `{ ok: true, data }` とは
+     * 別の形なので、取り違えないこと。
+     */
+    if (!body || body.success !== true || !body.data) {
       /*
        * 形式が違う返事。Apps Script はエラー時に HTML を返すことがあり、
        * それを「無効」と読むと解約していない人の通知を止めてしまう。
        * 届かなかった扱い（猶予の対象）にする。
+       *
+       * gas-auth 側が `{ success: false }` を返すのも同じ扱いになる。
+       * Stripe への問い合わせに失敗した場合など、**判定できなかった**ときは
+       * 「無効」ではなくここへ落とすのが正しい（Notifier.gs と対で読むこと）。
        */
       return { reachable: false, valid: false, plan: '', status: 'malformed' };
     }

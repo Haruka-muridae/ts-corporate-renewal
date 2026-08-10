@@ -164,6 +164,21 @@ function dispatchPost_(action, body) {
     return respond_(getCheckoutStatus_(body.checkoutSessionId));
   }
 
+  if (action === 'issueNotifierLicense') {
+    return respond_(issueNotifierLicense_({ sessionToken: body.sessionToken }));
+  }
+
+  if (action === 'verifyNotifierLicense') {
+    /*
+     * カレンダー通知の Workers からのサーバー間呼び出し。
+     * ログインセッションではなく共有シークレットで守る（Notifier.gs）。
+     */
+    return respond_(verifyNotifierLicense_({
+      secret: body.secret,
+      licenseKey: body.licenseKey
+    }));
+  }
+
   return failFrom_(ERRORS.INVALID_ACTION);
 }
 

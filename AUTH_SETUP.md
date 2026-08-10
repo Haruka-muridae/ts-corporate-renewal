@@ -264,7 +264,7 @@ PBKDF2-HMAC-SHA256 の所要時間
 
 | シート | 内容 |
 | --- | --- |
-| `users` | 利用者（A〜P の16列） |
+| `users` | 利用者（A〜Q の17列） |
 | `password_tokens` | 初期設定・再設定トークン（ハッシュのみ） |
 | `sessions` | セッション（ハッシュのみ） |
 | `stripe_events` | 受信済み Stripe イベント（冪等性の記録） |
@@ -289,6 +289,12 @@ PBKDF2-HMAC-SHA256 の所要時間
 | N | `password_updated_at` | |
 | O | `created_at` | |
 | P | `updated_at` | |
+| Q | `notifier_license_key` | カレンダー通知のライセンスキー。本人が通知のセットアップを始めたときに発行する（2026-08-10 追加。既存行は空欄のままでよい） |
+
+> Q 列を足したのはカレンダー通知 V2（[workers/notifier-gate/README.md](workers/notifier-gate/README.md)）のため。
+> **列は必ず末尾へ足すこと。** 途中へ挿入すると、既存データが1列ずつずれる
+> （[gas-auth/Config.gs](gas-auth/Config.gs) の `USER_COL` は列番号で読んでいる）。
+> 追加後は `setupAuthSystem()` を実行してヘッダー行を更新する。
 
 ### TSAM AI 認証ログ
 

@@ -322,7 +322,7 @@ async function run() {
           }
 
           return new Response(
-            JSON.stringify({ ok: true, data: { valid: answer.valid, plan: answer.plan ?? 'basic', status: 'active' } }),
+            JSON.stringify({ success: true, data: { valid: answer.valid, plan: answer.plan ?? 'basic', status: 'active' } }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           );
         },
@@ -374,7 +374,7 @@ async function run() {
       const key = makeLicenseKey('3');
       let valid = true;
       const fetchImpl = async () => new Response(
-        JSON.stringify({ ok: true, data: { valid, plan: 'basic', status: 'active' } }),
+        JSON.stringify({ success: true, data: { valid, plan: 'basic', status: 'active' } }),
         { status: 200 },
       );
 

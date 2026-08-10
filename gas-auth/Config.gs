@@ -47,6 +47,13 @@ var PROP = {
   /** パスワードハッシュに掛ける追加の鍵。シートが漏れても単体では解けなくする。 */
   PASSWORD_PEPPER: 'PASSWORD_PEPPER',
 
+  /**
+   * カレンダー通知の Workers（notifier-gate）と共有する合言葉。
+   * verifyNotifierLicense を呼べるのが運営の Workers だけであることの根拠。
+   * Cloudflare 側の `AUTH_GAS_SHARED_SECRET` と同じ値にする。
+   */
+  NOTIFIER_SHARED_SECRET: 'NOTIFIER_SHARED_SECRET',
+
   APP_BASE_URL: 'APP_BASE_URL',
   LOGIN_URL: 'LOGIN_URL',
   PORTAL_URL: 'PORTAL_URL'
@@ -61,7 +68,8 @@ var SECRET_KEYS = [
   PROP.TOKEN_SECRET,
   PROP.PASSWORD_PEPPER,
   /* リポジトリへの書き込み権限を持つ。設定シートから読めてはならない。 */
-  PROP.GITHUB_TOKEN
+  PROP.GITHUB_TOKEN,
+  PROP.NOTIFIER_SHARED_SECRET
 ];
 
 /** Drive 上のフォルダ名。 */
@@ -101,11 +109,17 @@ var SHEETS = {
 
 /** 各シートのヘッダー。列の順序はここが正本。 */
 var HEADERS = {};
+/*
+ * users の列を足すときは**必ず末尾へ**足すこと。途中へ挿入すると、
+ * 既存シートのデータが1列ずつずれる（USER_COL は列番号で読んでいる）。
+ * 足したあとは setupAuthSystem() を実行してヘッダー行を更新する。
+ */
 HEADERS[SHEETS.USERS] = [
   'user_id', 'email', 'password_hash', 'password_salt', 'role',
   'stripe_customer_id', 'stripe_subscription_id', 'subscription_status',
   'payment_exempt', 'account_status', 'last_login_at', 'login_failure_count',
-  'locked_until', 'password_updated_at', 'created_at', 'updated_at'
+  'locked_until', 'password_updated_at', 'created_at', 'updated_at',
+  'notifier_license_key'
 ];
 HEADERS[SHEETS.PASSWORD_TOKENS] = [
   'token_id', 'user_id', 'token_hash', 'token_type', 'expires_at', 'used_at', 'created_at'
@@ -164,7 +178,18 @@ var USER_COL = {
   LOCKED_UNTIL: 13,
   PASSWORD_UPDATED_AT: 14,
   CREATED_AT: 15,
-  UPDATED_AT: 16
+  UPDATED_AT: 16,
+
+  /**
+   * カレンダー通知のライセンスキー（平文）。
+   *
+   * パスワードと違って**平文で持つ**。テンプレートを再セットアップしたときに
+   * 同じキーを渡し直せなければ、既に配ったテンプレートが全部動かなくなるため
+   * （ハッシュだけ持つと再提示できない）。このシートは運営だけが開くもので、
+   * 利用者へ共有されるスプレッドシート（通知テンプレート側）とは別物である。
+   * 画面へ返す toPublicUser_ には含めないこと。
+   */
+  NOTIFIER_LICENSE_KEY: 17
 };
 
 var TOKEN_COL = {
@@ -359,7 +384,16 @@ var DEFAULT_SETTINGS = {
    * トークンだけは秘密情報なので Script Properties に置く（SECRET_KEYS）。
    */
   GITHUB_REPO: 'Haruka-muridae/ts-corporate-renewal',
-  GITHUB_BRANCH: 'main'
+  GITHUB_BRANCH: 'main',
+
+  /*
+   * カレンダー通知を使える範囲。課金形態が未決のため、設定値ひとつで
+   * 切り替えられる形にしてある（gas-auth/Notifier.gs 冒頭）。
+   *   all_active      … 契約が有効な会員すべて（現在の方針）
+   *   plan:<price_id> … その価格の契約を持つ会員だけ（アドオン化するとき）
+   * 解釈できない値を書くと**全員が通らなくなる**（黙って全員通すより安全側）。
+   */
+  NOTIFIER_ENTITLEMENT: 'all_active'
 };
 
 /**
@@ -386,7 +420,10 @@ var ALLOWED_POST_ACTIONS = [
   'requestPasswordReset',
   'resetPassword',
   'createCheckoutSession',
-  'checkoutStatus'
+  'checkoutStatus',
+  /* カレンダー通知。前者はログイン必須、後者は共有シークレット必須。 */
+  'issueNotifierLicense',
+  'verifyNotifierLicense'
 ];
 
 /* ---------- 設定値の読み出し ---------- */

@@ -48,3 +48,58 @@ Apps Script プロジェクトはリポジトリの外にある。
 
 関連: [../MANUAL_SETUP_CHECKLIST.md](../MANUAL_SETUP_CHECKLIST.md) A節 /
 [../AUTH_SETUP.md](../AUTH_SETUP.md) / [../gas-auth/README.md](../gas-auth/README.md)
+
+---
+
+## 未反映の予定: カレンダー通知 V2（2026-08-10 時点・**未実施**）
+
+ブランチ `feat/notifier-v2-license-gate` にあるもの。
+main へのマージ前に貼り替える必要は無い。**マージ後、Workers のデプロイと
+足並みを揃えて実施する。**
+
+### 変更ファイル
+
+| ファイル | 種別 | 変更内容 |
+| --- | --- | --- |
+| `Notifier.gs` | **新規** | ライセンスの発行（`issueNotifierLicense`）と照会（`verifyNotifierLicense`） |
+| `Config.gs` | 上書き | `users` に Q列 `notifier_license_key` を追加／`NOTIFIER_ENTITLEMENT` 設定を追加／`NOTIFIER_SHARED_SECRET` を秘密キーへ登録／action ホワイトリストに2件追加 |
+| `Main.gs` | 上書き | 追加した2 action の振り分け |
+| `Users.gs` | 上書き | `notifierLicenseKey` の読み書き |
+| `Setup.gs` | 上書き | `NOTIFIER_ENTITLEMENT` の説明文 |
+
+**貼り替えるのは上の5ファイルだけ。** ほかのファイルは変更していない。
+
+### 手順
+
+1. **Script Property を1つ足す**
+
+   プロジェクトの設定 → スクリプト プロパティ →
+   `NOTIFIER_SHARED_SECRET` に推測困難な文字列（32文字以上）を入れる。
+   **同じ値を Cloudflare 側の `AUTH_GAS_SHARED_SECRET` にも入れる**
+   （[../workers/notifier-gate/README.md](../workers/notifier-gate/README.md) §5-2）。
+   片方だけ設定した状態では、ライセンス照会が常に失敗する。
+
+2. **5ファイルを貼り替える**（`Notifier.gs` は同名で新規作成）
+
+3. **`setupAuthSystem()` を実行する。**
+
+   `users` シートのヘッダー行を17列へ広げるために必要。
+   **既存の行は上書きされない**（Q列は空欄のまま＝未発行と同じ扱い）。
+   設定シートには `NOTIFIER_ENTITLEMENT`（初期値 `all_active`）が1行増える。
+
+4. **「デプロイを管理」からバージョンを更新する**（新規デプロイを作らない）
+
+5. **疎通を確かめる**
+
+   - ログイン後の画面から `issueNotifierLicense` を呼び、43文字のキーが返ること
+   - `users` シートの Q列に同じ値が入り、**2回目も同じ値**が返ること
+   - Workers から `/v1/evaluate` を叩いて `licenseState: "active"` が返ること
+
+6. 結果を Claude へ報告する（上の反映履歴へ追記する）
+
+### 戻すとき
+
+Q列を消す必要は無い（空欄でも既存の処理は動く）。
+ファイルを前の版へ戻し、デプロイのバージョンを戻せばよい。
+`NOTIFIER_SHARED_SECRET` を消すと照会が全部失敗するようになるので、
+Workers を止めるまでは残しておくこと。
