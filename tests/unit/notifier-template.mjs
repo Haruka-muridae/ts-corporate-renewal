@@ -594,6 +594,81 @@ try {
       requests.findIndex((request) => request.url.includes('/versions'))
       < requests.findIndex((request) => request.method === 'put'));
 
+    /*
+     * ★部分失敗でバージョンが増えないこと。
+     *
+     * versions.create が通ったあとで deployments 側が失敗すると、
+     * 使われないバージョンだけが残る。ウィザードは API の許可待ちで
+     * 5秒ごとに呼ぶため、作り直していると失敗のあいだ増え続ける。
+     */
+    env.clearFetchHandlers();
+    requests.length = 0;
+
+    let createdVersions = 0;
+
+    env.onFetch((target, options) => {
+      if (String(target).indexOf('https://script.googleapis.com/') !== 0) {
+        return null;
+      }
+
+      requests.push({ url: String(target), method: options.method, options });
+
+      if (options.method === 'get') {
+        return { status: 200, body: { deployments: [] } };
+      }
+
+      if (String(target).includes('/versions')) {
+        createdVersions += 1;
+        return { status: 200, body: { versionNumber: 10 + createdVersions } };
+      }
+
+      /* デプロイ側だけが落ちる。 */
+      return { status: 500, body: { error: { message: 'boom' } } };
+    });
+
+    const failedOnce = gas.deployWebApp();
+
+    check('デプロイ側の失敗は失敗として返す', failedOnce.ok === false, JSON.stringify(failedOnce));
+    check('作ったバージョンを控える', env.properties.PENDING_VERSION === '11',
+      env.properties.PENDING_VERSION);
+
+    gas.deployWebApp();
+    gas.deployWebApp();
+
+    check('★再試行でバージョンを作り直さない（増殖しない）', createdVersions === 1,
+      String(createdVersions));
+    check('★控えたバージョンを使い回す',
+      requests.filter((request) => request.method === 'put' || (request.method === 'post' && !request.url.includes('/versions')))
+        .every((request) => JSON.parse(request.options.payload).versionNumber === 11
+          || JSON.parse(request.options.payload).deploymentConfig?.versionNumber === 11),
+      requests.map((request) => request.options.payload).join(' | '));
+
+    /* 復帰したら控えを使い切って消す。 */
+    env.clearFetchHandlers();
+    env.onFetch((target, options) => {
+      if (String(target).indexOf('https://script.googleapis.com/') !== 0) {
+        return null;
+      }
+
+      if (options.method === 'get') {
+        return { status: 200, body: { deployments: [] } };
+      }
+
+      if (String(target).includes('/versions')) {
+        createdVersions += 1;
+        return { status: 200, body: { versionNumber: 99 } };
+      }
+
+      return { status: 200, body: { entryPoints: [{ webApp: { url } }] } };
+    });
+
+    const recovered = gas.deployWebApp();
+
+    check('復帰したら公開できる', recovered.ok === true, JSON.stringify(recovered));
+    check('★復帰時もバージョンを作り直さない', createdVersions === 1, String(createdVersions));
+    check('使い切った控えは消す', env.properties.PENDING_VERSION === '');
+    check('公開したバージョンを記録する', env.properties.DEPLOYED_VERSION === '11');
+
     /* API が未許可のとき。 */
     env.clearFetchHandlers();
     env.onFetch((target) => {

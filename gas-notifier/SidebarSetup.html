@@ -179,6 +179,10 @@
   */
   var PANELS = ['loading', 'setup', 'api', 'deploy', 'handoff', 'done'];
   var apiPollTimer = null;
+  var apiPollCount = 0;
+
+  /* 待ち続ける上限（5秒 × 60 = 5分）。放置されたまま呼び続けない。 */
+  var API_POLL_LIMIT = 60;
 
   function setMessage(text, kind) {
     var node = document.getElementById('msg');
@@ -262,7 +266,19 @@
       return;
     }
 
+    apiPollCount = 0;
+
     apiPollTimer = setInterval(function () {
+      apiPollCount += 1;
+
+      if (apiPollCount > API_POLL_LIMIT) {
+        stopApiPolling();
+        document.getElementById('api-waiting').textContent =
+          '確認を止めました。設定をオンにしたら［公開する］をもう一度押してください。';
+        showPanel('deploy');
+        return;
+      }
+
       google.script.run
         .withSuccessHandler(function (result) {
           if (result.ok) {

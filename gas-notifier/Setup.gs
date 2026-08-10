@@ -145,18 +145,39 @@ function deployWebApp() {
 
   var existing = findWebAppDeployment_(listed.body);
 
-  var version = scriptApiFetch_('post', 'projects/' + scriptId + '/versions', {
-    description: DEPLOYMENT_DESCRIPTION
-  });
+  /*
+   * ------------------------------------------------------------------
+   * 作りかけのバージョンがあれば使い回す
+   * ------------------------------------------------------------------
+   * バージョンの作成に成功したあとでデプロイ側が失敗すると、
+   * **使われないバージョンだけが残る。** ウィザードは API の許可待ちで
+   * 5秒ごとにこの関数を呼ぶため、そのまま作り直していると、
+   * 失敗が続くあいだバージョンが増え続ける。
+   *
+   * 成功するまでは同じ番号を使い回す。デプロイが通った時点で記録を消す。
+   * 再試行の間にコードが変わることはない（利用者はエディタを開かない）ので、
+   * 使い回して困る場面が無い。
+   * ------------------------------------------------------------------
+   */
+  var versionNumber = Number(getProperty_(PROP.PENDING_VERSION));
 
-  if (!version.ok) {
-    return deployFailure_(version.error, version.message);
-  }
+  if (!isFinite(versionNumber) || versionNumber <= 0) {
+    var version = scriptApiFetch_('post', 'projects/' + scriptId + '/versions', {
+      description: DEPLOYMENT_DESCRIPTION
+    });
 
-  var versionNumber = version.body && version.body.versionNumber;
+    if (!version.ok) {
+      return deployFailure_(version.error, version.message);
+    }
 
-  if (!versionNumber) {
-    return deployFailure_('NO_VERSION', 'バージョンを作成できませんでした。');
+    versionNumber = version.body && version.body.versionNumber;
+
+    if (!versionNumber) {
+      return deployFailure_('NO_VERSION', 'バージョンを作成できませんでした。');
+    }
+
+    /* デプロイへ進む前に控える。ここで落ちても次回は作り直さない。 */
+    setProperty_(PROP.PENDING_VERSION, String(versionNumber));
   }
 
   var config = {
@@ -189,6 +210,9 @@ function deployWebApp() {
   }
 
   setProperty_(PROP.WEBAPP_URL, url);
+  /* 使い切ったので控えを消す。次回は新しいバージョンを作る。 */
+  setProperty_(PROP.PENDING_VERSION, '');
+  setProperty_(PROP.DEPLOYED_VERSION, String(versionNumber));
 
   return {
     ok: true,

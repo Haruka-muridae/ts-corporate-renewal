@@ -45,6 +45,13 @@ var PROP = {
   LAST_SYNC_AT: 'LAST_SYNC_AT',
   /** deployWebApp() が保存する公開URL。 */
   WEBAPP_URL: 'WEBAPP_URL',
+  /**
+   * 作ったが、まだデプロイに結びついていないバージョン番号。
+   * 再試行でバージョンが増え続けるのを防ぐ（design-notes §9-2）。
+   */
+  PENDING_VERSION: 'PENDING_VERSION',
+  /** 実際に公開されているバージョン番号（記録用）。 */
+  DEPLOYED_VERSION: 'DEPLOYED_VERSION',
   /* ゲートから受け取った VAPID 情報のキャッシュ（Gate.gs）。 */
   VAPID_PUBLIC: 'VAPID_PUBLIC_B64URL',
   VAPID_JWTS: 'VAPID_JWTS_JSON',
