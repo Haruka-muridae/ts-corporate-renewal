@@ -55,6 +55,7 @@ const SUITES = [
   { name: 'card-ocr', file: 'unit/card-ocr.mjs', kind: 'unit' },
   { name: 'voice-recorder', file: 'unit/voice-recorder.mjs', kind: 'unit' },
   { name: 'voice-recorder-notifier', file: 'unit/voice-recorder-notifier.mjs', kind: 'unit' },
+  { name: 'notifier-gate', file: 'unit/notifier-gate.mjs', kind: 'unit' },
   { name: 'short-script-companion', file: 'unit/short-script-companion.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
 ];

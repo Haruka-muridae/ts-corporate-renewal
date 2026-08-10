@@ -32,6 +32,7 @@
     "build:cf": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy:notifier-gate": "wrangler deploy --config workers/notifier-gate/wrangler.jsonc",
     "cf:whoami": "wrangler whoami",
     "cf:versions": "wrangler versions list",
     "check:vendor": "node public/apps/vendor/check-updates.mjs"
