@@ -18,9 +18,29 @@
 | Google Identity Services（GIS） | `https://accounts.google.com/gsi/client`（Google本体） | `public/production-app/card-ocr/`（名刺OCRアプリ） | Drive / Sheets API を呼ぶための OAuth トークン取得（トークンモデル） | 2026-08-03 |
 | `@playwright/test` | npm（devDependency） | `tests/e2e/` のみ | ブラウザ録音アプリの E2E（実マイク入力・OPFS・メモリ計測） | 2026-08-06 |
 | `@opennextjs/cloudflare` / `wrangler` | npm（devDependency） | ビルドとデプロイのみ | 本番配信（Cloudflare Workers）に必要。**既に本番で使われている構成を、設定ごとリポジトリへ入れたもの** | 2026-08-06 |
-| jsrsasign | 公式配布の `jsrsasign-all-min.js`（MIT）。**利用者のApps Scriptプロジェクトへ手で貼る同梱物** | `gas-notifier/lib_jsrsasign.gs` のみ | Web Push の VAPID 署名（ES256 / ECDSA P-256）。Apps Script 標準に ES256 が無い | 2026-08-09 |
+| ~~jsrsasign~~ | ~~公式配布の `jsrsasign-all-min.js`（MIT）~~ | **廃止（2026-08-10）** | 使用をやめた。§1-4 | 2026-08-09 承認 / 2026-08-10 廃止 |
 
-### 1-4. jsrsasign（録音アプリのカレンダー通知）
+### 1-4. jsrsasign（録音アプリのカレンダー通知）— **2026-08-10 に廃止**
+
+> **この依存は使用をやめた（2026-08-10）。**
+>
+> カレンダー通知 V2 で、VAPID の ES256 署名を運営の Cloudflare Workers
+> （[workers/notifier-gate/](../workers/notifier-gate/)）へ移した。Workers には
+> WebCrypto があり、`crypto.subtle.sign` の ECDSA / P-256 は JWS がそのまま
+> 要求する `r||s` の64バイトを返す。**外部ライブラリを1つも足さずに済む。**
+>
+> - `gas-notifier/lib_jsrsasign.gs` は**削除した**（コミット `2680160`）
+> - 配布テンプレートに同梱する外部ライブラリは**無くなった**
+> - `package.json` の dependencies は変わらず `next` / `react` / `react-dom` のみ
+>
+> **副次的な効果**: 利用者に約500KB を手で貼らせる工程が消えた。
+> 貼り忘れ・順序違い・途中で切れた、のいずれも「通知が届かない」という
+> 同じ症状になり、原因が見えない工程だった。
+>
+> 経緯は [notifier-design-notes.md](./notifier-design-notes.md) §6-3。
+>
+> **以下は廃止前の承認記録である。** 消さずに残すのは、同じ判断を繰り返すときに
+> 「なぜ一度は必要だと判断したのか」を辿れるようにするため。
 
 **承認の範囲**: 録音アプリのカレンダー通知が使う GAS（[gas-notifier/](../gas-notifier/)）に限る。
 **`package.json` の dependencies には足さない。** 配信物（`public/`）にも入らない。
@@ -49,6 +69,15 @@ GAS 側に要るのは VAPID 署名だけで、通知の中身は Service Worker
   `KEYUTIL` / `KJUR` の偽物を差し込む（実物は数百KBのミニファイ済みJSで、
   Node 上で読ませても検証できることが増えない）。実物で署名が通ることは、
   利用者の環境で `verifyJsrsasign()` を1回実行して確かめる。
+
+**廃止時に消したもの**（上の制約は、いずれも不要になった）:
+
+| 消したもの | 代わり |
+| --- | --- |
+| `gas-notifier/lib_jsrsasign.gs` | 無し（署名は Workers が行う） |
+| `verifyJsrsasign()` と「jsrsasign を検証」メニュー | 無し（貼り付け工程が無いため、検証する対象が無い） |
+| ハーネスの `KEYUTIL` / `KJUR` の偽物 | 無し。署名は `tests/unit/notifier-gate.mjs` が
+**実際の WebCrypto で署名し、公開鍵で検証して**確かめている |
 
 ### 1-3. OpenNext（Cloudflare）と wrangler
 
