@@ -176,6 +176,20 @@ export function requestPasswordReset(email) {
 }
 
 /*
+ * カレンダー通知のライセンスキーを受け取る。
+ *
+ * すでに発行済みなら**同じキー**が返る。作り直すと、そのキーで
+ * セットアップ済みのテンプレートが全部動かなくなるためである。
+ *
+ * 戻り値の entitled は「いま通知を使える契約か」。false でもキーは返るので、
+ * 呼び出し側は料金ページへの導線を出したうえで手続きを続けてよい
+ * （契約後にセットアップをやり直さずに通知が始まる）。
+ */
+export function issueNotifierLicense(sessionToken) {
+  return postAction('issueNotifierLicense', { sessionToken });
+}
+
+/*
  * 申込みを開始する。
  *
  * agreedItems と tosVersion は必須。

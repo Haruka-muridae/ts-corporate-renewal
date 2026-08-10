@@ -12,16 +12,15 @@
  * ==================================================================
  *
  * ==================================================================
- * jsrsasign の本体は読み込まない
+ * V2 では署名も判定もこの中で起きない
  * ==================================================================
- * lib_jsrsasign.gs には貼り付け先とスタブしか入っていない（本体は利用者が貼る）。
- * ここでは KEYUTIL / KJUR の偽物を差し込み、鍵の形と JWT の組み立て方だけを見る。
- * 実物の ES256 署名が通ることは、利用者の環境で verifyJsrsasign() を
- * 実行して確かめる（docs/external-dependency-approvals.md §1-4）。
+ * どちらも運営の Workers（notifier-gate）が行う。ここでは UrlFetchApp の
+ * 応答を差し替えて「ゲートがこう答えたとき、テンプレートがどう振る舞うか」を見る。
+ * 判定そのものの正しさは notifier-gate スイートが持つ。
  * ==================================================================
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +29,14 @@ import vm from 'node:vm';
 const here = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(here, '../..');
 const GAS_DIR = join(REPO_ROOT, 'gas-notifier');
+
+/**
+ * Apps Script のバイト配列は符号付き（-128..127）。
+ * Utilities.* が返す値を実物と同じ形にする。
+ */
+function toSignedBytes(buffer) {
+  return Array.from(buffer, (value) => (value > 127 ? value - 256 : value));
+}
 
 /* ---------- 偽のスプレッドシート ---------- */
 
@@ -141,62 +148,6 @@ class FakeSpreadsheet {
   }
 }
 
-/* ---------- 偽の jsrsasign ---------- */
-
-/*
- * 公開鍵は非圧縮形式（0x04 + X + Y = 65バイト）でなければならない。
- * 実物と同じ長さの16進文字列を返し、hexToBase64Url_ の変換を実際に通す。
- */
-const FAKE_PUB_KEY_HEX = `04${'ab'.repeat(64)}`;
-
-function base64UrlOf(text) {
-  return Buffer.from(text, 'utf8').toString('base64url');
-}
-
-function makeFakeJsrsasign(record) {
-  return {
-    KEYUTIL: {
-      generateKeypair(algorithm, curve) {
-        record.generated.push({ algorithm, curve });
-
-        return {
-          prvKeyObj: { kind: 'private' },
-          pubKeyObj: { kind: 'public', pubKeyHex: FAKE_PUB_KEY_HEX },
-        };
-      },
-
-      getPEM(key, format) {
-        if (format === 'PKCS8PRV') {
-          return '-----BEGIN PRIVATE KEY-----\nFAKE-PRIVATE\n-----END PRIVATE KEY-----';
-        }
-
-        return '-----BEGIN PUBLIC KEY-----\nFAKE-PUBLIC\n-----END PUBLIC KEY-----';
-      },
-    },
-
-    KJUR: {
-      jws: {
-        JWS: {
-          sign(algorithm, header, payload, key) {
-            record.signed.push({
-              algorithm,
-              header: JSON.parse(header),
-              payload: JSON.parse(payload),
-              key,
-            });
-
-            return `${base64UrlOf(header)}.${base64UrlOf(payload)}.fake-signature`;
-          },
-
-          verify() {
-            return true;
-          },
-        },
-      },
-    },
-  };
-}
-
 /* ---------- 環境の組み立て ---------- */
 
 /**
@@ -213,13 +164,13 @@ export function createNotifierEnvironment({
   now = Date.UTC(2026, 7, 10, 0, 0, 0),
   email = 'owner@example.com',
   serviceUrl = 'https://script.google.com/macros/s/AKfake/exec',
+  scriptId = 'SCRIPT-ID-FAKE',
 } = {}) {
   const scriptProperties = { ...properties };
   const book = new FakeSpreadsheet('TSAM AI 録音通知');
   const logs = [];
   const fetchCalls = [];
   const fetchHandlers = [];
-  const jsrsasignRecord = { generated: [], signed: [] };
 
   let triggers = [];
   let currentTime = now;
@@ -277,6 +228,15 @@ export function createNotifierEnvironment({
         const buffer = Buffer.from(bytes.map((b) => ((b % 256) + 256) % 256));
         return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
       },
+
+      /* Apps Script は符号付きバイト配列を返す。呼び出し側がそれ前提で書いている。 */
+      computeHmacSha256Signature: (value, key) => toSignedBytes(
+        createHmac('sha256', String(key)).update(String(value), 'utf8').digest(),
+      ),
+
+      newBlob: (text) => ({
+        getBytes: () => toSignedBytes(Buffer.from(String(text), 'utf8')),
+      }),
     },
 
     LockService: {
@@ -317,6 +277,14 @@ export function createNotifierEnvironment({
         }),
       }),
       getService: () => ({ getUrl: () => currentServiceUrl }),
+
+      getScriptId: () => scriptId,
+
+      /*
+       * 実物はアクセストークン。**この値がクライアントへ渡らないこと**を
+       * テストが見張れるよう、それと分かる文字列にしてある。
+       */
+      getOAuthToken: () => 'FAKE-OAUTH-TOKEN',
     },
 
     Session: {
@@ -386,21 +354,12 @@ export function createNotifierEnvironment({
     vm.runInContext(code, sandbox, { filename: `gas-notifier/${name}` });
   }
 
-  /*
-   * 偽の jsrsasign は .gs の読み込み後に差し込む。
-   * lib_jsrsasign.gs のスタブ（var window / var navigator）を上書きしないため。
-   */
-  const fake = makeFakeJsrsasign(jsrsasignRecord);
-  sandbox.KEYUTIL = fake.KEYUTIL;
-  sandbox.KJUR = fake.KJUR;
-
   return {
     api: sandbox,
     properties: scriptProperties,
     book,
     logs,
     fetchCalls,
-    jsrsasign: jsrsasignRecord,
 
     getTriggers: () => triggers.slice(),
 
@@ -476,11 +435,117 @@ export function createNotifierEnvironment({
   };
 }
 
-/** セットアップ済みの環境。ほとんどのテストはこちらを使う。 */
-export function createReadyNotifierEnvironment(options = {}) {
+/**
+ * ゲート（notifier-gate）の公開オリジン。
+ * 正本は workers/notifier-gate/origin.mjs で、一致は notifier-gate スイートが見る。
+ */
+export const GATE_ORIGIN = 'https://notifier-gate.potenitas-lp.workers.dev';
+
+/**
+ * ゲートの偽物を差し込む。
+ *
+ * 判定そのものの正しさは notifier-gate スイートが持つ。ここで確かめたいのは
+ * 「ゲートがこう答えたとき、テンプレートがどう振る舞うか」なので、
+ * 応答は呼び出し側が決められるようにしてある。
+ *
+ * 戻り値の calls に、送られた本文が順に入る（何を送ったかの検査に使う）。
+ */
+export function installGateStub(env, {
+  licenseState = 'active',
+  evaluate = null,
+  publicKey = 'FAKE-VAPID-PUBLIC-KEY',
+  jwt = 'fake.jwt.value',
+  vapidStatus = 200,
+  evaluateStatus = 200,
+  testNotifyStatus = 200,
+} = {}) {
+  const calls = [];
+
+  env.onFetch((url, options) => {
+    if (String(url).indexOf(GATE_ORIGIN) !== 0) {
+      return null;
+    }
+
+    const path = String(url).slice(GATE_ORIGIN.length);
+    const body = JSON.parse(options.payload);
+
+    calls.push({ path, body });
+
+    if (path === '/v1/evaluate') {
+      if (evaluateStatus !== 200) {
+        return { status: evaluateStatus, body: { ok: false, error: { code: 'RATE_LIMITED', message: '' } } };
+      }
+
+      const decided = evaluate
+        ? evaluate(body)
+        : { notify: body.events.map((event) => ({
+          eid: event.eid,
+          feature: 'calendar',
+          timing: body.settings.timingMin,
+          startAt: event.startAt,
+          notifyAt: new Date(Date.parse(event.startAt) - body.settings.timingMin * 60000).toISOString(),
+        })), remove: [] };
+
+      return {
+        status: 200,
+        body: { ok: true, notify: decided.notify || [], remove: decided.remove || [], licenseState },
+      };
+    }
+
+    if (path === '/v1/vapid') {
+      if (vapidStatus !== 200) {
+        return { status: vapidStatus, body: { ok: false, error: { code: 'LICENSE_EXPIRED', message: '' } } };
+      }
+
+      const jwts = {};
+
+      for (const audience of body.audiences) {
+        jwts[audience] = `${jwt}:${audience}`;
+      }
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          publicKey,
+          jwts,
+          expiresAt: new Date(env.getTime() + 12 * 60 * 60 * 1000).toISOString(),
+          licenseState,
+        },
+      };
+    }
+
+    if (path === '/v1/test-notify') {
+      if (testNotifyStatus !== 200) {
+        return { status: testNotifyStatus, body: { ok: false, error: { code: 'RATE_LIMITED', message: '' } } };
+      }
+
+      return { status: 200, body: { ok: true, licenseState } };
+    }
+
+    return { status: 404, body: { ok: false, error: { code: 'INVALID_ACTION', message: '' } } };
+  });
+
+  return calls;
+}
+
+/**
+ * セットアップ済みの環境。ほとんどのテストはこちらを使う。
+ *
+ * licenseKey を渡すと、録音アプリから受け取り済みの状態にする
+ * （実運用では saveLicense 経由で入る）。
+ */
+export function createReadyNotifierEnvironment({
+  licenseKey = 'LK'.padEnd(43, 'x'),
+  ...options
+} = {}) {
   const env = createNotifierEnvironment(options);
 
   env.api.setupNotifier();
+
+  if (licenseKey) {
+    env.properties.LICENSE_KEY = licenseKey;
+  }
 
   return env;
 }

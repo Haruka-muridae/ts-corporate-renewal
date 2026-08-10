@@ -221,8 +221,20 @@ self.addEventListener('push', function (event) {
           return [];
         }
 
-        return gasGet(connection, 'pending').then(function (data) {
-          return (data && data.notifications) || [];
+        /*
+         * **この端末の endpoint を必ず添える（宿題 B-04）。**
+         * 省略すると GAS は要求を受け付けない。V1 は「誰が取りに来たか」を
+         * 見ておらず、2台目の端末には汎用の通知しか出せなかった。
+         */
+        return self.registration.pushManager.getSubscription().then(function (subscription) {
+          if (!subscription) {
+            return [];
+          }
+
+          return gasGet(connection, 'pending', { endpoint: subscription.endpoint })
+            .then(function (data) {
+              return (data && data.notifications) || [];
+            });
         });
       })
       .catch(function (error) {

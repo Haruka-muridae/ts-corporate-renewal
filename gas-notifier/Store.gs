@@ -1,21 +1,16 @@
 /**
  * シート I/O と定数。
  *
- * 上位（Api.gs / CalendarSync.gs / Push.gs / Setup.gs）は、
+ * 上位（Api.gs / CalendarSync.gs / Push.gs / Gate.gs / Setup.gs）は、
  * ここだけを通してシートと Script Properties へ触る。
  *
- * ------------------------------------------------------------------
- * このスクリプトは「利用者自身のスプレッドシート」に貼られる
- * ------------------------------------------------------------------
- * gas-auth/ と違い、ID で別のファイルを開くことはしない。
- * スコープが spreadsheets.currentonly（このスプレッドシートだけ）であり、
- * 運営はデータを一切預からないという設計（要件 DR-01〜04）による。
- * したがってファイルの特定は SpreadsheetApp.getActive() ひとつで足りる。
- * ------------------------------------------------------------------
+ * このスクリプトは利用者自身のスプレッドシートに紐づく（`getActive()` 1つで足りる）。
+ *
+ * 設計の理由は docs/notifier-design-notes.md §2。
  */
 
-/** health で返す版。ロジックを変えたら上げる（利用者の再コピー判断に使う）。 */
-var NOTIFIER_VERSION = '1.0.0';
+/** health で返す版。 */
+var NOTIFIER_VERSION = '2.0.0';
 
 var SHEET = {
   SETTINGS: 'settings',
@@ -25,44 +20,48 @@ var SHEET = {
 };
 
 /**
- * 各シートの列。**順序がそのまま列順**であり、途中へ挿入しないこと。
- * 列を足すときは必ず末尾へ足す（既存データの列がずれる）。
- *
- * ------------------------------------------------------------------
- * 時刻はすべて「エポックミリ秒の数値」で持つ
- * ------------------------------------------------------------------
- * ISO 8601 の文字列をセルへ書くと、Google スプレッドシートが日時として
- * 解釈し、読み戻したときに Date オブジェクトや別書式の文字列になる。
- * そうなると `sentAt >= now - 10分` のような比較が静かに壊れる。
- * 表示用の整形は API の応答を作る時点（Api.gs）で行う。
- * 空欄は '' とする。
- * ------------------------------------------------------------------
+ * 各シートの列。**順序がそのまま列順**で、途中へ挿入しない（末尾へ足す）。
+ * 時刻はすべてエポックミリ秒の数値で持つ（理由は design-notes §2-1）。
  */
 var HEADERS = {
   settings: ['key', 'value'],
-  subscriptions: ['endpoint', 'p256dh', 'auth', 'createdAt', 'lastSuccessAt', 'lastErrorAt', 'lastError'],
-  notify_queue: ['key', 'eventId', 'timing', 'title', 'startTime', 'notifyAt', 'updatedAt'],
-  sent_log: ['key', 'eventId', 'timing', 'title', 'startTime', 'sentAt', 'purpose', 'fetchedAt']
+  subscriptions: ['subId', 'endpoint', 'p256dh', 'auth', 'createdAt', 'lastSuccessAt', 'lastErrorAt', 'lastError'],
+  notify_queue: ['key', 'eid', 'eventId', 'feature', 'timing', 'title', 'startTime', 'notifyAt', 'updatedAt'],
+  sent_log: ['key', 'eid', 'eventId', 'feature', 'timing', 'title', 'startTime', 'sentAt', 'purpose', 'fetchedBy']
 };
 
 var SHEET_ORDER = [SHEET.SETTINGS, SHEET.SUBSCRIPTIONS, SHEET.QUEUE, SHEET.SENT_LOG];
 
 /**
  * Script Properties のキー。
- *
- * **秘密鍵と接続キーはここにしか無い。** シートへ書かないこと。
- * シートは「リンクを知っている全員／閲覧者」で共有される想定であり、
- * 書けば第三者に渡る（要件 NFR-01）。
+ * **接続キー・ライセンスキー・EID の鍵はここにしか無い。シートへ書かない。**
  */
 var PROP = {
-  VAPID_PRIVATE: 'VAPID_PRIVATE_PEM',
-  VAPID_PUBLIC: 'VAPID_PUBLIC_B64URL',
   CONNECT_KEY: 'CONNECT_KEY',
+  LICENSE_KEY: 'LICENSE_KEY',
+  /** 予定IDを運営へ渡す前にハッシュ化する鍵（design-notes §3）。 */
+  EID_HMAC_KEY: 'EID_HMAC_KEY',
   LAST_TICK_AT: 'LAST_TICK_AT',
-  LAST_SYNC_AT: 'LAST_SYNC_AT'
+  LAST_SYNC_AT: 'LAST_SYNC_AT',
+  /** deployWebApp() が保存する公開URL。 */
+  WEBAPP_URL: 'WEBAPP_URL',
+  /**
+   * 作ったが、まだデプロイに結びついていないバージョン番号。
+   * 再試行でバージョンが増え続けるのを防ぐ（design-notes §9-2）。
+   */
+  PENDING_VERSION: 'PENDING_VERSION',
+  /** 実際に公開されているバージョン番号（記録用）。 */
+  DEPLOYED_VERSION: 'DEPLOYED_VERSION',
+  /** ゲートが最後に返したライセンスの状態と、その時刻（画面表示用）。 */
+  LICENSE_STATE: 'LICENSE_STATE',
+  LICENSE_CHECKED_AT: 'LICENSE_CHECKED_AT',
+  /* ゲートから受け取った VAPID 情報のキャッシュ（Gate.gs）。 */
+  VAPID_PUBLIC: 'VAPID_PUBLIC_B64URL',
+  VAPID_JWTS: 'VAPID_JWTS_JSON',
+  VAPID_EXPIRES_AT: 'VAPID_EXPIRES_AT'
 };
 
-/* 設定の既定値（FR-06 / FR-07 / FR-11）。 */
+/* 設定の既定値（要件 FR-06 / FR-07 / FR-11）。 */
 var DEFAULT_SETTINGS = {
   accepted: true,
   tentative: true,
@@ -75,16 +74,15 @@ var DEFAULT_SETTINGS = {
 /* 通知タイミングの選択肢（分前）。0 は「開始時刻」。FR-10。 */
 var ALLOWED_TIMINGS = [0, 5, 10, 15];
 
-/* 出欠の状態。Google Calendar API の responseStatus と同じ語をそのまま使う。 */
+/* 出欠の状態。Google Calendar API の responseStatus と同じ語。 */
 var RESPONSE_STATUSES = ['accepted', 'tentative', 'needsAction', 'declined'];
+
+/* 録音アプリの場所。引き継ぎリンクの組み立てに使う。 */
+var RECORDER_APP_URL = 'https://tsam-ai.com/production-app/voice-recorder/';
 
 /* ---------- 値の変換 ---------- */
 
-/**
- * セルの値をエポックミリ秒へ寄せる。読めない値は NaN を返す。
- * 利用者がシートを手で編集して日時セルに変えてしまった場合も拾えるよう、
- * Date オブジェクトと数値文字列の両方を受ける。
- */
+/** セルの値をエポックミリ秒へ寄せる。読めない値は NaN。 */
 function toMs_(value) {
   if (value instanceof Date) {
     return value.getTime();
@@ -128,10 +126,7 @@ function getBook_() {
   return book;
 }
 
-/**
- * シートを用意する。何度呼んでも重複して作らない（優等設計）。
- * すでにある場合はヘッダーだけ整え、データ行には触らない。
- */
+/** シートを用意する。何度呼んでも重複して作らず、データ行には触らない。 */
 function ensureSheet_(name) {
   var header = HEADERS[name];
 
@@ -153,10 +148,8 @@ function ensureSheet_(name) {
 }
 
 /**
- * 表を読む。1行1オブジェクトにし、`__row` に実際の行番号を入れる。
- *
- * `__row` は**読んだ時点の行番号**である。行を消すと後ろがずれるため、
- * 削除は必ず行番号の大きいほうから行うこと（deleteRowsByNumbers_ を使う）。
+ * 表を読む。1行1オブジェクトにし、`__row` に読んだ時点の行番号を入れる。
+ * 削除は必ず deleteRowsByNumbers_ を使う（行番号がずれるため）。
  */
 function tableRead_(name) {
   var sheet = ensureSheet_(name);
@@ -210,7 +203,7 @@ function tableUpdate_(name, rowNumber, obj) {
   sheet.getRange(rowNumber, 1, 1, header.length).setValues([line]);
 }
 
-/** 行番号の配列をまとめて削除する。**大きい番号から消す**（消すたびに後ろがずれるため）。 */
+/** 行番号の配列をまとめて削除する。**大きい番号から消す。** */
 function deleteRowsByNumbers_(name, rowNumbers) {
   if (!rowNumbers || rowNumbers.length === 0) {
     return 0;
@@ -228,13 +221,7 @@ function deleteRowsByNumbers_(name, rowNumbers) {
 
 /* ---------- settings ---------- */
 
-/**
- * 設定を読む。**壊れた値・未設定は既定値へ落とす。**
- *
- * 画面（notifier-panel.js）は保存前に検証するが、シートは利用者が
- * 直接編集できる。ここで丸めておかないと、`timing` に文字列が入っただけで
- * 通知が一切出ない状態になる。
- */
+/** 設定を読む。壊れた値・未設定は既定値へ落とす（design-notes §2-2）。 */
 function readSettings_() {
   var rows = tableRead_(SHEET.SETTINGS);
   var raw = {};
@@ -246,7 +233,7 @@ function readSettings_() {
   return normalizeSettings_(raw);
 }
 
-/** 任意の入力を設定オブジェクトへ正規化する（純関数。テストはここを見る）。 */
+/** 任意の入力を設定オブジェクトへ正規化する（純関数）。 */
 function normalizeSettings_(input) {
   var source = input && typeof input === 'object' ? input : {};
   var out = {};
@@ -262,13 +249,7 @@ function normalizeSettings_(input) {
   return out;
 }
 
-/**
- * 真偽値へ寄せる。
- *
- * 文字列 'false' を Boolean() に渡すと true になる。
- * 同じ誤りが本番認証系で30日セッションの誤発行を起こしている（gas-auth/Main.gs）。
- * ここでも文字列を明示的に見る。
- */
+/** 真偽値へ寄せる。文字列 'false' を Boolean() に渡すと true になるため明示的に見る。 */
 function toBool_(value, fallback) {
   if (value === true || value === false) {
     return value;
@@ -338,8 +319,8 @@ function writeSettings_(patch) {
 /* ---------- subscriptions ---------- */
 
 /**
- * Push 購読を upsert する。endpoint が同一なら鍵だけ更新する。
- * 同じブラウザからの再購読で行が増え続けると、1件の通知が何度も届く。
+ * Push 購読を upsert する。endpoint が同一なら鍵だけ更新し、subId は保つ。
+ * subId は「どの端末が通知を取りに来たか」の記録に使う（design-notes §5）。
  */
 function upsertSubscription_(subscription, nowMs) {
   var endpoint = String(subscription && subscription.endpoint ? subscription.endpoint : '').trim();
@@ -357,35 +338,58 @@ function upsertSubscription_(subscription, nowMs) {
   }
 
   var rows = tableRead_(SHEET.SUBSCRIPTIONS);
-  var stamp = nowMs;
 
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i].endpoint) === endpoint) {
+      var existingId = String(rows[i].subId || '') || randomBase64Url_(9);
+
       tableUpdate_(SHEET.SUBSCRIPTIONS, rows[i].__row, {
+        subId: existingId,
         endpoint: endpoint,
         p256dh: p256dh,
         auth: auth,
-        createdAt: rows[i].createdAt || stamp,
+        createdAt: rows[i].createdAt || nowMs,
         lastSuccessAt: rows[i].lastSuccessAt || '',
         lastErrorAt: '',
         lastError: ''
       });
 
-      return { created: false, endpoint: endpoint };
+      return { created: false, subId: existingId, endpoint: endpoint };
     }
   }
 
+  var subId = randomBase64Url_(9);
+
   tableAppend_(SHEET.SUBSCRIPTIONS, {
+    subId: subId,
     endpoint: endpoint,
     p256dh: p256dh,
     auth: auth,
-    createdAt: stamp,
+    createdAt: nowMs,
     lastSuccessAt: '',
     lastErrorAt: '',
     lastError: ''
   });
 
-  return { created: true, endpoint: endpoint };
+  return { created: true, subId: subId, endpoint: endpoint };
+}
+
+function findSubscriptionByEndpoint_(endpoint) {
+  var target = String(endpoint === undefined || endpoint === null ? '' : endpoint).trim();
+
+  if (target === '') {
+    return null;
+  }
+
+  var rows = tableRead_(SHEET.SUBSCRIPTIONS);
+
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].endpoint) === target) {
+      return rows[i];
+    }
+  }
+
+  return null;
 }
 
 function removeSubscriptionByEndpoint_(endpoint) {
@@ -403,25 +407,38 @@ function removeSubscriptionByEndpoint_(endpoint) {
 
 /* ---------- notify_queue ---------- */
 
-/**
- * キューの行キー。**eventId と timing の組**で1件とする。
- * timing を変えたら別の通知になる（設定変更後に「5分前」と「10分前」が
- * 二重に出ないよう、設定変更時は古い timing の行を消す）。
- */
-function queueKey_(eventId, timing) {
-  return String(eventId) + '|' + String(timing);
+/** キューの行キー。eid と timing の組で1件とする。 */
+function queueKey_(eid, timing) {
+  return String(eid) + '|' + String(timing);
 }
 
-/* ---------- sent_log ---------- */
+/* ---------- sent_log の取得済み（購読単位） ---------- */
 
-/** 送信済みキーの集合。キューの絞り込みで毎回引くため、まとめて作る。 */
-function sentKeySet_() {
-  var rows = tableRead_(SHEET.SENT_LOG);
-  var set = {};
+/**
+ * `fetchedBy` 列を subId の配列として読む。
+ * 空欄・壊れた値は「誰も取っていない」として扱う（design-notes §5）。
+ */
+function parseFetchedBy_(value) {
+  var text = String(value === undefined || value === null ? '' : value).trim();
 
-  for (var i = 0; i < rows.length; i++) {
-    set[String(rows[i].key)] = true;
+  if (text === '') {
+    return [];
   }
 
-  return set;
+  var parts = text.split(',');
+  var out = [];
+
+  for (var i = 0; i < parts.length; i++) {
+    var id = parts[i].trim();
+
+    if (id !== '' && out.indexOf(id) === -1) {
+      out.push(id);
+    }
+  }
+
+  return out;
+}
+
+function formatFetchedBy_(list) {
+  return (list || []).join(',');
 }

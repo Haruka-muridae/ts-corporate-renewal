@@ -17,9 +17,12 @@
 
   worker-src … 逐次エンコード用の Worker と AudioWorklet を自前で持つため 'self'。
   media-src blob: … 停止後のプレビュー再生（§FR-05）が blob: URL を使う。
-  connect-src … Google API と当社の認証系（Apps Script）に限る。
+  connect-src … Google API・当社の認証系（Apps Script）・通知ゲートに限る。
+    通知ゲート（notifier-gate）はライセンスの疎通確認に使う。
+    **ワイルドカード（*.workers.dev）にはしない。** workers.dev は誰でも
+    使える共有ドメインで、他人の Worker まで許可することになる。
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com https://notifier-gate.potenitas-lp.workers.dev; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'">
 
 <!--
   ホーム画面へ追加したときの表示（カレンダー通知の受け口として常駐させる想定）。
@@ -188,8 +191,8 @@
     <h2 class="vr-panel__title">Googleカレンダー連携（通知）</h2>
     <p class="vr-note">
       予定が始まる少し前に、この端末へ通知を出します。
-      通知の仕組みは<strong>あなたのGoogleアカウントの中だけ</strong>で動き、
-      予定の内容が当社のサーバーを通ることはありません。
+      予定の内容（予定名・参加者・説明）は<strong>あなたのGoogleアカウントの中だけ</strong>にあり、
+      当社のサーバーへ送られることはありません。
       通知から録音が自動で始まることはありません。
     </p>
 
@@ -217,21 +220,37 @@
         <p class="vr-step__hint" id="vr-nf-hint-subscription" hidden></p>
       </li>
       <li class="vr-step">
-        <span class="vr-step__label">GAS側の定期実行</span>
+        <span class="vr-step__label">通知用シートの定期実行</span>
         <span class="vr-step__state" id="vr-nf-state-trigger">未確認</span>
         <p class="vr-step__hint" id="vr-nf-hint-trigger" hidden></p>
       </li>
+      <li class="vr-step">
+        <span class="vr-step__label">ご契約（通知の利用）</span>
+        <span class="vr-step__state" id="vr-nf-state-license">未確認</span>
+        <p class="vr-step__hint" id="vr-nf-hint-license" hidden></p>
+      </li>
     </ol>
 
-    <!-- 接続の設定。設定済みのときは畳んでおく（普段は触らないため）。 -->
+    <!-- はじめての設定はここから。ボタン1つで始まる。 -->
+    <div class="vr-actions">
+      <button type="button" id="vr-nf-setup" class="auth-button">通知をセットアップ</button>
+    </div>
+    <p class="vr-note">
+      通知用シートのコピー画面が開きます。シートのサイドバーで［セットアップを実行］→［公開する］と進み、
+      最後に［📱 録音アプリで仕上げる］を押すと、この画面へ戻って設定が完了します。
+    </p>
+
+    <!--
+      接続の設定。通常はウィザードのリンクで自動的に埋まるため畳んでおく。
+      リンクが使えなかったときのために、手で入れる道も残す（行き止まりを作らない）。
+    -->
     <details class="vr-details" id="vr-nf-connection">
-      <summary class="vr-details__summary">接続の設定</summary>
+      <summary class="vr-details__summary">接続の設定（うまくいかないとき）</summary>
 
       <p class="vr-note">
-        はじめての方は
-        <a id="vr-nf-template" href="#" target="_blank" rel="noopener noreferrer">通知用シートをコピー</a>
-        してから、シートのメニュー「録音通知」→「セットアップを開始」に従ってください。
-        表示された接続コードを、下の2つへ貼り付けます。
+        通常はこの欄を触る必要はありません。引き継ぎリンクが開けなかった場合だけ、
+        <a id="vr-nf-template" href="#" target="_blank" rel="noopener noreferrer">通知用シート</a>
+        のメニュー「録音通知」→「録音アプリへの引き継ぎリンクを表示」で表示される値を貼り付けてください。
       </p>
 
       <label class="vr-field">
@@ -279,6 +298,25 @@
         <button type="button" id="vr-nf-recheck" class="auth-button auth-button--ghost">接続テスト</button>
       </div>
     </form>
+
+    <!-- 次に届く通知。設定が効いているかを、実際の予定で確かめられるようにする。 -->
+    <section class="vr-subsection">
+      <h3 class="vr-subsection__title">次に届く通知</h3>
+      <ul class="vr-upcoming" id="vr-nf-upcoming" hidden></ul>
+      <p class="vr-note" id="vr-nf-upcoming-empty">
+        24時間以内に通知の予定はありません。設定を変えた直後は、反映まで最大5分かかります。
+      </p>
+      <div class="vr-actions">
+        <button type="button" id="vr-nf-test" class="auth-button auth-button--ghost">テスト通知を送る</button>
+      </div>
+      <p class="vr-note">テスト通知は1日1回までです。</p>
+    </section>
+
+    <!-- ご契約の状態。期限切れのときだけ料金ページへの導線を出す。 -->
+    <p class="vr-note">
+      ご契約: <span id="vr-nf-license-state">未確認</span>
+      <a id="vr-nf-license-link" href="#" hidden>ご契約の内容を確認する</a>
+    </p>
 
     <p class="vr-note vr-note--hint" id="vr-nf-message" role="status" hidden></p>
   </section>

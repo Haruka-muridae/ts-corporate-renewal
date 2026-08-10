@@ -121,9 +121,14 @@ try {
     );
   }
 
+  /*
+   * A〜P の16列が元の要件。Q（notifier_license_key）は
+   * カレンダー通知 V2 で末尾へ足したもの（AUTH_SETUP.md の users の列）。
+   * **途中へ挿入すると既存データが1列ずれる**ため、下で末尾であることも見る。
+   */
   check(
-    'users の列構成が要件の A〜P（16列）',
-    gas.HEADERS.users.length === 16,
+    'users の列構成が A〜Q（17列）',
+    gas.HEADERS.users.length === 17,
     gas.HEADERS.users.length,
   );
 
@@ -133,6 +138,13 @@ try {
     && gas.HEADERS.users[gas.USER_COL.PASSWORD_HASH - 1] === 'password_hash'
     && gas.HEADERS.users[gas.USER_COL.PAYMENT_EXEMPT - 1] === 'payment_exempt'
     && gas.HEADERS.users[gas.USER_COL.UPDATED_AT - 1] === 'updated_at',
+  );
+
+  check(
+    '追加した列は末尾にある（既存の列番号を動かしていない）',
+    gas.USER_COL.UPDATED_AT === 16
+    && gas.HEADERS.users[16] === 'notifier_license_key',
+    gas.HEADERS.users.join(','),
   );
 
   check(

@@ -1,23 +1,21 @@
 /**
- * 初期セットアップ。
+ * セットアップと、ウェブアプリの公開。
  *
- * サイドバー（SidebarSetup.html）の②から setupNotifier() を1回実行する。
- * **何度実行しても同じ結果になる**（優等）。鍵と接続キーは既にあれば作り直さない。
- * 作り直すと、録音アプリ側の設定と Push 購読が黙って無効になるためである。
+ * V2 では利用者が Apps Script のエディタを開く工程が無い。
+ * サイドバー（SidebarSetup.html）から次の2つを押すだけで完了する。
  *
- * 行うこと:
- *   1. 4つのシートとヘッダーを用意する
- *   2. 設定の既定値を書く（未設定の項目だけ）
- *   3. VAPID の鍵を作る（無ければ）
- *   4. 接続キーを作る（無ければ）
- *   5. tick() の毎分トリガーを作る（同名の既存トリガーは消してから）
+ *   [セットアップを実行] … setupNotifier()
+ *   [公開する]           … deployWebApp()
+ *
+ * どちらも**何度実行しても同じ結果になる**（優等）。鍵と接続キーは既にあれば
+ * 作り直さない。作り直すと録音アプリ側の設定が黙って無効になるため。
  */
 
 /** サイドバーの②が呼ぶ。戻り値はそのまま画面へ出す。 */
 function setupNotifier() {
   ensureSheets_();
   writeSettings_({});
-  ensureVapidKeys_();
+  ensureEidHmacKey_();
   ensureConnectKey_();
   ensureTickTrigger_();
 
@@ -31,32 +29,25 @@ function ensureSheets_() {
 }
 
 /**
- * VAPID の鍵を用意する。
+ * 予定IDのハッシュ化に使う鍵を用意する。
  *
- * 公開鍵は「非圧縮形式（0x04 + X + Y = 65バイト）の base64url」で保存する。
- * ブラウザの `applicationServerKey` がこの形しか受け取らないため、
- * PEM ではなくこちらを持つ。
+ * **この鍵は端末（このスプレッドシート）の外へ出ない。** 運営が受け取るのは
+ * これで HMAC した値だけで、元の予定IDへは戻せない（design-notes §3）。
+ * 作り直すと、送信済みの記録と突き合わなくなって同じ通知が再送されるため、
+ * 既にあれば触らない。
  */
-function ensureVapidKeys_() {
-  if (getProperty_(PROP.VAPID_PRIVATE) !== '' && getProperty_(PROP.VAPID_PUBLIC) !== '') {
+function ensureEidHmacKey_() {
+  if (getProperty_(PROP.EID_HMAC_KEY) !== '') {
     return false;
   }
 
-  requireJsrsasign_();
-
-  var pair = KEYUTIL.generateKeypair('EC', 'secp256r1');
-
-  setProperty_(PROP.VAPID_PRIVATE, KEYUTIL.getPEM(pair.prvKeyObj, 'PKCS8PRV'));
-  setProperty_(PROP.VAPID_PUBLIC, hexToBase64Url_(pair.pubKeyObj.pubKeyHex));
-
+  setProperty_(PROP.EID_HMAC_KEY, randomBase64Url_(32));
   return true;
 }
 
 /**
  * 接続キーを用意する。
- *
- * Web アプリのURLは第三者にも推測されうるため、health 以外の全 API で
- * このキーを検証する（Api.gs）。32バイトあれば総当たりは成立しない。
+ * Web アプリのURLは第三者にも推測されうるため、health 以外の全 API で検証する。
  */
 function ensureConnectKey_() {
   if (getProperty_(PROP.CONNECT_KEY) !== '') {
@@ -67,13 +58,13 @@ function ensureConnectKey_() {
   return true;
 }
 
-/**
- * 接続キーを作り直す。漏れた疑いがあるときだけ使う。
- * **録音アプリ側の設定は無効になる**ので、接続コードを貼り直してもらう。
- */
-function resetConnectionKey() {
-  setProperty_(PROP.CONNECT_KEY, randomBase64Url_(32));
-  return getConnectionCode();
+/** 接続キーを作り直す。**録音アプリ側の設定は無効になる。** */
+function resetConnectKey_() {
+  var fresh = randomBase64Url_(32);
+
+  setProperty_(PROP.CONNECT_KEY, fresh);
+
+  return fresh;
 }
 
 /**
@@ -110,11 +101,221 @@ function hasTickTrigger_() {
   return false;
 }
 
+/* ---------- ワンボタン公開 ---------- */
+
+var SCRIPT_API_BASE = 'https://script.googleapis.com/v1/';
+
+/** 作るデプロイの説明文。既存デプロイを見分ける手掛かりにもする。 */
+var DEPLOYMENT_DESCRIPTION = 'TSAM AI 録音通知（自動公開）';
+
+/**
+ * ウェブアプリとして公開する（ウィザードの [公開する] が呼ぶ）。
+ *
+ * ------------------------------------------------------------------
+ * 冪等にする（同じURLを保つ）
+ * ------------------------------------------------------------------
+ * 既存のウェブアプリ用デプロイがあれば、**新しいバージョンを作って
+ * そのデプロイを update する。** create し直すと `/exec` URL が変わり、
+ * 録音アプリ側の設定が黙って無効になる。
+ *
+ * `@HEAD` のデプロイ（versionNumber を持たない）は update できないため、
+ * 探索から外す。
+ * ------------------------------------------------------------------
+ *
+ * **アクセストークンをクライアントへ渡さない。** 呼ぶのはこのサーバー側関数だけで、
+ * サイドバーへ返すのは公開URLと状態のみ。
+ *
+ * 戻り値は { ok, url, created, status, message }。
+ * 失敗しても例外にはせず、ウィザードが次の手を案内できる形で返す。
+ */
+function deployWebApp() {
+  var scriptId;
+
+  try {
+    scriptId = ScriptApp.getScriptId();
+  } catch (err) {
+    return deployFailure_('SCRIPT_ID', 'スクリプトIDを取得できませんでした。');
+  }
+
+  var listed = scriptApiFetch_('get', 'projects/' + scriptId + '/deployments', null);
+
+  if (!listed.ok) {
+    return deployFailure_(listed.error, listed.message);
+  }
+
+  var existing = findWebAppDeployment_(listed.body);
+
+  /*
+   * ------------------------------------------------------------------
+   * 作りかけのバージョンがあれば使い回す
+   * ------------------------------------------------------------------
+   * バージョンの作成に成功したあとでデプロイ側が失敗すると、
+   * **使われないバージョンだけが残る。** ウィザードは API の許可待ちで
+   * 5秒ごとにこの関数を呼ぶため、そのまま作り直していると、
+   * 失敗が続くあいだバージョンが増え続ける。
+   *
+   * 成功するまでは同じ番号を使い回す。デプロイが通った時点で記録を消す。
+   * 再試行の間にコードが変わることはない（利用者はエディタを開かない）ので、
+   * 使い回して困る場面が無い。
+   * ------------------------------------------------------------------
+   */
+  var versionNumber = Number(getProperty_(PROP.PENDING_VERSION));
+
+  if (!isFinite(versionNumber) || versionNumber <= 0) {
+    var version = scriptApiFetch_('post', 'projects/' + scriptId + '/versions', {
+      description: DEPLOYMENT_DESCRIPTION
+    });
+
+    if (!version.ok) {
+      return deployFailure_(version.error, version.message);
+    }
+
+    versionNumber = version.body && version.body.versionNumber;
+
+    if (!versionNumber) {
+      return deployFailure_('NO_VERSION', 'バージョンを作成できませんでした。');
+    }
+
+    /* デプロイへ進む前に控える。ここで落ちても次回は作り直さない。 */
+    setProperty_(PROP.PENDING_VERSION, String(versionNumber));
+  }
+
+  var config = {
+    scriptId: scriptId,
+    versionNumber: versionNumber,
+    manifestFileName: 'appsscript',
+    description: DEPLOYMENT_DESCRIPTION
+  };
+
+  var applied;
+
+  if (existing) {
+    applied = scriptApiFetch_(
+      'put',
+      'projects/' + scriptId + '/deployments/' + existing.deploymentId,
+      { deploymentConfig: config }
+    );
+  } else {
+    applied = scriptApiFetch_('post', 'projects/' + scriptId + '/deployments', config);
+  }
+
+  if (!applied.ok) {
+    return deployFailure_(applied.error, applied.message);
+  }
+
+  var url = webAppUrlFromDeployment_(applied.body);
+
+  if (url === '') {
+    return deployFailure_('NO_URL', '公開URLを取得できませんでした。');
+  }
+
+  setProperty_(PROP.WEBAPP_URL, url);
+  /* 使い切ったので控えを消す。次回は新しいバージョンを作る。 */
+  setProperty_(PROP.PENDING_VERSION, '');
+  setProperty_(PROP.DEPLOYED_VERSION, String(versionNumber));
+
+  return {
+    ok: true,
+    url: url,
+    created: !existing,
+    status: 'DEPLOYED',
+    message: existing ? '公開を更新しました（URLは変わりません）。' : '公開しました。'
+  };
+}
+
+/** ウェブアプリの入口を持つデプロイを探す。@HEAD は除く。 */
+function findWebAppDeployment_(body) {
+  var deployments = (body && body.deployments) || [];
+
+  for (var i = 0; i < deployments.length; i++) {
+    var deployment = deployments[i] || {};
+    var config = deployment.deploymentConfig || {};
+
+    /* @HEAD は versionNumber を持たず、update もできない。 */
+    if (!config.versionNumber) {
+      continue;
+    }
+
+    if (webAppUrlFromDeployment_(deployment) !== '') {
+      return { deploymentId: String(deployment.deploymentId || '') };
+    }
+  }
+
+  return null;
+}
+
+function webAppUrlFromDeployment_(deployment) {
+  var entryPoints = (deployment && deployment.entryPoints) || [];
+
+  for (var i = 0; i < entryPoints.length; i++) {
+    var entry = entryPoints[i] || {};
+
+    if (entry.webApp && entry.webApp.url) {
+      return String(entry.webApp.url);
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Apps Script API を叩く。
+ *
+ * 403 は「Apps Script API が未許可」であることがほとんどで、
+ * ウィザードはこれを見て設定ページへ誘導する。
+ */
+function scriptApiFetch_(method, path, payload) {
+  var options = {
+    method: method,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  };
+
+  if (payload) {
+    options.contentType = 'application/json';
+    options.payload = JSON.stringify(payload);
+  }
+
+  var response;
+
+  try {
+    response = UrlFetchApp.fetch(SCRIPT_API_BASE + path, options);
+  } catch (err) {
+    return { ok: false, error: 'NETWORK', message: '通信に失敗しました。', body: null };
+  }
+
+  var status = response.getResponseCode();
+  var body = null;
+
+  try {
+    body = JSON.parse(response.getContentText());
+  } catch (err) {
+    body = null;
+  }
+
+  if (status === 403) {
+    return { ok: false, error: 'API_DISABLED', message: 'Apps Script API が許可されていません。', body: body };
+  }
+
+  if (status < 200 || status >= 300) {
+    var detail = (body && body.error && body.error.message) ? String(body.error.message) : ('HTTP ' + status);
+    return { ok: false, error: 'API_ERROR', message: detail.slice(0, 200), body: body };
+  }
+
+  return { ok: true, error: '', message: '', body: body };
+}
+
+function deployFailure_(error, message) {
+  Logger.log('deployWebApp failed: ' + error);
+
+  return { ok: false, url: '', created: false, status: error, message: message };
+}
+
 /* ---------- サイドバーが読む状態 ---------- */
 
 /**
- * セットアップの進み具合。サイドバーは、この5項目を ○/× で並べる。
- * **接続キーそのものはここに入れない**（表示は getConnectionCode() で明示的に取る）。
+ * セットアップの進み具合。サイドバーはこれを見て状態を切り替える。
+ * **接続キーとライセンスキーそのものはここに入れない。**
  */
 function getSetupStatus() {
   var book = null;
@@ -125,7 +326,7 @@ function getSetupStatus() {
     book = null;
   }
 
-  var sheetsReady = true;
+  var sheetsReady = book !== null;
 
   if (book) {
     for (var i = 0; i < SHEET_ORDER.length; i++) {
@@ -133,35 +334,57 @@ function getSetupStatus() {
         sheetsReady = false;
       }
     }
-  } else {
-    sheetsReady = false;
   }
 
   return {
-    jsrsasign: hasJsrsasign_(),
     sheets: sheetsReady,
-    keys: getProperty_(PROP.VAPID_PUBLIC) !== '' && getProperty_(PROP.VAPID_PRIVATE) !== '',
+    eidKey: getProperty_(PROP.EID_HMAC_KEY) !== '',
     connectKey: getProperty_(PROP.CONNECT_KEY) !== '',
     trigger: hasTickTrigger_(),
     deployed: webAppUrl_() !== '',
+    license: getProperty_(PROP.LICENSE_KEY) !== '',
     version: NOTIFIER_VERSION
   };
 }
 
 /**
- * 録音アプリへ貼る接続コード。
+ * 録音アプリへ渡す引き継ぎリンク。
  *
- * URL は「デプロイを管理」で公開したあとでなければ取れない。
- * 空文字なら、サイドバーは③（公開）がまだだと案内する。
+ * URL のフラグメント（`#`）に載せるのは、**サーバーへ送信されない**ため。
+ * 受け取った録音アプリは、保存した直後に history.replaceState で消す。
+ * ライセンスキーはここに載せない（逆向きに録音アプリから届く。design-notes §8）。
  */
-function getConnectionCode() {
-  return {
-    url: webAppUrl_(),
-    key: getProperty_(PROP.CONNECT_KEY)
-  };
+function getHandoffLink() {
+  var url = webAppUrl_();
+
+  if (url === '') {
+    return { ok: false, link: '', reason: 'NOT_DEPLOYED' };
+  }
+
+  var payload = JSON.stringify({
+    execUrl: url,
+    connectKey: getProperty_(PROP.CONNECT_KEY),
+    version: NOTIFIER_VERSION
+  });
+
+  var encoded = stripBase64Padding_(
+    Utilities.base64EncodeWebSafe(Utilities.newBlob(payload).getBytes())
+  );
+
+  return { ok: true, link: RECORDER_APP_URL + '#setup=' + encoded, reason: '' };
 }
 
+/**
+ * 公開URL。deployWebApp() が保存した値を先に見る。
+ * getService().getUrl() は、公開直後だと空を返すことがある。
+ */
 function webAppUrl_() {
+  var saved = getProperty_(PROP.WEBAPP_URL);
+
+  if (saved !== '') {
+    return saved;
+  }
+
   try {
     var url = ScriptApp.getService().getUrl();
     return url ? String(url) : '';
@@ -170,95 +393,13 @@ function webAppUrl_() {
   }
 }
 
-/* ---------- jsrsasign ---------- */
-
-function hasJsrsasign_() {
-  return typeof KEYUTIL !== 'undefined' && typeof KJUR !== 'undefined';
-}
-
-function requireJsrsasign_() {
-  if (!hasJsrsasign_()) {
-    throw new Error(
-      'jsrsasign が読み込まれていません。lib_jsrsasign.gs の冒頭のスタブの下に、'
-      + 'jsrsasign-all-min.js の中身を貼り付けてください（gas-notifier/README.md §2）。'
-    );
-  }
-}
-
-/**
- * jsrsasign が本当に使えるかを確かめる。
- *
- * **貼り付けの成否はここでしか分からない。** 貼り忘れ・順序違い・途中で切れた、
- * のいずれも「通知が届かない」という同じ症状になり、原因が見えない。
- * セットアップの途中と、トラブル時の切り分けで実行する。
- */
-function verifyJsrsasign() {
-  requireJsrsasign_();
-
-  if (typeof navigator === 'undefined' || typeof window === 'undefined') {
-    throw new Error(
-      'lib_jsrsasign.gs のスタブが評価されていません。'
-      + 'スタブ（navigator / window の定義）が jsrsasign 本体より上にあるか確認してください。'
-    );
-  }
-
-  var pair = KEYUTIL.generateKeypair('EC', 'secp256r1');
-  var privatePem = KEYUTIL.getPEM(pair.prvKeyObj, 'PKCS8PRV');
-  var publicPem = KEYUTIL.getPEM(pair.pubKeyObj);
-
-  var token = KJUR.jws.JWS.sign(
-    'ES256',
-    JSON.stringify({ typ: 'JWT', alg: 'ES256' }),
-    JSON.stringify({
-      aud: 'https://push.example.test',
-      exp: Math.floor((Date.now() + VAPID_JWT_TTL_MS) / 1000),
-      sub: 'mailto:verify@example.test'
-    }),
-    privatePem
-  );
-
-  if (!KJUR.jws.JWS.verify(token, publicPem, ['ES256'])) {
-    throw new Error('ES256 の署名を検証できませんでした。jsrsasign の貼り付け内容を確認してください。');
-  }
-
-  var raw = hexToBase64Url_(pair.pubKeyObj.pubKeyHex);
-
-  if (raw.length < 80) {
-    throw new Error('公開鍵の形式が想定と異なります（非圧縮形式の65バイトではありません）。');
-  }
-
-  Logger.log('jsrsasign OK / ES256 署名と検証に成功しました。');
-
-  return 'jsrsasign は正しく読み込まれています（ES256 の署名と検証に成功）。';
-}
-
 /* ---------- バイト列の変換 ---------- */
-
-/** 16進文字列 → base64url（パディング無し）。VAPID の公開鍵に使う。 */
-function hexToBase64Url_(hex) {
-  var text = String(hex || '').replace(/[^0-9a-fA-F]/g, '');
-
-  if (text.length === 0 || text.length % 2 !== 0) {
-    throw new Error('16進文字列の長さが不正です。');
-  }
-
-  var bytes = [];
-
-  for (var i = 0; i < text.length; i += 2) {
-    var value = parseInt(text.substr(i, 2), 16);
-    /* Apps Script のバイト配列は符号付き（-128..127）。 */
-    bytes.push(value > 127 ? value - 256 : value);
-  }
-
-  return stripBase64Padding_(Utilities.base64EncodeWebSafe(bytes));
-}
 
 /**
  * ランダムな base64url 文字列。
  *
- * Apps Script には暗号用の乱数が無い。Utilities.getUuid() は v4 UUID
- * （122ビットのランダム）なので、必要バイト数ぶんつなげて使う。
- * Math.random() は使わない。
+ * Apps Script には暗号用の乱数が無い。getUuid() は v4 UUID（122ビットの
+ * ランダム）なので、必要バイト数ぶんつなげて使う。Math.random() は使わない。
  */
 function randomBase64Url_(byteLength) {
   var bytes = [];
@@ -268,6 +409,7 @@ function randomBase64Url_(byteLength) {
 
     for (var i = 0; i + 1 < hex.length && bytes.length < byteLength; i += 2) {
       var value = parseInt(hex.substr(i, 2), 16);
+      /* Apps Script のバイト配列は符号付き（-128..127）。 */
       bytes.push(value > 127 ? value - 256 : value);
     }
   }
@@ -275,7 +417,7 @@ function randomBase64Url_(byteLength) {
   return stripBase64Padding_(Utilities.base64EncodeWebSafe(bytes));
 }
 
-/** base64url の '=' を落とす。RFC 8292 の Authorization ヘッダーはパディング無し。 */
+/** base64url の '=' を落とす。 */
 function stripBase64Padding_(text) {
   return String(text).replace(/=+$/, '');
 }

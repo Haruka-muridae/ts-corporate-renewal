@@ -33,23 +33,34 @@ export const NotifierErrorCode = Object.freeze({
   UNAUTHORIZED: 'UNAUTHORIZED',
   NOT_CONFIGURED: 'NOT_CONFIGURED',
   NOT_FOUND: 'NOT_FOUND',
+  INVALID_REQUEST: 'INVALID_REQUEST',
+  /* 契約が確認できない（ゲートが expired と答えた）。 */
+  NO_LICENSE: 'NO_LICENSE',
+  /* 通知サーバー（ゲート）へ届かない。利用者にできることは待つことだけ。 */
+  GATE_ERROR: 'GATE_ERROR',
   SERVER: 'SERVER',
 });
 
 /* 画面へ出す文言。errors.js と同じく、例外の message は使わない。 */
 const GUIDE = Object.freeze({
   [NotifierErrorCode.NOT_CONNECTED]:
-    'GASの接続情報がありません。セットアップ手順に従って接続コードを貼り付けてください。',
+    '通知の接続情報がありません。「通知をセットアップ」からやり直してください。',
   [NotifierErrorCode.NETWORK]:
     'GASへ接続できませんでした。URLとネットワーク接続を確認して、もう一度お試しください。',
   [NotifierErrorCode.BAD_RESPONSE]:
     'GASの応答を解釈できませんでした。ウェブアプリとして公開（デプロイ）されているか確認してください。',
   [NotifierErrorCode.UNAUTHORIZED]:
-    '接続キーが一致しません。スプレッドシートのメニュー「録音通知」→「接続コードを表示」で確認してください。',
+    '接続キーが一致しません。通知用シートのメニュー「録音通知」→「録音アプリへの引き継ぎリンクを表示」からやり直してください。',
   [NotifierErrorCode.NOT_CONFIGURED]:
-    'GAS側のセットアップが完了していません。スプレッドシートで「セットアップを実行」を行ってください。',
+    '通知用シート側のセットアップが完了していません。シートのサイドバーで［セットアップを実行］を行ってください。',
   [NotifierErrorCode.NOT_FOUND]:
     '対象の予定が見つかりませんでした。予定が変更または削除された可能性があります。',
+  [NotifierErrorCode.INVALID_REQUEST]:
+    '要求の形式が正しくありませんでした。ページを再読み込みして、もう一度お試しください。',
+  [NotifierErrorCode.NO_LICENSE]:
+    'ご契約が確認できないため、通知を停止しています。ご契約の状態をご確認ください。',
+  [NotifierErrorCode.GATE_ERROR]:
+    '通知サーバーへ接続できませんでした。時間をおいて、もう一度お試しください。',
   [NotifierErrorCode.SERVER]:
     'GAS側でエラーが発生しました。時間をおいて、もう一度お試しください。',
 });
@@ -70,6 +81,12 @@ function toClientCode(serverCode) {
       return NotifierErrorCode.NOT_CONFIGURED;
     case 'NOT_FOUND':
       return NotifierErrorCode.NOT_FOUND;
+    case 'INVALID_REQUEST':
+      return NotifierErrorCode.INVALID_REQUEST;
+    case 'NO_LICENSE':
+      return NotifierErrorCode.NO_LICENSE;
+    case 'GATE_ERROR':
+      return NotifierErrorCode.GATE_ERROR;
     default:
       return NotifierErrorCode.SERVER;
   }
@@ -182,4 +199,40 @@ export function saveSubscription(connection, subscription) {
 export async function fetchEvent(connection, eventId) {
   const data = await gasGet(connection, 'event', { id: eventId });
   return data.event ?? null;
+}
+
+/*
+ * ライセンスキーを GAS へ預ける。
+ *
+ * 引き継ぎの向きは「録音アプリ → GAS」である。**すでに確立した接続越しに渡す。**
+ * リンクへ載せる案を採らなかった理由は docs/notifier-design-notes.md §8。
+ */
+export function saveLicense(connection, licenseKey) {
+  return gasPost(connection, 'saveLicense', { licenseKey });
+}
+
+/** 直近の通知予定。設定画面の「次に届く通知」に出す。 */
+export async function fetchUpcoming(connection) {
+  const data = await gasGet(connection, 'upcoming');
+  return Array.isArray(data.upcoming) ? data.upcoming : [];
+}
+
+/** テスト通知を1件送らせる。回数の制限はゲート側にある（1日1回）。 */
+export function sendTestNotification(connection) {
+  return gasPost(connection, 'sendTestNotification');
+}
+
+/*
+ * その場で同期させる。
+ *
+ * 設定を変えた直後に「次の同期まで最大5分」を待たせないための入口で、
+ * 利用者に Apps Script のエディタを開かせないための正式な代替でもある。
+ */
+export function syncNow(connection) {
+  return gasPost(connection, 'syncNow');
+}
+
+/** 接続キーを作り直す。**いま繋がっている端末以外は接続し直しになる。** */
+export function regenerateConnectKey(connection) {
+  return gasPost(connection, 'regenerateConnectKey');
 }

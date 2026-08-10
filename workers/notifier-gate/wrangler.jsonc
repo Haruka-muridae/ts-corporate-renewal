@@ -1,0 +1,96 @@
+/*
+ * notifier-gate（カレンダー通知 V2 のライセンスゲート）の Workers 設定。
+ *
+ * ------------------------------------------------------------------
+ * リポジトリ直下の wrangler.jsonc とは別サービス
+ * ------------------------------------------------------------------
+ * 直下のものは tsam-ai.com を配信する OpenNext の Worker
+ * （name: ts-corporate-renewal）。こちらは通知の判定だけを行う独立した
+ * サービスで、デプロイも別に行う。
+ *
+ *   wrangler deploy --config workers/notifier-gate/wrangler.jsonc
+ *   （npm run deploy:notifier-gate と同じ）
+ *
+ * **`npm run deploy` はこの Worker を更新しない。** 逆もまた同じ。
+ * ------------------------------------------------------------------
+ *
+ * デプロイ前に必要な作業は README.md §5 にまとめてある。
+ * とくに下の TODO を2か所埋めないと deploy は失敗する。
+ */
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "notifier-gate",
+	"account_id": "4a71eb14d3889124d4afedd48c1458d8",
+	"main": "src/index.mjs",
+	/* 直下の Worker と同じ日付にそろえてある（実績のある値を使う）。 */
+	"compatibility_date": "2026-08-05",
+	/*
+	 * nodejs_compat は付けない。署名は WebCrypto（crypto.subtle）だけで
+	 * 行っており、Node の API を使っていないため。
+	 */
+	/*
+	 * 公開先は workers.dev の既定ドメイン（2026-08-10 決定）。
+	 *
+	 *   https://notifier-gate.potenitas-lp.workers.dev
+	 *   （= https://<name>.<アカウントのサブドメイン>.workers.dev）
+	 *
+	 * 当初は独自ドメインのサブドメインを充てる案だったが、ゾーンの追加を
+	 * 待たずに出せることを優先した（MVP 方針）。URL の正本は
+	 * workers/notifier-gate/origin.mjs にあり、参照する4か所の一致は
+	 * tests/unit/notifier-gate.mjs が検査する。
+	 *
+	 * **routes は書かない。** Custom Domain を後から足しても workers.dev の
+	 * URL は並行して有効なままなので、移行時に既存利用者の再セットアップは
+	 * 要らない（README.md §8）。
+	 */
+	"workers_dev": true,
+	/*
+	 * ライセンス判定のキャッシュとレート制限のカウンタ。
+	 *
+	 * **id は運用者が埋める。** 作成コマンド:
+	 *   wrangler kv namespace create LICENSE_CACHE --config workers/notifier-gate/wrangler.jsonc
+	 * 出力された id をここへ貼る。
+	 */
+	"kv_namespaces": [
+		{
+			"binding": "LICENSE_CACHE",
+			"id": "0a5422c832c84757b52bbae161202bf6"
+		}
+	],
+	/*
+	 * 平文の環境変数。**秘密は入れない**（VAPID の秘密鍵と共有シークレットは
+	 * wrangler secret put で登録する。README.md §5）。
+	 *
+	 * wrangler deploy は、この設定に無い平文の環境変数を Worker から削除する。
+	 * 直下の wrangler.jsonc と同じ注意がここにも当てはまる。
+	 */
+	"vars": {
+		/*
+		 * VAPID の sub（RFC 8292 の連絡先 URI）。
+		 * mailto: でも https: でもよい。V1 は利用者本人のメールアドレスを
+		 * 使っていたが、V2 では鍵が運営のものなので運営の連絡先を書く。
+		 */
+		"VAPID_SUBJECT": "https://tsam-ai.com/production-app/voice-recorder/",
+		/*
+		 * CORS を許すオリジン（カンマ区切り）。ブラウザから来るのは
+		 * 録音アプリのヘルスチェックだけなので、その配信元だけでよい。
+		 */
+		"ALLOWED_ORIGINS": "https://tsam-ai.com",
+		/*
+		 * 認証系 GAS（gas-auth）の /exec URL。
+		 * **public/auth/config.js の apiUrl と同じ値にすること。**
+		 * 片方だけ更新すると、ライセンス検証だけが 404 になる。
+		 */
+		"AUTH_GAS_URL": "https://script.google.com/macros/s/AKfycbwK-Kw9ynTbDpUG7e5pHgXSPLFg1ur62ukbHLHdHBogqcz3YT0Hn3nQg74SpHOzvXAN/exec"
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"invocation_logs": true,
+			"persist": true
+		}
+	}
+}

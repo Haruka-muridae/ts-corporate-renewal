@@ -32,10 +32,15 @@ import {
   TEMPLATE_COPY_URL,
   TIMING_OPTIONS,
   clearConnection,
+  clearLicenseKey,
   isGasUrl,
+  isLicenseKeyShaped,
   normalizeGasUrl,
+  parseSetupFragment,
   readConnection,
+  readLicenseKey,
   writeConnection,
+  writeLicenseKey,
 } from './notifier-config.js';
 
 import {
@@ -46,11 +51,19 @@ import {
   fetchHealth,
   fetchPublicKey,
   fetchSettings,
+  fetchUpcoming,
+  gasGet,
+  saveLicense,
   saveSettings,
   saveSubscription,
+  sendTestNotification,
 } from './notifier-client.js';
 
-import { formatEventBanner } from './notifier-messages.js';
+import { formatEventBanner, formatClock } from './notifier-messages.js';
+
+import { issueNotifierLicense } from '../../auth/api.js';
+import { readSessionToken } from '../../auth/session.js';
+import { screenPath } from '../../auth/config.js';
 
 /* ---------- 要素 ---------- */
 
@@ -59,13 +72,16 @@ const el = {};
 const ELEMENT_IDS = [
   'vr-notifier-panel',
   'vr-nf-state-health', 'vr-nf-state-key', 'vr-nf-state-permission',
-  'vr-nf-state-subscription', 'vr-nf-state-trigger',
+  'vr-nf-state-subscription', 'vr-nf-state-trigger', 'vr-nf-state-license',
   'vr-nf-hint-health', 'vr-nf-hint-key', 'vr-nf-hint-permission',
-  'vr-nf-hint-subscription', 'vr-nf-hint-trigger',
+  'vr-nf-hint-subscription', 'vr-nf-hint-trigger', 'vr-nf-hint-license',
   'vr-nf-permission',
-  'vr-nf-template', 'vr-nf-url', 'vr-nf-key', 'vr-nf-connect', 'vr-nf-disconnect',
+  'vr-nf-setup', 'vr-nf-template', 'vr-nf-url', 'vr-nf-key',
+  'vr-nf-connect', 'vr-nf-disconnect',
   'vr-nf-connection', 'vr-nf-settings-form',
   'vr-nf-timedOnly', 'vr-nf-timing', 'vr-nf-save', 'vr-nf-recheck',
+  'vr-nf-test', 'vr-nf-upcoming', 'vr-nf-upcoming-empty',
+  'vr-nf-license-state', 'vr-nf-license-link',
   'vr-nf-message', 'vr-event-banner',
 ];
 
@@ -132,11 +148,13 @@ function reportError(error) {
  */
 async function runChecks() {
   if (!connection) {
-    setStep('health', '未接続', 'error', '下の「接続の設定」からGASのURLと接続キーを貼り付けてください。');
+    setStep('health', '未接続', 'error', '上の［通知をセットアップ］から始めてください。');
     setStep('key', '確認できません', '');
     setStep('permission', permissionLabel(), permissionKind());
     setStep('subscription', '確認できません', '');
     setStep('trigger', '確認できません', '');
+    setStep('license', '確認できません', '');
+    renderLicense(null);
     return false;
   }
 
@@ -150,6 +168,8 @@ async function runChecks() {
     setStep('key', '確認できません', '');
     setStep('subscription', '確認できません', '');
     setStep('trigger', '確認できません', '');
+    setStep('license', '確認できません', '');
+    renderLicense(null);
     return false;
   }
 
@@ -185,11 +205,93 @@ async function runChecks() {
       'trigger',
       '停止しています',
       'error',
-      'スプレッドシートのメニュー「録音通知」→「セットアップを開始」→「セットアップを実行」で、毎分トリガーを作り直してください。',
+      '通知用シートのメニュー「録音通知」→「セットアップを開く」→［セットアップを実行］で、毎分トリガーを作り直してください。',
     );
   }
 
+  /*
+   * 6項目め。**「キーがあるか」ではなく「使える契約か」を出す。**
+   * 本当の状態を知っているのは運営のゲートだけなので、GAS が最後に
+   * 受け取った結果（getSettings の license）を見る。
+   */
+  await refreshLicense();
+
   return true;
+}
+
+/* ---------- ライセンス（6項目め） ---------- */
+
+/* 直近に GAS から受け取ったライセンスの状態。 */
+let licenseSummary = null;
+
+const LICENSE_VIEW = Object.freeze({
+  active: { label: 'ご利用いただけます', kind: 'ok', hint: '' },
+  grace: {
+    label: '確認中（利用は継続しています）',
+    kind: '',
+    hint: 'ご契約の確認に一時的に失敗しています。通知は続きます。時間をおいて再度ご確認ください。',
+  },
+  expired: {
+    label: 'ご契約を確認できません',
+    kind: 'error',
+    hint: 'ご契約が確認できないため、通知を停止しています。',
+  },
+  unknown: {
+    label: '未確認',
+    kind: '',
+    hint: '次回の同期（最大5分）で確認されます。',
+  },
+});
+
+function renderLicense(summary) {
+  const node = el['vr-nf-license-state'];
+  const link = el['vr-nf-license-link'];
+
+  if (!summary || summary.present !== true) {
+    setStep('license', '未設定', 'error', '上の［通知をセットアップ］からやり直してください。');
+
+    if (node) {
+      node.textContent = '未設定';
+      node.dataset.kind = 'error';
+    }
+
+    if (link) {
+      link.hidden = true;
+    }
+
+    return;
+  }
+
+  const view = LICENSE_VIEW[summary.state] ?? LICENSE_VIEW.unknown;
+
+  setStep('license', view.label, view.kind, view.hint);
+
+  if (node) {
+    node.textContent = view.label;
+    node.dataset.kind = view.kind;
+  }
+
+  /* 期限切れのときだけ料金ページへの導線を出す（それ以外では邪魔になる）。 */
+  if (link) {
+    link.hidden = summary.state !== 'expired';
+  }
+}
+
+async function refreshLicense() {
+  if (!connection) {
+    renderLicense(null);
+    return;
+  }
+
+  try {
+    const data = await gasGet(connection, 'getSettings');
+
+    licenseSummary = data.license ?? null;
+    renderLicense(licenseSummary);
+  } catch (error) {
+    console.warn('[voice-recorder:notifier] ライセンスの状態を取得できませんでした', error);
+    setStep('license', '確認できません', '', describeNotifierError(error));
+  }
 }
 
 function permissionLabel() {
@@ -524,7 +626,13 @@ async function handleRecheck() {
   showMessage('確認しています…');
 
   try {
+    /* 引き渡せていないライセンスがあれば、ここで再試行する。 */
+    await pushLicenseToGas();
+
     const ok = await runChecks();
+
+    await loadUpcoming();
+
     showMessage(ok ? '確認しました。' : '', ok ? 'ok' : '');
   } catch (error) {
     reportError(error);
@@ -578,6 +686,250 @@ export function currentEventIdFromUrl() {
   return new URLSearchParams(globalThis.location?.search ?? '').get('eventId') ?? '';
 }
 
+/* ---------- セットアップの引き継ぎ（#setup=） ---------- */
+
+/**
+ * 「通知をセットアップ」。
+ *
+ * ------------------------------------------------------------------
+ * ここでライセンスキーを先に取っておく理由
+ * ------------------------------------------------------------------
+ * ライセンスキーを渡せるのは**ログイン済みの本人だけ**である。
+ * テンプレートをコピーしたあとの画面はスプレッドシートであり、
+ * そこから当社の認証系へは繋がらない。したがってこの時点で受け取り、
+ * 接続が確立した直後に GAS へ預ける（docs/notifier-design-notes.md §8）。
+ * ------------------------------------------------------------------
+ *
+ * 途中で失敗しても行き止まりにしない。ライセンスが取れなくても
+ * テンプレートのコピーへは進める（契約後にやり直せば通知が始まる）。
+ */
+async function handleSetup() {
+  if (busy) {
+    return;
+  }
+
+  busy = true;
+  el['vr-nf-setup'].disabled = true;
+  showMessage('準備しています…');
+
+  let guidance = '通知用シートのコピー画面を開きました。シートのサイドバーに従って進めてください。';
+  let kind = 'ok';
+
+  try {
+    const sessionToken = readSessionToken();
+
+    if (!sessionToken) {
+      /* guardPage() を通っている以上、通常は起きない。 */
+      showMessage('ログインの有効期限が切れています。ページを再読み込みしてログインし直してください。', 'error');
+      return;
+    }
+
+    const result = await issueNotifierLicense(sessionToken);
+
+    if (isLicenseKeyShaped(result.licenseKey)) {
+      await writeLicenseKey(result.licenseKey);
+    }
+
+    if (result.entitled !== true) {
+      guidance = 'ご契約では通知をご利用いただけません。設定は進められますが、'
+        + '通知を受け取るにはご契約の追加が必要です。';
+      kind = 'error';
+
+      if (el['vr-nf-license-link']) {
+        el['vr-nf-license-link'].hidden = false;
+      }
+    }
+  } catch (error) {
+    /*
+     * 認証系へ届かなかった場合。**ここで止めない。**
+     * 接続だけ先に済ませておけば、あとで［接続テスト］を押すだけで
+     * ライセンスの受け渡しをやり直せる。
+     */
+    console.warn('[voice-recorder:notifier] ライセンスを取得できませんでした', error);
+    guidance = 'ライセンスの取得に失敗しました。シートのセットアップを終えたあと、'
+      + '［接続テスト］を押すと再試行します。';
+    kind = 'error';
+  } finally {
+    busy = false;
+    el['vr-nf-setup'].disabled = false;
+  }
+
+  showMessage(guidance, kind);
+  globalThis.open(TEMPLATE_COPY_URL, '_blank', 'noopener');
+}
+
+/**
+ * ウィザードの引き継ぎリンクで開かれたときの受け口。
+ *
+ * **読んだら即座にフラグメントを消す。** 接続キーが残ったURLのまま
+ * 画面を共有・ブックマークされると、そのまま第三者へ渡ることになる。
+ * （フラグメント自体はサーバーへ送信されないが、画面には残る。）
+ *
+ * 戻り値は「引き継ぎがあったか」。
+ */
+async function applySetupFragment() {
+  const parsed = parseSetupFragment(globalThis.location?.hash ?? '');
+
+  /*
+   * 形が違うものは黙って捨てる。**ただしフラグメントは必ず消す。**
+   * 残すと、読み込みのたびに同じ不正な値を処理し続けることになる。
+   */
+  const hadFragment = String(globalThis.location?.hash ?? '').includes('#setup=');
+
+  if (hadFragment) {
+    clearSetupFragment();
+  }
+
+  if (!parsed) {
+    if (hadFragment) {
+      showMessage('引き継ぎリンクの内容を確認できませんでした。シートのサイドバーからリンクを取り直してください。', 'error');
+    }
+
+    return false;
+  }
+
+  await writeConnection(parsed);
+  connection = parsed;
+
+  el['vr-nf-url'].value = parsed.url;
+  el['vr-nf-connection'].open = false;
+
+  return true;
+}
+
+/* URL からフラグメントだけを落とす。履歴を1件増やさない。 */
+function clearSetupFragment() {
+  try {
+    const url = new URL(globalThis.location.href);
+
+    url.hash = '';
+    globalThis.history.replaceState(null, '', url.toString());
+  } catch {
+    /* 履歴APIが使えない環境。表示上の問題にとどまるので黙って続ける。 */
+  }
+}
+
+/**
+ * 預かっているライセンスキーを GAS へ渡す。
+ *
+ * 接続が確立してから呼ぶ。渡し終えたらブラウザ側からは消す
+ * （持ち続ける理由が無く、置いておくだけ漏れる先が増える）。
+ */
+async function pushLicenseToGas() {
+  if (!connection) {
+    return;
+  }
+
+  let licenseKey = '';
+
+  try {
+    licenseKey = await readLicenseKey();
+  } catch {
+    return;
+  }
+
+  if (!isLicenseKeyShaped(licenseKey)) {
+    return;
+  }
+
+  try {
+    await saveLicense(connection, licenseKey);
+    await clearLicenseKey();
+  } catch (error) {
+    /*
+     * 渡せなかった。**キーは消さない。**次の［接続テスト］で再試行する。
+     * 消してしまうと、取り直すために認証系からの発行をやり直すことになる。
+     */
+    console.warn('[voice-recorder:notifier] ライセンスを引き渡せませんでした', error);
+    showMessage(describeNotifierError(error), 'error');
+  }
+}
+
+/* ---------- 直近の通知予定・テスト通知 ---------- */
+
+function renderUpcoming(items) {
+  const list = el['vr-nf-upcoming'];
+  const empty = el['vr-nf-upcoming-empty'];
+
+  if (!list) {
+    return;
+  }
+
+  list.replaceChildren();
+
+  if (!items || items.length === 0) {
+    list.hidden = true;
+
+    if (empty) {
+      empty.hidden = false;
+    }
+
+    return;
+  }
+
+  for (const item of items) {
+    const node = document.createElement('li');
+    const clock = formatClock(item.notifyAt);
+    const start = formatClock(item.startTime);
+
+    /* 予定名は Google 由来の値。textContent 以外で入れない。 */
+    node.textContent = clock === ''
+      ? String(item.title ?? '')
+      : `${clock} に通知 — ${String(item.title ?? '')}${start === '' ? '' : `（${start}開始）`}`;
+
+    list.append(node);
+  }
+
+  list.hidden = false;
+
+  if (empty) {
+    empty.hidden = true;
+  }
+}
+
+async function loadUpcoming() {
+  if (!connection) {
+    renderUpcoming([]);
+    return;
+  }
+
+  try {
+    renderUpcoming(await fetchUpcoming(connection));
+  } catch (error) {
+    console.warn('[voice-recorder:notifier] 直近の通知予定を取得できませんでした', error);
+    renderUpcoming([]);
+  }
+}
+
+async function handleTestNotification() {
+  if (busy || !connection) {
+    if (!connection) {
+      showMessage('先に通知のセットアップを終えてください。', 'error');
+    }
+
+    return;
+  }
+
+  if (Notification.permission !== 'granted') {
+    showMessage('先にブラウザの通知を許可してください。', 'error');
+    return;
+  }
+
+  busy = true;
+  el['vr-nf-test'].disabled = true;
+  showMessage('テスト通知を送っています…');
+
+  try {
+    await sendTestNotification(connection);
+    showMessage('テスト通知を送りました。数秒で届かない場合は、通知の許可とこの端末の登録をご確認ください。', 'ok');
+  } catch (error) {
+    reportError(error);
+  } finally {
+    busy = false;
+    el['vr-nf-test'].disabled = false;
+  }
+}
+
 /* ---------- 組み立て ---------- */
 
 function buildTimingOptions() {
@@ -613,15 +965,21 @@ export async function mountNotifier() {
 
   el['vr-nf-template'].href = TEMPLATE_COPY_URL;
 
+  if (el['vr-nf-license-link']) {
+    el['vr-nf-license-link'].href = screenPath('pricing');
+  }
+
   buildTimingOptions();
   renderSettings(readCachedSettings());
 
   el['vr-notifier-panel'].hidden = false;
 
+  el['vr-nf-setup'].addEventListener('click', handleSetup);
   el['vr-nf-connect'].addEventListener('click', handleConnect);
   el['vr-nf-disconnect'].addEventListener('click', handleDisconnect);
   el['vr-nf-permission'].addEventListener('click', handlePermission);
   el['vr-nf-recheck'].addEventListener('click', handleRecheck);
+  el['vr-nf-test'].addEventListener('click', handleTestNotification);
   el['vr-nf-settings-form'].addEventListener('submit', handleSaveSettings);
 
   /*
@@ -638,6 +996,13 @@ export async function mountNotifier() {
 
   connection = await readConnection();
 
+  /*
+   * ウィザードから引き継がれてきた場合は、保存済みの接続より優先する。
+   * 端末を作り直した・接続キーを更新したときに、古い値が残っていても
+   * リンク1つで直せるようにするため。
+   */
+  const handedOff = await applySetupFragment();
+
   if (connection) {
     el['vr-nf-url'].value = connection.url;
     el['vr-nf-connection'].open = false;
@@ -645,7 +1010,21 @@ export async function mountNotifier() {
     el['vr-nf-connection'].open = true;
   }
 
-  await runChecks();
+  /* 引き継ぎ直後は、預かっているライセンスを渡してから状態を確かめる。 */
+  await pushLicenseToGas();
+
+  const ok = await runChecks();
+
   await loadSettings();
+  await loadUpcoming();
   await showEvent(currentEventIdFromUrl());
+
+  if (handedOff) {
+    showMessage(
+      ok
+        ? '通知の設定が完了しました。ブラウザの通知を許可すると受け取れます。'
+        : '接続しましたが、確認できない項目があります。上の一覧をご確認ください。',
+      ok ? 'ok' : 'error',
+    );
+  }
 }
