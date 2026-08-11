@@ -46,9 +46,32 @@ try {
 
     const url = post.buildIntentUrl('こんにちは Threads\n2行目');
     check('intent の URL になる',
-      url.startsWith('https://www.threads.net/intent/post?text='));
+      url.startsWith('https://www.threads.com/intent/post?text='));
     check('本文が URL エンコードされる',
       url.includes(encodeURIComponent('こんにちは Threads\n2行目')));
+  }
+
+  {
+    /*
+     * 実機確認（2026-08-12）: 未ログインだと Threads は
+     * /login?next=<intent URL> へ誘導し、ログイン後に本文入りの
+     * 作成画面が開く。この動線が成り立つ前提は「text パラメータが
+     * URL として壊れていない」ことなので、復号の往復で固定する。
+     */
+    const tricky = '改行\nあり # ハッシュ & アンパサンド = 等号 ?疑問符 絵文字🎉 +プラス';
+    const url = post.buildIntentUrl(tricky);
+    const encoded = url.slice('https://www.threads.com/intent/post?text='.length);
+
+    check('復号すると本文へ完全に戻る', decodeURIComponent(encoded) === tricky);
+    check('URL を壊す文字が生で残らない',
+      !/[\n #&=?]/.test(encoded));
+    check('URL 全体が再エンコードなしで new URL に通る', (() => {
+      try {
+        return new URL(url).searchParams.get('text') === tricky;
+      } catch {
+        return false;
+      }
+    })());
   }
 
   /* ================================================================ */

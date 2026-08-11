@@ -33,8 +33,13 @@ export const MAX_OUTPUT_TOKENS = 1024;
  * 投稿は intent リンク（本文入りの投稿画面を開く）で行い、
  * 最後の「投稿」は利用者が押す。API・トークンは使わない
  * （docs/specs/threads-mvp-requirements-v1.md §1.1 の方式選択）。
+ *
+ * ドメインは threads.com（旧 threads.net は 2026-08-12 の実機確認で
+ * threads.com へリダイレクトされることを確認済み。直接向ける）。
+ * 未ログイン時は Threads が /login?next=<この URL> へ誘導し、
+ * ログイン後に本文入りの作成画面が開く（同日確認）。
  */
-export const THREADS_INTENT_BASE = 'https://www.threads.net/intent/post';
+export const THREADS_INTENT_BASE = 'https://www.threads.com/intent/post';
 
 /* Threads の本文上限（文字）。 */
 export const TEXT_LIMIT = 500;
