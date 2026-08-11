@@ -61,23 +61,113 @@ export function base64ToBytes(text) {
  *
  * どちらも `wrangler secret put VAPID_PRIVATE_KEY` にそのまま貼れる。
  */
-export async function importVapidPrivateKey(secret) {
-  const text = String(secret || '').trim();
+const EC_ALGORITHM = { name: 'ECDSA', namedCurve: 'P-256' };
+
+/* P-256 の PKCS#8 は 130〜160 バイト前後。桁が違えば貼り付け事故を疑う。 */
+const MIN_PKCS8_BYTES = 60;
+
+/**
+ * 渡された文字列がどの形かを見分ける（値そのものは返さない）。
+ *
+ * **エラーへ中身を混ぜないために、形だけを名前で持つ。**
+ * 実機で「/v1/vapid が 500」としか分からなかったとき、
+ * 読めなかったのが形式のせいなのかを言えるようにしておく。
+ */
+export function describeKeyMaterial(secret) {
+  const text = String(secret ?? '').trim();
 
   if (text === '') {
+    return { kind: 'empty', length: 0 };
+  }
+
+  if (text.charAt(0) === '{') {
+    return { kind: 'jwk', length: text.length };
+  }
+
+  if (text.indexOf('-----BEGIN') !== -1) {
+    return { kind: 'pem', length: text.length };
+  }
+
+  if (/^[A-Za-z0-9+/=\-_\s]+$/.test(text)) {
+    return { kind: /[-_]/.test(text) ? 'base64url' : 'base64', length: text.length };
+  }
+
+  return { kind: 'unknown', length: text.length };
+}
+
+/**
+ * 秘密鍵をシークレットの文字列から読む。
+ *
+ * 失敗したときは**何が読めなかったのかを名前で言う。**
+ * 値は絶対にメッセージへ入れない（そのままログへ出るため）。
+ */
+export async function importVapidPrivateKey(secret) {
+  const text = String(secret ?? '').trim();
+  const shape = describeKeyMaterial(text);
+
+  if (shape.kind === 'empty') {
     throw new Error('VAPID_PRIVATE_KEY が設定されていません。');
   }
 
-  const algorithm = { name: 'ECDSA', namedCurve: 'P-256' };
-
-  if (text.charAt(0) === '{') {
-    const jwk = JSON.parse(text);
-    return crypto.subtle.importKey('jwk', jwk, algorithm, false, ['sign']);
+  if (shape.kind === 'unknown') {
+    throw new Error(
+      'VAPID_PRIVATE_KEY に base64 以外の文字が混ざっています'
+      + `（長さ ${shape.length}）。見出し行ごと貼っていないか確認してください。`,
+    );
   }
 
-  const der = base64ToBytes(text.replace(/-----[^-]+-----/g, ''));
+  if (shape.kind === 'jwk') {
+    let jwk = null;
 
-  return crypto.subtle.importKey('pkcs8', der, algorithm, false, ['sign']);
+    try {
+      jwk = JSON.parse(text);
+    } catch {
+      /* JSON.parse のメッセージには入力の断片が混ざる。**転記しない。** */
+      throw new Error('VAPID_PRIVATE_KEY を JWK として読めませんでした。');
+    }
+
+    return crypto.subtle.importKey('jwk', jwk, EC_ALGORITHM, false, ['sign']);
+  }
+
+  let der = null;
+
+  try {
+    der = base64ToBytes(text.replace(/-----[^-]+-----/g, ''));
+  } catch {
+    throw new Error(`VAPID_PRIVATE_KEY を base64 として読めませんでした（形式 ${shape.kind}）。`);
+  }
+
+  if (der.length < MIN_PKCS8_BYTES) {
+    throw new Error(
+      `VAPID_PRIVATE_KEY が短すぎます（${der.length} バイト、形式 ${shape.kind}）。`
+      + ' 途中で切れていないか確認してください。',
+    );
+  }
+
+  try {
+    return await crypto.subtle.importKey('pkcs8', der, EC_ALGORITHM, false, ['sign']);
+  } catch (error) {
+    /*
+     * WebCrypto の例外は素っ気ないが、入力を含まないので転記してよい。
+     * 「PKCS#8 ではない何かを渡した」ときにここへ来る。
+     */
+    throw new Error(
+      `VAPID_PRIVATE_KEY を PKCS#8 として取り込めませんでした（形式 ${shape.kind}、`
+      + `${der.length} バイト、${error instanceof Error ? error.name : 'Error'}）。`,
+    );
+  }
+}
+
+/**
+ * 公開鍵を base64url へ寄せる。
+ *
+ * ブラウザの `applicationServerKey` は base64url でなければならない。
+ * 素の base64（`+` `/` `=` を含む）で登録されていても値の意味は同じなので、
+ * **拒否せずに直す。** 変種の取り違えは貼り付け事故として起きやすい。
+ * どちらで登録されているかは check-vapid-keys.mjs が報告する。
+ */
+export function normalizeBase64Url(text) {
+  return String(text ?? '').trim().replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /**

@@ -41,11 +41,19 @@ import {
 } from '../../workers/notifier-gate/src/license.mjs';
 import {
   base64ToBytes,
+  describeKeyMaterial,
   importVapidPrivateKey,
   isAllowedAudience,
   normalizeAudiences,
+  normalizeBase64Url,
   signJwt,
 } from '../../workers/notifier-gate/src/vapid.mjs';
+import {
+  PhaseError,
+  collectSecrets,
+  logFailure,
+  redactSecrets,
+} from '../../workers/notifier-gate/src/diagnostics.mjs';
 import worker from '../../workers/notifier-gate/src/index.mjs';
 import {
   FORBIDDEN_GATE_ORIGINS,
@@ -101,6 +109,22 @@ function makeLicenseKey(suffix) {
 }
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+/** console.error を1回だけ横取りして、書かれた行を返す。 */
+function logFailureCapture(run) {
+  const lines = [];
+  const original = console.error;
+
+  console.error = (...args) => { lines.push(args.join(' ')); };
+
+  try {
+    run();
+  } finally {
+    console.error = original;
+  }
+
+  return lines.join(' | ');
+}
 
 async function run() {
   section('公開オリジン — 4か所でずれていないこと');
@@ -715,6 +739,118 @@ async function run() {
 
     const jwk = JSON.stringify(await crypto.subtle.exportKey('jwk', pair.privateKey));
     check('JWK 形式でも読める', (await importVapidPrivateKey(jwk)) !== null);
+  }
+
+  section('★失敗の記録（値を出さずに原因が分かること）');
+
+  {
+    const PRIVATE = 'PRIVATE-KEY-VALUE-abcdefghijklmnopqrstuvwxyz0123456789';
+    const SHARED = 'SHARED-SECRET-VALUE-0123456789abcdefghij';
+    const LICENSE = makeLicenseKey('Z');
+    const env = { VAPID_PRIVATE_KEY: PRIVATE, AUTH_GAS_SHARED_SECRET: SHARED };
+
+    check('秘密を伏せる', redactSecrets(`boom ${PRIVATE} end`, [PRIVATE]).includes(PRIVATE) === false);
+    check('伏せたことは分かる', redactSecrets(`boom ${PRIVATE}`, [PRIVATE]).includes('[伏せ字]'));
+    check('関係ない文字列は残す', redactSecrets('boom', [PRIVATE]) === 'boom');
+    check('短すぎる値では伏せない（本文が読めなくなる）',
+      redactSecrets('a boom a', ['a']) === 'a boom a');
+
+    const secrets = collectSecrets(env, LICENSE);
+
+    check('env とライセンスキーを集める',
+      secrets.includes(PRIVATE) && secrets.includes(SHARED) && secrets.includes(LICENSE));
+
+    /* --- 実際にログへ書く道を通す --- */
+    const lines = [];
+    const original = console.error;
+
+    console.error = (...args) => { lines.push(args.join(' ')); };
+
+    let logged = null;
+
+    try {
+      /*
+       * 例外のメッセージへ秘密が混ざる状況を作る。
+       * JSON.parse などは入力の断片をメッセージへ入れることがあり、
+       * **これが実際に起きうる漏れ方**である。
+       */
+      logged = logFailure({
+        path: '/v1/vapid',
+        error: new PhaseError('import-key', Object.assign(
+          new Error(`Unexpected token in ${PRIVATE} at position 3`),
+          { name: 'SyntaxError' },
+        )),
+        secrets,
+      });
+    } finally {
+      console.error = original;
+    }
+
+    const output = lines.join(' | ');
+
+    check('★ログに秘密鍵を出さない', output.includes(PRIVATE) === false, output);
+    check('★ログに共有シークレットを出さない', output.includes(SHARED) === false);
+    check('★ログにライセンスキーを出さない', output.includes(LICENSE) === false);
+    check('どのエンドポイントか分かる', output.includes('/v1/vapid'));
+    check('★どの段階で落ちたか分かる', output.includes('phase=import-key'), output);
+    check('★例外の種類が分かる', output.includes('name=SyntaxError'), output);
+    check('メッセージの骨格は残る', output.includes('Unexpected token'));
+    check('戻り値でも段階が取れる', logged.phase === 'import-key' && logged.name === 'SyntaxError');
+
+    const plain = logFailureCapture(() => logFailure({
+      path: '/v1/evaluate',
+      error: new Error('boom'),
+      secrets: [],
+    }));
+
+    check('段階が付いていなければ unknown', plain.includes('phase=unknown'), plain);
+  }
+
+  section('★鍵の形式（貼り付け事故を名前で言えること）');
+
+  {
+    const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const pkcs8 = Buffer.from(await crypto.subtle.exportKey('pkcs8', pair.privateKey)).toString('base64');
+
+    check('生成スクリプトの出力は base64 と判定される', describeKeyMaterial(pkcs8).kind === 'base64');
+    check('JWK は jwk と判定される', describeKeyMaterial('{"kty":"EC"}').kind === 'jwk');
+    check('PEM は pem と判定される',
+      describeKeyMaterial('-----BEGIN PRIVATE KEY-----\nAAA\n-----END PRIVATE KEY-----').kind === 'pem');
+    check('見出し行ごと貼ると unknown', describeKeyMaterial('--- VAPID_PRIVATE_KEY（貼る） ---').kind === 'unknown');
+    check('空は empty', describeKeyMaterial('').kind === 'empty');
+
+    /* 失敗のメッセージが「何が悪いか」を言い、値を含まないこと。 */
+    async function importError(value) {
+      try {
+        await importVapidPrivateKey(value);
+        return '';
+      } catch (error) {
+        return error.message;
+      }
+    }
+
+    const headerPasted = await importError('--- VAPID_PRIVATE_KEY（PKCS#8 / base64） ---');
+
+    check('★見出し行ごと貼った場合を言い当てる', headerPasted.includes('base64 以外の文字'), headerPasted);
+    check('★その文面に値を含めない', headerPasted.includes('VAPID_PRIVATE_KEY（PKCS#8') === false);
+
+    const truncated = await importError(pkcs8.slice(0, 40));
+
+    check('★途中で切れた場合を言い当てる', truncated.includes('短すぎます'), truncated);
+
+    const swapped = await importError(
+      Buffer.from(await crypto.subtle.exportKey('raw', pair.publicKey)).toString('base64url'),
+    );
+
+    check('★公開鍵を貼った場合を言い当てる', swapped.includes('PKCS#8 として取り込めませんでした'), swapped);
+    check('例外の種類を添える', swapped.includes('DataError') || swapped.includes('Error'));
+
+    check('★正しい値はそのまま読める', (await importVapidPrivateKey(pkcs8)) !== null);
+
+    /* 公開鍵の base64 変種は直して使う（拒否しない）。 */
+    check('素の base64 を base64url へ寄せる',
+      normalizeBase64Url('ab+cd/ef==') === 'ab-cd_ef');
+    check('すでに base64url ならそのまま', normalizeBase64Url('ab-cd_ef') === 'ab-cd_ef');
   }
 
   section('VAPID — aud の制限');

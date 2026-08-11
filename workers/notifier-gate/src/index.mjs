@@ -33,6 +33,7 @@ import {
   RATE_LIMITS,
 } from './constants.mjs';
 import { ERRORS, corsHeaders, fail, ok } from './http.mjs';
+import { collectSecrets, inPhase, logFailure } from './diagnostics.mjs';
 import {
   evaluateEvents,
   validateEvents,
@@ -45,7 +46,7 @@ import {
   resolveLicense,
 } from './license.mjs';
 import { consumeRateLimit } from './ratelimit.mjs';
-import { importVapidPrivateKey, issueJwts, normalizeAudiences } from './vapid.mjs';
+import { importVapidPrivateKey, issueJwts, normalizeAudiences, normalizeBase64Url } from './vapid.mjs';
 
 /* 想定外に大きい本文は読まない（gas-auth/Main.gs の parsePostBody_ と同じ考え）。 */
 const MAX_BODY_BYTES = 256 * 1024;
@@ -70,6 +71,12 @@ const handler = {
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     }
 
+    /*
+     * 失敗をログへ書くとき、この要求のライセンスキーも伏せ字の対象にする。
+     * catch から見えるようにここで持つ（値は使わない）。
+     */
+    let bodyLicenseKey = '';
+
     try {
       /*
        * health だけ GET を許す。運用者が curl で疎通を見るための窓であり、
@@ -89,6 +96,8 @@ const handler = {
         return fail(ERRORS.INVALID_REQUEST, { request, env });
       }
 
+      bodyLicenseKey = typeof body.licenseKey === 'string' ? body.licenseKey : '';
+
       if (url.pathname === '/v1/evaluate') {
         return await handleEvaluate(body, request, env);
       }
@@ -102,12 +111,17 @@ const handler = {
       }
 
       return fail(ERRORS.INVALID_ACTION, { status: 404, request, env });
-    } catch {
+    } catch (error) {
       /*
-       * 内部情報は返さない。ログにもライセンスキーは出さない
-       * （出るとしたら例外メッセージ経由なので、message も出さない）。
+       * **応答には内部情報を出さない。ログには出す。**
+       * 読む相手が違うため（diagnostics.mjs の冒頭）。
+       * 秘密は logFailure が伏せる。
        */
-      console.error(`notifier-gate error: ${url.pathname}`);
+      logFailure({
+        path: url.pathname,
+        error,
+        secrets: collectSecrets(env, bodyLicenseKey),
+      });
 
       return fail(ERRORS.SERVER_ERROR, { status: 500, request, env });
     }
@@ -146,22 +160,22 @@ async function gate({ body, env, scope, nowMs, request }) {
     return { response: fail(ERRORS.UNAUTHORIZED, { status: 401, request, env }) };
   }
 
-  const hash = await hashLicenseKey(licenseKey);
+  const hash = await inPhase('hash-license', () => hashLicenseKey(licenseKey));
   const limit = RATE_LIMITS[scope];
-  const rate = await consumeRateLimit({
+  const rate = await inPhase('rate-limit', () => consumeRateLimit({
     kv: env.LICENSE_CACHE,
     scope,
     hash,
     limit: limit.limit,
     windowSec: limit.windowSec,
     nowMs,
-  });
+  }));
 
   if (!rate.allowed) {
     return { response: fail(ERRORS.RATE_LIMITED, { status: 429, request, env }) };
   }
 
-  const license = await resolveLicense({ licenseKey, env, nowMs });
+  const license = await inPhase('license-verify', () => resolveLicense({ licenseKey, env, nowMs }));
 
   return { license, hash };
 }
@@ -234,7 +248,8 @@ async function handleVapid(body, request, env) {
     return fail(ERRORS.LICENSE_EXPIRED, { status: 402, request, env });
   }
 
-  const publicKey = String(env.VAPID_PUBLIC_KEY || '').trim();
+  /* 素の base64 で登録されていても直して返す（vapid.mjs の normalizeBase64Url）。 */
+  const publicKey = normalizeBase64Url(env.VAPID_PUBLIC_KEY);
   const subject = String(env.VAPID_SUBJECT || '').trim();
 
   if (publicKey === '' || subject === '' || String(env.VAPID_PRIVATE_KEY || '').trim() === '') {
@@ -250,16 +265,23 @@ async function handleVapid(body, request, env) {
 
   const secret = String(env.VAPID_PRIVATE_KEY);
 
+  /*
+   * 段階を分けておく。実機では「/v1/vapid が 500」としか分からず、
+   * 鍵の読み込みで落ちたのか署名で落ちたのかを切り分けられなかった。
+   */
   if (cachedPrivateKey.secret !== secret) {
-    cachedPrivateKey = { secret, key: await importVapidPrivateKey(secret) };
+    cachedPrivateKey = {
+      secret,
+      key: await inPhase('import-key', () => importVapidPrivateKey(secret)),
+    };
   }
 
-  const issued = await issueJwts({
+  const issued = await inPhase('sign', () => issueJwts({
     privateKey: cachedPrivateKey.key,
     audiences: audiences.list,
     subject,
     nowMs,
-  });
+  }));
 
   return ok({
     publicKey,
