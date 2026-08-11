@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X 投稿｜TSAM AI</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy
+  ==================================================================
+  next.config.ts ではなく meta で宣言する（台本メーカーと同じ）。
+
+  connect-src の内訳:
+    - 'self'                              … 自分の JS / CSS
+    - generativelanguage.googleapis.com   … Gemini（投稿文の生成）
+    - script.google.com /
+      script.googleusercontent.com        … TSAM AI 認証（guardPage）
+
+  X へは fetch しない（intent リンクを別タブで開くだけ）ため、
+  x.com は connect-src に**入れない**。
+  Google OAuth（GIS）も使わないため accounts.google.com も入れない。
+  APIキーは KeyStore（localStorage）だけが扱い、外部へ送るのは Gemini のみ。
+  ==================================================================
+-->
+<meta htxp-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../css/style.css">
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <!--
+      guardPage() が利用者を返すまで中身を出さない。
+      hidden を外すのは app.js だけ（他の本番アプリと同じ約束）。
+    -->
+    <p id="xp-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="xp-content" hidden>
+
+      <header class="xp-header">
+        <h1>X 投稿</h1>
+        <p class="xp-lede">
+          投稿文を書く・AIで作る・下書きを残す。「X で投稿」は本文入りの
+          投稿画面を開くので、内容を確かめて最後の「ポスト」はご自身で押してください。
+        </p>
+      </header>
+
+      <p id="xp-storage-note" class="xp-note" hidden>
+        この環境では保存領域が使えないため、下書きと履歴は残りません
+        （書く・生成する・投稿画面を開くことはできます）。
+      </p>
+
+      <section class="xp-generate" aria-labelledby="xp-generate-heading">
+        <h2 id="xp-generate-heading">AIで作る（任意）</h2>
+        <p id="xp-key-note" class="xp-note" hidden>
+          Gemini APIキーが未設定です。<a href="../../portal/" id="xp-key-link">ポータル</a>で
+          設定すると「AIで生成」が使えます（手で書く・貼る場合は不要です）。
+        </p>
+        <form id="xp-generate-form">
+          <label for="xp-theme">テーマ・指示</label>
+          <input type="text" id="xp-theme" maxlength="100"
+            placeholder="例: 新サービスの告知。絵文字少なめ" autocomplete="off">
+          <button type="submit" id="xp-generate" class="auth-button">AIで生成</button>
+        </form>
+      </section>
+
+      <section class="xp-compose" aria-labelledby="xp-compose-heading">
+        <h2 id="xp-compose-heading">投稿文</h2>
+        <label for="xp-text" class="xp-visually-hidden">投稿文</label>
+        <textarea id="xp-text" rows="8"
+          placeholder="投稿文を書く／貼り付ける（「AIで生成」の結果もここに入ります）"></textarea>
+        <p class="xp-count-line"><span id="xp-count">0</span> / <span id="xp-limit">280</span> ウェイト（全角1文字=2。日本語なら約140字）</p>
+        <p class="xp-actions">
+          <button type="button" id="xp-save" class="auth-button auth-button--secondary">下書き保存</button>
+          <button type="button" id="xp-post" class="auth-button">X で投稿</button>
+        </p>
+        <p id="xp-message" class="xp-message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="xp-list" aria-labelledby="xp-drafts-heading">
+        <h2 id="xp-drafts-heading">下書き</h2>
+        <ul id="xp-drafts" class="xp-items"></ul>
+        <p id="xp-drafts-empty" class="xp-note">下書きはまだありません。</p>
+      </section>
+
+      <section class="xp-list" aria-labelledby="xp-history-heading">
+        <h2 id="xp-history-heading">履歴</h2>
+        <p class="xp-note">
+          記録されるのは「投稿画面を開いた」ことまでです。実際に投稿したかは
+          X 側でご確認ください。
+        </p>
+        <ul id="xp-history" class="xp-items"></ul>
+        <p id="xp-history-empty" class="xp-note">履歴はまだありません。</p>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

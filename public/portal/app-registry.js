@@ -150,4 +150,16 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/threads-post/',
     icon: '投',
   }),
+  Object.freeze({
+    id: 'x-post',
+    name: 'X 投稿',
+    href: 'production-app/x-post/',
+    icon: 'X',
+  }),
+  Object.freeze({
+    id: 'note-post',
+    name: 'note 下書き',
+    href: 'production-app/note-post/',
+    icon: 'n',
+  }),
 ]);

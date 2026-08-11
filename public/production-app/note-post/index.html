@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>note 下書き｜TSAM AI</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy
+  ==================================================================
+  next.config.ts ではなく meta で宣言する（台本メーカーと同じ）。
+
+  connect-src の内訳:
+    - 'self'                              … 自分の JS / CSS
+    - generativelanguage.googleapis.com   … Gemini（投稿文の生成）
+    - script.google.com /
+      script.googleusercontent.com        … TSAM AI 認証（guardPage）
+
+  note へは fetch しない（作成画面を別タブで開くだけ）ため、
+  note.com は connect-src に**入れない**。
+  Google OAuth（GIS）も使わないため accounts.google.com も入れない。
+  APIキーは KeyStore（localStorage）だけが扱い、外部へ送るのは Gemini のみ。
+  ==================================================================
+-->
+<meta htnp-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../css/style.css">
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <!--
+      guardPage() が利用者を返すまで中身を出さない。
+      hidden を外すのは app.js だけ（他の本番アプリと同じ約束）。
+    -->
+    <p id="np-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="np-content" hidden>
+
+      <header class="np-header">
+        <h1>note 下書き</h1>
+        <p class="np-lede">
+          記事を書く・AIで作る・下書きを残す。「note で書く」は本文をコピーして
+          note の作成画面を開くので、エディタに貼り付けて公開はご自身で行ってください。
+        </p>
+      </header>
+
+      <p id="np-storage-note" class="np-note" hidden>
+        この環境では保存領域が使えないため、下書きと履歴は残りません
+        （書く・生成する・投稿画面を開くことはできます）。
+      </p>
+
+      <section class="np-generate" aria-labelledby="np-generate-heading">
+        <h2 id="np-generate-heading">AIで作る（任意）</h2>
+        <p id="np-key-note" class="np-note" hidden>
+          Gemini APIキーが未設定です。<a href="../../portal/" id="np-key-link">ポータル</a>で
+          設定すると「AIで生成」が使えます（手で書く・貼る場合は不要です）。
+        </p>
+        <form id="np-generate-form">
+          <label for="np-theme">テーマ・指示</label>
+          <input type="text" id="np-theme" maxlength="100"
+            placeholder="例: AI導入の始め方について、初心者向けに" autocomplete="off">
+          <button type="submit" id="np-generate" class="auth-button">AIで生成</button>
+        </form>
+      </section>
+
+      <section class="np-compose" aria-labelledby="np-compose-heading">
+        <h2 id="np-compose-heading">投稿文</h2>
+        <label for="np-text" class="np-visually-hidden">投稿文</label>
+        <textarea id="np-text" rows="16"
+          placeholder="記事本文を書く／貼り付ける（「AIで生成」の結果もここに入ります）"></textarea>
+        <p class="np-count-line"><span id="np-count">0</span> / <span id="np-limit">30000</span> 文字</p>
+        <p class="np-actions">
+          <button type="button" id="np-save" class="auth-button auth-button--secondary">下書き保存</button>
+          <button type="button" id="np-post" class="auth-button">note で書く</button>
+        </p>
+        <p id="np-message" class="np-message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="np-list" aria-labelledby="np-drafts-heading">
+        <h2 id="np-drafts-heading">下書き</h2>
+        <ul id="np-drafts" class="np-items"></ul>
+        <p id="np-drafts-empty" class="np-note">下書きはまだありません。</p>
+      </section>
+
+      <section class="np-list" aria-labelledby="np-history-heading">
+        <h2 id="np-history-heading">履歴</h2>
+        <p class="np-note">
+          記録されるのは「作成画面を開いた」ことまでです。実際に公開したかは
+          note 側でご確認ください。
+        </p>
+        <ul id="np-history" class="np-items"></ul>
+        <p id="np-history-empty" class="np-note">履歴はまだありません。</p>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

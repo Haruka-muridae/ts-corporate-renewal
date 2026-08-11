@@ -1,0 +1,155 @@
+/*
+ * Threads 投稿アプリの画面。auth.css の土台（auth-shell / auth-button）に
+ * 乗せ、ここではアプリ固有の並びだけを整える。
+ */
+
+.xp-header h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.5rem;
+}
+
+.xp-lede {
+  color: #445;
+  margin: 0 0 1rem;
+}
+
+.xp-note {
+  background: #eef4fb;
+  border-radius: 6px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}
+
+section + section {
+  margin-top: 1.5rem;
+}
+
+.xp-generate h2,
+.xp-compose h2,
+.xp-list h2 {
+  font-size: 1rem;
+  border-bottom: 1px solid #dde;
+  padding-bottom: 0.3rem;
+  margin: 0 0 0.6rem;
+}
+
+#xp-generate-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+#xp-generate-form label {
+  font-size: 0.9rem;
+}
+
+#xp-theme {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #bbc;
+  border-radius: 6px;
+}
+
+#xp-text {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.6rem;
+  border: 1px solid #bbc;
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.xp-count-line {
+  font-size: 0.85rem;
+  color: #556;
+  margin: 0.3rem 0 0.6rem;
+}
+
+.xp-count-over {
+  color: #b00020;
+  font-weight: 700;
+}
+
+.xp-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.xp-message {
+  min-height: 1.3em;
+  margin: 0.5rem 0 0;
+}
+
+.xp-message--error {
+  color: #b00020;
+}
+
+.xp-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.xp-items li {
+  border: 1px solid #dde;
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+}
+
+.xp-item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.xp-item-meta {
+  font-size: 0.8rem;
+  color: #667;
+  margin: 0 0 0.2rem;
+}
+
+.xp-item-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.92rem;
+}
+
+.xp-item-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.xp-item-actions button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+
+.xp-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
