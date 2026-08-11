@@ -16,6 +16,56 @@
 
 ## 未対応
 
+### B-09. ［接続テスト］がライセンスの状態を取り直さない（優先度: 中）
+
+**内容**: 録音アプリの「ご契約」の行は `getSettings` が返す `LICENSE_STATE` を出す。
+これを書くのは**同期（`syncCalendar_`）だけ**で、同期は5分間隔である
+（[CalendarSync.gs](../gas-notifier/CalendarSync.gs)）。したがって
+**［接続テスト］を押しても、ライセンスの状態は取り直されない。**
+
+利用者から見ると「確認のボタンを押したのに、確認されていない」。
+契約を直した直後に押しても変わらず、直っていないと読める。
+`syncNow` の action は既にあり（`Api.gs`）、クライアント側の関数も
+[notifier-client.js](../public/production-app/voice-recorder/notifier-client.js) に
+あるが、**画面のどこからも呼んでいない。**
+
+**なぜ今やらないか**: 実機検証の段取りに影響するだけで、通知そのものは
+正しく動いている（5分以内に反映される）。またこの修正は
+「接続テストが同期を起こす」という副作用を足すことになり、
+押すたびにカレンダー読み取りとゲート照会が走る。レート制限との
+兼ね合いを設計してからでないと、2026-08-11 の増幅事故と同じ形になりうる。
+
+**着手条件**: 検証セッション（B〜G節）が終わり、evaluate の呼び出し回数の
+実測が取れた時点。`syncNow` を接続テストへ足すか、押した時刻を見て
+「次の同期で反映されます（あとN分）」と出すかを、そこで決める。
+
+---
+
+### B-10. `NOTIFIER_ENTITLEMENT` の判定が実機で未確認（優先度: 低）
+
+**内容**: [gas-auth/Notifier.gs](../gas-auth/Notifier.gs) の
+`evaluateNotifierEntitlement_` は `payment_exempt` を
+**`NOTIFIER_ENTITLEMENT` を読むより先に**通す（免除の利用者が Stripe の契約を
+持たないため。順序自体は正しい）。
+
+現在の検証アカウントは `payment_exempt = TRUE` であり、
+**`all_active` / `plan:<price_id>` の分岐に一度も入らない。**
+E節はライセンスキーを未登録の値へ差し替えることで「ゲートが止める」ことは
+確かめたが、**entitlement の規則そのものは実機で通っていない。**
+
+`payment_exempt` を FALSE にして確かめる案は採れない。
+[gas-auth/Sessions.gs](../gas-auth/Sessions.gs) がセッション検証のたびに
+`isSubscriptionUsable_` を通すため、その瞬間にログインから締め出される
+（`subscription_status` が `exempt` のため復帰もできない）。
+
+**なぜ今やらないか**: 免除でない利用者が実在しないと確かめられない。
+単体テストでは分岐を押さえてある（`tests/unit/notifier-license.mjs`）。
+
+**着手条件**: 有料契約の利用者が1人でも通知を使い始めたとき。
+その時点で `plan:` へ切り替える判断をするなら、切り替え前に必ず実機で確認する。
+
+---
+
 ### B-08. VAPID キャッシュの上書きで、宛先の組み合わせが往復すると取り直しが起きる（優先度: 中）
 
 **内容**: [gas-notifier/Gate.gs](../gas-notifier/Gate.gs) の `gateVapid_` は、

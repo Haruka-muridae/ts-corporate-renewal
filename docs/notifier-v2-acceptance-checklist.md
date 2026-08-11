@@ -266,9 +266,17 @@ npx wrangler kv key delete "<KEY>" --binding LICENSE_CACHE --config workers/noti
 | --- | --- | --- | --- | --- |
 | G-1 | 録音アプリで DevTools のコンソールを開き、［接続テスト］を押す | **CSP 違反の警告が出ない** | ☐ | |
 | G-2 | DevTools の Network で通知ゲートへの要求を探す<br>▶ `notifier-gate.potenitas-lp.workers.dev` | ブロックされていない | ☐ | |
-| G-3 | `curl https://notifier-gate.potenitas-lp.workers.dev/v1/health` | `{"ok":true,"version":"2.0.0"}` | ☐ | |
-| G-4 | `sw.js` の Content-Type を確認<br>▶ [deployment-cloudflare.md](./deployment-cloudflare.md) §5 | JavaScript の MIME（HTML でない） | ☐ | |
-| G-5 | `manifest.webmanifest` の Content-Type | `application/manifest+json` | ☐ | |
+| G-3 | `curl https://notifier-gate.potenitas-lp.workers.dev/v1/health` | `{"ok":true,"version":"2.0.0"}` | ✅ | `{"ok":true,"version":"2.0.0"}`（2026-08-11 20:2x JST 実測） |
+| G-4 | `sw.js` の Content-Type を確認<br>▶ [deployment-cloudflare.md](./deployment-cloudflare.md) §5 | JavaScript の MIME（HTML でない） | ✅ | `Content-Type: text/javascript`（HTML ではない） |
+| G-5 | `manifest.webmanifest` の Content-Type | `application/manifest+json` | ✅ | `Content-Type: application/manifest+json` |
+
+---
+
+> **G-3〜G-5 は外形から確認済み**（2026-08-11、curl による実測）。
+> 残るのは G-1・G-2 で、どちらも DevTools を開いている必要がある。
+>
+> あわせて、本番の `notifier-panel.js` に `describeGateError` が含まれることも
+> 確認した（サイトのデプロイが反映済み）。
 
 ---
 
