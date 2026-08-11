@@ -62,6 +62,8 @@ const SUITES = [
   { name: 'notifier-connection', file: 'unit/notifier-connection.mjs', kind: 'unit' },
   { name: 'audio-transcriber', file: 'unit/audio-transcriber.mjs', kind: 'unit' },
   { name: 'short-script-companion', file: 'unit/short-script-companion.mjs', kind: 'unit' },
+  { name: 'threads-mvp', file: 'unit/threads-mvp.mjs', kind: 'unit' },
+  { name: 'threads-post', file: 'unit/threads-post.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
   { name: 'browser:card-mail', file: 'browser/card-mail.mjs', kind: 'browser' },
 ];

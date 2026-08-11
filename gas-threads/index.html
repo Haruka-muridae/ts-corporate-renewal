@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threads 投稿 MVP</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem auto; max-width: 720px; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.2rem; }
+  h2 { font-size: 1rem; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: .3rem; }
+  textarea { width: 100%; min-height: 8rem; font: inherit; box-sizing: border-box; }
+  button { font: inherit; padding: .4rem .9rem; margin-right: .5rem; cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+  th, td { border: 1px solid #ddd; padding: .3rem .5rem; text-align: left; vertical-align: top; word-break: break-all; }
+  .note { background: #eef4fb; padding: .5rem .8rem; border-radius: .3rem; font-size: .9rem; }
+  .status-failed { color: #b00020; font-weight: bold; }
+  .status-done { color: #1a7f37; }
+  .message { margin: .5rem 0; min-height: 1.2em; }
+  .message.error { color: #b00020; }
+  .count-over { color: #b00020; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Threads 投稿 MVP</h1>
+
+<p class="note">
+  「Threads で投稿」は、本文が入った Threads の投稿画面を開きます。
+  最後の「投稿」ボタンはご自身で押してください。
+  予約は、時間になると本文と投稿リンク入りのメールが届きます。
+</p>
+
+<p>
+  <input type="text" id="theme" placeholder="テーマ・指示（例: 新サービスの告知。絵文字少なめ）" style="width: 70%; font: inherit; padding: .3rem;">
+  <button id="generate">AIで生成</button>
+</p>
+
+<textarea id="text" placeholder="投稿文を書く／貼り付ける（「AIで生成」の結果もここに入ります）"></textarea>
+<div><span id="count">0</span> / <span id="limit">500</span> 文字</div>
+
+<p>
+  <button id="save">保存</button>
+  <button id="post">Threads で投稿</button>
+  <input type="datetime-local" id="at">
+  <button id="reserve">予約</button>
+</p>
+<div id="message" class="message" role="status"></div>
+
+<h2>予約一覧</h2>
+<table id="reservations"><thead><tr>
+  <th>予定日時</th><th>本文</th><th>状態</th><th>エラー</th><th></th>
+</tr></thead><tbody></tbody></table>
+
+<h2>履歴</h2>
+<table id="history"><thead><tr>
+  <th>日時</th><th>種別</th><th>本文</th><th>成否</th><th>エラー</th>
+</tr></thead><tbody></tbody></table>
+
+<h2>下書き</h2>
+<table id="drafts"><thead><tr>
+  <th>作成日時</th><th>本文</th><th></th>
+</tr></thead><tbody></tbody></table>
+
+<script>
+  var limit = 500;
+
+  function $(id) { return document.getElementById(id); }
+
+  function fmt(ms) {
+    if (!ms) return '';
+    var d = new Date(Number(ms));
+    function p(n) { return String(n).padStart(2, '0'); }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+      + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function say(text, isError) {
+    var el = $('message');
+    el.textContent = text;
+    el.className = 'message' + (isError ? ' error' : '');
+  }
+
+  function run(name) {
+    var args = Array.prototype.slice.call(arguments, 1);
+
+    return new Promise(function (resolve, reject) {
+      var runner = google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(function (error) { reject(error); });
+      runner[name].apply(runner, args);
+    });
+  }
+
+  function updateCount() {
+    var length = Array.from($('text').value).length;
+    $('count').textContent = length;
+    $('count').className = length > limit ? 'count-over' : '';
+  }
+
+  function render(state) {
+    limit = state.textLimit;
+    $('limit').textContent = limit;
+
+    var rb = $('reservations').tBodies[0];
+    rb.innerHTML = '';
+    state.reservations.forEach(function (row) {
+      var tr = rb.insertRow();
+      tr.insertCell().textContent = fmt(row['予定日時']);
+      tr.insertCell().textContent = row['本文'];
+      var st = tr.insertCell();
+      st.textContent = row['状態'];
+      if (row['状態'] === 'failed') st.className = 'status-failed';
+      if (row['状態'] === 'done') st.className = 'status-done';
+      tr.insertCell().textContent = row['エラー'] || '';
+      var op = tr.insertCell();
+      if (row['状態'] === 'scheduled') {
+        var btn = document.createElement('button');
+        btn.textContent = '取消';
+        btn.onclick = function () {
+          run('cancelReservation', row.id).then(function (result) {
+            say(result.ok ? '取り消しました' : result.error, !result.ok);
+            refresh();
+          });
+        };
+        op.appendChild(btn);
+      }
+    });
+
+    var hb = $('history').tBodies[0];
+    hb.innerHTML = '';
+    state.history.forEach(function (row) {
+      var tr = hb.insertRow();
+      tr.insertCell().textContent = fmt(row['日時']);
+      tr.insertCell().textContent = row['種別'];
+      tr.insertCell().textContent = row['本文'];
+      var ok = tr.insertCell();
+      ok.textContent = row['成否'];
+      ok.className = row['成否'] === '失敗' ? 'status-failed' : 'status-done';
+      tr.insertCell().textContent = row['エラー'] || '';
+    });
+
+    var db = $('drafts').tBodies[0];
+    db.innerHTML = '';
+    state.drafts.forEach(function (row) {
+      var tr = db.insertRow();
+      tr.insertCell().textContent = fmt(row['作成日時']);
+      tr.insertCell().textContent = row['本文'];
+      var op = tr.insertCell();
+      var btn = document.createElement('button');
+      btn.textContent = '呼び出す';
+      btn.onclick = function () {
+        $('text').value = row['本文'];
+        updateCount();
+      };
+      op.appendChild(btn);
+    });
+  }
+
+  function refresh() {
+    return run('getState').then(render).catch(function (error) {
+      say('状態の取得に失敗: ' + (error && error.message || error), true);
+    });
+  }
+
+  $('text').addEventListener('input', updateCount);
+
+  $('generate').onclick = function () {
+    /* 生成結果はテキストエリアに入れるだけ。保存・投稿は人が確認してから。 */
+    var current = $('text').value;
+    if (current.trim() && !confirm('入力中の本文を生成結果で置き換えます。よろしいですか？')) return;
+
+    $('generate').disabled = true;
+    say('生成中…');
+
+    run('generatePostText', $('theme').value)
+      .then(function (result) {
+        if (result.ok) {
+          $('text').value = result.text;
+          updateCount();
+          say('生成しました。内容を確認・編集してから保存/投稿してください');
+        } else {
+          say(result.error, true);
+        }
+      })
+      .catch(function (error) { say(String(error.message || error), true); })
+      .then(function () { $('generate').disabled = false; });
+  };
+
+  $('save').onclick = function () {
+    run('saveDraft', $('text').value)
+      .then(function () { say('保存しました'); refresh(); })
+      .catch(function (error) { say(String(error.message || error), true); });
+  };
+
+  $('post').onclick = function () {
+    /*
+     * ポップアップ扱いを避けるため、クリックと同じイベント内で先に窓を開き、
+     * サーバーの検証が通ったら URL を差し込む。
+     */
+    var win = window.open('about:blank', '_blank');
+
+    run('buildIntentLink', $('text').value)
+      .then(function (result) {
+        if (!result.ok) {
+          if (win) win.close();
+          say(result.error, true);
+          return;
+        }
+        if (win) {
+          win.location.href = result.url;
+        } else {
+          say('ポップアップがブロックされました。もう一度お試しください。', true);
+        }
+        refresh();
+      })
+      .catch(function (error) {
+        if (win) win.close();
+        say(String(error.message || error), true);
+      });
+  };
+
+  $('reserve').onclick = function () {
+    var at = $('at').value;
+    if (!at) { say('予定日時を入力してください', true); return; }
+    run('reservePost', $('text').value, new Date(at).getTime())
+      .then(function () { say('予約しました。時間になるとメールが届きます'); refresh(); })
+      .catch(function (error) { say(String(error.message || error), true); });
+  };
+
+  refresh();
+</script>
+</body>
+</html>

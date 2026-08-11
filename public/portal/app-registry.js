@@ -144,4 +144,10 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/audio-transcriber/',
     icon: '文',
   }),
+  Object.freeze({
+    id: 'threads-post',
+    name: 'Threads 投稿',
+    href: 'production-app/threads-post/',
+    icon: '投',
+  }),
 ]);
