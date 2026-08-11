@@ -67,9 +67,18 @@ export function ok(data, options) {
   return json({ ok: true, ...data }, options);
 }
 
+/**
+ * 失敗を返す。
+ *
+ * `extra` は本文の**最上位**へ足す（error の中ではなく）。呼び出し側が
+ * 機械的に読む値（retryAfterSec など）の置き場所であり、error は
+ * 人に見せる code / message だけに保つ。
+ */
 export function fail(pair, options = {}) {
+  const { extra, ...rest } = options;
+
   return json(
-    { ok: false, error: { code: pair[0], message: pair[1] } },
-    { status: options.status ?? 400, ...options },
+    { ok: false, error: { code: pair[0], message: pair[1] }, ...extra },
+    { status: rest.status ?? 400, ...rest },
   );
 }
