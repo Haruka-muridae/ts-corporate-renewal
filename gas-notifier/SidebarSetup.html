@@ -127,6 +127,28 @@
   <p id="api-waiting">オンになるのを待っています…</p>
 </section>
 
+<!-- 状態3b: GCP プロジェクト側で API が未有効 -->
+<section id="panel-gcp" class="hidden">
+  <h2>Google Cloud 側で1回だけ有効化してください</h2>
+  <p class="note">
+    このスクリプトが使っている Google Cloud のプロジェクトで、
+    「Apps Script API」がまだ有効になっていません。
+    <strong>この操作は最初の1回だけ</strong>です。
+  </p>
+  <p>
+    <a class="button-link" id="open-gcp" href="#" target="_blank" rel="noopener">
+      有効化のページを開く
+    </a>
+  </p>
+  <ol>
+    <li>開いたページで「有効にする」を押す</li>
+    <li>反映まで1〜2分かかることがあります</li>
+    <li>このサイドバーへ戻る（自動で次へ進みます）</li>
+  </ol>
+  <p id="gcp-waiting">有効になるのを待っています…</p>
+  <p class="note" id="gcp-detail"></p>
+</section>
+
 <!-- 状態4: 公開できる -->
 <section id="panel-deploy" class="hidden">
   <h2>公開します</h2>
@@ -177,7 +199,7 @@
     innerHTML は使わない。ここに出る値（引き継ぎリンク）は接続キーを含むため、
     textContent と href 以外の入れ方をしない。
   */
-  var PANELS = ['loading', 'setup', 'api', 'deploy', 'handoff', 'done'];
+  var PANELS = ['loading', 'setup', 'api', 'gcp', 'deploy', 'handoff', 'done'];
   var apiPollTimer = null;
   var apiPollCount = 0;
 
@@ -285,8 +307,11 @@
 
       if (apiPollCount > API_POLL_LIMIT) {
         stopApiPolling();
-        document.getElementById('api-waiting').textContent =
-          '確認を止めました。設定をオンにしたら［公開する］をもう一度押してください。';
+
+        var waiting = '確認を止めました。有効にしたら［公開する］をもう一度押してください。';
+
+        document.getElementById('api-waiting').textContent = waiting;
+        document.getElementById('gcp-waiting').textContent = waiting;
         showPanel('deploy');
         return;
       }
@@ -347,7 +372,27 @@
         }
 
         if (result.status === 'API_DISABLED') {
+          if (result.helpUrl) {
+            document.getElementById('open-settings').href = result.helpUrl;
+          }
+
           showPanel('api');
+          startApiPolling();
+          return;
+        }
+
+        /*
+          403 でも、直す場所が Google Cloud 側のことがある。
+          利用者設定の案内を出すと、いつまでも直らない画面を見せることになる。
+          Google が本文で示してくる有効化URLを、そのままボタンにする。
+        */
+        if (result.status === 'API_DISABLED_GCP') {
+          if (result.helpUrl) {
+            document.getElementById('open-gcp').href = result.helpUrl;
+          }
+
+          document.getElementById('gcp-detail').textContent = result.message || '';
+          showPanel('gcp');
           startApiPolling();
           return;
         }
