@@ -228,41 +228,19 @@
             <p class="at-note">「自動」を選ぶと、お使いのAPIキーで利用できるモデルから自動的に選びます。</p>
           </div>
 
-          <div class="at-field">
-            <label class="at-label" for="at-api-key">Gemini APIキー</label>
-            <div class="at-key-row">
-              <!--
-                autocomplete="off" と name の省略は、ブラウザのパスワード保存
-                ダイアログを出さないため。キーを端末へ残さない方針に合わせる。
-              -->
-              <input
-                id="at-api-key"
-                class="at-input at-input--key"
-                type="password"
-                autocomplete="off"
-                autocapitalize="off"
-                autocorrect="off"
-                spellcheck="false"
-                placeholder="APIキーを貼り付けてください"
-              >
-              <button id="at-key-toggle" class="auth-button at-btn-quiet at-key-toggle" type="button" aria-pressed="false">表示</button>
+          <!--
+            APIキーはこの画面では入力させない。ポータルの「API設定」で
+            KeyStore（端末内 localStorage のみ）へ保存したものを、実行の
+            瞬間にだけ読む（docs/specs/keystore-spec-v1.md）。
+            未設定・保存不可のときだけ下の案内を出す。文言は script.js が
+            textContent で入れる（innerHTML を使わない）。
+          -->
+          <div id="at-key-guidance" class="at-key-guidance" aria-live="polite" hidden>
+            <h3 id="at-key-guidance-title" class="at-subtitle"></h3>
+            <p id="at-key-guidance-text" class="at-note"></p>
+            <div class="at-actions">
+              <a id="at-portal-link" class="auth-button" href="../../portal/" hidden>ポータルでキーを設定する</a>
             </div>
-            <p id="at-key-status" class="at-note" role="status" aria-live="polite">APIキーは未入力です。</p>
-          </div>
-
-          <div class="at-security-note">
-            <p>APIキーはGoogle AI Studioで取得できます。</p>
-            <p>このアプリは入力されたAPIキーを保存しません。</p>
-            <p>共有端末では使用後にページを閉じてください。</p>
-            <p>
-              <a
-                id="at-key-link"
-                class="at-link"
-                href="https://aistudio.google.com/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-              >Google AI Studio でAPIキーを取得する（新しいタブで開きます）</a>
-            </p>
           </div>
         </div>
       </div>

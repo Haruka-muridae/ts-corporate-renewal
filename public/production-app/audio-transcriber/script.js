@@ -4,10 +4,12 @@
  * public/apps/audio-transcriber/script.js からの複製・適合。
  * 複製であって import ではないのは、本番アプリからテスト環境（public/apps/）を
  * 参照しないという境界（docs/repository-structure.md §1）による。
- * テスト版との差分は次の3点だけで、文字起こしの挙動は変えていない。
+ * テスト版との差分は次の4点だけで、文字起こしの挙動は変えていない。
  *   1. 認可を ../drive-auth.js から自前の ./oauth.js へ置き換えた
  *   2. フォルダ名を ../drive-folders.js から ./config.js の DRIVE_NAMES へ移した
  *   3. 起動時に guardPage() でポータル認証を確認し、通るまで main を隠す
+ *   4. Gemini APIキーの都度入力を廃し、KeyStore（ポータルの「API設定」）へ
+ *      置き換えた（docs/specs/keystore-spec-v1.md。short-script と同じ流儀）
  *
  * 担当するのは「DOMの更新」「利用者の操作の受け取り」「文言」の3つだけ。
  * 音声処理・API呼び出し・認可のロジックは各モジュールへ置く。
@@ -15,14 +17,10 @@
  * ------------------------------------------------------------------
  * APIキーの扱い（このファイルで最も重要な点）
  * ------------------------------------------------------------------
- * 入力されたキーは、下の apiKey 変数（このモジュールのクロージャ）だけに置く。
- *
- *   input.value からは毎回読み直さず、変数へ写して使う
- *   → data属性・localStorage・sessionStorage・Cookie・URLへは書かない
- *   → console へも出さない。エラー文言にも混ぜない
- *   → ページを閉じる／再読み込みすれば、変数ごと消える
- *
- * この方針を崩す変更（「次回も使えるように保存」など）を安易に入れないこと。
+ * 画面では KeyStore の**有無だけ**を見る（KeyStore.has）。
+ * **値を読むのは実行の瞬間の KeyStore.get 1回だけ**（runGemini）で、
+ * モジュール変数・DOM・state・console のどこにも保持しない。
+ * KeyStore の外で localStorage を触らない（keystore-spec-v1.md §2-1）。
  * ------------------------------------------------------------------
  *
  * 外部由来の文字列（ファイル名・Driveの表示名・APIの応答）は、
@@ -31,6 +29,7 @@
 
 import { guardPage } from '../../auth/session.js';
 import { setScreenDepth } from '../../auth/config.js';
+import { KeyStore, PROVIDERS, isKeyStoreAvailable } from '../../auth/keystore.js';
 
 import {
   DEFAULT_LANGUAGE,
@@ -206,7 +205,8 @@ const WHISPER_ERROR_MESSAGES = Object.freeze({
 });
 
 const GEMINI_ERROR_MESSAGES = Object.freeze({
-  [GeminiErrorCode.API_KEY_MISSING]: 'Gemini APIキーを入力してください。',
+  [GeminiErrorCode.API_KEY_MISSING]:
+    'Gemini APIキーが設定されていません。ポータルの「API設定」で設定してください。',
   [GeminiErrorCode.API_KEY_INVALID]:
     'APIキーが正しくないようです。Google AI Studio で発行したキーを確認してください。',
   [GeminiErrorCode.PERMISSION_DENIED]:
@@ -283,7 +283,8 @@ function cacheElements() {
     'at-mode-local', 'at-mode-gemini',
     'at-language', 'at-timestamps',
     'at-local-settings', 'at-whisper-model', 'at-whisper-model-note', 'at-device-note',
-    'at-gemini-settings', 'at-gemini-model', 'at-api-key', 'at-key-toggle', 'at-key-status',
+    'at-gemini-settings', 'at-gemini-model',
+    'at-key-guidance', 'at-key-guidance-title', 'at-key-guidance-text', 'at-portal-link',
     'at-status', 'at-progress', 'at-progress-fill', 'at-progress-label', 'at-error',
     'at-start', 'at-cancel',
     'at-result', 'at-result-count', 'at-result-mode', 'at-result-elapsed',
@@ -303,10 +304,14 @@ function cacheElements() {
    ============================================================ */
 
 /*
- * Gemini APIキー。ここ以外のどこにも書かない。
- * 画面の input からは submit のたびに読み直さず、この変数を使う。
+ * Gemini APIキーの「有無」。値は持たない。
+ *
+ * 値を読むのは runGemini の KeyStore.get 1回だけで、
+ * この画面はモジュール変数・DOM・state のどこにもキーを保持しない。
+ * 利用者がポータルの別タブでキーを設定して戻ってくることがあるため、
+ * refreshKeyState() が visibilitychange / focus で読み直す。
  */
-let apiKey = '';
+let geminiKeyOk = false;
 
 /* 進行中の処理を止めるための AbortController。 */
 let abortController = null;
@@ -423,6 +428,49 @@ function updateDriveNote() {
 }
 
 /* ============================================================
+   Gemini APIキーの状態（KeyStore）
+   ============================================================ */
+
+/*
+ * KeyStore の有無だけを見て、案内と実行可否を切り替える（short-script と同じ流儀）。
+ * **値は読まない**（読むのは実際に実行するとき … runGemini）。
+ *
+ * 利用者がポータルの別タブでキーを設定して戻ってくることがあるため、
+ * 画面が再表示された（visibilitychange / focus）ときにも呼び直す。
+ */
+function refreshKeyState() {
+  const storageOk = isKeyStoreAvailable();
+  geminiKeyOk = storageOk && KeyStore.has(PROVIDERS.gemini);
+
+  if (!storageOk) {
+    setText(el.keyGuidanceTitle, 'この端末ではキーを保存できません');
+    setText(
+      el.keyGuidanceText,
+      'プライベートモードなどで localStorage が使えないため、APIキーを保存・参照できません。'
+      + '通常のウィンドウでお試しください。',
+    );
+    setHidden(el.portalLink, true);
+    setHidden(el.keyGuidance, false);
+  } else if (!geminiKeyOk) {
+    setText(el.keyGuidanceTitle, 'Gemini APIキーの設定が必要です');
+    setText(
+      el.keyGuidanceText,
+      'Gemini APIでの文字起こしには、あなた自身の Gemini APIキーを使います。'
+      + 'ポータルの「API設定」で一度だけ設定してください。'
+      + 'キーはこの端末にのみ保存され、当社サーバーには送信されません。',
+    );
+    setHidden(el.portalLink, false);
+    setHidden(el.keyGuidance, false);
+  } else {
+    setHidden(el.keyGuidance, true);
+  }
+
+  /* 開始ボタンの可否は render が geminiKeyOk を見て決める。 */
+  render(getState());
+  return geminiKeyOk;
+}
+
+/* ============================================================
    状態に応じた描画
    ============================================================ */
 
@@ -449,7 +497,8 @@ function render(snapshot) {
 
   /* ---- 実行ボタン ---- */
   const busy = isBusy(state);
-  el.start.disabled = busy || !file;
+  /* Gemini モードはキー未設定（KeyStore 未登録・保存先なし）の間は開始できない。 */
+  el.start.disabled = busy || !file || (mode === 'gemini' && !geminiKeyOk);
   el.start.textContent = busy ? '処理中…' : '文字起こしを開始';
   setHidden(el.cancel, !busy);
 
@@ -461,7 +510,6 @@ function render(snapshot) {
   el.whisperModel.disabled = busy;
   el.geminiModel.disabled = busy;
   el.language.disabled = busy;
-  el.apiKey.disabled = busy;
 
   /* ---- 結果の操作 ---- */
   const hasResult = result.trim() !== '';
@@ -1118,7 +1166,8 @@ async function onStart() {
     return;
   }
 
-  if (snapshot.mode === 'gemini' && apiKey === '') {
+  /* キーの「有無」を実行直前にも確かめる（別タブで削除された場合に備える）。 */
+  if (snapshot.mode === 'gemini' && !refreshKeyState()) {
     update({ state: State.ERROR, errorMessage: GEMINI_ERROR_MESSAGES[GeminiErrorCode.API_KEY_MISSING] });
     return;
   }
@@ -1203,6 +1252,12 @@ async function runLocal({ snapshot, language, withTimestamps }) {
 }
 
 async function runGemini({ snapshot, language, withTimestamps }) {
+  /*
+   * キーの値を読むのはこの1行だけ。変数へ受けたら、この関数の外へ渡さない。
+   * gemini-transcriber.js も引数で受け取るだけで、モジュール内に保持しない設計。
+   */
+  const apiKey = KeyStore.get(PROVIDERS.gemini);
+
   const result = await transcribeWithGemini(snapshot.file.blob, {
     apiKey,
     displayName: snapshot.file.name,
@@ -1318,33 +1373,6 @@ function confirmOverwrite() {
 }
 
 /* ============================================================
-   APIキー
-   ============================================================ */
-
-function onApiKeyInput() {
-  /*
-   * 入力欄の値を変数へ写す。
-   * この変数はページを閉じれば消える。保存先はここ以外に無い。
-   */
-  apiKey = el.apiKey.value.trim();
-
-  setText(
-    el.keyStatus,
-    apiKey === ''
-      ? 'APIキーは未入力です。'
-      : 'APIキーを受け取りました。この端末には保存されません。',
-  );
-}
-
-function onKeyToggle() {
-  const showing = el.apiKey.type === 'text';
-
-  el.apiKey.type = showing ? 'password' : 'text';
-  el.keyToggle.textContent = showing ? '表示' : '隠す';
-  el.keyToggle.setAttribute('aria-pressed', String(!showing));
-}
-
-/* ============================================================
    起動
    ============================================================ */
 
@@ -1368,13 +1396,25 @@ function bindEvents() {
   el.clearFile.addEventListener('click', clearFile);
 
   el.modeLocal.addEventListener('change', () => update({ mode: 'local', errorMessage: null }));
-  el.modeGemini.addEventListener('change', () => update({ mode: 'gemini', errorMessage: null }));
+  el.modeGemini.addEventListener('change', () => {
+    update({ mode: 'gemini', errorMessage: null });
+    /* Gemini モードに入った時点でキーの有無を確かめ、案内を出し分ける。 */
+    refreshKeyState();
+  });
 
   el.whisperModel.addEventListener('change', updateWhisperModelNote);
   el.timestamps.addEventListener('change', onTimestampToggle);
 
-  el.apiKey.addEventListener('input', onApiKeyInput);
-  el.keyToggle.addEventListener('click', onKeyToggle);
+  /*
+   * ポータルの別タブでキーを設定して戻ってきたときに拾う。
+   * KeyStore の有無を見るだけで、値は読まない。
+   */
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      refreshKeyState();
+    }
+  });
+  window.addEventListener('focus', () => refreshKeyState());
 
   el.start.addEventListener('click', () => void onStart());
   el.cancel.addEventListener('click', onCancel);
@@ -1388,10 +1428,10 @@ function bindEvents() {
 
   /*
    * ページを離れるときに後始末をする。
-   * apiKey はページの破棄と同時に消えるが、明示的に空にしておく。
+   * APIキーはこの画面が保持していない（KeyStore の外へ出さない）ため、
+   * ここで消すものは無い。
    */
   window.addEventListener('pagehide', () => {
-    apiKey = '';
     abortController?.abort();
     disposeWorker();
     releaseObjectUrl();
@@ -1420,7 +1460,8 @@ async function init() {
   populateSelects();
   bindEvents();
   subscribe(render);
-  render(getState());
+  /* キーの有無の初期判定（render も内側で走る）。値は読まない。 */
+  refreshKeyState();
 
   /* 認証が確認できてから中身を出す。hidden を外すのはここだけ。 */
   const main = document.getElementById('at-main');

@@ -255,8 +255,11 @@ export const GEMINI = Object.freeze({
   pollIntervalMs: 2000,
   pollTimeoutMs: 10 * 60 * 1000,
 
-  /* APIキーの取得先。別タブで開く。 */
-  apiKeyUrl: 'https://aistudio.google.com/apikey',
+  /*
+   * APIキーの取得先URL（テスト版の apiKeyUrl）はここには持たない。
+   * 本番のキーは KeyStore（ポータルの「API設定」）で管理し、
+   * 取得手順の案内もポータル側が持つ（docs/specs/keystore-spec-v1.md）。
+   */
 });
 
 /*
