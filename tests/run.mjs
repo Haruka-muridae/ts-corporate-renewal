@@ -59,6 +59,7 @@ const SUITES = [
   { name: 'notifier-gate', file: 'unit/notifier-gate.mjs', kind: 'unit' },
   { name: 'notifier-license', file: 'unit/notifier-license.mjs', kind: 'unit' },
   { name: 'notifier-template', file: 'unit/notifier-template.mjs', kind: 'unit' },
+  { name: 'notifier-connection', file: 'unit/notifier-connection.mjs', kind: 'unit' },
   { name: 'short-script-companion', file: 'unit/short-script-companion.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
   { name: 'browser:card-mail', file: 'browser/card-mail.mjs', kind: 'browser' },

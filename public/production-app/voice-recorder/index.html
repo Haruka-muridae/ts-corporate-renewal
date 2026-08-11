@@ -269,15 +269,20 @@
         new-password と各社の除外属性を併記する。
       -->
       <label class="vr-field">
-        <span class="vr-field__label">接続キー</span>
+        <span class="vr-field__label">
+          接続キー
+          <!-- 復元できているかを出す。値そのものは戻さない（notifier-panel.js の renderKeyState）。 -->
+          <span class="vr-badge" id="vr-nf-key-state" hidden></span>
+        </span>
         <input type="password" id="vr-nf-key" class="vr-input" spellcheck="false"
                name="vr-notifier-connect-key" autocomplete="new-password"
                data-1p-ignore data-lpignore="true" data-bwignore
                aria-describedby="vr-nf-key-help">
       </label>
       <p class="vr-note" id="vr-nf-key-help">
-        接続キーは第三者へ渡さないでください。保存後はこの欄を空にします。
-        <strong>パスワードマネージャが自動入力した場合は、必ず消してから貼り直してください。</strong>
+        接続キーは第三者へ渡さないでください。<strong>保存後はこの欄を空にしますが、
+        「保存済み」と出ていれば設定は残っています。</strong>変更するときだけ入力してください。
+        パスワードマネージャが自動入力した場合は、必ず消してから貼り直してください。
       </p>
 
       <div class="vr-actions">

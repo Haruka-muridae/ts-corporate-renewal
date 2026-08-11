@@ -78,7 +78,7 @@ const ELEMENT_IDS = [
   'vr-nf-hint-health', 'vr-nf-hint-key', 'vr-nf-hint-permission',
   'vr-nf-hint-subscription', 'vr-nf-hint-trigger', 'vr-nf-hint-license',
   'vr-nf-permission',
-  'vr-nf-setup', 'vr-nf-template', 'vr-nf-url', 'vr-nf-key',
+  'vr-nf-setup', 'vr-nf-template', 'vr-nf-url', 'vr-nf-key', 'vr-nf-key-state',
   'vr-nf-connect', 'vr-nf-disconnect',
   'vr-nf-connection', 'vr-nf-settings-form',
   'vr-nf-timedOnly', 'vr-nf-timing', 'vr-nf-save', 'vr-nf-recheck',
@@ -117,6 +117,36 @@ function setStep(name, text, kind, hint = '') {
   if (hintNode) {
     hintNode.textContent = hint;
     hintNode.hidden = hint === '';
+  }
+}
+
+/**
+ * 接続キー欄に「保存済みか」を出す。
+ *
+ * ------------------------------------------------------------------
+ * 値そのものは入れない。**入れないからこそ、状態を出す。**
+ * ------------------------------------------------------------------
+ * 接続キーは秘密なので、復元しても入力欄へは戻さない（DOM に置かない）。
+ * ところが URL は戻るため、画面上は「片方だけ復元された」ように見える。
+ *
+ * 実機の検証で、**保存されているのに「保存されていない」と判定された**
+ * （2026-08-11）。IndexedDB には値があり、接続テストも保存済みの値で
+ * 通っていたが、それを画面から確かめる方法が無かった。
+ *
+ * 復元できているかどうかは、利用者が知る必要のある情報である。出す。
+ * ------------------------------------------------------------------
+ */
+function renderKeyState(saved) {
+  const badge = el['vr-nf-key-state'];
+  const input = el['vr-nf-key'];
+
+  if (badge) {
+    badge.textContent = saved ? '保存済み' : '';
+    badge.hidden = !saved;
+  }
+
+  if (input) {
+    input.placeholder = saved ? '保存済み（変更するときだけ入力）' : '';
   }
 }
 
@@ -599,7 +629,24 @@ async function handleConnect() {
   }
 
   const url = normalizeGasUrl(el['vr-nf-url'].value);
-  const key = String(el['vr-nf-key'].value ?? '').trim();
+  const typed = String(el['vr-nf-key'].value ?? '').trim();
+
+  /*
+   * ------------------------------------------------------------------
+   * 未入力は「いまのキーを保つ」とする
+   * ------------------------------------------------------------------
+   * 接続キーは復元しても入力欄へ戻さない（秘密を DOM に置かない）。
+   * そのため、接続済みの状態でこの欄は必ず空に見える。
+   *
+   * ここで「空はエラー」にしていると、**接続が生きているのに
+   * ［接続する］を押した時点で行き止まりになる。** V2 の利用者は
+   * 接続キーを手元に控えていない（引き継ぎリンクで渡している）ため、
+   * 自力で復帰できない。実機でここに嵌まった（2026-08-11）。
+   *
+   * 空のときは保存済みの値を使う。URL だけ直したい場合にも要る。
+   * ------------------------------------------------------------------
+   */
+  const key = typed !== '' ? typed : String(connection?.key ?? '');
 
   if (!isGasUrl(url)) {
     showMessage('GASのURLの形式が違います。末尾が /exec のURLを貼り付けてください。', 'error');
@@ -643,6 +690,9 @@ async function handleConnect() {
     el['vr-nf-url'].value = url;
     el['vr-nf-key'].value = '';
     el['vr-nf-connection'].open = false;
+
+    /* 欄を空にした直後に「保存済み」を出す（空＝未保存に見せない）。 */
+    renderKeyState(true);
 
     /* 預かっているライセンスを先に渡す（publicKey はこれが済んでいないと通らない）。 */
     await pushLicenseToGas();
@@ -696,6 +746,7 @@ async function handleDisconnect() {
     el['vr-nf-url'].value = '';
     el['vr-nf-key'].value = '';
     el['vr-nf-connection'].open = true;
+    renderKeyState(false);
 
     await runChecks();
     showMessage('接続を解除しました。', 'ok');
@@ -897,6 +948,7 @@ async function applySetupFragment() {
 
   el['vr-nf-url'].value = parsed.url;
   el['vr-nf-connection'].open = false;
+  renderKeyState(true);
 
   return true;
 }
@@ -1107,12 +1159,19 @@ export async function mountNotifier() {
    */
   const handedOff = await applySetupFragment();
 
+  /*
+   * **接続キーは入力欄へ戻さない。** 代わりに「保存済み」を出す。
+   * connection には URL とキーの両方が入っており、接続テストはこれを使う
+   * （入力欄の値は見ない）。renderKeyState の説明を参照。
+   */
   if (connection) {
     el['vr-nf-url'].value = connection.url;
     el['vr-nf-connection'].open = false;
   } else {
     el['vr-nf-connection'].open = true;
   }
+
+  renderKeyState(Boolean(connection?.key));
 
   /* 引き継ぎ直後は、預かっているライセンスを渡してから状態を確かめる。 */
   await pushLicenseToGas();

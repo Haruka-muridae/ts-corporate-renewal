@@ -249,6 +249,22 @@
   margin-bottom: 0.35rem;
 }
 
+/*
+  「保存済み」の印。値そのものを画面へ戻さない代わりに、
+  復元できていることだけを示す（notifier-panel.js の renderKeyState）。
+*/
+.vr-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #137333;
+  vertical-align: middle;
+}
+
 .vr-input {
   width: 100%;
   box-sizing: border-box;
