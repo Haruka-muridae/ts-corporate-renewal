@@ -74,11 +74,34 @@ function gateFetch_(path, payload) {
 
   if (status < 200 || status >= 300 || !parsed || parsed.ok !== true) {
     var code = (parsed && parsed.error && parsed.error.code) ? String(parsed.error.code) : ('HTTP_' + status);
-    Logger.log('gate ' + path + ' -> ' + code);
-    return { ok: false, status: status, body: parsed, error: code };
+
+    return gateFailure_(path, code, status, parsed);
   }
 
+  setProperty_(PROP.LAST_GATE_ERROR, '');
+
   return { ok: true, status: status, body: parsed, error: '' };
+}
+
+/**
+ * 失敗を記録して返す。
+ *
+ * ------------------------------------------------------------------
+ * 「なぜ鍵が無いのか」を画面から辿れるようにする
+ * ------------------------------------------------------------------
+ * 実機で、録音アプリの「通知の鍵」が × のまま直らない状態になった。
+ * ゲート側のログには成功が並んでいたが、**テンプレート側では何が
+ * 起きたのかを誰も持っていなかった**（実行ログを開かない限り分からない）。
+ *
+ * 最後の失敗だけを Script Property に置き、health から読めるようにする。
+ * **応答本文も鍵も入れない。** 入れるのは path と符号だけ。
+ * ------------------------------------------------------------------
+ */
+function gateFailure_(path, code, status, parsed) {
+  Logger.log('gate ' + path + ' -> ' + code);
+  setProperty_(PROP.LAST_GATE_ERROR, path + ' -> ' + code);
+
+  return { ok: false, status: status, body: parsed, error: code };
 }
 
 /**
@@ -150,16 +173,33 @@ function gateVapid_(audiences, nowMs) {
     return { ok: false, publicKey: '', jwts: {}, error: result.error };
   }
 
-  setProperty_(PROP.VAPID_PUBLIC, String(result.body.publicKey || ''));
-  setProperty_(PROP.VAPID_JWTS, JSON.stringify(result.body.jwts || {}));
+  var publicKey = String(result.body.publicKey || '');
+  var jwts = result.body.jwts || {};
+
+  /*
+   * ------------------------------------------------------------------
+   * 200 でも中身が使えないことがある
+   * ------------------------------------------------------------------
+   * ゲートとテンプレートは別々に書かれており、応答の形は2か所にある。
+   * 片方だけ変わると、**通信は成功しているのに何も取り出せない**という
+   * 静かな壊れ方になる。同じ組み合わせの事故が Phase 2 に起きている
+   * （gas-auth は success、Workers は ok を見ていた）。
+   *
+   * ここで気づけるようにしておく。既定値を書いて成功として返すと、
+   * 「鍵が無い」という結果だけが残り、原因が消える。
+   * ------------------------------------------------------------------
+   */
+  if (publicKey === '' || !hasAllAudiences_(jwts, wanted)) {
+    gateFailure_('/v1/vapid', 'BAD_PAYLOAD', result.status, result.body);
+
+    return { ok: false, publicKey: '', jwts: {}, error: 'BAD_PAYLOAD' };
+  }
+
+  setProperty_(PROP.VAPID_PUBLIC, publicKey);
+  setProperty_(PROP.VAPID_JWTS, JSON.stringify(jwts));
   setProperty_(PROP.VAPID_EXPIRES_AT, String(toMs_(Date.parse(String(result.body.expiresAt || ''))) || 0));
 
-  return {
-    ok: true,
-    publicKey: String(result.body.publicKey || ''),
-    jwts: result.body.jwts || {},
-    error: ''
-  };
+  return { ok: true, publicKey: publicKey, jwts: jwts, error: '' };
 }
 
 function readVapidCache_() {

@@ -23,11 +23,18 @@ import { join } from 'node:path';
 
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import {
+  GATE_ORIGIN,
   REPO_ROOT,
   createNotifierEnvironment,
   createReadyNotifierEnvironment,
   installGateStub,
 } from '../helpers/gas-notifier-harness.mjs';
+import {
+  FIXTURE_AUDIENCES,
+  FIXTURE_LICENSE_KEY,
+  captureGateResponses,
+  installCapturedGateStub,
+} from '../helpers/gate-fixtures.mjs';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -515,7 +522,7 @@ try {
       JSON.stringify(health).includes(env.properties.LICENSE_KEY) === false);
     check('health に予定の情報を含めない',
       Object.keys(health.data).sort().join(',')
-        === 'configured,deployedVersion,execUrlDigest,lastTickAt,licensed,ok,triggerActive,version',
+        === 'configured,deployedVersion,execUrlDigest,lastGateError,lastTickAt,licensed,ok,triggerActive,version',
       Object.keys(health.data).sort().join(','));
 
     check('★接続キー無しでは設定を読めない',
@@ -844,6 +851,144 @@ try {
       result.url === 'https://script.google.com/macros/s/AKdeployed/exec', result.url);
     check('保存先も正規化済み',
       env.properties.WEBAPP_URL === 'https://script.google.com/macros/s/AKdeployed/exec');
+  }
+
+  /* ================================================================ */
+  section('★ゲートの実応答を、そのまま読めること（二重定義の見張り）');
+
+  {
+    /*
+     * ------------------------------------------------------------------
+     * 本物の Worker が返した JSON を、そのまま GAS へ流す
+     * ------------------------------------------------------------------
+     * 応答の形は Workers 側（ok()）と Gate.gs 側（取り出し）の2か所にあり、
+     * 片方だけ変えても両方のテストが通ってしまう。
+     * Phase 2 に同じ事故が起きている（gas-auth は success、Workers は ok）。
+     *
+     * ここでは整形せずに流す。形が食い違えば、この節が落ちる。
+     * ------------------------------------------------------------------
+     */
+    const fixtures = await captureGateResponses();
+
+    /* --- まず、応答の形そのものを固定する --- */
+    check('vapid は 200', fixtures.vapid.status === 200, String(fixtures.vapid.status));
+    check('★vapid の項目は ok / publicKey / jwts / expiresAt / licenseState',
+      Object.keys(fixtures.vapid.body).sort().join(',') === 'expiresAt,jwts,licenseState,ok,publicKey',
+      Object.keys(fixtures.vapid.body).sort().join(','));
+    check('★evaluate の項目は ok / notify / remove / licenseState',
+      Object.keys(fixtures.evaluate.body).sort().join(',') === 'licenseState,notify,ok,remove',
+      Object.keys(fixtures.evaluate.body).sort().join(','));
+    check('★入れ子（data）にしていない',
+      fixtures.vapid.body.data === undefined && fixtures.evaluate.body.data === undefined);
+    check('★成功の印は ok（success ではない）',
+      fixtures.vapid.body.ok === true && fixtures.vapid.body.success === undefined);
+
+    /* --- その応答を GAS に読ませる --- */
+    const env = createReadyNotifierEnvironment({ licenseKey: FIXTURE_LICENSE_KEY });
+    const gas = env.api;
+
+    installCapturedGateStub(env, fixtures);
+
+    const vapid = gas.gateVapid_(FIXTURE_AUDIENCES, env.getTime());
+
+    check('★Gate.gs が本物の応答から公開鍵を取り出せる',
+      vapid.ok === true && vapid.publicKey === fixtures.vapid.body.publicKey,
+      `${vapid.ok} / ${String(vapid.publicKey).slice(0, 12)}`);
+    check('★JWT も宛先ごとに取り出せる',
+      FIXTURE_AUDIENCES.every((audience) => typeof vapid.jwts[audience] === 'string'),
+      Object.keys(vapid.jwts).join(','));
+    check('公開鍵を保存する', env.properties.VAPID_PUBLIC_B64URL === fixtures.vapid.body.publicKey);
+    check('★有効期限を数値として保存する（0 のままにしない）',
+      Number(env.properties.VAPID_EXPIRES_AT) > env.getTime(),
+      env.properties.VAPID_EXPIRES_AT);
+    check('失敗の記録を残さない', env.properties.LAST_GATE_ERROR === '');
+
+    /* --- evaluate 側も同じ応答で通す --- */
+    const withEvent = await captureGateResponses({
+      events: [{
+        eid: 'EID-FIXTURE',
+        feature: 'calendar',
+        startAt: new Date(env.getTime() + HOUR).toISOString(),
+        status: 'accepted',
+        allDay: false,
+        cancelled: false,
+      }],
+    });
+
+    check('本物の evaluate が1件返す', withEvent.evaluate.body.notify.length === 1,
+      JSON.stringify(withEvent.evaluate.body));
+
+    const env2 = createReadyNotifierEnvironment({ licenseKey: FIXTURE_LICENSE_KEY });
+
+    installCapturedGateStub(env2, withEvent);
+
+    const evaluated = env2.api.gateEvaluate_({
+      settings: { accepted: true, tentative: true, needsAction: true, declined: false, timedOnly: true, timingMin: 5 },
+      events: [],
+      sentDigest: [],
+    });
+
+    check('★Gate.gs が本物の応答から判定を取り出せる',
+      evaluated.ok === true && evaluated.notify.length === 1, JSON.stringify(evaluated));
+    check('★ライセンスの状態も取り出せる', evaluated.licenseState === 'active', evaluated.licenseState);
+
+    /*
+     * ほかの節が使う手書きの偽ゲート（installGateStub）が、本物と同じ形か。
+     * **ここがずれると、他の全部が作り話の上で緑になる。**
+     */
+    const handMade = createReadyNotifierEnvironment();
+    let stubbed = null;
+
+    installGateStub(handMade);
+    handMade.onFetch(() => null);
+    handMade.api.gateVapid_(['https://fcm.googleapis.com'], handMade.getTime());
+    stubbed = handMade.fetchCalls.length > 0 ? handMade.fetchCalls : null;
+
+    check('手書きの偽ゲートも呼ばれている（前提）', stubbed !== null);
+    check('★手書きの偽ゲートの公開鍵の置き場所が本物と同じ',
+      handMade.properties.VAPID_PUBLIC_B64URL !== undefined
+      && handMade.properties.VAPID_PUBLIC_B64URL !== '',
+      String(handMade.properties.VAPID_PUBLIC_B64URL));
+    check('★手書きの偽ゲートでも有効期限が入る（形が同じ証拠）',
+      Number(handMade.properties.VAPID_EXPIRES_AT) > handMade.getTime(),
+      handMade.properties.VAPID_EXPIRES_AT);
+  }
+
+  {
+    /*
+     * 200 でも中身が使えない場合。**形が食い違ったときの壊れ方**である。
+     * 既定値を書いて成功として返すと「鍵が無い」結果だけが残り、原因が消える。
+     */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    installGateStub(env);
+    env.clearFetchHandlers();
+
+    env.onFetch((url) => {
+      if (String(url).indexOf(GATE_ORIGIN) !== 0) {
+        return null;
+      }
+
+      /* 入れ子にしてしまった場合（Phase 2 の事故と同じ形）。 */
+      return { status: 200, body: { ok: true, data: { publicKey: 'X', jwts: {}, expiresAt: '' } } };
+    });
+
+    const result = gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('★取り出せなければ失敗として返す', result.ok === false, JSON.stringify(result));
+    check('理由が分かる', result.error === 'BAD_PAYLOAD', result.error);
+    check('★空の既定値を保存しない', env.properties.VAPID_PUBLIC_B64URL === undefined,
+      String(env.properties.VAPID_PUBLIC_B64URL));
+    check('★失敗を記録して画面から辿れるようにする',
+      String(env.properties.LAST_GATE_ERROR).includes('BAD_PAYLOAD'),
+      env.properties.LAST_GATE_ERROR);
+
+    const health = env.readOutput(gas.doGet({ parameter: { action: 'health' } }));
+
+    check('health から失敗の符号が読める',
+      String(health.data.lastGateError).includes('BAD_PAYLOAD'), JSON.stringify(health.data));
+    check('★health に応答本文を出さない', JSON.stringify(health).includes('"publicKey"') === false);
   }
 
   /* ================================================================ */
