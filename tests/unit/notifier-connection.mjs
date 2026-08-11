@@ -25,7 +25,7 @@ import { check, section, finish, fatal } from '../../public/apps/tests/helpers/a
 import { installFakeIndexedDb } from '../helpers/fake-indexeddb.mjs';
 import { installFakeNotifierDom, installFakeGasFetch } from '../helpers/fake-notifier-dom.mjs';
 
-const PANEL = '../../public/production-app/voice-recorder/notifier-panel.js';
+const PANEL = '../../public/apps/voice-recorder/notifier-panel.js';
 
 const EXEC_URL = 'https://script.google.com/macros/s/AKfycbxeNexample/exec';
 const CONNECT_KEY = 'connect-key-0123456789abcdefghijklmnop';
@@ -275,7 +275,7 @@ try {
 
     const dom = installFakeNotifierDom();
     const calls = installFakeGasFetch({ connectKey: CONNECT_KEY });
-    const config = await import('../../public/production-app/voice-recorder/notifier-config.js?reload=200');
+    const config = await import('../../public/apps/voice-recorder/notifier-config.js?reload=200');
 
     await config.writeConnection({ url: EXEC_URL, key: CONNECT_KEY });
     await config.writeLicenseKey('LK'.padEnd(43, 'q'));

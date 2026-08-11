@@ -711,3 +711,204 @@
     animation: none;
   }
 }
+
+
+/*
+ * ==================================================================
+ * カレンダー通知（V2）— 本番から移設した分
+ * ==================================================================
+ * 2026-08-11 に /production-app/voice-recorder/style.css から移した。
+ * **本番へ戻すときは、このブロックごと戻す**（docs/notifier-v2-resume.md）。
+ *
+ * .vr-note / .vr-badge はこのファイルに既にあるため持ってきていない。
+ * .auth-button は本番の認証系 CSS（public/auth/）にあり、ここでは読み込んで
+ * いないので既定のボタン表示になる。**動作には影響しない。**
+ * ==================================================================
+ */
+
+.vr-panel {
+  border: 1px solid #d9dee5;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  background: #fff;
+}
+
+.vr-panel--done {
+  border-color: #9fc6a4;
+  background: #f4faf5;
+}
+
+.vr-panel__title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.875rem;
+}
+
+/* 操作できない理由の案内。色だけでなく位置でも「保存ボタンの説明」と分かるようにする。 */
+.vr-note--hint {
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid #b9c6d8;
+  background: #f6f9fd;
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+/* ---------- 準備の状態 ---------- */
+
+.vr-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vr-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.vr-step:last-child {
+  border-bottom: 0;
+}
+
+.vr-step__label {
+  flex: 1 1 10rem;
+  font-size: 0.9375rem;
+}
+
+.vr-step__state {
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.vr-step__state[data-kind='ok'] {
+  color: #1f7a3d;
+  font-weight: 700;
+}
+
+.vr-step__state[data-kind='error'] {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+/*
+ * 小さいボタン。
+ * auth.css には .auth-button と .auth-button--ghost しか無い
+ * （receipt-ocr の index.html にある .auth-button--small は未定義のまま効いていない）。
+ * 共通CSSを本アプリの都合で増やさず、ここに自前で持つ。
+ */
+.vr-button--small {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8125rem;
+}
+
+.vr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/*
+  「保存済み」の印。値そのものを画面へ戻さない代わりに、
+  復元できていることだけを示す（notifier-panel.js の renderKeyState）。
+*/
+.vr-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #137333;
+  vertical-align: middle;
+}
+
+.vr-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #b8c0cc;
+  border-radius: 0.375rem;
+  font: inherit;
+}
+
+/* ---------- 通知から開いたときの対象表示（要件書 5.3） ---------- */
+
+.vr-event-banner {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  border-left: 4px solid #1a4f8a;
+  background: #eaf3ff;
+  color: #1a4f8a;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+/* ---------- Googleカレンダー連携 ---------- */
+
+/*
+ * 対処法は、失敗した行の下へ回り込ませる。
+ * .vr-step は flex なので、幅100%で改行させる。
+ */
+.vr-step__hint {
+  flex: 1 1 100%;
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: #7d1a15;
+}
+
+.vr-details {
+  margin: 0 0 1.25rem;
+  border: 1px solid #e3e7ed;
+  border-radius: 0.375rem;
+  padding: 0 0.875rem;
+}
+
+.vr-details[open] {
+  padding-bottom: 0.5rem;
+}
+
+.vr-details__summary {
+  padding: 0.6rem 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vr-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.vr-check:last-child {
+  margin-bottom: 0;
+}
+
+/* form 直下のチェックは、fieldset の下で少し離す。 */
+#vr-nf-settings-form > .vr-check {
+  margin-bottom: 1rem;
+}
+
+#vr-nf-message[data-kind='ok'] {
+  border-left-color: #1f7a3d;
+  background: #f4faf5;
+}
+
+#vr-nf-message[data-kind='error'] {
+  border-left-color: #b3261e;
+  background: #fdecea;
+  color: #7d1a15;
+}
+

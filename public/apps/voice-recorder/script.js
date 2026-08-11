@@ -175,6 +175,25 @@ function logDeveloperError(context, error) {
   console.error('[voice-recorder]', context, error);
 }
 
+/*
+ * ==================================================================
+ * カレンダー通知（V2）— 本番から移設したもの
+ * ==================================================================
+ * 2026-08-11 に /production-app/voice-recorder/ から移してきた。
+ * 試験の先送りであって廃止ではない（docs/notifier-v2-resume.md）。
+ *
+ * **録音より後に、失敗しても録音を止めない形で呼ぶ。** 本番側と同じ扱いで、
+ * 通知が録音の付随機能であるという位置づけをそのまま持ってきている。
+ * したがって await せず、例外もここで握りつぶす。
+ *
+ * このテスト環境はログインを通さない（`guardPage()` が無い）。
+ * ［通知をセットアップ］からのライセンス取得は認証系のセッションを
+ * 必要とするため完走しないが、**それで構わない**。移設の目的は
+ * 実体を main に残すことであって、ここで試験することではない。
+ * ==================================================================
+ */
+import { mountNotifier } from './notifier-panel.js';
+
 document.addEventListener('DOMContentLoaded', () => {
   const el = {
     app: document.getElementById('recorder-app'),
@@ -678,6 +697,11 @@ document.addEventListener('DOMContentLoaded', () => {
      通常録音のロジックには手を入れず、モード切替とパネル制御を追加する。
      ============================================================ */
   setupLongMode();
+
+  /* 通知の組み立て。失敗しても録音には影響させない（冒頭の説明）。 */
+  mountNotifier().catch((error) => {
+    console.warn('[apps/voice-recorder] カレンダー通知の初期化に失敗', error);
+  });
 });
 
 function formatLongDuration(totalSeconds) {
