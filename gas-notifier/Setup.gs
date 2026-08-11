@@ -203,7 +203,7 @@ function deployWebApp() {
     return deployFailure_(applied.error, applied.message);
   }
 
-  var url = webAppUrlFromDeployment_(applied.body);
+  var url = normalizeExecUrl_(webAppUrlFromDeployment_(applied.body));
 
   if (url === '') {
     return deployFailure_('NO_URL', '公開URLを取得できませんでした。');
@@ -341,7 +341,9 @@ function getSetupStatus() {
     eidKey: getProperty_(PROP.EID_HMAC_KEY) !== '',
     connectKey: getProperty_(PROP.CONNECT_KEY) !== '',
     trigger: hasTickTrigger_(),
+    /* **公開したという事実は deployWebApp() だけが知っている**（webAppUrl_ の説明）。 */
     deployed: webAppUrl_() !== '',
+    deployedVersion: getProperty_(PROP.DEPLOYED_VERSION),
     license: getProperty_(PROP.LICENSE_KEY) !== '',
     version: NOTIFIER_VERSION
   };
@@ -375,22 +377,87 @@ function getHandoffLink() {
 }
 
 /**
- * 公開URL。deployWebApp() が保存した値を先に見る。
- * getService().getUrl() は、公開直後だと空を返すことがある。
+ * 公開URL。**deployWebApp() が保存した値だけを見る（fail closed）。**
+ *
+ * ------------------------------------------------------------------
+ * getService().getUrl() を使わない
+ * ------------------------------------------------------------------
+ * 実機で次の壊れ方をした（2026-08-11）。
+ *
+ *   - **一度も公開していないのに URL が返る。** その結果
+ *     getSetupStatus().deployed が true になり、ウィザードが公開の手順を
+ *     飛ばして「録音アプリで仕上げ」へ直行した
+ *   - 返る URL が実際に公開したデプロイと**別のID**だった。引き継ぎリンクに
+ *     それが載り、録音アプリは使えないデプロイへ繋ぎに行った
+ *
+ * getUrl() は「このスクリプトのウェブアプリ入口」を返すもので、
+ * **いま公開されているデプロイを指すとは限らない。**
+ * 公開したという事実は deployWebApp() だけが知っているので、そこが
+ * 保存した値のみを正とする。無ければ空（＝未公開）とする。
+ * ------------------------------------------------------------------
  */
 function webAppUrl_() {
-  var saved = getProperty_(PROP.WEBAPP_URL);
+  return getProperty_(PROP.WEBAPP_URL);
+}
 
-  if (saved !== '') {
-    return saved;
-  }
+/**
+ * ウェブアプリURLを正規化する。
+ *
+ * Google Workspace のアカウントでは、デプロイURLが
+ * `https://script.google.com/a/macros/<ドメイン>/s/<ID>/exec` の形で返る。
+ * この形は**そのドメインでのログインを求められることがある**ため、匿名で叩く
+ * Service Worker からは使えない場合がある。同じデプロイは
+ * `/macros/s/<ID>/exec` でも開けるので、そちらへ寄せる。
+ *
+ * 読めない形は空文字を返す（呼び出し側が未公開として扱う）。
+ */
+function normalizeExecUrl_(url) {
+  var text = String(url === undefined || url === null ? '' : url).trim();
 
-  try {
-    var url = ScriptApp.getService().getUrl();
-    return url ? String(url) : '';
-  } catch (err) {
+  if (text === '') {
     return '';
   }
+
+  /* ドメイン付きの形。<ID> だけ取り出して素の形へ組み直す。 */
+  var domainForm = text.match(/^https:\/\/script\.google\.com\/a\/macros\/[^\/]+\/s\/([\w-]+)\/exec/);
+
+  if (domainForm) {
+    return 'https://script.google.com/macros/s/' + domainForm[1] + '/exec';
+  }
+
+  var plainForm = text.match(/^https:\/\/script\.google\.com\/macros\/s\/([\w-]+)\/exec/);
+
+  if (plainForm) {
+    return 'https://script.google.com/macros/s/' + plainForm[1] + '/exec';
+  }
+
+  return '';
+}
+
+/**
+ * 保存済みの公開URLの指紋（SHA-256 の先頭12文字）。
+ *
+ * 録音アプリが「いま自分が叩いているURL」から同じ値を計算して突き合わせる。
+ * **一致しなければ、古いデプロイに繋いでいる。** 実機ではこれが分からず、
+ * URLが3種類に食い違っていることの発見が遅れた。
+ * URL そのものを返さないのは、health が接続キー無しで読めるためである。
+ */
+function execUrlDigest_() {
+  var url = webAppUrl_();
+
+  if (url === '') {
+    return '';
+  }
+
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, url, Utilities.Charset.UTF_8);
+  var hex = '';
+
+  for (var i = 0; i < bytes.length && hex.length < 12; i++) {
+    var value = bytes[i] < 0 ? bytes[i] + 256 : bytes[i];
+    hex += (value < 16 ? '0' : '') + value.toString(16);
+  }
+
+  return hex.slice(0, 12);
 }
 
 /* ---------- バイト列の変換 ---------- */

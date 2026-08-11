@@ -514,7 +514,9 @@ try {
     check('★health にライセンスキーを含めない',
       JSON.stringify(health).includes(env.properties.LICENSE_KEY) === false);
     check('health に予定の情報を含めない',
-      Object.keys(health.data).sort().join(',') === 'configured,lastTickAt,licensed,ok,triggerActive,version');
+      Object.keys(health.data).sort().join(',')
+        === 'configured,deployedVersion,execUrlDigest,lastTickAt,licensed,ok,triggerActive,version',
+      Object.keys(health.data).sort().join(','));
 
     check('★接続キー無しでは設定を読めない',
       env.readOutput(gas.doGet({ parameter: { action: 'getSettings' } })).error.code === 'UNAUTHORIZED');
@@ -687,6 +689,141 @@ try {
   }
 
   /* ================================================================ */
+  section('★公開URLの扱い（実機で踏んだ壊れ方）');
+
+  {
+    const env = createNotifierEnvironment({ serviceUrl: 'https://script.google.com/a/macros/potenitas.com/s/AKghost/exec' });
+    const gas = env.api;
+
+    gas.setupNotifier();
+
+    /*
+     * 実機の症状: 一度も公開していないのに deployed が true になり、
+     * ウィザードが公開を飛ばして引き継ぎの画面へ直行した。
+     * getService().getUrl() が値を返していたため。
+     */
+    check('★未公開なら公開URLは空（getUrl を見ない）', gas.webAppUrl_() === '', gas.webAppUrl_());
+    check('★未公開なら deployed は false', gas.getSetupStatus().deployed === false);
+    check('★未公開なら引き継ぎリンクを出さない', gas.getHandoffLink().ok === false);
+
+    env.properties.WEBAPP_URL = 'https://script.google.com/macros/s/AKreal/exec';
+
+    check('保存されていれば公開URLになる', gas.webAppUrl_() === 'https://script.google.com/macros/s/AKreal/exec');
+    check('保存されていれば deployed は true', gas.getSetupStatus().deployed === true);
+  }
+
+  {
+    const env = createNotifierEnvironment();
+    const gas = env.api;
+
+    /* Workspace のアカウントで返る形。匿名アクセスで使えないことがある。 */
+    check('★/a/<ドメイン>/ 形式を素の形へ正規化する',
+      gas.normalizeExecUrl_('https://script.google.com/a/macros/potenitas.com/s/AKfycbxeN/exec')
+        === 'https://script.google.com/macros/s/AKfycbxeN/exec');
+    check('素の形はそのまま',
+      gas.normalizeExecUrl_('https://script.google.com/macros/s/AKfycbxeN/exec')
+        === 'https://script.google.com/macros/s/AKfycbxeN/exec');
+    check('読めない形は空', gas.normalizeExecUrl_('https://example.com/exec') === '');
+    check('空も空', gas.normalizeExecUrl_('') === '');
+  }
+
+  {
+    /* 公開時に正規化した形で保存されること。 */
+    const env = createNotifierEnvironment({ serviceUrl: '' });
+    const gas = env.api;
+
+    gas.setupNotifier();
+
+    env.onFetch((target, options) => {
+      if (String(target).indexOf('https://script.googleapis.com/') !== 0) {
+        return null;
+      }
+
+      if (options.method === 'get') {
+        return { status: 200, body: { deployments: [] } };
+      }
+
+      if (String(target).includes('/versions')) {
+        return { status: 200, body: { versionNumber: 7 } };
+      }
+
+      return {
+        status: 200,
+        body: {
+          entryPoints: [
+            { webApp: { url: 'https://script.google.com/a/macros/potenitas.com/s/AKdeployed/exec' } },
+          ],
+        },
+      };
+    });
+
+    const result = gas.deployWebApp();
+
+    check('★公開URLは正規化して保存する',
+      result.url === 'https://script.google.com/macros/s/AKdeployed/exec', result.url);
+    check('保存先も正規化済み',
+      env.properties.WEBAPP_URL === 'https://script.google.com/macros/s/AKdeployed/exec');
+  }
+
+  /* ================================================================ */
+  section('★どのデプロイに繋いでいるかを答える');
+
+  {
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+    const key = env.properties.CONNECT_KEY;
+
+    installGateStub(env);
+    env.properties.WEBAPP_URL = 'https://script.google.com/macros/s/AKreal/exec';
+    env.properties.DEPLOYED_VERSION = '7';
+
+    const health = env.readOutput(gas.doGet({ parameter: { action: 'health' } }));
+
+    check('health が公開URLの指紋を返す', /^[0-9a-f]{12}$/.test(health.data.execUrlDigest),
+      health.data.execUrlDigest);
+    check('★health に公開URLそのものは入れない',
+      JSON.stringify(health).includes('AKreal') === false, JSON.stringify(health));
+    check('health が公開のバージョンを返す', health.data.deployedVersion === '7');
+
+    const ping = env.readOutput(gas.doPost({
+      postData: { contents: JSON.stringify({ action: 'ping', key }) },
+    }));
+
+    check('★POST の疎通確認ができる', ping.ok === true, JSON.stringify(ping));
+    check('ping も同じ指紋を返す', ping.data.execUrlDigest === health.data.execUrlDigest);
+    check('★接続キー無しでは ping できない',
+      env.readOutput(gas.doPost({ postData: { contents: JSON.stringify({ action: 'ping' }) } }))
+        .error.code === 'UNAUTHORIZED');
+
+    /* URLが変われば指紋も変わる（＝古いデプロイを見分けられる）。 */
+    env.properties.WEBAPP_URL = 'https://script.google.com/macros/s/AKother/exec';
+
+    check('★URLが違えば指紋も違う',
+      env.readOutput(gas.doGet({ parameter: { action: 'health' } })).data.execUrlDigest
+        !== health.data.execUrlDigest);
+  }
+
+  {
+    /* ライセンス未着と「セットアップ未完了」を混ぜないこと（鶏卵の可視化）。 */
+    const env = createReadyNotifierEnvironment({ licenseKey: '' });
+    const gas = env.api;
+
+    installGateStub(env);
+
+    const denied = env.readOutput(gas.doGet({
+      parameter: { action: 'publicKey', key: env.properties.CONNECT_KEY },
+    }));
+
+    check('★ライセンス未着は NO_LICENSE で返す（NOT_CONFIGURED にしない）',
+      denied.error.code === 'NO_LICENSE', JSON.stringify(denied));
+
+    env.properties.LICENSE_KEY = 'LK'.padEnd(43, 'x');
+
+    check('ライセンスが届いていれば鍵を返す',
+      env.readOutput(gas.doGet({ parameter: { action: 'publicKey', key: env.properties.CONNECT_KEY } })).ok === true);
+  }
+
+  /* ================================================================ */
   section('引き継ぎリンク');
 
   {
@@ -711,7 +848,6 @@ try {
       handoff.link.includes('?') === false);
 
     env.properties.WEBAPP_URL = '';
-    env.setServiceUrl('');
 
     check('未公開ならリンクを出さない', gas.getHandoffLink().ok === false);
   }
@@ -755,7 +891,8 @@ try {
 
     check('状態チェッカーが匿名化の鍵を見る', status.eidKey === true);
     check('状態チェッカーがトリガーを見る', status.trigger === true);
-    check('状態チェッカーが公開を見る', status.deployed === true);
+    /* この環境は setupNotifier() だけを実行しており、まだ公開していない。 */
+    check('★セットアップだけでは公開済みにならない', status.deployed === false);
     check('状態チェッカーがライセンスを見る', status.license === false);
     check('★状態チェッカーに接続キーを含めない',
       JSON.stringify(status).includes(connectKey) === false);

@@ -33,6 +33,7 @@ import {
   TIMING_OPTIONS,
   clearConnection,
   clearLicenseKey,
+  execUrlDigest,
   isGasUrl,
   isLicenseKeyShaped,
   normalizeGasUrl,
@@ -53,6 +54,7 @@ import {
   fetchSettings,
   fetchUpcoming,
   gasGet,
+  pingGas,
   saveLicense,
   saveSettings,
   saveSubscription,
@@ -162,7 +164,6 @@ async function runChecks() {
 
   try {
     health = await fetchHealth(connection);
-    setStep('health', '接続できました', 'ok');
   } catch (error) {
     setStep('health', '接続できません', 'error', describeNotifierError(error));
     setStep('key', '確認できません', '');
@@ -173,15 +174,87 @@ async function runChecks() {
     return false;
   }
 
+  /*
+   * ------------------------------------------------------------------
+   * GET が通っても、まだ安心できない
+   * ------------------------------------------------------------------
+   * 実機では、GET 系だけ成功して POST の新しい action が INVALID_ACTION に
+   * なる状態が起きた（**古いデプロイに繋いでいた**）。health は V1 にも
+   * あるため、これだけ見ていると「接続できました」と表示されてしまう。
+   *
+   * そこで POST の疎通も確かめ、あわせて
+   * 「シートが公開したURL」と「いま繋いでいるURL」の指紋を突き合わせる。
+   * ------------------------------------------------------------------
+   */
+  let identity = null;
+
+  try {
+    identity = await pingGas(connection);
+  } catch (error) {
+    setStep(
+      'health',
+      '古い版に接続しています',
+      'error',
+      '通知用シートで［公開する］をやり直すか、シートのメニューから引き継ぎリンクを取り直してください。',
+    );
+    setStep('key', '確認できません', '');
+    setStep('subscription', '確認できません', '');
+    setStep('trigger', '確認できません', '');
+    setStep('license', '確認できません', '');
+    renderLicense(null);
+    console.warn('[voice-recorder:notifier] POST が通りません', error);
+    return false;
+  }
+
+  const expected = String(identity.execUrlDigest ?? '');
+  const actual = await execUrlDigest(connection.url);
+
+  if (expected !== '' && actual !== '' && expected !== actual) {
+    setStep(
+      'health',
+      '別のデプロイに接続しています',
+      'error',
+      'シートが公開したURLと、この端末の接続先が違います。'
+      + 'シートのメニュー「録音通知」→「録音アプリへの引き継ぎリンクを表示」から接続し直してください。',
+    );
+    setStep('key', '確認できません', '');
+    setStep('subscription', '確認できません', '');
+    setStep('trigger', '確認できません', '');
+    setStep('license', '確認できません', '');
+    renderLicense(null);
+    return false;
+  }
+
+  setStep('health', '接続できました', 'ok');
+
   let publicKey = '';
 
   try {
     publicKey = await fetchPublicKey(connection);
     setStep('key', '設定済み', 'ok');
   } catch (error) {
-    setStep('key', '未設定', 'error', describeNotifierError(error));
+    /*
+     * ライセンスがまだ GAS へ届いていないと、鍵は取れない（ゲートが発行しない）。
+     * その場合に「セットアップが未完了」と出すと、直す場所を誤らせる。
+     * **やり直すのはセットアップではなく、ライセンスの引き渡しである。**
+     */
+    const missingLicense = error instanceof NotifierError
+      && error.code === NotifierErrorCode.NO_LICENSE;
+
+    setStep(
+      'key',
+      '未設定',
+      'error',
+      missingLicense
+        ? 'ご契約の情報がまだ通知用シートへ渡っていません。［接続テスト］をもう一度押すと引き渡しをやり直します。'
+        : describeNotifierError(error),
+    );
     setStep('subscription', '確認できません', '');
     setStep('trigger', health.triggerActive ? '動いています' : '停止しています', health.triggerActive ? 'ok' : 'error');
+
+    /* ここで止めず、ご契約の行までは出す（何が足りないのかを見せる）。 */
+    await refreshLicense();
+
     return false;
   }
 
@@ -543,22 +616,53 @@ async function handleConnect() {
   showMessage('接続しています…');
 
   try {
+    /*
+     * ------------------------------------------------------------------
+     * 順序を変えた（2026-08-11）
+     * ------------------------------------------------------------------
+     * 以前は「読めることを確かめてから保存」していた。これが実機で
+     * 2つの壊れ方を同時に起こした。
+     *
+     *   1. **手動入力が永続化されない。** 確認に失敗すると保存へ到達せず、
+     *      さらに connection を捨てていたため、リロードで古い値へ戻った。
+     *      画面に見えている値と、実際に使われた値が食い違った
+     *   2. **鶏卵になる。** publicKey はゲートから鍵をもらう action で、
+     *      ライセンスが GAS へ届いていないと失敗する。しかしライセンスを
+     *      渡す saveLicense は接続が確立してからしか呼べない
+     *
+     * そこで「形が正しければまず保存する」へ改めた。保存してから
+     * ライセンスを渡し、最後に確認する。**確認に失敗しても入力値は残る。**
+     * 誤ったURLを保存する心配は、形の検証・チェッカーの ×・
+     * ［接続を解除］の3つで受ける。
+     * ------------------------------------------------------------------
+     */
     connection = { url, key };
 
-    /* 保存する前に、この組み合わせで実際に読めることを確かめる。 */
-    await fetchPublicKey(connection);
     await writeConnection(connection);
 
     el['vr-nf-url'].value = url;
     el['vr-nf-key'].value = '';
     el['vr-nf-connection'].open = false;
 
-    await runChecks();
-    await loadSettings();
+    /* 預かっているライセンスを先に渡す（publicKey はこれが済んでいないと通らない）。 */
+    await pushLicenseToGas();
 
-    showMessage('接続しました。', 'ok');
+    const ok = await runChecks();
+
+    await loadSettings();
+    await loadUpcoming();
+
+    showMessage(
+      ok
+        ? '接続しました。'
+        : '接続先を保存しました。確認できない項目があります。上の一覧をご確認ください。',
+      ok ? 'ok' : 'error',
+    );
   } catch (error) {
-    connection = null;
+    /*
+     * **connection を捨てない。** 保存は済んでいるので、捨てると
+     * 画面の状態と保存内容が食い違う（上の 1 の再発）。
+     */
     reportError(error);
     await runChecks();
   } finally {

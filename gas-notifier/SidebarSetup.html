@@ -215,6 +215,15 @@
     return setupDone;
   }
 
+  /*
+    状態の決め方。**前提が揃っていない状態へ進まないこと。**
+
+    実機で「一度も公開していないのに引き継ぎの画面へ直行する」ことが起きた
+    （2026-08-11）。status.deployed が getService().getUrl() 由来で、
+    公開していなくても値が返っていたため。GAS 側で
+    「deployWebApp が保存したURLがあるときだけ deployed」に直したうえで、
+    ここでも引き継ぎリンクが実際に作れることを確かめてから進む。
+  */
   function render(status) {
     var setupDone = markSteps(status);
 
@@ -228,21 +237,24 @@
       return;
     }
 
-    if (!status.license) {
-      loadHandoff('handoff');
-      return;
-    }
-
-    loadHandoff('done');
+    loadHandoff(status.license ? 'done' : 'handoff');
   }
 
   function loadHandoff(panel) {
     google.script.run
       .withSuccessHandler(function (result) {
-        if (result.ok) {
-          document.getElementById('open-recorder').href = result.link;
-          document.getElementById('open-recorder-done').href = result.link;
+        if (!result.ok) {
+          /*
+            リンクを作れない＝公開URLが無い。**引き継ぎの画面へ進まない。**
+            進むと、押せないボタンだけが並んだ行き止まりになる。
+          */
+          setMessage('公開URLを確認できませんでした。［公開する］をやり直してください。', 'error');
+          showPanel('deploy');
+          return;
         }
+
+        document.getElementById('open-recorder').href = result.link;
+        document.getElementById('open-recorder-done').href = result.link;
 
         showPanel(panel);
       })
