@@ -297,28 +297,6 @@ function scriptApiFetch_(method, path, payload) {
     return { ok: true, error: '', message: '', helpUrl: '', body: body };
   }
 
-  /*
-   * ==================================================================
-   * ★一時デバッグ★ 生の応答を実行ログへ出す
-   * ==================================================================
-   * **原因が確定したら、このブロックごと削除する**（docs/backlog.md B-07）。
-   *
-   * 403 には少なくとも2種類あり、応答本文を捨てていたために区別できなかった。
-   *
-   *   1. 利用者の設定（script.google.com/home/usersettings）が OFF
-   *   2. スクリプトに紐づく **GCP プロジェクト**で Apps Script API が未有効
-   *
-   * 2 の場合、本文にプロジェクト番号と有効化URLが入る。それを見れば確定する。
-   *
-   * **Authorization ヘッダーは出さない。** 出すのは応答の本文と状態だけで、
-   * ここにアクセストークンは含まれない。
-   * ==================================================================
-   */
-  Logger.log(
-    '[一時デバッグ] scriptApiFetch_ ' + method + ' ' + path
-    + ' -> HTTP ' + status + '\n' + String(response.getContentText() || '').slice(0, 4000)
-  );
-
   var detail = (body && body.error && body.error.message) ? String(body.error.message) : '';
   var reason = scriptApiReason_(body);
 

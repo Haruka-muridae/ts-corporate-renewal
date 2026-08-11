@@ -768,10 +768,20 @@ try {
 
     check('403 以外は API_ERROR', other.result.status === 'API_ERROR', JSON.stringify(other.result));
 
-    /* 5) 生の応答を実行ログへ出していること（★一時デバッグ。B-07 で削除する）。 */
-    check('★失敗時に生の応答をログへ出す',
-      gcpOff.env.logs.some((line) => line.includes('123456789012')),
-      gcpOff.env.logs.join(' | ').slice(0, 300));
+    /*
+     * 5) ログは種別ごとの1行だけにする（宿題 B-07・済）。
+     *
+     * 原因の切り分けのあいだは生の応答を4000文字まで出していた。原因が
+     * 確定した（GCP プロジェクトで API 未有効）ので恒久化しない。
+     * **出す内容を自分で決めていない**のがよくない——Google 側の文面が
+     * 変われば何が出るか分からず、将来そこへ個人情報が乗る保証も無い。
+     */
+    check('★生の応答をログへ流し込まない',
+      gcpOff.env.logs.some((line) => line.includes('一時デバッグ')) === false,
+      gcpOff.env.logs.join(' | ').slice(0, 200));
+    check('★種別が分かる1行は残す',
+      gcpOff.env.logs.some((line) => line.includes('API_DISABLED_GCP')),
+      gcpOff.env.logs.join(' | ').slice(0, 200));
     check('★ログにアクセストークンを出さない',
       gcpOff.env.logs.some((line) => line.includes('FAKE-OAUTH-TOKEN')) === false);
   }
@@ -1430,6 +1440,47 @@ try {
     check('★自動検出のポーリングがある', sidebar.includes('startApiPolling'));
     check('★行き止まりにしない（手動デプロイの折りたたみが残っている）',
       sidebar.includes('うまくいかないときは') && sidebar.includes('デプロイを管理'));
+
+    /*
+     * ------------------------------------------------------------------
+     * GCP 分岐は手動公開を主経路にする（2026-08-11 の実機で決めた）
+     * ------------------------------------------------------------------
+     * Workspace の既定プロジェクト（`sys-` で始まる）では、自動公開まで
+     * 進めるのに「プロジェクト作成 → API を2つ有効化 → 切替 → 再承認」が要る。
+     * 一般の利用者に求める工程ではない。手動デプロイなら1分で同じ結果になる。
+     * ------------------------------------------------------------------
+     */
+    const gcpPanel = sidebar.slice(
+      sidebar.indexOf('<section id="panel-gcp"'),
+      sidebar.indexOf('<!-- 状態4'),
+    );
+
+    check('★GCP 分岐は手動公開を先に出す',
+      gcpPanel.indexOf('新しいデプロイ') < gcpPanel.indexOf('<details>'),
+      String(gcpPanel.indexOf('新しいデプロイ')));
+    check('★GCP の自力設定は折りたたみへ入れる',
+      gcpPanel.includes('<details>') && gcpPanel.includes('技術者向け'));
+    check('★カレンダー API の有効化も手順に含める',
+      gcpPanel.includes('Google カレンダー API'), 'Advanced Calendar Service が要る');
+    check('★手動で公開したあとの出口がある', gcpPanel.includes('gcp-recheck'));
+    check('★GCP 分岐では待たない（再承認でサイドバーが開き直されるため）',
+      /API_DISABLED_GCP'\)\s*\{[^}]*\}[\s\S]{0,400}?showPanel\('gcp'\);\s*return;/.test(sidebar),
+      'startApiPolling が残っていないか');
+
+    /*
+     * 公開したあとにコードを貼り替える場面のほうが多い。
+     * 更新の導線が「うまくいかないときは」の中にしか無いのは誤りだった。
+     */
+    const donePanel = sidebar.slice(
+      sidebar.indexOf('<section id="panel-done"'),
+      sidebar.indexOf('<p class="msg"'),
+    );
+
+    check('★完了画面に更新の導線がある', donePanel.includes('run-update'));
+    check('★完了画面から「デプロイを管理」へ辿れる',
+      donePanel.includes('デプロイを管理') && donePanel.includes('新バージョン'));
+    check('★「新しいデプロイ」を選ばせない注意がある',
+      donePanel.includes('「新しいデプロイ」は選ばないでください'));
     /* 「使わない」と書いたコメントに引っかからないよう、代入の形で見る。 */
     check('★接続キーを innerHTML で入れない', /\.innerHTML/.test(sidebar) === false);
 
