@@ -271,13 +271,22 @@ async function runChecks() {
     const missingLicense = error instanceof NotifierError
       && error.code === NotifierErrorCode.NO_LICENSE;
 
+    /*
+     * 通知用シートが通知サーバーとやり取りできていない場合、その符号を添える。
+     * 実機で「鍵が × のまま直らない」状態になったとき、**原因を持っている
+     * 場所が誰からも見えなかった**（health には出ていなかった）。
+     */
+    const gateHint = health.lastGateError
+      ? `通知サーバーとのやり取りに失敗しています（${health.lastGateError}）。`
+      : '';
+
     setStep(
       'key',
       '未設定',
       'error',
-      missingLicense
+      gateHint || (missingLicense
         ? 'ご契約の情報がまだ通知用シートへ渡っていません。［接続テスト］をもう一度押すと引き渡しをやり直します。'
-        : describeNotifierError(error),
+        : describeNotifierError(error)),
     );
     setStep('subscription', '確認できません', '');
     setStep('trigger', health.triggerActive ? '動いています' : '停止しています', health.triggerActive ? 'ok' : 'error');

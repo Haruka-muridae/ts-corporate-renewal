@@ -55,6 +55,11 @@ var PROP = {
   /** ゲートが最後に返したライセンスの状態と、その時刻（画面表示用）。 */
   LICENSE_STATE: 'LICENSE_STATE',
   LICENSE_CHECKED_AT: 'LICENSE_CHECKED_AT',
+  /**
+   * ゲートとの最後のやり取りの結果（画面と切り分け用）。
+   * **値は状態だけで、応答本文も鍵も入れない。**
+   */
+  LAST_GATE_ERROR: 'LAST_GATE_ERROR',
   /* ゲートから受け取った VAPID 情報のキャッシュ（Gate.gs）。 */
   VAPID_PUBLIC: 'VAPID_PUBLIC_B64URL',
   VAPID_JWTS: 'VAPID_JWTS_JSON',

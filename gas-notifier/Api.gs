@@ -102,16 +102,12 @@ function doGet(e) {
       if (publicKey === '') {
         /*
          * まだゲートから受け取っていない。購読の登録に必要なので、
-         * ここで1度だけ取りに行く（以後は tick が更新する）。
+         * ここで取りに行く（以後は tick が更新する）。
+         *
+         * 以前はここで gateVapid_([], ...) も呼んでいたが、宛先が空だと
+         * 保存済みの値を返すだけで**必ず空になる**。読む人を惑わせるので外した。
          */
-        var fetched = gateVapid_([], Date.now());
-
-        publicKey = fetched.publicKey || '';
-
-        if (publicKey === '') {
-          var primed = primeVapid_(Date.now());
-          publicKey = primed.publicKey || '';
-        }
+        publicKey = primeVapid_(Date.now()).publicKey || '';
       }
 
       if (publicKey === '') {
@@ -352,7 +348,13 @@ function buildHealth_() {
     lastTickAt: toIsoOrEmpty_(getProperty_(PROP.LAST_TICK_AT)),
     triggerActive: hasTickTrigger_(),
     configured: getProperty_(PROP.CONNECT_KEY) !== '' && getProperty_(PROP.EID_HMAC_KEY) !== '',
-    licensed: getProperty_(PROP.LICENSE_KEY) !== ''
+    licensed: getProperty_(PROP.LICENSE_KEY) !== '',
+    /*
+     * ゲートとの最後のやり取りが失敗していれば、その符号。
+     * **鍵も応答本文も入らない**（Gate.gs の gateFailure_）。
+     * 「通知の鍵が × のまま」の原因を、画面から辿れるようにするためのもの。
+     */
+    lastGateError: getProperty_(PROP.LAST_GATE_ERROR)
   };
 }
 
