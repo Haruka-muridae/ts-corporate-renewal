@@ -499,39 +499,44 @@ try {
   }
 
   /* ================================================================ */
-  section('★本番の CSP（通知ゲートの行の残置）');
+  section('★本番の CSP から通知ゲートが外れていること');
 
   {
     /*
      * ------------------------------------------------------------------
-     * 移設しても、本番の CSP からは**まだ外していない**
+     * 使わない許可は置かない
      * ------------------------------------------------------------------
-     * 通知が本番から無くなった以上、`connect-src` の通知ゲートは使われない。
-     * ただし**外すかどうかは未承認**なので、いまは残置している。
-     * 残していても攻撃面は増えない（許可であって呼び出しではない）。
+     * 通知をテスト環境へ移した時点で、本番の画面からゲートを呼ぶ経路は
+     * 無くなった。`connect-src` の許可は攻撃面を増やすものではないが、
+     * **必要が無い許可を残すと「なぜ在るのか」が読めなくなる。**
      *
-     * ここは「勝手に増えていないこと」を見張る場所であって、
-     * 「必ず在ること」を要求する場所ではない。外す判断が出たら、
-     * この節ごと落とす（docs/notifier-v2-resume.md）。
+     * 戻すときは足し直す（docs/notifier-v2-resume.md §4）。
+     * そのときも `*.workers.dev` にはしない——workers.dev は誰でも使える
+     * 共有ドメインで、他人の Worker まで許可することになる。
      * ------------------------------------------------------------------
      */
     const html = readProdApp('index.html');
     const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
     const connectSrc = csp.split(';').map((part) => part.trim()).find((part) => part.startsWith('connect-src'));
 
-    check('connect-src に通知ゲートを足した', connectSrc.includes(NOTIFIER_GATE_ORIGIN), connectSrc);
-    check('★ワイルドカードにしない（他人の Worker を許可しない）',
-      csp.includes('*.workers.dev') === false);
-    check('★script-src には足していない',
-      csp.split(';').map((part) => part.trim()).find((part) => part.startsWith('script-src'))
-        .includes('workers.dev') === false);
-    check('既存の接続先を落としていない',
+    check('★connect-src から通知ゲートを外した',
+      connectSrc.includes(NOTIFIER_GATE_ORIGIN) === false, connectSrc);
+    check('★ワイルドカードで代用していない', csp.includes('workers.dev') === false, csp);
+    check('既存の接続先は落としていない',
       connectSrc.includes('https://www.googleapis.com')
       && connectSrc.includes('https://script.google.com')
       && connectSrc.includes('https://script.googleusercontent.com'));
-    check('足したのは1オリジンだけ',
-      connectSrc.split(/\s+/).filter((value) => value.startsWith('https://')).length === 4,
+    check('★残ったのは3オリジンだけ',
+      connectSrc.split(/\s+/).filter((value) => value.startsWith('https://')).length === 3,
       connectSrc);
+
+    /*
+     * 戻すときに足す先が分かるよう、手順書にオリジンが書いてあること。
+     * **ここが消えると、戻す人はどのURLを足すのか分からなくなる。**
+     */
+    const resume = readFileSync(join(REPO_ROOT, 'docs/notifier-v2-resume.md'), 'utf8');
+
+    check('★復帰手順書に再追加が書いてある', resume.includes('CSP'), 'notifier-v2-resume.md');
   }
 
   /* ================================================================ */
