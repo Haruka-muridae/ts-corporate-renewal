@@ -140,14 +140,48 @@ GAS 側はこの2つで `notify_queue` を同期するだけでよい。
 
 ## 4. VAPID 鍵
 
-### 生成
+### 生成と、登録前の確認
 
 ```powershell
+# 1) 作る
 node workers/notifier-gate/scripts/generate-vapid-keys.mjs
+
+# 2) 登録する前に確かめる（1行目に秘密鍵、2行目に公開鍵を貼る）
+#    入力を終えるには Ctrl+Z → Enter（PowerShell）
+node workers/notifier-gate/scripts/check-vapid-keys.mjs
 ```
+
+**2 を飛ばさないこと。** `wrangler secret put` で登録した値は
+**あとから読み返せない。** 貼り付けを誤っても気づけるのは
+「本番で 500 が出たとき」になる。実機でそうなった（2026-08-11）。
+
+確認スクリプトは Worker と**同じコード**（`src/vapid.mjs`）で読み込みと署名を行い、
+さらに公開鍵で署名を検証する。通れば、その2つは形式が正しく、
+かつ**互いに対になっている**ことが確定する。次の事故はいずれもここで止まる。
+
+| 事故 | 出る内容 |
+| --- | --- |
+| 見出し行ごと貼った | `base64 以外の文字が混ざっています` |
+| 途中で切れた | `短すぎます（N バイト）` |
+| 秘密鍵と公開鍵を逆に貼った | `PKCS#8 として取り込めませんでした` |
+| 別々に生成した値を混ぜた | `対になっていません` |
+
+**鍵を引数で渡さない。** シェルの履歴とプロセス一覧に残るため、
+標準入力から読む作りにしてある。出力にも鍵は出ない。
 
 出力された2つの値を、そのまま `wrangler secret put` へ貼る。
 **ファイルへ保存しないこと。リポジトリへは絶対に入れない。**
+
+### 形式（生成側と読み込み側の対応）
+
+| 値 | 形式 | 生成 | 読み込み |
+| --- | --- | --- | --- |
+| `VAPID_PRIVATE_KEY` | PKCS#8 の DER を **base64** | `exportKey('pkcs8')` → `toString('base64')` | `importKey('pkcs8', …)`。PEM・base64url・JWK も受ける |
+| `VAPID_PUBLIC_KEY` | 非圧縮の生の点（65バイト）を **base64url** | `exportKey('raw')` → `toString('base64url')` | そのまま返す。素の base64 で登録されていても base64url へ直す |
+
+公開鍵が base64url なのは、ブラウザの `applicationServerKey` がその形しか
+受け取らないため。`exportKey('raw')` はまさにこの65バイトを返すので、
+openssl で DER の中身を切り出す作業が要らない。
 
 署名は WebCrypto（`crypto.subtle`）の ECDSA / P-256 で行う。この API は
 JWS がそのまま要求する `r||s` の64バイトを返すため、V1 で使っていた
@@ -162,12 +196,29 @@ jsrsasign（利用者に手で貼らせていた約500KB）は不要になった
 したがってローテーションは次の順で行うこと。
 
 1. 事前に利用者へ告知する（「録音アプリで通知を登録し直す作業が要る」）
-2. 新しい鍵を `wrangler secret put` で登録し、deploy する
-3. 利用者は録音アプリの設定画面から通知を登録し直す
-4. 古い購読は push 送信時に 404 / 410 を返すので、GAS 側が自然に消す
+2. 新しい鍵を作り、**`check-vapid-keys.mjs` で確認してから**登録する
+3. `npm run deploy:notifier-gate` で反映する
+4. 利用者は録音アプリの設定画面から通知を登録し直す
+5. 古い購読は push 送信時に 404 / 410 を返すので、GAS 側が自然に消す
 
 鍵が漏れた場合は上を即座に行う。漏れた鍵でできるのは
 「この鍵で登録された購読へ push を送ること」であり、予定の中身は読めない。
+
+### 貼り直しだけを行う場合（鍵は変えない）
+
+登録に失敗した疑いがあるときは、**同じ鍵をもう一度登録し直す**だけでよい。
+値が同じであれば `applicationServerKey` は変わらないので、
+**購読への影響は無い**（利用者の再登録は要らない）。
+
+```powershell
+node workers/notifier-gate/scripts/check-vapid-keys.mjs   # 手元の控えを確認
+npx wrangler secret put VAPID_PRIVATE_KEY --config workers/notifier-gate/wrangler.jsonc
+npx wrangler secret put VAPID_PUBLIC_KEY  --config workers/notifier-gate/wrangler.jsonc
+npm run deploy:notifier-gate
+```
+
+手元に控えが無い場合は、鍵を作り直すことになる（＝上のローテーション手順）。
+**登録済みの値は読み返せない。**
 
 ---
 
@@ -263,6 +314,31 @@ node tests/run.mjs notifier-gate
 使っていないため、テストから直接 import できる。
 
 公開オリジンが4か所でずれていないことも、このスイートが見ている（§8）。
+
+### 本番で失敗したときの読み方
+
+```powershell
+npx wrangler tail notifier-gate --format pretty
+```
+
+失敗すると1行だけ出る。**応答には内部情報を返さないが、ログには出す**
+（読む相手が違うため。`src/diagnostics.mjs` の冒頭）。
+
+```
+notifier-gate error: /v1/vapid phase=import-key name=DataError message=…
+```
+
+| `phase` | 落ちた場所 | まず見るもの |
+| --- | --- | --- |
+| `hash-license` | ライセンスキーの取り扱い | 要求の形 |
+| `rate-limit` | KV の読み書き | KV バインディングの id |
+| `license-verify` | 認証系 GAS への照会 | `AUTH_GAS_URL` と共有シークレット（§5 の R-10b） |
+| `import-key` | **VAPID 秘密鍵の読み込み** | `check-vapid-keys.mjs` で手元の控えを確認 |
+| `sign` | ES256 署名 | 同上（鍵は読めたが署名に失敗＝稀） |
+| `unknown` | 上記以外 | `name` と `message` |
+
+**鍵・共有シークレット・ライセンスキーはログに出ない。**
+例外メッセージへ混ざっていても、書き出す直前に伏せている（テストで固定）。
 
 ---
 
