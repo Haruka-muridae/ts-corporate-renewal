@@ -138,4 +138,10 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/short-script/',
     icon: '台',
   }),
+  Object.freeze({
+    id: 'audio-transcriber',
+    name: '音声文字起こし',
+    href: 'production-app/audio-transcriber/',
+    icon: '文',
+  }),
 ]);
