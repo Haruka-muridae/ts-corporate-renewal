@@ -63,7 +63,16 @@ var PROP = {
   /* ゲートから受け取った VAPID 情報のキャッシュ（Gate.gs）。 */
   VAPID_PUBLIC: 'VAPID_PUBLIC_B64URL',
   VAPID_JWTS: 'VAPID_JWTS_JSON',
-  VAPID_EXPIRES_AT: 'VAPID_EXPIRES_AT'
+  VAPID_EXPIRES_AT: 'VAPID_EXPIRES_AT',
+  /**
+   * 鍵の取得に失敗したあと、次に試してよい時刻とその理由。
+   *
+   * **失敗したときこそ呼び出しを減らす**ためにある。失敗すると鍵が保存されず、
+   * 次の操作でまた取りに行く……を繰り返してゲートの上限を使い切り、
+   * 二度と抜け出せなくなった（Gate.gs の gateVapid_）。
+   */
+  VAPID_RETRY_AT: 'VAPID_RETRY_AT',
+  VAPID_RETRY_CODE: 'VAPID_RETRY_CODE'
 };
 
 /* 設定の既定値（要件 FR-06 / FR-07 / FR-11）。 */

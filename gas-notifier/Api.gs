@@ -286,11 +286,30 @@ function handleSaveLicense_(licenseKey) {
 
   var primed = primeVapid_(Date.now());
 
-  if (!primed.ok) {
-    return apiFail_(primed.error === 'NO_LICENSE' ? API_ERRORS.NO_LICENSE : API_ERRORS.GATE_ERROR);
-  }
-
-  return apiOk_({ saved: true, publicKey: primed.publicKey, license: licenseSummary_() });
+  /*
+   * ------------------------------------------------------------------
+   * 鍵が取れなくても、この action は成功である
+   * ------------------------------------------------------------------
+   * この action の仕事は**ライセンスキーを預かること**であり、それは
+   * 上の setProperty_ で終わっている。鍵の先取りはついでにすぎない。
+   *
+   * 以前はここで失敗を返していた。すると録音アプリは「引き渡せなかった」と
+   * 解釈してブラウザ側のライセンスキーを消さず、**画面を開くたび・
+   * ［接続テスト］のたびに saveLicense をやり直す。** その1回ごとに
+   * ゲートの /v1/vapid を1回消費し、さらに直後の publicKey でもう1回
+   * 消費する。正規の操作2回で1時間ぶんの上限を使い切り、以後すべて
+   * RATE_LIMITED になった（2026-08-11）。
+   *
+   * 預かれたことは、預かれたと伝える。鍵が取れなかった事実は
+   * gateError として添え、画面の「通知の鍵」の行で見せる。
+   * ------------------------------------------------------------------
+   */
+  return apiOk_({
+    saved: true,
+    publicKey: primed.publicKey,
+    gateError: primed.ok ? '' : primed.error,
+    license: licenseSummary_()
+  });
 }
 
 /**
