@@ -91,6 +91,37 @@ V2 では「判定」と「VAPID JWT の発行」を運営の Workers へ移し�
 > そうなると `public/auth/config.js` と `workers/notifier-gate/wrangler.jsonc` の
 > `AUTH_GAS_URL` を両方直すことになる。既存デプロイのバージョン更新を選ぶこと。
 
+#### `wrangler tail` の読み方（**先に読むこと**）
+
+> ## ⚠ `Ok` は「HTTP が成功した」という意味ではない
+>
+> `wrangler tail` が行末に出す `Ok` / `Exception` は、**ワーカーが例外を投げずに
+> 応答を返したか**だけを表す。返した応答が 200 なのか 4xx なのかは見ていない。
+>
+> | tail の表示 | 実際に返した応答 |
+> | --- | --- |
+> | `Ok` | 200 も **429 も 402 も 401 も** すべてここに入る |
+> | `Exception` | 500（ハンドラの外まで例外が出た場合） |
+>
+> **`Ok` が並んでいることは、正常に動いている証拠にならない。**
+> 2026-08-11 の実機切り分けで、「ゲート側は `/v1/vapid` が Ok 連続・error ゼロ」
+> という観測から**ゲートは正常と判断し、原因をテンプレート側の取り出し不具合と
+> 誤って絞り込んだ。** 実際は全件 429（`RATE_LIMITED`）で、**切り分けが2往復
+> 遅れた。**
+
+判定は次の3つで行う。tail の `Ok` / `Exception` では**行わない**。
+
+| 見るもの | 何が分かるか |
+| --- | --- |
+| `(error) notifier-gate error: <path> phase=… name=… message=…` | 500 になった要求と、その発生段階（`import-key` / `sign` など） |
+| `license verify: reachable=… valid=… status=…` | ライセンス照会の結果（R-10b で使う） |
+| 利用者側の `health.lastGateError`（`<path> -> <符号>`） | **200 以外で返したときの符号。** 4xx はここにしか出ない |
+
+**4xx は tail から読めない**（診断ログを出さないため）。`RATE_LIMITED` や
+`LICENSE_EXPIRED` を疑うときは、録音アプリの「通知の鍵」の行か、通知用シートの
+`LAST_GATE_ERROR` を見る。状態コードそのものを見たい場合は `--status error`
+（4xx/5xx だけに絞る）を付けるか、`curl -i` で直接叩く。
+
 #### R-10b: 共有シークレットの一致を確かめる
 
 > **先に notifier-gate を deploy し直すこと**（`npm run deploy:notifier-gate`）。
@@ -188,7 +219,7 @@ curl -X POST https://notifier-gate.potenitas-lp.workers.dev/v1/evaluate `
 | --- | --- |
 | 録音アプリの「ご契約」が「確認できません」 | **R-10b を実行する。** R-4 と R-7 の値が一致しているか。片方だけの設定が最も多い |
 | 「ご契約」が「未確認」のまま | まだ一度も同期していない。5分待つか［接続テスト］を押す |
-| 「通知の鍵」が × | ゲートが応答しているか（`/v1/health`）。次にライセンスが渡っているか |
+| 「通知の鍵」が × | **その行に出ている符号を読む**（`/v1/vapid -> …`）。`RATE_LIMITED` なら数分待つ。tail の `Ok` を根拠にゲートを正常と判断しないこと（上記） |
 | 公開ボタンで 403 | Apps Script API が未許可（利用者側の設定。ウィザードが誘導する） |
 | 通知は届くが中身が汎用 | 2台目の端末で `pending` が空。`sent_log` の `fetchedBy` を見る |
 | どの端末にも通知が来ない | シートの `notify_queue` に行があるか。無ければ判定側、あれば送信側 |

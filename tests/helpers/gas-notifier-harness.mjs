@@ -467,6 +467,10 @@ export function installGateStub(env, {
   publicKey = 'FAKE-VAPID-PUBLIC-KEY',
   jwt = 'fake.jwt.value',
   vapidStatus = 200,
+  /* vapidStatus が 200 以外のときに返す符号。上限（429）の検証に使う。 */
+  vapidError = 'LICENSE_EXPIRED',
+  /* 429 のときに添える「窓が明けるまでの秒数」。0 なら添えない（古いゲートの再現）。 */
+  vapidRetryAfterSec = 0,
   evaluateStatus = 200,
   testNotifyStatus = 200,
 } = {}) {
@@ -505,7 +509,14 @@ export function installGateStub(env, {
 
     if (path === '/v1/vapid') {
       if (vapidStatus !== 200) {
-        return { status: vapidStatus, body: { ok: false, error: { code: 'LICENSE_EXPIRED', message: '' } } };
+        const failure = { ok: false, error: { code: vapidError, message: '' } };
+
+        if (vapidRetryAfterSec > 0) {
+          /* 本物と同じく**最上位**へ置く（error の中ではない）。 */
+          failure.retryAfterSec = vapidRetryAfterSec;
+        }
+
+        return { status: vapidStatus, body: failure };
       }
 
       const jwts = {};

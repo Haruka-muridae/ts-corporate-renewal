@@ -192,6 +192,8 @@ export function installFakeGasFetch({
    * 「確認してから保存」していると、保存に永久に到達しない。
    */
   publicKeyError = '',
+  /* health が持ち帰るゲートの失敗。画面に出す文言の検証に使う。 */
+  lastGateError = '',
 } = {}) {
   const calls = [];
 
@@ -215,6 +217,7 @@ export function installFakeGasFetch({
         data: {
           ok: true, version: '2.0.0', deployedVersion: '1', execUrlDigest,
           lastTickAt: '', triggerActive: true, configured: true, licensed: true,
+          lastGateError,
         },
       });
     }

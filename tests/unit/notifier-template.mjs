@@ -901,7 +901,8 @@ try {
     check('★有効期限を数値として保存する（0 のままにしない）',
       Number(env.properties.VAPID_EXPIRES_AT) > env.getTime(),
       env.properties.VAPID_EXPIRES_AT);
-    check('失敗の記録を残さない', env.properties.LAST_GATE_ERROR === '');
+    /* 記録が無い状態は「未設定」でも「空文字」でもよい（消すときに書き足さない）。 */
+    check('失敗の記録を残さない', !env.properties.LAST_GATE_ERROR, String(env.properties.LAST_GATE_ERROR));
 
     /* --- evaluate 側も同じ応答で通す --- */
     const withEvent = await captureGateResponses({
@@ -989,6 +990,284 @@ try {
     check('health から失敗の符号が読める',
       String(health.data.lastGateError).includes('BAD_PAYLOAD'), JSON.stringify(health.data));
     check('★health に応答本文を出さない', JSON.stringify(health).includes('"publicKey"') === false);
+  }
+
+  /* ================================================================ */
+  section('★鍵が取れないときに、呼び出しを増やさないこと（枠の食い合い）');
+
+  {
+    /*
+     * ==================================================================
+     * 実機で起きた「抜け出せない」状態
+     * ==================================================================
+     * ゲートの /v1/vapid には1キーあたりの上限がある。ところが
+     * **失敗するほど呼び出しが増える**作りになっていた。
+     *
+     *   1. saveLicense が鍵の先取りに失敗すると action ごと失敗を返す
+     *   2. 録音アプリは「引き渡せなかった」と解釈し、ブラウザ側の
+     *      ライセンスキーを消さない
+     *   3. 画面を開くたび・［接続テスト］のたびに saveLicense をやり直す
+     *      → /v1/vapid を1回消費
+     *   4. その直後の publicKey でもう1回消費
+     *
+     * 正規の操作2回で1時間ぶんの上限（当時4回）を使い切り、以後すべて
+     * RATE_LIMITED。**成功しないと呼び出しが減らないのに、呼べないから
+     * 成功しない。** 上限を上げるだけでは同じ罠が残るので、
+     * 「1操作あたり何回ゲートを呼ぶか」をここで固定する。
+     * ==================================================================
+     */
+    const env = createReadyNotifierEnvironment({ licenseKey: '' });
+    const gas = env.api;
+    const key = env.properties.CONNECT_KEY;
+    const licenseKey = 'LK'.padEnd(43, 'z');
+
+    /* ゲートは上限に当たっている（窓の残りは30分と告げてくる）。 */
+    const calls = installGateStub(env, {
+      vapidStatus: 429,
+      vapidError: 'RATE_LIMITED',
+      vapidRetryAfterSec: 1800,
+    });
+
+    function vapidCalls() {
+      return calls.filter((call) => call.path === '/v1/vapid').length;
+    }
+
+    /* --- 1回目の［接続する］。saveLicense → publicKey の順に来る。 --- */
+    const saved = env.readOutput(gas.doPost({
+      postData: { contents: JSON.stringify({ action: 'saveLicense', key: key, licenseKey: licenseKey }) },
+    }));
+
+    check('★鍵が取れなくても saveLicense は成功を返す', saved.ok === true, JSON.stringify(saved));
+    check('★預かったことを伝える', saved.data.saved === true);
+    check('★取れなかった理由を添える', saved.data.gateError === 'RATE_LIMITED', saved.data.gateError);
+    check('ライセンスキーは保存されている', env.properties.LICENSE_KEY === licenseKey);
+    check('前提: ここまでで1回だけ呼んでいる', vapidCalls() === 1, String(vapidCalls()));
+
+    const afterSave = vapidCalls();
+
+    const first = env.readOutput(gas.doGet({ parameter: { action: 'publicKey', key: key } }));
+
+    check('鍵はまだ無い（前提）', first.ok === false, JSON.stringify(first));
+    check('★直後の publicKey はゲートを呼び直さない', vapidCalls() === afterSave, String(vapidCalls()));
+
+    /* --- 利用者は当然もう一度押す。ここで増えないことが本題。 --- */
+    for (let i = 0; i < 5; i += 1) {
+      gas.doPost({ postData: { contents: JSON.stringify({ action: 'saveLicense', key: key, licenseKey: licenseKey }) } });
+      gas.doGet({ parameter: { action: 'publicKey', key: key } });
+    }
+
+    check('★何度押してもゲートの呼び出しは増えない', vapidCalls() === 1, String(vapidCalls()));
+    check('待つべき時刻を覚えている',
+      Number(env.properties.VAPID_RETRY_AT) === env.getTime() + 1800 * 1000,
+      env.properties.VAPID_RETRY_AT);
+    check('理由も覚えている', env.properties.VAPID_RETRY_CODE === 'RATE_LIMITED');
+
+    /* --- tick も同じ枠を使う。ここからも増やさない。 --- */
+    gas.tick();
+
+    check('★tick も待っている間はゲートを呼ばない', vapidCalls() === 1, String(vapidCalls()));
+
+    /* --- 告げられた時刻より前は、まだ呼ばない --- */
+    env.advance(1799 * 1000);
+    gas.doGet({ parameter: { action: 'publicKey', key: key } });
+
+    check('★1秒前でも呼ばない', vapidCalls() === 1, String(vapidCalls()));
+
+    /* --- 窓が明けたら、1回だけ試す --- */
+    env.advance(2 * 1000);
+    gas.doGet({ parameter: { action: 'publicKey', key: key } });
+
+    check('★窓が明けたら試す', vapidCalls() === 2, String(vapidCalls()));
+  }
+
+  {
+    /*
+     * ゲートが秒数を返さない場合（古いゲートに繋いでいるとき）。
+     * **当てずっぽうで再試行しない**ことは同じにする。
+     */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    const calls = installGateStub(env, { vapidStatus: 429, vapidError: 'RATE_LIMITED' });
+
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('★秒数が無くても待つ', calls.length === 1, String(calls.length));
+    check('待ちは10分（既定）',
+      Number(env.properties.VAPID_RETRY_AT) === env.getTime() + 10 * 60 * 1000,
+      env.properties.VAPID_RETRY_AT);
+
+    env.advance(10 * 60 * 1000 + 1);
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('10分後には試す', calls.length === 2, String(calls.length));
+  }
+
+  {
+    /*
+     * 一時的な不調（500 / 通信断）は短く空ける。上限とは事情が違い、
+     * 1分後には直っていることが多い。
+     */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    const calls = installGateStub(env, { vapidStatus: 500, vapidError: 'SERVER_ERROR' });
+
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('待ちは1分', Number(env.properties.VAPID_RETRY_AT) === env.getTime() + 60 * 1000,
+      env.properties.VAPID_RETRY_AT);
+
+    env.advance(30 * 1000);
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+    check('30秒後はまだ呼ばない', calls.length === 1, String(calls.length));
+
+    env.advance(31 * 1000);
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+    check('1分後には呼ぶ', calls.length === 2, String(calls.length));
+  }
+
+  {
+    /*
+     * ライセンスが未設定のときは待たせない。
+     * **ゲートを呼んでもいない**（gateFetch_ が手前で返す）ので待つ理由が無く、
+     * 待たせると録音アプリからキーが届いた直後に取りに行けなくなる。
+     */
+    const env = createReadyNotifierEnvironment({ licenseKey: '' });
+    const gas = env.api;
+    const calls = installGateStub(env);
+
+    const result = gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('前提: ライセンス未設定で失敗する', result.ok === false && result.error === 'NO_LICENSE', result.error);
+    check('ゲートは呼んでいない', calls.length === 0, String(calls.length));
+    check('★待ち時間を作らない', (env.properties.VAPID_RETRY_AT || '0') === '0',
+      String(env.properties.VAPID_RETRY_AT));
+
+    /* キーが届いたら、その場で取りに行ける。 */
+    env.properties.LICENSE_KEY = 'LK'.padEnd(43, 'y');
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('★キーが届いたら待たずに取りに行く', calls.length === 1, String(calls.length));
+  }
+
+  {
+    /* 成功したら待ちは消える（次の取り直しが遅れない）。 */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    env.properties.VAPID_RETRY_AT = String(env.getTime() - 1);
+    env.properties.VAPID_RETRY_CODE = 'RATE_LIMITED';
+
+    installGateStub(env);
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('★成功したら待ちを捨てる', env.properties.VAPID_RETRY_AT === '0', env.properties.VAPID_RETRY_AT);
+    check('理由も捨てる', env.properties.VAPID_RETRY_CODE === '');
+  }
+
+  {
+    /* 別のライセンスに入れ替えたら、前のキーで断られた事情は無関係になる。 */
+    const env = createReadyNotifierEnvironment({ licenseKey: 'LK'.padEnd(43, 'a') });
+    const gas = env.api;
+    const key = env.properties.CONNECT_KEY;
+
+    env.properties.VAPID_RETRY_AT = String(env.getTime() + 30 * 60 * 1000);
+    env.properties.VAPID_RETRY_CODE = 'RATE_LIMITED';
+
+    const calls = installGateStub(env);
+
+    gas.doPost({
+      postData: { contents: JSON.stringify({ action: 'saveLicense', key: key, licenseKey: 'LK'.padEnd(43, 'b') }) },
+    });
+
+    check('★ライセンスを入れ替えたら待たずに取りに行く', calls.length === 1, String(calls.length));
+    check('待ちも捨てられている', env.properties.VAPID_RETRY_AT === '0', env.properties.VAPID_RETRY_AT);
+  }
+
+  /* ================================================================ */
+  section('★失敗の記録は、その相手が直ったときだけ消えること');
+
+  {
+    /*
+     * ------------------------------------------------------------------
+     * evaluate の成功が vapid の失敗を消してしまっていた
+     * ------------------------------------------------------------------
+     * 実機では evaluate は1分ごとに成功し、vapid だけが失敗し続けた。
+     * 記録は1つしか無く、成功のたびに空にしていたため、
+     * **画面に出たり消えたりして原因が読めなかった**（2026-08-11）。
+     * ------------------------------------------------------------------
+     */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    installGateStub(env, { vapidStatus: 429, vapidError: 'RATE_LIMITED' });
+
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('前提: vapid の失敗が記録されている',
+      env.properties.LAST_GATE_ERROR === '/v1/vapid -> RATE_LIMITED', env.properties.LAST_GATE_ERROR);
+
+    gas.gateEvaluate_({ settings: {}, events: [], sentDigest: [] });
+
+    check('★evaluate が成功しても vapid の失敗は残る',
+      env.properties.LAST_GATE_ERROR === '/v1/vapid -> RATE_LIMITED', env.properties.LAST_GATE_ERROR);
+
+    const health = env.readOutput(gas.doGet({ parameter: { action: 'health' } }));
+
+    check('health からも読める', health.data.lastGateError === '/v1/vapid -> RATE_LIMITED',
+      JSON.stringify(health.data.lastGateError));
+
+    /* 直ったら消える。 */
+    env.clearFetchHandlers();
+    installGateStub(env);
+    env.advance(11 * 60 * 1000);
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('★vapid が直れば消える', env.properties.LAST_GATE_ERROR === '', env.properties.LAST_GATE_ERROR);
+  }
+
+  {
+    /*
+     * キャッシュで足りている間はゲートを呼ばない。**それでも記録は消す。**
+     * 呼ばないことを理由に古い失敗が残り続けると、直っているのに
+     * 画面には「失敗しています」と出たままになる。
+     */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    installGateStub(env);
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    /* 鍵は手元にある状態のまま、過去の失敗だけを残す。 */
+    env.properties.LAST_GATE_ERROR = '/v1/vapid -> RATE_LIMITED';
+
+    const cached = gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('前提: キャッシュで足りている', cached.ok === true && cached.publicKey !== '');
+    check('★キャッシュで足りるなら失敗の記録は消す', env.properties.LAST_GATE_ERROR === '',
+      env.properties.LAST_GATE_ERROR);
+  }
+
+  {
+    /* 別の相手の失敗は、勝手に消さない。 */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    installGateStub(env, { evaluateStatus: 429 });
+
+    gas.gateEvaluate_({ settings: {}, events: [], sentDigest: [] });
+
+    check('前提: evaluate の失敗が記録されている',
+      env.properties.LAST_GATE_ERROR === '/v1/evaluate -> RATE_LIMITED', env.properties.LAST_GATE_ERROR);
+
+    env.clearFetchHandlers();
+    installGateStub(env);
+    gas.gateVapid_(['https://fcm.googleapis.com'], env.getTime());
+
+    check('★vapid が成功しても evaluate の失敗は消えない',
+      env.properties.LAST_GATE_ERROR === '/v1/evaluate -> RATE_LIMITED', env.properties.LAST_GATE_ERROR);
   }
 
   /* ================================================================ */

@@ -25,6 +25,7 @@ import {
   DEFAULT_SETTINGS,
   LICENSE_CACHE_TTL_MS,
   LICENSE_CONTINUATION_MAX_MS,
+  RATE_LIMITS,
   RENOTIFY_THRESHOLD_MS,
 } from '../../workers/notifier-gate/src/constants.mjs';
 import {
@@ -1037,6 +1038,90 @@ async function run() {
       const third = await post('/v1/evaluate', payload);
 
       check('evaluate は1分2回に制限する', third.status === 429, String(third.status));
+    }
+
+    /* ================================================================ */
+    {
+      /*
+       * ------------------------------------------------------------------
+       * 上限に当たったとき「いつなら通るか」を返すこと
+       * ------------------------------------------------------------------
+       * これが無いと、呼び出し側は当てずっぽうで再試行するしかない。
+       * 実機ではその再試行がまた断られ、**正規の操作だけで永久に
+       * 抜け出せない**状態になった（2026-08-11）。
+       * ------------------------------------------------------------------
+       */
+      const key = makeLicenseKey('R');
+      await seedLicense(key, 'active');
+
+      const payload = { licenseKey: key, settings: SETTINGS, events: [], sentDigest: [] };
+
+      await post('/v1/evaluate', payload);
+      await post('/v1/evaluate', payload);
+
+      const limited = await post('/v1/evaluate', payload);
+      const body = await limited.json();
+
+      check('前提: 上限に当たっている', limited.status === 429 && body.error.code === 'RATE_LIMITED', JSON.stringify(body));
+      check('★窓が明けるまでの秒数を本文で返す',
+        Number.isFinite(body.retryAfterSec) && body.retryAfterSec > 0, JSON.stringify(body));
+      check('★秒数は窓（60秒）を超えない', body.retryAfterSec <= 60, String(body.retryAfterSec));
+      check('★Retry-After ヘッダーにも同じ値を出す',
+        limited.headers.get('Retry-After') === String(body.retryAfterSec),
+        `${limited.headers.get('Retry-After')} / ${body.retryAfterSec}`);
+      check('秒数は error の中ではなく最上位に置く', body.error.retryAfterSec === undefined);
+
+      /* 成功の応答に余計な項目を足していないこと（フィクスチャの形を崩さない）。 */
+      const fresh = makeLicenseKey('S');
+      await seedLicense(fresh, 'active');
+
+      const okBody = await (await post('/v1/vapid', { licenseKey: fresh, audiences: ['https://fcm.googleapis.com'] })).json();
+
+      check('成功の応答に retryAfterSec は付かない', okBody.retryAfterSec === undefined, JSON.stringify(Object.keys(okBody)));
+    }
+
+    /* ================================================================ */
+    {
+      /*
+       * ------------------------------------------------------------------
+       * vapid の上限が「セットアップを完走できる」大きさであること
+       * ------------------------------------------------------------------
+       * 元は1時間4回だった。定常状態（12時間キャッシュ）だけを見た数字で、
+       * **鍵をまだ1度も取れていないセットアップ中には足りなかった。**
+       *
+       * 数字そのものを固定するのではなく、「何回ぶんの余裕があるか」を
+       * 意味で縛る。将来 evaluate と同じ轍を踏まないための番人である。
+       * ------------------------------------------------------------------
+       */
+      check('vapid の窓は1時間', RATE_LIMITS.vapid.windowSec === 3600, String(RATE_LIMITS.vapid.windowSec));
+      check(
+        '★［接続テスト］を10回押しても使い切らない（1回につき最大1呼び出し）',
+        RATE_LIMITS.vapid.limit >= 10,
+        String(RATE_LIMITS.vapid.limit),
+      );
+      check(
+        '★毎分の暴走（1時間60回）は止まる',
+        RATE_LIMITS.vapid.limit < 60,
+        String(RATE_LIMITS.vapid.limit),
+      );
+
+      /* 実際に上限まで通ることを、Worker を走らせて確かめる。 */
+      const key = makeLicenseKey('T');
+      await seedLicense(key, 'active');
+
+      const payload = { licenseKey: key, audiences: ['https://fcm.googleapis.com'] };
+      let lastOk = 0;
+
+      for (let i = 0; i < RATE_LIMITS.vapid.limit; i += 1) {
+        const response = await post('/v1/vapid', payload);
+
+        if (response.status === 200) {
+          lastOk += 1;
+        }
+      }
+
+      check('★上限の回数までは実際に発行される', lastOk === RATE_LIMITS.vapid.limit, String(lastOk));
+      check('上限を1回超えると断る', (await post('/v1/vapid', payload)).status === 429);
     }
 
     {

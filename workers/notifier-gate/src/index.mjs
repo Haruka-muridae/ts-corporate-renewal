@@ -172,7 +172,21 @@ async function gate({ body, env, scope, nowMs, request }) {
   }));
 
   if (!rate.allowed) {
-    return { response: fail(ERRORS.RATE_LIMITED, { status: 429, request, env }) };
+    /*
+     * **「いつなら通るか」を必ず添える。** 添えないと呼び出し側は
+     * 当てずっぽうで再試行し、その再試行がまた断られる（ratelimit.mjs の冒頭）。
+     * ヘッダは HTTP の作法として、本文は Apps Script が読むために置く
+     * （UrlFetchApp からヘッダを読むこともできるが、本文のほうが扱いが素直）。
+     */
+    return {
+      response: fail(ERRORS.RATE_LIMITED, {
+        status: 429,
+        request,
+        env,
+        extra: { retryAfterSec: rate.retryAfterSec },
+        extraHeaders: { 'Retry-After': String(rate.retryAfterSec) },
+      }),
+    };
   }
 
   const license = await inPhase('license-verify', () => resolveLicense({ licenseKey, env, nowMs }));

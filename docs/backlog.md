@@ -16,6 +16,36 @@
 
 ## 未対応
 
+### B-08. VAPID キャッシュの上書きで、宛先の組み合わせが往復すると取り直しが起きる（優先度: 中）
+
+**内容**: [gas-notifier/Gate.gs](../gas-notifier/Gate.gs) の `gateVapid_` は、
+受け取った JWT の集合で `VAPID_JWTS_JSON` を**まるごと上書き**する。
+ところが呼び出し元によって欲しい宛先が違う。
+
+| 呼び出し元 | 欲しい宛先 |
+| --- | --- |
+| `primeVapid_`（`saveLicense` / `publicKey`） | 主要3社を決め打ち（fcm / mozilla / apple） |
+| `sendTickle_`（tick） | **実際の購読の endpoint から作った origin** |
+
+Edge（`wns2-….notify.windows.com`）のように決め打ちに含まれない宛先を使う端末が
+あると、`primeVapid_` → tick → `primeVapid_` と交互に呼ばれるたびに
+キャッシュが外れ、**そのつどゲートを1回消費する。**
+
+**なぜ今やらないか**: 実害が出ていない。tick は連続して同じ宛先を求めるので
+2回目以降はキャッシュに当たり、`primeVapid_` はライセンスの引き渡しと
+初回の鍵取得でしか動かない（この修正で `saveLicense` の繰り返しも止めた）。
+1時間20回の枠に対して、往復しても数回で収まる。
+
+**単純な「上書きせず統合する」では直らない**ことも先に書いておく。
+`VAPID_EXPIRES_AT` は集合全体で1つしか持っていないため、統合すると
+古い JWT が新しい期限を名乗り、**期限切れの署名で送って 401 になる。**
+直すなら、宛先ごとに期限を持つ形へ変える必要がある。
+
+**着手条件**: 実機で Edge / Firefox を含む複数端末を登録し、
+`RATE_LIMITED` が再び出た場合。または宛先ごとの期限を持たせる改修を行うとき。
+
+---
+
 ### B-07. `scriptApiFetch_` の一時デバッグ出力を削除する（優先度: 中）
 
 **内容**: [gas-notifier/Setup.gs](../gas-notifier/Setup.gs) の `scriptApiFetch_` に、

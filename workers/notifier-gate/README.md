@@ -107,6 +107,37 @@ GAS 側はこの2つで `notify_queue` を同期するだけでよい。
 `audiences` は push サービスの origin に限る（[src/constants.mjs](src/constants.mjs) の
 `DEFAULT_PUSH_HOSTS`）。任意の相手への署名を配らないための制限。
 
+### レート制限（`RATE_LIMITS`）
+
+| エンドポイント | 上限 | 想定する呼び出し |
+| --- | --- | --- |
+| `/v1/evaluate` | 1分2回 | 同期は5分に1回 |
+| `/v1/vapid` | 1時間20回 | JWT は12時間キャッシュ。定常状態では1日1〜2回 |
+| `/v1/test-notify` | 1日1回 | 利用者がボタンを押したとき |
+
+上限に当たると **429** を返す。本文とヘッダの両方に「窓が明けるまでの秒数」を載せる。
+
+```jsonc
+// 429 の本文
+{ "ok": false, "error": { "code": "RATE_LIMITED", "message": "…" }, "retryAfterSec": 1800 }
+```
+
+```
+Retry-After: 1800
+```
+
+呼び出し側（[gas-notifier/Gate.gs](../../gas-notifier/Gate.gs)）はこの秒数のあいだ
+**呼ぶのをやめる。** 返さないと当てずっぽうで再試行され、その再試行がまた断られる。
+
+> **`wrangler tail` の "Ok" は 200 という意味ではない。** 例外が出なかったという
+> 意味であり、**429 も 402 も "Ok" と表示される。** 実機で「ゲート側は成功している
+> のに利用者側は失敗し続ける」という読み違いを起こした（2026-08-11）。
+> 状態コードを見るには `--status` を使うか、利用者側の `lastGateError` を読む。
+
+`RATE_LIMITS` を変えるときの見方は
+[docs/notifier-design-notes.md](../../docs/notifier-design-notes.md) §10-3。
+**上限だけを決めて、失敗したときの振る舞いを決めないと事故になる。**
+
 ---
 
 ## 3. 判定ロジック
@@ -320,6 +351,15 @@ node tests/run.mjs notifier-gate
 ```powershell
 npx wrangler tail notifier-gate --format pretty
 ```
+
+> **`Ok` は「HTTP が成功した」という意味ではない。** ワーカーが例外を投げずに
+> 応答を返したかどうかだけを表しており、**429・402・401 もすべて `Ok` になる。**
+> `Ok` が並んでいることは、正常に動いている証拠にならない。
+>
+> 2026-08-11 の実機切り分けで、`/v1/vapid` が「Ok 連続・error ゼロ」だったため
+> ゲートは正常と判断したが、実際は全件 429 だった。**4xx はこのログに出ない**
+> （診断ログは 500 のときだけ書く）。4xx を疑うときは利用者側の
+> `health.lastGateError` を読むか、`--status error` を付けるか、`curl -i` で叩く。
 
 失敗すると1行だけ出る。**応答には内部情報を返さないが、ログには出す**
 （読む相手が違うため。`src/diagnostics.mjs` の冒頭）。
