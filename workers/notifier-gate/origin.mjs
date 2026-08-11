@@ -8,7 +8,7 @@
  *
  *   1. Workers の設定（workers/notifier-gate/wrangler.jsonc）
  *   2. 利用者の Apps Script（gas-notifier/ の Gate クライアント）
- *   3. 録音アプリのフロント（public/production-app/voice-recorder/notifier-config.js）
+ *   3. 録音アプリのフロント（public/apps/voice-recorder/notifier-config.js）
  *   4. 録音アプリの CSP（index.html の connect-src）
  *
  * これらは別の実行環境にあり、import で1つの値を共有できない
@@ -56,7 +56,7 @@ export const GATE_ORIGIN_FILES = [
     expectOrigin: true,
   },
   {
-    path: 'public/production-app/voice-recorder/notifier-config.js',
+    path: 'public/apps/voice-recorder/notifier-config.js',
     note: 'フロントの接続先（ヘルスチェックとライセンス状態の表示）',
     expectOrigin: true,
   },

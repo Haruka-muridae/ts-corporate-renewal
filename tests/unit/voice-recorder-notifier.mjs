@@ -1,5 +1,16 @@
 /*
- * 録音アプリ側のカレンダー通知（public/production-app/voice-recorder/）。
+ * 録音アプリ側のカレンダー通知（public/apps/voice-recorder/）。
+ *
+ * ==================================================================
+ * 対象はテスト環境である（2026-08-11 に移設）
+ * ==================================================================
+ * 通知は本番（/production-app/）から**テスト環境（/apps/）へ移した。**
+ * 試験の先送りであって廃止ではない（docs/notifier-v2-resume.md）。
+ *
+ * このスイートは `tests/` 側に置いたままにしてある。中身は Node だけで
+ * 動く純関数と文字列の検査であり、`public/apps/tests/` のランナーは
+ * Chrome を要求する。**動かすのに要らないものを要求しない**方を採った。
+ * ==================================================================
  *
  * 対象要件: recording_calendar_requirements.docx v1.0
  *   FR-15〜FR-20 / NFR-06 / 5.3
@@ -18,7 +29,7 @@
  * ==================================================================
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
@@ -29,10 +40,22 @@ import { installFakeIndexedDb } from '../helpers/fake-indexeddb.mjs';
 /* notifier-config.js は import の時点では触らないが、読み込み前に置いておく。 */
 const fakeDb = installFakeIndexedDb();
 
-const APP_DIR = join(REPO_ROOT, 'public/production-app/voice-recorder');
+const APP_DIR = join(REPO_ROOT, 'public/apps/voice-recorder');
+
+/*
+ * 通知は移設したが、**`?eventId=` の引き継ぎは本番側に残っている。**
+ * これは認証系の元画面復帰につながる話で、通知とは独立に効いているため、
+ * 移設の巻き添えで消さなかった（public/production-app/voice-recorder/app.js
+ * の `currentEventIdFromUrl` のコメント）。読む先だけ分ける。
+ */
+const PROD_DIR = join(REPO_ROOT, 'public/production-app/voice-recorder');
 
 function readApp(name) {
   return readFileSync(join(APP_DIR, name), 'utf8');
+}
+
+function readProdApp(name) {
+  return readFileSync(join(PROD_DIR, name), 'utf8');
 }
 
 /*
@@ -42,14 +65,14 @@ function readApp(name) {
 let currentSearch = '';
 
 globalThis.location = {
-  get href() { return `https://tsam-ai.example/production-app/voice-recorder/${currentSearch}`; },
+  get href() { return `https://tsam-ai.example/apps/voice-recorder/${currentSearch}`; },
   get search() { return currentSearch; },
   get origin() { return 'https://tsam-ai.example'; },
 };
 
 try {
-  const messages = await import('../../public/production-app/voice-recorder/notifier-messages.js');
-  const panel = await import('../../public/production-app/voice-recorder/notifier-panel.js');
+  const messages = await import('../../public/apps/voice-recorder/notifier-messages.js');
+  const panel = await import('../../public/apps/voice-recorder/notifier-panel.js');
 
   /* ================================================================ */
   section('通知の文言（FR-15 / FR-16 / 5.3）');
@@ -86,7 +109,7 @@ try {
   section('通知から開くURL（FR-17/18/19）');
 
   {
-    const scope = 'https://tsam-ai.com/production-app/voice-recorder/';
+    const scope = 'https://tsam-ai.com/apps/voice-recorder/';
 
     check('eventId をクエリで渡す', messages.buildEventUrl(scope, 'abc') === `${scope}?eventId=abc`);
     check('★eventId をURLエンコードする',
@@ -96,8 +119,14 @@ try {
     check('スコープ配下の窓は自分の窓', messages.isAppClientUrl(`${scope}?eventId=x`, scope) === true);
     check('★別アプリの窓は自分の窓ではない',
       messages.isAppClientUrl('https://tsam-ai.com/production-app/card-ocr/', scope) === false);
-    check('★テスト環境の同名アプリも自分の窓ではない',
-      messages.isAppClientUrl('https://tsam-ai.com/apps/voice-recorder/', scope) === false);
+    /*
+     * `/apps/` と `/production-app/` は**同一オリジン**にある同名のアプリである。
+     * 移設で両者の役割が入れ替わったが、**取り違えてはいけない**という
+     * 性質は変わらない。いまは通知が `/apps/` 側にあるので、
+     * 本番側の同名アプリを「自分の窓」と見なさないことを確かめる。
+     */
+    check('★本番側の同名アプリを自分の窓と見なさない',
+      messages.isAppClientUrl('https://tsam-ai.com/production-app/voice-recorder/', scope) === false);
     check('スコープが空なら自分の窓とみなさない', messages.isAppClientUrl(scope, '') === false);
   }
 
@@ -125,7 +154,7 @@ try {
 
     currentSearch = '';
 
-    const app = readApp('app.js');
+    const app = readProdApp('app.js');
 
     check('★戻り先を録音アプリにしている（Portal ではない）',
       app.includes("next: 'voiceRecorder'"));
@@ -166,23 +195,51 @@ try {
 
     check('★sw.js を module で登録しない', !panel.includes("type: 'module'"));
     check('sw.js の登録は import.meta.url からの相対', panel.includes("new URL('./sw.js', import.meta.url)"));
-    check('★sw.js に /production-app/ の直書きが無い', !sw.includes('/production-app/'));
-    check('★notifier-panel.js に /production-app/ の直書きが無い', !panel.includes('/production-app/'));
+    /*
+     * ------------------------------------------------------------------
+     * 配置場所を直書きしない（**移設して初めて効いた性質**）
+     * ------------------------------------------------------------------
+     * 2026-08-11 に /production-app/ から /apps/ へ移したとき、
+     * sw.js と notifier-panel.js は**1文字も直さずに動いた。**
+     * 開く先も自分の窓かどうかの判定も `self.registration.scope` と
+     * `import.meta.url` から作っているためである。
+     *
+     * 本番へ戻すときも同じでなければならないので、**どちらのパスも
+     * 直書きされていないこと**を見る（片方だけ見ると、戻すときに
+     * 逆向きの直書きが入り込む）。
+     * ------------------------------------------------------------------
+     */
+    for (const [name, source] of [['sw.js', sw], ['notifier-panel.js', panel]]) {
+      check(`★${name} に /production-app/ の直書きが無い`, !source.includes('/production-app/'));
+      check(`★${name} に /apps/voice-recorder/ の直書きが無い`, !source.includes('/apps/voice-recorder/'));
+    }
     check('sw.js は registration.scope から開く先を作る', sw.includes('self.registration.scope'));
 
-    check('manifest の start_url は本番アプリのパス',
-      manifest.start_url === '/production-app/voice-recorder/');
-    check('manifest の scope も同じ', manifest.scope === '/production-app/voice-recorder/');
+    /* manifest だけは相対で書けない（scope は絶対パス）。移設のたびに直す。 */
+    check('manifest の start_url は移設先のパス',
+      manifest.start_url === '/apps/voice-recorder/');
+    check('manifest の scope も同じ', manifest.scope === '/apps/voice-recorder/');
     check('manifest を index.html から読み込む', html.includes('rel="manifest"'));
 
     /*
-     * ★CSP は変更しない。connect-src に script.google.com が既にあり、
-     * 通知用GASもその範囲で動く。ここが変わっていたら、変更の理由を確かめること。
+     * ------------------------------------------------------------------
+     * CSP は**本番のページ**を見る
+     * ------------------------------------------------------------------
+     * 通知はテスト環境（`/apps/`）へ移したが、テスト環境の index.html には
+     * CSP が無い（この系はもともと持っていない）。**無いものは足さない。**
+     *
+     * 一方 CSP そのものは本番の配信物として引き続き守る対象なので、
+     * 見る先だけを本番へ向ける。緩んだら気づけるようにしておく。
+     * ------------------------------------------------------------------
      */
-    check('★CSP の connect-src に script.google.com がある',
-      html.includes('connect-src \'self\' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com'));
-    check('★CSP に第三者ホストを足していない', !html.includes('https://cdn.'));
-    check('★worker-src は self のまま', html.includes("worker-src 'self'"));
+    const prodHtml = readProdApp('index.html');
+
+    check('★本番の connect-src に script.google.com がある',
+      prodHtml.includes('connect-src \'self\' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com'));
+    check('★本番の CSP に第三者ホストを足していない', !prodHtml.includes('https://cdn.'));
+    check('★本番の worker-src は self のまま', prodHtml.includes("worker-src 'self'"));
+    check('★テスト環境には CSP を足していない',
+      html.includes('Content-Security-Policy') === false);
 
     check('★接続キーをコンソールへ出していない（sw.js）', !/console\.\w+\([^)]*key/.test(sw));
     check('★接続キーをコンソールへ出していない（panel）', !/console\.\w+\([^)]*\bkey\b/.test(panel));
@@ -203,7 +260,7 @@ try {
   section('★引き継ぎリンクの受け口（#setup=）');
 
   {
-    const config = await import('../../public/production-app/voice-recorder/notifier-config.js');
+    const config = await import('../../public/apps/voice-recorder/notifier-config.js');
 
     function link(payload) {
       return `#setup=${Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')}`;
@@ -275,7 +332,7 @@ try {
      *
      * **保存先と復元元が同じであること**を、実際に読み書きして確かめる。
      */
-    const config = await import('../../public/production-app/voice-recorder/notifier-config.js');
+    const config = await import('../../public/apps/voice-recorder/notifier-config.js');
 
     fakeDb.reset();
 
@@ -323,7 +380,7 @@ try {
   section('★Workspace 形式のURL（実機で接続できなかった形）');
 
   {
-    const config = await import('../../public/production-app/voice-recorder/notifier-config.js');
+    const config = await import('../../public/apps/voice-recorder/notifier-config.js');
 
     const domainForm = 'https://script.google.com/a/macros/potenitas.com/s/AKfycbxeNexample/exec';
     const plainForm = 'https://script.google.com/macros/s/AKfycbxeNexample/exec';
@@ -353,7 +410,7 @@ try {
   section('★URL の指紋（どのデプロイに繋いでいるか）');
 
   {
-    const config = await import('../../public/production-app/voice-recorder/notifier-config.js');
+    const config = await import('../../public/apps/voice-recorder/notifier-config.js');
 
     const a = await config.execUrlDigest('https://script.google.com/macros/s/AAA/exec');
     const b = await config.execUrlDigest('https://script.google.com/macros/s/BBB/exec');
@@ -442,26 +499,128 @@ try {
   }
 
   /* ================================================================ */
-  section('★CSP（承認済みの変更案どおり）');
+  section('★本番の CSP から通知ゲートが外れていること');
 
   {
-    const html = readApp('index.html');
+    /*
+     * ------------------------------------------------------------------
+     * 使わない許可は置かない
+     * ------------------------------------------------------------------
+     * 通知をテスト環境へ移した時点で、本番の画面からゲートを呼ぶ経路は
+     * 無くなった。`connect-src` の許可は攻撃面を増やすものではないが、
+     * **必要が無い許可を残すと「なぜ在るのか」が読めなくなる。**
+     *
+     * 戻すときは足し直す（docs/notifier-v2-resume.md §4）。
+     * そのときも `*.workers.dev` にはしない——workers.dev は誰でも使える
+     * 共有ドメインで、他人の Worker まで許可することになる。
+     * ------------------------------------------------------------------
+     */
+    const html = readProdApp('index.html');
     const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
     const connectSrc = csp.split(';').map((part) => part.trim()).find((part) => part.startsWith('connect-src'));
 
-    check('connect-src に通知ゲートを足した', connectSrc.includes(NOTIFIER_GATE_ORIGIN), connectSrc);
-    check('★ワイルドカードにしない（他人の Worker を許可しない）',
-      csp.includes('*.workers.dev') === false);
-    check('★script-src には足していない',
-      csp.split(';').map((part) => part.trim()).find((part) => part.startsWith('script-src'))
-        .includes('workers.dev') === false);
-    check('既存の接続先を落としていない',
+    check('★connect-src から通知ゲートを外した',
+      connectSrc.includes(NOTIFIER_GATE_ORIGIN) === false, connectSrc);
+    check('★ワイルドカードで代用していない', csp.includes('workers.dev') === false, csp);
+    check('既存の接続先は落としていない',
       connectSrc.includes('https://www.googleapis.com')
       && connectSrc.includes('https://script.google.com')
       && connectSrc.includes('https://script.googleusercontent.com'));
-    check('足したのは1オリジンだけ',
-      connectSrc.split(/\s+/).filter((value) => value.startsWith('https://')).length === 4,
+    check('★残ったのは3オリジンだけ',
+      connectSrc.split(/\s+/).filter((value) => value.startsWith('https://')).length === 3,
       connectSrc);
+
+    /*
+     * 戻すときに足す先が分かるよう、手順書にオリジンが書いてあること。
+     * **ここが消えると、戻す人はどのURLを足すのか分からなくなる。**
+     */
+    const resume = readFileSync(join(REPO_ROOT, 'docs/notifier-v2-resume.md'), 'utf8');
+
+    check('★復帰手順書に再追加が書いてある', resume.includes('CSP'), 'notifier-v2-resume.md');
+  }
+
+  /* ================================================================ */
+  section('★本番からは取り除かれていること（移設の裏側）');
+
+  {
+    /*
+     * ==================================================================
+     * 「移した」は「本番から消えた」と対で確かめる
+     * ==================================================================
+     * 移設は**2つの操作**でできている。片方だけ通ると、同じ実装が
+     * 2か所に残る（`/apps/` と `/production-app/` は同一オリジンなので、
+     * Service Worker のスコープと IndexedDB の名前が衝突しうる）。
+     *
+     * 上の節が「テスト環境に在ること」を見ているので、ここは
+     * **「本番に無いこと」**だけを見る。
+     * ==================================================================
+     */
+    const gone = ['notifier-client.js', 'notifier-config.js', 'notifier-messages.js',
+      'notifier-panel.js', 'sw.js', 'manifest.webmanifest'];
+
+    for (const name of gone) {
+      check(`★本番に ${name} が無い`, existsSync(join(PROD_DIR, name)) === false);
+      check(`テスト環境に ${name} がある`, existsSync(join(APP_DIR, name)) === true);
+    }
+
+    const prodHtml = readProdApp('index.html');
+    const prodApp = readProdApp('app.js');
+
+    check('★本番の HTML に通知パネルが無い', prodHtml.includes('vr-notifier-panel') === false);
+    check('★本番の HTML に通知の部品（vr-nf-）が1つも無い',
+      /vr-nf-/.test(prodHtml) === false);
+    check('★本番の HTML に通知バナーが無い', prodHtml.includes('vr-event-banner') === false);
+    check('★本番の HTML が manifest を読み込まない', prodHtml.includes('rel="manifest"') === false);
+    /* 由来を説明するコメントには出てくるので、**import の形**で見る。 */
+    check('★本番の app.js が notifier-panel.js を import しない',
+      /from '\.\/notifier-[a-z]+\.js'/.test(prodApp) === false);
+    check('★本番の app.js が mountNotifier を呼ばない',
+      prodApp.includes('mountNotifier') === false);
+    check('★本番の app.js が Service Worker を登録しない',
+      prodApp.includes('serviceWorker.register') === false);
+  }
+
+  /* ================================================================ */
+  section('★本番の既存機能が無傷であること（移設の巻き添えを見張る）');
+
+  {
+    /*
+     * ------------------------------------------------------------------
+     * 消しすぎていないか
+     * ------------------------------------------------------------------
+     * 通知を外す作業で、録音・Drive保存・ログインまで削ってしまうのが
+     * いちばん怖い壊れ方である。**通知と同じファイルに同居している**
+     * ため、範囲を1行間違えると起きる。
+     *
+     * ここは「残っていること」を見る。上の節と対で意味を持つ。
+     * ------------------------------------------------------------------
+     */
+    const prodHtml = readProdApp('index.html');
+    const prodApp = readProdApp('app.js');
+    const prodCss = readProdApp('style.css');
+
+    for (const id of ['vr-record-panel', 'vr-save-panel', 'vr-progress-panel', 'vr-result-panel',
+      'vr-start', 'vr-stop', 'vr-save', 'vr-state-auth', 'vr-state-oauth',
+      'vr-state-folder', 'vr-state-device', 'vr-main']) {
+      check(`本番の HTML に ${id} が残っている`, prodHtml.includes(id));
+    }
+
+    check('録音の実装を読み込んでいる', prodApp.includes("from './recorder/recorder.js'"));
+    check('Drive 保存を読み込んでいる', prodApp.includes("from './drive.js'"));
+    check('ログインの門を通している', prodApp.includes('guardPage('));
+    check('★戻り先は録音アプリのまま', prodApp.includes("next: 'voiceRecorder'"));
+
+    /*
+     * `?eventId=` の引き継ぎは**本番に残してある**（認証系の元画面復帰に
+     * つながっており、通知とは独立に効いているため）。除去の可否は未承認。
+     */
+    check('★eventId の引き継ぎが残っている',
+      prodApp.includes('params: { eventId: currentEventIdFromUrl() }'));
+    check('★eventId の読み取りが本番の中で完結している',
+      prodApp.includes('function currentEventIdFromUrl()'));
+
+    check('録音のスタイルが残っている', prodCss.includes('.vr-panel'));
+    check('★通知専用のスタイルは残していない', /#vr-nf-/.test(prodCss) === false);
   }
 
   finish();

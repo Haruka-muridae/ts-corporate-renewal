@@ -65,7 +65,7 @@
 7. 共有設定を「リンクを知っている全員: 閲覧者」にする。
 8. 配布URLは、シートURLの末尾を `/edit...` から `/copy` に差し替えたもの。
    開くとコピー画面になる。これを
-   `public/production-app/voice-recorder/notifier-config.js` の
+   `public/apps/voice-recorder/notifier-config.js` の
    `TEMPLATE_COPY_URL` へ設定する。
 
 ### 1-1. スコープが7つある理由（`script.container.ui` を含む）

@@ -17,19 +17,24 @@
 
   worker-src … 逐次エンコード用の Worker と AudioWorklet を自前で持つため 'self'。
   media-src blob: … 停止後のプレビュー再生（§FR-05）が blob: URL を使う。
-  connect-src … Google API・当社の認証系（Apps Script）・通知ゲートに限る。
-    通知ゲート（notifier-gate）はライセンスの疎通確認に使う。
-    **ワイルドカード（*.workers.dev）にはしない。** workers.dev は誰でも
-    使える共有ドメインで、他人の Worker まで許可することになる。
+  connect-src … Google API と当社の認証系（Apps Script）に限る。
+
+  通知ゲート（notifier-gate）は 2026-08-11 に外した。カレンダー通知を
+  テスト環境へ移設し、**この画面からゲートを呼ぶ経路が無くなった**ため。
+  必要が無い許可は置かない。
+
+  戻すときは connect-src へ https://notifier-gate.potenitas-lp.workers.dev を
+  足す（docs/notifier-v2-resume.md §4）。そのときも
+  **ワイルドカード（*.workers.dev）にはしない。** workers.dev は誰でも
+  使える共有ドメインで、他人の Worker まで許可することになる。
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com https://notifier-gate.potenitas-lp.workers.dev; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'">
 
 <!--
   ホーム画面へ追加したときの表示（カレンダー通知の受け口として常駐させる想定）。
   start_url / scope だけは絶対パスで書く。マニフェストは相対解決の基準が
   ファイル自身になるため、ここを相対にすると意図しない位置を指す。
 -->
-<link rel="manifest" href="manifest.webmanifest">
 
 <link rel="stylesheet" href="../../auth/auth.css">
 <link rel="stylesheet" href="style.css">
@@ -50,11 +55,6 @@
     </p>
   </header>
 
-  <!--
-    通知から開いたときの対象表示（要件書 5.3）。
-    表示するだけで録音は始めない（FR-20 / AC-07）。
-  -->
-  <p class="vr-event-banner" id="vr-event-banner" role="status" hidden></p>
 
   <!-- 利用の準備（§7: Google連携ボタン・連携アカウント・保存先フォルダ）。 -->
   <section class="vr-panel">
@@ -180,162 +180,6 @@
     <div class="vr-actions">
       <button type="button" id="vr-again" class="auth-button">新しい録音</button>
     </div>
-  </section>
-
-  <!--
-    Googleカレンダー連携（要件書 5.1）。
-    guardPage() を通ったあと notifier-panel.js が hidden を外す。
-    録音とは独立した機能なので、設定していなくても録音は使える。
-  -->
-  <section class="vr-panel" id="vr-notifier-panel" hidden>
-    <h2 class="vr-panel__title">Googleカレンダー連携（通知）</h2>
-    <p class="vr-note">
-      予定が始まる少し前に、この端末へ通知を出します。
-      予定の内容（予定名・参加者・説明）は<strong>あなたのGoogleアカウントの中だけ</strong>にあり、
-      当社のサーバーへ送られることはありません。
-      通知から録音が自動で始まることはありません。
-    </p>
-
-    <!-- セットアップ状態チェッカー。×の行にだけ対処法を出す。 -->
-    <ol class="vr-steps">
-      <li class="vr-step">
-        <span class="vr-step__label">GASへの接続</span>
-        <span class="vr-step__state" id="vr-nf-state-health">未確認</span>
-        <p class="vr-step__hint" id="vr-nf-hint-health" hidden></p>
-      </li>
-      <li class="vr-step">
-        <span class="vr-step__label">通知の鍵</span>
-        <span class="vr-step__state" id="vr-nf-state-key">未確認</span>
-        <p class="vr-step__hint" id="vr-nf-hint-key" hidden></p>
-      </li>
-      <li class="vr-step">
-        <span class="vr-step__label">ブラウザの通知許可</span>
-        <span class="vr-step__state" id="vr-nf-state-permission">未確認</span>
-        <button type="button" id="vr-nf-permission" class="auth-button vr-button--small">許可する</button>
-        <p class="vr-step__hint" id="vr-nf-hint-permission" hidden></p>
-      </li>
-      <li class="vr-step">
-        <span class="vr-step__label">この端末の登録</span>
-        <span class="vr-step__state" id="vr-nf-state-subscription">未確認</span>
-        <p class="vr-step__hint" id="vr-nf-hint-subscription" hidden></p>
-      </li>
-      <li class="vr-step">
-        <span class="vr-step__label">通知用シートの定期実行</span>
-        <span class="vr-step__state" id="vr-nf-state-trigger">未確認</span>
-        <p class="vr-step__hint" id="vr-nf-hint-trigger" hidden></p>
-      </li>
-      <li class="vr-step">
-        <span class="vr-step__label">ご契約（通知の利用）</span>
-        <span class="vr-step__state" id="vr-nf-state-license">未確認</span>
-        <p class="vr-step__hint" id="vr-nf-hint-license" hidden></p>
-      </li>
-    </ol>
-
-    <!-- はじめての設定はここから。ボタン1つで始まる。 -->
-    <div class="vr-actions">
-      <button type="button" id="vr-nf-setup" class="auth-button">通知をセットアップ</button>
-    </div>
-    <p class="vr-note">
-      通知用シートのコピー画面が開きます。シートのサイドバーで［セットアップを実行］→［公開する］と進み、
-      最後に［📱 録音アプリで仕上げる］を押すと、この画面へ戻って設定が完了します。
-    </p>
-
-    <!--
-      接続の設定。通常はウィザードのリンクで自動的に埋まるため畳んでおく。
-      リンクが使えなかったときのために、手で入れる道も残す（行き止まりを作らない）。
-    -->
-    <details class="vr-details" id="vr-nf-connection">
-      <summary class="vr-details__summary">接続の設定（うまくいかないとき）</summary>
-
-      <p class="vr-note">
-        通常はこの欄を触る必要はありません。引き継ぎリンクが開けなかった場合だけ、
-        <a id="vr-nf-template" href="#" target="_blank" rel="noopener noreferrer">通知用シート</a>
-        のメニュー「録音通知」→「録音アプリへの引き継ぎリンクを表示」で表示される値を貼り付けてください。
-      </p>
-
-      <label class="vr-field">
-        <span class="vr-field__label">GAS の URL</span>
-        <input type="url" id="vr-nf-url" class="vr-input" autocomplete="off" spellcheck="false"
-               name="vr-notifier-url" data-1p-ignore data-lpignore="true" data-bwignore
-               placeholder="https://script.google.com/macros/s/.../exec">
-      </label>
-
-      <!--
-        接続キーの欄。
-        **パスワードマネージャに拾わせない。** type="password" だと、
-        保存済みのログインパスワードが自動で入り、利用者が気づかないまま
-        別の値で接続を試すことになる（実機で実害が出た。2026-08-11）。
-        autocomplete="off" は password 欄では無視する実装があるため、
-        new-password と各社の除外属性を併記する。
-      -->
-      <label class="vr-field">
-        <span class="vr-field__label">
-          接続キー
-          <!-- 復元できているかを出す。値そのものは戻さない（notifier-panel.js の renderKeyState）。 -->
-          <span class="vr-badge" id="vr-nf-key-state" hidden></span>
-        </span>
-        <input type="password" id="vr-nf-key" class="vr-input" spellcheck="false"
-               name="vr-notifier-connect-key" autocomplete="new-password"
-               data-1p-ignore data-lpignore="true" data-bwignore
-               aria-describedby="vr-nf-key-help">
-      </label>
-      <p class="vr-note" id="vr-nf-key-help">
-        接続キーは第三者へ渡さないでください。<strong>保存後はこの欄を空にしますが、
-        「保存済み」と出ていれば設定は残っています。</strong>変更するときだけ入力してください。
-        パスワードマネージャが自動入力した場合は、必ず消してから貼り直してください。
-      </p>
-
-      <div class="vr-actions">
-        <button type="button" id="vr-nf-connect" class="auth-button">接続する</button>
-        <button type="button" id="vr-nf-disconnect" class="auth-button auth-button--ghost">接続を解除</button>
-      </div>
-    </details>
-
-    <!-- 通知の条件（FR-05〜FR-11）。正はGAS側にある。 -->
-    <form id="vr-nf-settings-form">
-      <fieldset class="vr-fieldset">
-        <legend class="vr-fieldset__legend">通知する予定（自分の出欠）</legend>
-        <label class="vr-check"><input type="checkbox" id="vr-nf-accepted"> 参加予定</label>
-        <label class="vr-check"><input type="checkbox" id="vr-nf-tentative"> 仮参加</label>
-        <label class="vr-check"><input type="checkbox" id="vr-nf-needsAction"> 未回答</label>
-        <label class="vr-check"><input type="checkbox" id="vr-nf-declined"> 辞退</label>
-      </fieldset>
-
-      <label class="vr-check">
-        <input type="checkbox" id="vr-nf-timedOnly"> 時間指定の予定のみ通知する（終日予定は通知しない）
-      </label>
-
-      <label class="vr-field">
-        <span class="vr-field__label">通知タイミング</span>
-        <select id="vr-nf-timing" class="vr-input"></select>
-      </label>
-
-      <div class="vr-actions">
-        <button type="submit" id="vr-nf-save" class="auth-button">設定を保存</button>
-        <button type="button" id="vr-nf-recheck" class="auth-button auth-button--ghost">接続テスト</button>
-      </div>
-    </form>
-
-    <!-- 次に届く通知。設定が効いているかを、実際の予定で確かめられるようにする。 -->
-    <section class="vr-subsection">
-      <h3 class="vr-subsection__title">次に届く通知</h3>
-      <ul class="vr-upcoming" id="vr-nf-upcoming" hidden></ul>
-      <p class="vr-note" id="vr-nf-upcoming-empty">
-        24時間以内に通知の予定はありません。設定を変えた直後は、反映まで最大5分かかります。
-      </p>
-      <div class="vr-actions">
-        <button type="button" id="vr-nf-test" class="auth-button auth-button--ghost">テスト通知を送る</button>
-      </div>
-      <p class="vr-note">テスト通知は1日1回までです。</p>
-    </section>
-
-    <!-- ご契約の状態。期限切れのときだけ料金ページへの導線を出す。 -->
-    <p class="vr-note">
-      ご契約: <span id="vr-nf-license-state">未確認</span>
-      <a id="vr-nf-license-link" href="#" hidden>ご契約の内容を確認する</a>
-    </p>
-
-    <p class="vr-note vr-note--hint" id="vr-nf-message" role="status" hidden></p>
   </section>
 
   <!-- 状態とエラー（§9）。 -->

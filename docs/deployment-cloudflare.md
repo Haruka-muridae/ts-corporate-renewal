@@ -209,22 +209,28 @@ curl -sI https://tsam-ai.com/event/apply/                   # 200 かつ x-openn
 - [ ] 交流会の申込（`/event/apply/`）が開く ← **サーバー側が動いている証拠**
 - [ ] ブラウザの devtools で、更新したはずのファイルが**新しい内容**になっている
 
-### Service Worker とマニフェスト（録音アプリのカレンダー通知）
+### Service Worker とマニフェスト（カレンダー通知）
+
+> **2026-08-11 に配置が変わった。** 通知を本番の録音アプリから
+> テスト環境（`/apps/voice-recorder/`）へ移設したため、
+> **`/production-app/voice-recorder/` の `sw.js` と `manifest.webmanifest` は
+> 404 になるのが正しい。** 本番へ戻したら、下の URL も戻す
+> （[notifier-v2-resume.md](./notifier-v2-resume.md)）。
 
 **Content-Type まで見る。** 200 が返るだけでは足りない。
 
 ```bash
-curl -sI https://tsam-ai.com/production-app/voice-recorder/sw.js
+curl -sI https://tsam-ai.com/apps/voice-recorder/sw.js
 #   200 / content-type: text/javascript（または application/javascript）
 
-curl -sI https://tsam-ai.com/production-app/voice-recorder/manifest.webmanifest
+curl -sI https://tsam-ai.com/apps/voice-recorder/manifest.webmanifest
 #   200 / content-type: application/manifest+json
 ```
 
 - [ ] `sw.js` が 200 かつ **`text/javascript` または `application/javascript`**
 - [ ] `manifest.webmanifest` が 200 かつ `application/manifest+json`
 - [ ] 録音アプリを開き、devtools → Application → Service Workers に
-      `/production-app/voice-recorder/` スコープで **activated** が出る
+      `/apps/voice-recorder/` スコープで **activated** が出る
 
 > **`text/javascript` でも正しい。** 2026-08-09 の本番実測値は `text/javascript`
 > だった（`npm run dev` のローカルでは `application/javascript`）。
