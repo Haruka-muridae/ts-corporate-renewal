@@ -689,6 +689,87 @@ try {
   }
 
   /* ================================================================ */
+  section('★403 の見分け（直す場所が2か所ある）');
+
+  {
+    /*
+     * 実機で「利用者設定は有効なのに 403 が続く」状態に嵌まった（2026-08-11）。
+     * 403 の本文を捨てていたため、直す場所が
+     *   利用者設定（script.google.com/home/usersettings）なのか
+     *   GCP プロジェクト（Apps Script API が未有効）なのか
+     * を区別できなかった。**区別してから案内する。**
+     */
+    function deployWith(status, body) {
+      const env = createNotifierEnvironment({ serviceUrl: '' });
+
+      env.api.setupNotifier();
+      env.onFetch((target) => {
+        if (String(target).indexOf('https://script.googleapis.com/') !== 0) {
+          return null;
+        }
+
+        return { status, body };
+      });
+
+      return { env, result: env.api.deployWebApp() };
+    }
+
+    /* 1) 利用者設定が OFF のときの文面。 */
+    const userOff = deployWith(403, {
+      error: {
+        code: 403,
+        status: 'PERMISSION_DENIED',
+        message: 'User has not enabled the Apps Script API. Enable it by visiting '
+          + 'https://script.google.com/home/usersettings then retry.',
+      },
+    });
+
+    check('利用者設定の 403 は API_DISABLED', userOff.result.status === 'API_DISABLED',
+      JSON.stringify(userOff.result));
+    check('案内URLを取り出す',
+      userOff.result.helpUrl === 'https://script.google.com/home/usersettings',
+      userOff.result.helpUrl);
+
+    /* 2) GCP プロジェクトで未有効のときの文面（SERVICE_DISABLED）。 */
+    const gcpOff = deployWith(403, {
+      error: {
+        code: 403,
+        status: 'PERMISSION_DENIED',
+        message: 'Apps Script API has not been used in project 123456789012 before or it is '
+          + 'disabled. Enable it by visiting https://console.developers.google.com/apis/api/'
+          + 'script.googleapis.com/overview?project=123456789012 then retry.',
+        details: [{ reason: 'SERVICE_DISABLED' }],
+      },
+    });
+
+    check('★GCP 側の 403 は別種として返す', gcpOff.result.status === 'API_DISABLED_GCP',
+      JSON.stringify(gcpOff.result));
+    check('★有効化URLをそのままボタンにできる',
+      gcpOff.result.helpUrl.indexOf('https://console.developers.google.com/apis/api/') === 0,
+      gcpOff.result.helpUrl);
+    check('プロジェクト番号が案内URLに残る', gcpOff.result.helpUrl.includes('123456789012'));
+
+    /* 3) reason だけで判定できること（文面が変わっても効くように）。 */
+    const byReason = deployWith(403, {
+      error: { code: 403, message: '（文面が変わった場合）', details: [{ reason: 'SERVICE_DISABLED' }] },
+    });
+
+    check('★文面が変わっても reason で見分ける', byReason.result.status === 'API_DISABLED_GCP');
+
+    /* 4) 403 以外は従来どおり。 */
+    const other = deployWith(500, { error: { code: 500, message: 'boom' } });
+
+    check('403 以外は API_ERROR', other.result.status === 'API_ERROR', JSON.stringify(other.result));
+
+    /* 5) 生の応答を実行ログへ出していること（★一時デバッグ。B-07 で削除する）。 */
+    check('★失敗時に生の応答をログへ出す',
+      gcpOff.env.logs.some((line) => line.includes('123456789012')),
+      gcpOff.env.logs.join(' | ').slice(0, 300));
+    check('★ログにアクセストークンを出さない',
+      gcpOff.env.logs.some((line) => line.includes('FAKE-OAUTH-TOKEN')) === false);
+  }
+
+  /* ================================================================ */
   section('★公開URLの扱い（実機で踏んだ壊れ方）');
 
   {
@@ -919,6 +1000,9 @@ try {
     check('★ウィザードに引き継ぎリンクがある', sidebar.includes('getHandoffLink()'));
     check('★API 未許可を検出して設定ページへ誘導する',
       sidebar.includes('API_DISABLED') && sidebar.includes('script.google.com/home/usersettings'));
+    check('★GCP 側の未有効にも別の案内を出す',
+      sidebar.includes('API_DISABLED_GCP') && sidebar.includes('panel-gcp'));
+    check('★Google が示す有効化URLをボタンにする', sidebar.includes('result.helpUrl'));
     check('★自動検出のポーリングがある', sidebar.includes('startApiPolling'));
     check('★行き止まりにしない（手動デプロイの折りたたみが残っている）',
       sidebar.includes('うまくいかないときは') && sidebar.includes('デプロイを管理'));

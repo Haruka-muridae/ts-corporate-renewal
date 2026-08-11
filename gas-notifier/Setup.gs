@@ -140,7 +140,7 @@ function deployWebApp() {
   var listed = scriptApiFetch_('get', 'projects/' + scriptId + '/deployments', null);
 
   if (!listed.ok) {
-    return deployFailure_(listed.error, listed.message);
+    return deployFailure_(listed.error, listed.message, listed.helpUrl);
   }
 
   var existing = findWebAppDeployment_(listed.body);
@@ -167,7 +167,7 @@ function deployWebApp() {
     });
 
     if (!version.ok) {
-      return deployFailure_(version.error, version.message);
+      return deployFailure_(version.error, version.message, version.helpUrl);
     }
 
     versionNumber = version.body && version.body.versionNumber;
@@ -200,7 +200,7 @@ function deployWebApp() {
   }
 
   if (!applied.ok) {
-    return deployFailure_(applied.error, applied.message);
+    return deployFailure_(applied.error, applied.message, applied.helpUrl);
   }
 
   var url = normalizeExecUrl_(webAppUrlFromDeployment_(applied.body));
@@ -293,22 +293,107 @@ function scriptApiFetch_(method, path, payload) {
     body = null;
   }
 
+  if (status >= 200 && status < 300) {
+    return { ok: true, error: '', message: '', helpUrl: '', body: body };
+  }
+
+  /*
+   * ==================================================================
+   * ★一時デバッグ★ 生の応答を実行ログへ出す
+   * ==================================================================
+   * **原因が確定したら、このブロックごと削除する**（docs/backlog.md B-07）。
+   *
+   * 403 には少なくとも2種類あり、応答本文を捨てていたために区別できなかった。
+   *
+   *   1. 利用者の設定（script.google.com/home/usersettings）が OFF
+   *   2. スクリプトに紐づく **GCP プロジェクト**で Apps Script API が未有効
+   *
+   * 2 の場合、本文にプロジェクト番号と有効化URLが入る。それを見れば確定する。
+   *
+   * **Authorization ヘッダーは出さない。** 出すのは応答の本文と状態だけで、
+   * ここにアクセストークンは含まれない。
+   * ==================================================================
+   */
+  Logger.log(
+    '[一時デバッグ] scriptApiFetch_ ' + method + ' ' + path
+    + ' -> HTTP ' + status + '\n' + String(response.getContentText() || '').slice(0, 4000)
+  );
+
+  var detail = (body && body.error && body.error.message) ? String(body.error.message) : '';
+  var reason = scriptApiReason_(body);
+
   if (status === 403) {
-    return { ok: false, error: 'API_DISABLED', message: 'Apps Script API が許可されていません。', body: body };
+    /*
+     * **どちらの 403 かを分ける。** 直す場所がまったく違う。
+     * 判定は Google の文面に含まれる案内URLで行い、
+     * 見分けがつかないときは利用者設定側（頻度が高い）へ倒す。
+     */
+    if (reason === 'SERVICE_DISABLED' || detail.indexOf('console.developers.google.com') !== -1
+      || detail.indexOf('console.cloud.google.com') !== -1) {
+      return {
+        ok: false,
+        error: 'API_DISABLED_GCP',
+        message: 'このスクリプトに紐づく Google Cloud プロジェクトで Apps Script API が有効になっていません。',
+        helpUrl: firstHttpsUrl_(detail),
+        body: body
+      };
+    }
+
+    return {
+      ok: false,
+      error: 'API_DISABLED',
+      message: 'Apps Script API が許可されていません。',
+      helpUrl: firstHttpsUrl_(detail) || 'https://script.google.com/home/usersettings',
+      body: body
+    };
   }
 
-  if (status < 200 || status >= 300) {
-    var detail = (body && body.error && body.error.message) ? String(body.error.message) : ('HTTP ' + status);
-    return { ok: false, error: 'API_ERROR', message: detail.slice(0, 200), body: body };
-  }
-
-  return { ok: true, error: '', message: '', body: body };
+  return {
+    ok: false,
+    error: 'API_ERROR',
+    message: (detail || ('HTTP ' + status)).slice(0, 200),
+    helpUrl: '',
+    body: body
+  };
 }
 
-function deployFailure_(error, message) {
-  Logger.log('deployWebApp failed: ' + error);
+/** エラー応答の details に入る reason（SERVICE_DISABLED など）。無ければ ''。 */
+function scriptApiReason_(body) {
+  var details = (body && body.error && body.error.details) || [];
 
-  return { ok: false, url: '', created: false, status: error, message: message };
+  for (var i = 0; i < details.length; i++) {
+    var reason = details[i] && details[i].reason;
+
+    if (reason) {
+      return String(reason);
+    }
+  }
+
+  return String((body && body.error && body.error.status) || '');
+}
+
+/**
+ * 文面の中の最初の https URL。
+ * Google のエラーは「ここを開いて有効化せよ」というURLを本文へ入れてくる。
+ * それをそのままボタンにすれば、利用者が探さずに済む。
+ */
+function firstHttpsUrl_(text) {
+  var match = String(text || '').match(/https:\/\/[^\s"'<>)]+/);
+
+  return match ? match[0].replace(/[.,]$/, '') : '';
+}
+
+function deployFailure_(error, message, helpUrl) {
+  Logger.log('deployWebApp failed: ' + error + (message ? ' / ' + message : ''));
+
+  return {
+    ok: false,
+    url: '',
+    created: false,
+    status: error,
+    message: message,
+    helpUrl: helpUrl || ''
+  };
 }
 
 /* ---------- サイドバーが読む状態 ---------- */
