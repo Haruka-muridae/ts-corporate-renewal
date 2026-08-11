@@ -24,6 +24,10 @@ import { join } from 'node:path';
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
 import { REPO_ROOT } from '../helpers/gas-notifier-harness.mjs';
 import { NOTIFIER_GATE_ORIGIN } from '../../workers/notifier-gate/origin.mjs';
+import { installFakeIndexedDb } from '../helpers/fake-indexeddb.mjs';
+
+/* notifier-config.js は import の時点では触らないが、読み込み前に置いておく。 */
+const fakeDb = installFakeIndexedDb();
 
 const APP_DIR = join(REPO_ROOT, 'public/production-app/voice-recorder');
 
@@ -261,6 +265,106 @@ try {
   }
 
   /* ================================================================ */
+  section('★接続情報の永続化（実機で踏んだ根本）');
+
+  {
+    /*
+     * 実機の症状: 手動入力して［接続する］→ リロードすると古い値へ戻る。
+     * 原因は「確認してから保存」の順序で、確認に失敗すると保存へ到達せず、
+     * さらに connection を捨てていたこと。
+     *
+     * **保存先と復元元が同じであること**を、実際に読み書きして確かめる。
+     */
+    const config = await import('../../public/production-app/voice-recorder/notifier-config.js');
+
+    fakeDb.reset();
+
+    const pair = {
+      url: 'https://script.google.com/macros/s/AKfycbxeNexample/exec',
+      key: 'connect-key-0123456789abcdefghijklmnop',
+    };
+
+    check('最初は未接続', (await config.readConnection()) === null);
+
+    await config.writeConnection(pair);
+
+    const restored = await config.readConnection();
+
+    check('保存した値が読み戻せる',
+      restored?.url === pair.url && restored?.key === pair.key, JSON.stringify(restored));
+
+    /* リロードの再現。開き直しても同じ値が出ること。 */
+    const afterReload = await config.readConnection();
+
+    check('★開き直しても同じ値（リロードで戻らない）',
+      afterReload?.url === pair.url && afterReload?.key === pair.key, JSON.stringify(afterReload));
+
+    /* 上書きが効くこと（別のデプロイへ繋ぎ直す場面）。 */
+    const next = { url: 'https://script.google.com/macros/s/AKfycbzsFI9cOther/exec', key: 'another-key-abcdefghijklmnopqrstuvwx' };
+
+    await config.writeConnection(next);
+    check('★上書きすると新しい値になる', (await config.readConnection())?.url === next.url);
+
+    await config.clearConnection();
+    check('解除すると消える', (await config.readConnection()) === null);
+
+    /* ライセンスキーも同じストアで往復すること。 */
+    await config.writeLicenseKey('L'.repeat(43));
+    check('ライセンスキーが読み戻せる', (await config.readLicenseKey()) === 'L'.repeat(43));
+
+    await config.clearLicenseKey();
+    check('ライセンスキーを消せる', (await config.readLicenseKey()) === '');
+
+    check('接続とライセンスは別々に消える',
+      (await config.readConnection()) === null && (await config.readLicenseKey()) === '');
+  }
+
+  /* ================================================================ */
+  section('★Workspace 形式のURL（実機で接続できなかった形）');
+
+  {
+    const config = await import('../../public/production-app/voice-recorder/notifier-config.js');
+
+    const domainForm = 'https://script.google.com/a/macros/potenitas.com/s/AKfycbxeNexample/exec';
+    const plainForm = 'https://script.google.com/macros/s/AKfycbxeNexample/exec';
+
+    check('★/a/<ドメイン>/ 形式を素の形へ正規化する',
+      config.normalizeGasUrl(domainForm) === plainForm, config.normalizeGasUrl(domainForm));
+    check('正規化した形は受理される', config.isGasUrl(domainForm) === true);
+    check('素の形はそのまま', config.normalizeGasUrl(plainForm) === plainForm);
+    check('末尾スラッシュとクエリを落とす',
+      config.normalizeGasUrl(`${plainForm}/?usp=x`) === plainForm);
+
+    check('★別ドメインに見せかけた形は受理しない',
+      config.isGasUrl('https://script.google.com.evil.example/a/macros/x/s/AK/exec') === false);
+
+    /* 引き継ぎリンクでも同じ正規化が効くこと。 */
+    const link = `#setup=${Buffer.from(JSON.stringify({
+      execUrl: domainForm,
+      connectKey: 'k'.repeat(43),
+    }), 'utf8').toString('base64url')}`;
+
+    check('★引き継ぎリンクの /a/ 形式も正規化して受理する',
+      config.parseSetupFragment(link)?.url === plainForm,
+      JSON.stringify(config.parseSetupFragment(link)));
+  }
+
+  /* ================================================================ */
+  section('★URL の指紋（どのデプロイに繋いでいるか）');
+
+  {
+    const config = await import('../../public/production-app/voice-recorder/notifier-config.js');
+
+    const a = await config.execUrlDigest('https://script.google.com/macros/s/AAA/exec');
+    const b = await config.execUrlDigest('https://script.google.com/macros/s/BBB/exec');
+
+    check('12文字の16進を返す', /^[0-9a-f]{12}$/.test(a), a);
+    check('★URLが違えば指紋も違う', a !== b);
+    check('同じURLなら同じ指紋', a === await config.execUrlDigest('https://script.google.com/macros/s/AAA/exec'));
+    check('空なら空', (await config.execUrlDigest('')) === '');
+  }
+
+  /* ================================================================ */
   section('★フロントの配線（Phase 4）');
 
   {
@@ -306,6 +410,35 @@ try {
 
     check('★予定名は textContent で入れる（innerHTML を使わない）',
       /\.innerHTML/.test(panel) === false);
+
+    /* ---- 実機で踏んだ順序の固定（2026-08-11） ---- */
+    const connect = panel.slice(
+      panel.indexOf('async function handleConnect'),
+      panel.indexOf('async function handleDisconnect'),
+    );
+
+    check('★[接続する]は確認より先に保存する（リロードで消えない）',
+      connect.indexOf('writeConnection(connection)') < connect.indexOf('runChecks()'),
+      String(connect.indexOf('writeConnection(connection)')));
+    check('★ライセンスの引き渡しを publicKey より先に行う（鶏卵を作らない）',
+      connect.indexOf('pushLicenseToGas()') !== -1
+      && connect.indexOf('pushLicenseToGas()') < connect.indexOf('runChecks()'));
+    check('★失敗しても接続情報を捨てない',
+      /catch[\s\S]*connection = null/.test(connect) === false, connect.slice(-400));
+
+    const checks = panel.slice(panel.indexOf('async function runChecks'), panel.indexOf('function permissionLabel'));
+
+    check('★接続テストで POST の疎通も見る', checks.includes('pingGas(connection)'));
+    check('★シートの公開URLと接続先の指紋を突き合わせる',
+      checks.includes('execUrlDigest(connection.url)') && checks.includes('execUrlDigest'));
+    check('★ライセンス未着を「セットアップ未完了」と混ぜない',
+      checks.includes('NotifierErrorCode.NO_LICENSE'));
+
+    const html2 = readApp('index.html');
+
+    check('★接続キー欄をパスワードマネージャに拾わせない',
+      html2.includes('autocomplete="new-password"') && html2.includes('data-1p-ignore'),
+      'autocomplete');
   }
 
   /* ================================================================ */

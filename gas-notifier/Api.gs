@@ -13,6 +13,7 @@
 
 var ALLOWED_GET_ACTIONS = ['health', 'publicKey', 'getSettings', 'pending', 'event', 'upcoming'];
 var ALLOWED_POST_ACTIONS = [
+  'ping',
   'saveSettings',
   'saveSubscription',
   'saveLicense',
@@ -114,7 +115,15 @@ function doGet(e) {
       }
 
       if (publicKey === '') {
-        return apiFail_(API_ERRORS.NOT_CONFIGURED);
+        /*
+         * **「セットアップが未完了」と「ライセンスがまだ届いていない」を分ける。**
+         * 実機では、鍵が取れない原因がライセンス未着信であることが読み取れず、
+         * 「セットアップをやり直す」という誤った方向へ切り分けが進んだ。
+         * ライセンスさえ届けば解ける状態なら、そう言う。
+         */
+        return apiFail_(
+          getProperty_(PROP.LICENSE_KEY) === '' ? API_ERRORS.NO_LICENSE : API_ERRORS.NOT_CONFIGURED
+        );
       }
 
       return apiOk_({ publicKey: publicKey });
@@ -175,6 +184,20 @@ function doPost(e) {
 
     if (!connectKeyMatches_(body.key)) {
       return apiFail_(API_ERRORS.UNAUTHORIZED);
+    }
+
+    if (action === 'ping') {
+      /*
+       * POST の疎通確認。**副作用は持たない。**
+       *
+       * GET だけ通って POST が通らない状態が実際に起きた（古いデプロイに
+       * 繋がっていて、新しい action が INVALID_ACTION になる）。GET 系の
+       * 成功だけを見ていると気づけないため、接続テストはここも叩く。
+       *
+       * この action の存在自体が「新しいスナップショットか」の判定にもなる
+       * （古いデプロイなら INVALID_ACTION が返る）。
+       */
+      return apiOk_(buildIdentity_());
     }
 
     if (action === 'saveSettings') {
@@ -314,13 +337,31 @@ function handleSyncNow_() {
  * **予定の内容は一切含めない。** ここは接続キー無しで読める。
  */
 function buildHealth_() {
+  var identity = buildIdentity_();
+
   return {
     ok: true,
-    version: NOTIFIER_VERSION,
+    version: identity.version,
+    /*
+     * 公開のたびに増える番号と、公開URLの指紋。
+     * **どちらも「いま話している相手が想定のデプロイか」を見るためのもの。**
+     * version は手で上げる値なので、スナップショットの取り違えを検出できない。
+     */
+    deployedVersion: identity.deployedVersion,
+    execUrlDigest: identity.execUrlDigest,
     lastTickAt: toIsoOrEmpty_(getProperty_(PROP.LAST_TICK_AT)),
     triggerActive: hasTickTrigger_(),
     configured: getProperty_(PROP.CONNECT_KEY) !== '' && getProperty_(PROP.EID_HMAC_KEY) !== '',
     licensed: getProperty_(PROP.LICENSE_KEY) !== ''
+  };
+}
+
+/** 「どのスナップショットか」を示す値。health と ping が同じものを返す。 */
+function buildIdentity_() {
+  return {
+    version: NOTIFIER_VERSION,
+    deployedVersion: getProperty_(PROP.DEPLOYED_VERSION),
+    execUrlDigest: execUrlDigest_()
   };
 }
 

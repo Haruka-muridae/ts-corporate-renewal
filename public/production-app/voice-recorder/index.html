@@ -256,16 +256,28 @@
       <label class="vr-field">
         <span class="vr-field__label">GAS の URL</span>
         <input type="url" id="vr-nf-url" class="vr-input" autocomplete="off" spellcheck="false"
+               name="vr-notifier-url" data-1p-ignore data-lpignore="true" data-bwignore
                placeholder="https://script.google.com/macros/s/.../exec">
       </label>
 
+      <!--
+        接続キーの欄。
+        **パスワードマネージャに拾わせない。** type="password" だと、
+        保存済みのログインパスワードが自動で入り、利用者が気づかないまま
+        別の値で接続を試すことになる（実機で実害が出た。2026-08-11）。
+        autocomplete="off" は password 欄では無視する実装があるため、
+        new-password と各社の除外属性を併記する。
+      -->
       <label class="vr-field">
         <span class="vr-field__label">接続キー</span>
-        <input type="password" id="vr-nf-key" class="vr-input" autocomplete="off" spellcheck="false"
+        <input type="password" id="vr-nf-key" class="vr-input" spellcheck="false"
+               name="vr-notifier-connect-key" autocomplete="new-password"
+               data-1p-ignore data-lpignore="true" data-bwignore
                aria-describedby="vr-nf-key-help">
       </label>
       <p class="vr-note" id="vr-nf-key-help">
         接続キーは第三者へ渡さないでください。保存後はこの欄を空にします。
+        <strong>パスワードマネージャが自動入力した場合は、必ず消してから貼り直してください。</strong>
       </p>
 
       <div class="vr-actions">

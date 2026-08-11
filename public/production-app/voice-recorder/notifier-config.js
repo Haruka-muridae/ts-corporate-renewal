@@ -315,7 +315,22 @@ export function parseSetupFragment(hash) {
 
 /*
  * 貼り付けられた GAS の URL を整える。
- * 末尾の空白と、コピー時に付きがちな `?...` を落として `/exec` までにする。
+ *
+ * ------------------------------------------------------------------
+ * ドメイン付きの形を素の形へ寄せる
+ * ------------------------------------------------------------------
+ * Google Workspace のアカウントでは、デプロイURLが
+ * `https://script.google.com/a/macros/<ドメイン>/s/<ID>/exec` の形で返る。
+ * この形は**そのドメインでのログインを求められることがある**ため、匿名で叩く
+ * Service Worker からは使えない場合がある。同じデプロイは
+ * `/macros/s/<ID>/exec` でも開けるので、そちらへ寄せる。
+ *
+ * 実機では、この形のURLが引き継ぎリンクに載って接続できなかった（2026-08-11）。
+ * **拒否ではなく正規化にしているのは、Workspace の利用者を締め出さないため。**
+ * GAS 側（Setup.gs の normalizeExecUrl_）にも同じ変換がある。
+ * ------------------------------------------------------------------
+ *
+ * 末尾の空白と、コピー時に付きがちな `?...` `#...` も落とす。
  */
 export function normalizeGasUrl(input) {
   const text = String(input ?? '').trim();
@@ -324,9 +339,17 @@ export function normalizeGasUrl(input) {
     return '';
   }
 
-  const withoutQuery = text.split('#')[0].split('?')[0];
+  const withoutQuery = text.split('#')[0].split('?')[0].replace(/\/+$/, '');
 
-  return withoutQuery.replace(/\/+$/, '');
+  const domainForm = withoutQuery.match(
+    /^https:\/\/script\.google\.com\/a\/macros\/[^/]+\/s\/([\w-]+)\/exec$/,
+  );
+
+  if (domainForm) {
+    return `https://script.google.com/macros/s/${domainForm[1]}/exec`;
+  }
+
+  return withoutQuery;
 }
 
 /* 形として GAS の Web アプリURLか。判定であって、到達確認ではない。 */
@@ -334,4 +357,32 @@ export function isGasUrl(input) {
   const url = normalizeGasUrl(input);
 
   return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url);
+}
+
+/**
+ * URL の指紋（SHA-256 の先頭12文字）。
+ *
+ * GAS 側（Setup.gs の execUrlDigest_）と**同じ計算**にしてある。
+ * health が返す値と突き合わせて、「シートが公開したデプロイ」と
+ * 「いま自分が繋いでいる先」が同じかを見る。
+ * 実機では3種類のURLが食い違っていたのに、それを知る手段が無かった。
+ */
+export async function execUrlDigest(url) {
+  const text = String(url ?? '').trim();
+
+  if (text === '' || !globalThis.crypto?.subtle) {
+    return '';
+  }
+
+  const bytes = new Uint8Array(
+    await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)),
+  );
+
+  let hex = '';
+
+  for (let i = 0; i < bytes.length && hex.length < 12; i += 1) {
+    hex += bytes[i].toString(16).padStart(2, '0');
+  }
+
+  return hex.slice(0, 12);
 }

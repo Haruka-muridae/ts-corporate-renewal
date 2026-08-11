@@ -20,7 +20,7 @@
  * ==================================================================
  */
 
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -233,6 +233,17 @@ export function createNotifierEnvironment({
       computeHmacSha256Signature: (value, key) => toSignedBytes(
         createHmac('sha256', String(key)).update(String(value), 'utf8').digest(),
       ),
+
+      DigestAlgorithm: { SHA_256: 'SHA_256' },
+      Charset: { UTF_8: 'UTF_8' },
+
+      computeDigest: (algorithm, value) => {
+        if (algorithm !== 'SHA_256') {
+          throw new Error(`未対応のダイジェスト: ${algorithm}`);
+        }
+
+        return toSignedBytes(createHash('sha256').update(String(value), 'utf8').digest());
+      },
 
       newBlob: (text) => ({
         getBytes: () => toSignedBytes(Buffer.from(String(text), 'utf8')),
@@ -537,6 +548,7 @@ export function installGateStub(env, {
  */
 export function createReadyNotifierEnvironment({
   licenseKey = 'LK'.padEnd(43, 'x'),
+  webAppUrl = 'https://script.google.com/macros/s/AKdeployed/exec',
   ...options
 } = {}) {
   const env = createNotifierEnvironment(options);
@@ -545,6 +557,18 @@ export function createReadyNotifierEnvironment({
 
   if (licenseKey) {
     env.properties.LICENSE_KEY = licenseKey;
+  }
+
+  /*
+   * 公開済みの状態にする。
+   *
+   * **getService().getUrl() では代用できない。** 実機の不具合を受けて、
+   * 公開したという事実は deployWebApp() が保存した WEBAPP_URL だけが
+   * 持つようにした（gas-notifier/Setup.gs の webAppUrl_）。
+   * 未公開の状態を試したいテストは webAppUrl: '' を渡す。
+   */
+  if (webAppUrl) {
+    env.properties.WEBAPP_URL = webAppUrl;
   }
 
   return env;

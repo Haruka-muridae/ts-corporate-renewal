@@ -201,6 +201,20 @@ export async function fetchEvent(connection, eventId) {
   return data.event ?? null;
 }
 
+/**
+ * POST の疎通確認。**副作用は持たない。**
+ *
+ * GET だけ通って POST が通らない状態が実際に起きた（古いデプロイに繋がっていて、
+ * 新しい action が INVALID_ACTION になる）。GET 系の成功だけを見ていると
+ * 気づけないため、接続テストはこれも叩く。
+ *
+ * 戻り値の execUrlDigest は「シートが公開したURLの指紋」。
+ * いま繋いでいるURLの指紋と突き合わせると、古いデプロイに繋いでいるか分かる。
+ */
+export function pingGas(connection) {
+  return gasPost(connection, 'ping');
+}
+
 /*
  * ライセンスキーを GAS へ預ける。
  *
