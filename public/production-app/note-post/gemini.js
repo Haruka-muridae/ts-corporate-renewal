@@ -151,7 +151,7 @@ export function mapStatus(status) {
  * Gemini へ送る要求本文。
  * 事実の創作を防ぐ指示は、note 記事生成の既存実装（note-auto-fill-gas）から引き継ぐ。
  */
-export function buildPostRequest(theme, { maxOutputTokens = MAX_OUTPUT_TOKENS } = {}) {
+export function buildPostRequest(theme, { maxOutputTokens = MAX_OUTPUT_TOKENS, stylePrompt = '' } = {}) {
   const prompt = 'あなたは、note に投稿する記事を書く日本語のライターです。\n'
     + '以下のテーマ・指示をもとに、記事を1本作成してください。\n'
     + '\n'
@@ -162,6 +162,13 @@ export function buildPostRequest(theme, { maxOutputTokens = MAX_OUTPUT_TOKENS } 
     + '- テーマ・指示に無い数字・固有名詞・具体的なエピソードを追加しないこと（創作の禁止）。\n'
     + '- 未確認の情報を断定しないこと。一般論は「一般的には」と明示すること。\n'
     + '- 前置き・後書き・コードブロックを付けず、記事本文そのものだけを出力すること。\n'
+    /*
+     * 利用者の調整プロンプト（画面で常設保存）。方針の一部として
+     * テーマより前に置く。長すぎる指示は要点がぼけるため頭打ちにする。
+     */
+    + (String(stylePrompt ?? '').trim()
+      ? '\n# 書き方の調整（利用者設定）\n' + String(stylePrompt).trim().slice(0, 2000) + '\n'
+      : '')
     + '\n'
     + '# テーマ・指示\n'
     + String(theme ?? '').slice(0, THEME_MAX_LENGTH);
@@ -204,7 +211,7 @@ export function extractPostText(payload) {
  * 1回だけ呼ぶ。モデルの切り替えは呼び出し側（generatePost）の仕事。
  * fetchImpl を差し替えられるのはテストで実APIへ通信しないため。
  */
-async function callOnce({ apiKey, model, theme, fetchImpl, signal }) {
+async function callOnce({ apiKey, model, theme, stylePrompt, fetchImpl, signal }) {
   const url = `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent`;
   const impl = fetchImpl ?? globalThis.fetch;
 
@@ -218,7 +225,7 @@ async function callOnce({ apiKey, model, theme, fetchImpl, signal }) {
         'x-goog-api-key': apiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(buildPostRequest(theme)),
+      body: JSON.stringify(buildPostRequest(theme, { stylePrompt })),
       signal,
     });
   } catch {
@@ -257,16 +264,16 @@ async function callOnce({ apiKey, model, theme, fetchImpl, signal }) {
  * それ以外のエラーでは再試行しない（401/403 を繰り返しても結果は
  * 変わらず、無料枠のクォータを削るだけ）。
  */
-export async function generatePost({ apiKey, theme, fetchImpl, signal }) {
+export async function generatePost({ apiKey, theme, stylePrompt, fetchImpl, signal }) {
   if (typeof apiKey !== 'string' || apiKey.trim() === '') {
     throw new GeminiError(GeminiErrorCode.KEY_MISSING, 0, 'no_key');
   }
 
   try {
-    return await callOnce({ apiKey, model: DEFAULT_MODEL, theme, fetchImpl, signal });
+    return await callOnce({ apiKey, model: DEFAULT_MODEL, theme, stylePrompt, fetchImpl, signal });
   } catch (error) {
     if (error instanceof GeminiError && error.code === GeminiErrorCode.MODEL_NOT_FOUND) {
-      return callOnce({ apiKey, model: FALLBACK_MODEL, theme, fetchImpl, signal });
+      return callOnce({ apiKey, model: FALLBACK_MODEL, theme, stylePrompt, fetchImpl, signal });
     }
 
     throw error;

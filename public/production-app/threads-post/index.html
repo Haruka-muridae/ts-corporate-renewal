@@ -79,6 +79,10 @@
             placeholder="例: 新サービスの告知。絵文字少なめ" autocomplete="off">
           <button type="submit" id="tp-generate" class="auth-button">AIで生成</button>
         </form>
+        <label for="tp-style">書き方の調整（任意・この端末に自動保存）</label>
+        <textarea id="tp-style" rows="3"
+          placeholder="例: です・ます調で。絵文字は使わない。箇条書きを交える"></textarea>
+        <p class="tp-note">ここに書いた指示は、以後の「AIで生成」で毎回使われます。空にすれば使われません。</p>
       </section>
 
       <section class="tp-compose" aria-labelledby="tp-compose-heading">

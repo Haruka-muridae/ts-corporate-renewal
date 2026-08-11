@@ -62,6 +62,15 @@ try {
     check('壊れた保存データは読み捨てる', post.listDrafts({ storage }).length === 0);
   }
 
+  {
+    /* 調整プロンプトの保存（Threads 版の複製・要点のみ）。 */
+    const storage = makeStorage();
+    post.saveStylePrompt('専門用語には注釈を付ける', { storage });
+    post.saveDraft('下書き', { storage });
+    check('調整プロンプトが残る',
+      post.loadStylePrompt({ storage }) === '専門用語には注釈を付ける');
+  }
+
   /* ================================================================ */
   section('Gemini（記事向けプロンプトの差分のみ）');
 
@@ -76,10 +85,15 @@ try {
       };
     };
 
-    const text = await gemini.generatePost({ apiKey: 'FAKE', theme: 'AI導入の始め方', fetchImpl });
+    const text = await gemini.generatePost({
+      apiKey: 'FAKE', theme: 'AI導入の始め方', stylePrompt: '結論を先に書く', fetchImpl,
+    });
     check('生成できる', text === '## 見出し\n本文');
 
     const body = JSON.parse(calls[0].options.body);
+    check('調整プロンプトが要求に載る',
+      body.contents[0].parts[0].text.includes('# 書き方の調整（利用者設定）')
+      && body.contents[0].parts[0].text.includes('結論を先に書く'));
     const prompt = body.contents[0].parts[0].text;
     check('note 記事向けのプロンプトになっている', prompt.includes('note に投稿する記事'));
     check('目安文字数が入る',

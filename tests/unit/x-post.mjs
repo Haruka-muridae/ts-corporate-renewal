@@ -82,6 +82,14 @@ try {
     check('壊れた保存データは読み捨てる', post.listDrafts({ storage }).length === 0);
   }
 
+  {
+    /* 調整プロンプトの保存（Threads 版の複製・要点のみ）。 */
+    const storage = makeStorage();
+    post.saveStylePrompt('絵文字は使わない', { storage });
+    post.saveDraft('下書き', { storage });
+    check('調整プロンプトが残る', post.loadStylePrompt({ storage }) === '絵文字は使わない');
+  }
+
   /* ================================================================ */
   section('Gemini（プロンプトの差分のみ）');
 
@@ -96,10 +104,15 @@ try {
       };
     };
 
-    const text = await gemini.generatePost({ apiKey: 'FAKE', theme: '新商品の告知', fetchImpl });
+    const text = await gemini.generatePost({
+      apiKey: 'FAKE', theme: '新商品の告知', stylePrompt: 'ですます調で', fetchImpl,
+    });
     check('生成できる', text === '生成結果');
 
     const body = JSON.parse(calls[0].options.body);
+    check('調整プロンプトが要求に載る',
+      body.contents[0].parts[0].text.includes('# 書き方の調整（利用者設定）')
+      && body.contents[0].parts[0].text.includes('ですます調で'));
     const prompt = body.contents[0].parts[0].text;
     check('X 向けのプロンプトになっている', prompt.includes('X（旧 Twitter）'));
     check('140字制約（全角=2の説明つき）が入る',

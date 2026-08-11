@@ -132,6 +132,56 @@ try {
   }
 
   /* ================================================================ */
+  section('書き方の調整プロンプト（保存と生成への反映）');
+
+  {
+    const storage = makeStorage();
+
+    check('初期値は空', post.loadStylePrompt({ storage }) === '');
+
+    post.saveStylePrompt('です・ます調で。絵文字は使わない。', { storage });
+    check('保存して読み出せる',
+      post.loadStylePrompt({ storage }) === 'です・ます調で。絵文字は使わない。');
+
+    /* 下書き・履歴の操作で消えないこと（同じ保存場所を共有するため）。 */
+    post.saveDraft('下書き', { storage });
+    post.recordHistory('投稿画面を開いた', '本文', { storage });
+    post.deleteDraft(post.listDrafts({ storage })[0].id, { storage });
+    check('下書き・履歴の操作後も残る',
+      post.loadStylePrompt({ storage }) === 'です・ます調で。絵文字は使わない。');
+
+    post.saveStylePrompt('', { storage });
+    check('空にすれば消せる', post.loadStylePrompt({ storage }) === '');
+  }
+
+  {
+    /* 調整プロンプトが Gemini への要求に載る。空なら載らない。 */
+    const calls = [];
+    const fetchImpl = async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ candidates: [{ content: { parts: [{ text: 'x' }] } }] }),
+      };
+    };
+
+    await gemini.generatePost({
+      apiKey: 'FAKE', theme: 'テーマ', stylePrompt: '箇条書きを交える', fetchImpl,
+    });
+    const withStyle = JSON.parse(calls[0].options.body).contents[0].parts[0].text;
+    check('調整プロンプトが要求に載る',
+      withStyle.includes('# 書き方の調整（利用者設定）')
+      && withStyle.includes('箇条書きを交える'));
+    check('テーマより前に置かれる',
+      withStyle.indexOf('書き方の調整') < withStyle.indexOf('# テーマ・指示'));
+
+    await gemini.generatePost({ apiKey: 'FAKE', theme: 'テーマ', stylePrompt: '   ', fetchImpl });
+    const withoutStyle = JSON.parse(calls[1].options.body).contents[0].parts[0].text;
+    check('空白だけなら節ごと載らない', !withoutStyle.includes('書き方の調整'));
+  }
+
+  /* ================================================================ */
   section('Gemini 呼び出し');
 
   {

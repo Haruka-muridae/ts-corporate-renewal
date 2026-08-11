@@ -79,6 +79,10 @@
             placeholder="例: AI導入の始め方について、初心者向けに" autocomplete="off">
           <button type="submit" id="np-generate" class="auth-button">AIで生成</button>
         </form>
+        <label for="np-style">書き方の調整（任意・この端末に自動保存）</label>
+        <textarea id="np-style" rows="3"
+          placeholder="例: です・ます調で。絵文字は使わない。箇条書きを交える"></textarea>
+        <p class="np-note">ここに書いた指示は、以後の「AIで生成」で毎回使われます。空にすれば使われません。</p>
       </section>
 
       <section class="np-compose" aria-labelledby="np-compose-heading">

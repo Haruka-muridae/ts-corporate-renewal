@@ -24,6 +24,8 @@ import {
   deleteDraft,
   recordHistory,
   listHistory,
+  saveStylePrompt,
+  loadStylePrompt,
 } from './post.js';
 import { generatePost, describeGeminiError } from './gemini.js';
 
@@ -37,6 +39,7 @@ const dom = {
   generateForm: document.getElementById('xp-generate-form'),
   generateButton: document.getElementById('xp-generate'),
   theme: document.getElementById('xp-theme'),
+  style: document.getElementById('xp-style'),
   text: document.getElementById('xp-text'),
   count: document.getElementById('xp-count'),
   limit: document.getElementById('xp-limit'),
@@ -221,7 +224,7 @@ async function handleGenerate(event) {
   say('生成しています…');
 
   try {
-    const text = await generatePost({ apiKey: apiKey ?? '', theme });
+    const text = await generatePost({ apiKey: apiKey ?? '', theme, stylePrompt: dom.style.value });
     dom.text.value = text;
     updateCount();
     say('生成しました。内容を確認・編集してから保存/投稿してください。');
@@ -261,6 +264,16 @@ async function init() {
     }
   });
   globalThis.addEventListener('focus', refreshKeyState);
+
+  /* 調整プロンプトの復元と自動保存。保存できない環境では欄だけ生かす。 */
+  if (storageOk) {
+    dom.style.value = loadStylePrompt();
+  }
+  dom.style.addEventListener('input', () => {
+    if (storageOk) {
+      saveStylePrompt(dom.style.value);
+    }
+  });
 
   refreshKeyState();
   updateCount();

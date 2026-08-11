@@ -77,7 +77,7 @@ function readState(storage) {
     const raw = storage.getItem(STORAGE_KEY);
 
     if (!raw) {
-      return { drafts: [], history: [] };
+      return { drafts: [], history: [], stylePrompt: '' };
     }
 
     const parsed = JSON.parse(raw);
@@ -85,10 +85,11 @@ function readState(storage) {
     return {
       drafts: Array.isArray(parsed?.drafts) ? parsed.drafts : [],
       history: Array.isArray(parsed?.history) ? parsed.history : [],
+      stylePrompt: typeof parsed?.stylePrompt === 'string' ? parsed.stylePrompt : '',
     };
   } catch {
     /* 壊れた保存データは読み捨てる（次の保存で作り直される）。 */
-    return { drafts: [], history: [] };
+    return { drafts: [], history: [], stylePrompt: '' };
   }
 }
 
@@ -140,4 +141,21 @@ export function recordHistory(kind, text, { storage = globalThis.localStorage, n
 
 export function listHistory({ storage = globalThis.localStorage } = {}) {
   return readState(storage).history.slice().reverse();
+}
+
+/* ---------- 書き方の調整（利用者設定） ---------- */
+
+/*
+ * 調整プロンプトは端末内に保存し、消さない限り生成のたびに使われる。
+ * 下書き・履歴と同じ保存場所（STORAGE_KEY）に持つため、
+ * ブラウザのサイトデータを消さない限り残る。
+ */
+export function saveStylePrompt(text, { storage = globalThis.localStorage } = {}) {
+  const state = readState(storage);
+  state.stylePrompt = String(text ?? '');
+  writeState(storage, state);
+}
+
+export function loadStylePrompt({ storage = globalThis.localStorage } = {}) {
+  return readState(storage).stylePrompt ?? '';
 }
