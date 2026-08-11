@@ -257,6 +257,93 @@ try {
   }
 
   /* ================================================================ */
+  section('★ライセンスの引き渡しを、成功したら繰り返さない');
+
+  {
+    /*
+     * ------------------------------------------------------------------
+     * ここが「枠の食い合い」のブラウザ側の入口だった
+     * ------------------------------------------------------------------
+     * saveLicense が成功したら、ブラウザ側のライセンスキーは消す。
+     * 消さないと、画面を開くたび・［接続テスト］のたびに引き渡しを
+     * やり直し、その1回ごとに通知用シートがゲートの /v1/vapid を
+     * 1回消費する。実機ではこれで1時間ぶんの上限を使い切った
+     * （2026-08-11。GAS 側は tests/unit/notifier-template.mjs）。
+     * ------------------------------------------------------------------
+     */
+    installFakeIndexedDb().reset();
+
+    const dom = installFakeNotifierDom();
+    const calls = installFakeGasFetch({ connectKey: CONNECT_KEY });
+    const config = await import('../../public/production-app/voice-recorder/notifier-config.js?reload=200');
+
+    await config.writeConnection({ url: EXEC_URL, key: CONNECT_KEY });
+    await config.writeLicenseKey('LK'.padEnd(43, 'q'));
+
+    const panel = await import(`${PANEL}?reload=200`);
+
+    await panel.mountNotifier();
+
+    check('前提: 引き渡しが1回行われる',
+      calls.filter((call) => call.action === 'saveLicense').length === 1,
+      JSON.stringify(calls.map((call) => call.action)));
+
+    const before = calls.length;
+
+    await dom.click('vr-nf-recheck');
+    await dom.click('vr-nf-recheck');
+
+    check('★成功したあとは引き渡しを繰り返さない',
+      calls.slice(before).some((call) => call.action === 'saveLicense') === false,
+      JSON.stringify(calls.slice(before).map((call) => call.action)));
+    check('引き渡し済みのキーは手元に残さない',
+      (await config.readLicenseKey()) === '', await config.readLicenseKey());
+  }
+
+  /* ================================================================ */
+  section('★ゲートの失敗を、次の一手が分かる文にする');
+
+  {
+    /*
+     * 実機で「通知の鍵: 未設定（/v1/vapid -> RATE_LIMITED）」とだけ出た。
+     * **待てば直るのか、こちらの落ち度なのかが利用者に分からない。**
+     */
+    installFakeIndexedDb().reset();
+
+    const dom = installFakeNotifierDom();
+
+    installFakeGasFetch({
+      connectKey: CONNECT_KEY,
+      publicKeyError: 'NOT_CONFIGURED',
+      lastGateError: '/v1/vapid -> RATE_LIMITED',
+    });
+
+    const panel = await import(`${PANEL}?reload=201`);
+
+    dom.el('vr-nf-url').value = EXEC_URL;
+    dom.el('vr-nf-key').value = CONNECT_KEY;
+
+    await panel.mountNotifier();
+    await dom.click('vr-nf-connect');
+
+    const hint = dom.el('vr-nf-hint-key').textContent;
+
+    check('前提: 鍵は取れていない', dom.el('vr-nf-state-key').textContent === '未設定');
+    check('★待てば直ると分かる', hint.includes('数分おいて'), hint);
+    check('★次に何をすればよいか書いてある', hint.includes('接続テスト'), hint);
+    check('切り分けのための符号は残す', hint.includes('/v1/vapid -> RATE_LIMITED'), hint);
+    check('★「セットアップをやり直す」とは言わない', hint.includes('やり直') === false, hint);
+
+    /* 符号の対応表に無いものは、そのまま出す（黙って握りつぶさない）。 */
+    check('未知の符号もそのまま読める',
+      panel.describeGateError('/v1/vapid -> WHAT_IS_THIS').includes('WHAT_IS_THIS'));
+    check('5xx はサーバー側の問題だと分かる',
+      panel.describeGateError('/v1/vapid -> HTTP_503').includes('通知サーバーで問題'),
+      panel.describeGateError('/v1/vapid -> HTTP_503'));
+    check('記録が無ければ何も出さない', panel.describeGateError('') === '');
+  }
+
+  /* ================================================================ */
   section('★接続の解除');
 
   {
