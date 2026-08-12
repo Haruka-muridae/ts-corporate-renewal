@@ -66,6 +66,7 @@ const SUITES = [
   { name: 'threads-post', file: 'unit/threads-post.mjs', kind: 'unit' },
   { name: 'x-post', file: 'unit/x-post.mjs', kind: 'unit' },
   { name: 'note-post', file: 'unit/note-post.mjs', kind: 'unit' },
+  { name: 'meeting-minutes', file: 'unit/meeting-minutes.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
   { name: 'browser:card-mail', file: 'browser/card-mail.mjs', kind: 'browser' },
 ];

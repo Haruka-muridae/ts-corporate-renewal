@@ -6,9 +6,9 @@
 | --- | --- |
 | システム名 | 音声文字起こしアプリ（アプリID `audio-transcriber`） |
 | 文書種別 | 要件定義書 |
-| バージョン | 1.1 |
+| バージョン | 1.2 |
 | 作成日 | 2026年8月11日 |
-| 改訂日 | 2026年8月11日 |
+| 改訂日 | 2026年8月12日 |
 | 開発方式 | tsam-ai.com 配信の静的フロントエンドのみ（サーバーコードなし） |
 | 実装 | `public/production-app/audio-transcriber/`（**実装済み**。テスト環境 `public/apps/audio-transcriber/` からの複製・適合） |
 | 想定利用者 | TSAM AI 利用ユーザー（お客様全員） |
@@ -244,6 +244,63 @@ Gemini モードは公式 REST を直接呼ぶ（SDKなし・依存追加なし�
 
 上限は `config.js` の `LIMITS` で管理する（単体テストで固定）。
 
+### FR-09 AI議事録への引継ぎ
+
+「5. 文字起こし結果」に「AI議事録を作成」ボタンを置き、本アプリの文字起こし結果を
+新アプリ **AI議事録**（`meeting-minutes`。docs/specs/meeting-minutes-requirements-v1.md）
+へ引き継ぐ。本アプリ側は「引継ぎデータを組み立てて sessionStorage へ書き込み、
+同一タブで遷移する」ところまでを担当する。取込みの確認・検証・有効期限判定は
+meeting-minutes 側の責務であり、本アプリは行わない。
+
+- **実装** は `minutes-handoff.js`（純ロジック。storage / 現在時刻を引数で受け取り、
+  DOMを参照しない）と `script.js`（結線）に分ける。
+  ロジックは Node から直接 import して単体テストできる形にする
+  （`tests/unit/audio-transcriber.mjs`）。
+- **保存先** は `sessionStorage`。本文をlocalStorageへ恒久保存しない
+  （meeting-minutes-requirements-v1.md §5-3）。
+- **引継ぎキー** は固定名 `tsam-meeting-minutes-handoff-v1`
+  （`minutes-handoff.js` の `HANDOFF_STORAGE_KEY`。meeting-minutes 側の
+  仕様書にも同じ名前で記載する。値を変えると双方の実装が揃っていても
+  引継ぎが成立しなくなるため、変えない）。
+- **データ形式**（`HANDOFF_VERSION` = 1）:
+
+  ```json
+  {
+    "version": 1,
+    "sourceApp": "audio-transcriber",
+    "createdAt": "<ISO 8601 文字列>",
+    "transcript": "<文字起こし全文>",
+    "metadata": {
+      "title": "<元ファイル名等があれば>",
+      "recordedAt": "<判明時のみ>",
+      "durationSeconds": "<判明時のみ数値>",
+      "speakers": []
+    }
+  }
+  ```
+
+  - `transcript` はボタン押下時点の結果欄（タイムスタンプ付きならその表記のまま）。
+  - `metadata` は判明している項目だけを入れる（推測で埋めない）。`title` は
+    選択中の音声ファイル名、`durationSeconds` は音声の長さが判明していれば入れる。
+    `recordedAt` は本アプリでは録音日時を確実に特定できないため入れない。
+  - `speakers` は本アプリでは話者を構造化して特定できない（本文中の
+    「話者1：」等の表記は `transcript` の一部でしかない）ため、常に空配列にする。
+- **有効期限** の判定（`createdAt` + 30分）は受け側（meeting-minutes）が行う。
+  本アプリは書き込むだけで、期限の判定・自動失効は行わない。
+- **画面遷移** は `window.location.href = '../meeting-minutes/'` による同一タブ遷移。
+  `window.open` は使わない（sessionStorage はタブごとに独立しており、別タブで
+  開くと meeting-minutes 側が引継ぎデータを読めないため）。
+- **URLへ本文を載せない。** クエリ文字列・ハッシュへ文字起こし本文を含めない
+  （meeting-minutes-requirements-v1.md §5-1）。遷移先は固定の相対パス文字列のみ。
+- 結果が空（空白のみを含む）のときはボタンを無効化する（既存の結果操作ボタンと
+  同じ活性制御の慣習）。
+- 保存できなかった場合（文字起こしが空、または sessionStorage が使えない
+  プライベートモード等）は、既存のトースト通知（`showToast`）で理由を伝え、
+  画面遷移しない。文字起こし結果や既存のコピー・ダウンロード・Drive保存の
+  動作には影響しない。
+- voice-recorder から meeting-minutes への直接導線は追加しない
+  （meeting-minutes-requirements-v1.md §5-4）。
+
 ---
 
 ## 10. APIキーの扱い（利用者の Gemini キー）— KeyStore 方式
@@ -361,3 +418,4 @@ Picker を使わないため、Picker API のブラウザキーは不要。
 | --- | --- | --- |
 | 1.0 | 2026-08-11 | 初版。テスト環境 `public/apps/audio-transcriber/` からの本番複製・適合（自前OAuth・guardPage・CSP合成・Portal掲載）に合わせて起こした |
 | 1.1 | 2026-08-11 | Gemini APIキーをテスト版の都度入力方式から KeyStore 方式へ変更（本番の正 docs/specs/keystore-spec-v1.md への適合。§6・§7.2・§8・§10・§11・§12） |
+| 1.2 | 2026-08-12 | 新アプリ「AI議事録」（meeting-minutes）への引継ぎ導線を追加（FR-09）。sessionStorage・固定キー `tsam-meeting-minutes-handoff-v1`・同一タブ遷移・書き込みのみで有効期限判定は受け側、を定義。docs/specs/meeting-minutes-requirements-v1.md §3-1・§5 との対応 |

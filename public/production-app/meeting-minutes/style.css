@@ -1,0 +1,780 @@
+/*
+ * AI議事録（本番）専用スタイル。
+ *
+ * ==================================================================
+ * 2枚構成（audio-transcriber/style.css と同じ流儀）
+ * ==================================================================
+ * 本番アプリ群は auth/auth.css（ボタン・メッセージ等の共通部品）と、
+ * このファイル（アプリ固有のレイアウト）の2枚だけで組む。
+ * コーポレートサイトの css/style.css は読み込まない。
+ *
+ *   1. auth.css が参照するカスタムプロパティ（--c-main 等）を、
+ *      このファイルの :root で再定義する（値は audio-transcriber/style.css
+ *      の :root を踏襲）。定義しないと .auth-button などが色を失う。
+ *   2. サイト共通の .btn / .container / ヘッダーは使わない。
+ *      外枠は .mm-main、ボタンは auth.css の .auth-button を使う。
+ *
+ * 本アプリだけの拡張点:
+ *   - **prefers-color-scheme: dark 用のトークン上書きを持つ**
+ *     （下の @media ブロック）。他の本番アプリに前例は無いが、
+ *     要件書 §6-7「light / darkの両テーマでコントラストを確認する」
+ *     に対応するため、本アプリ限定で導入する。共通ファイル
+ *     （auth.css・css/style.css）には触れない。
+ *   - 確認・編集画面（ステップ4）は1024px以上で原文と議事録を
+ *     左右に並べる（要件書 §6-6）。
+ * ==================================================================
+ */
+
+:root {
+  /* css/style.css の写し（audio-transcriber/style.css と同じ値）。 */
+  --color-navy: #1b7a3d;
+  --color-navy-dark: #135c2d;
+  --color-navy-light: #3fa065;
+  --color-gold: #35a8e0;
+  --color-gold-text: #146c9e;
+  --color-gold-light: #a9def7;
+  --color-white: #ffffff;
+  --color-off-white: #c1e4e9;
+  --color-text: #20242a;
+  --color-text-muted: #6b7078;
+  --color-border: #c6dde8;
+  --color-border-strong: #93bfd4;
+
+  --c-main: var(--color-navy);
+  --c-main-dark: var(--color-navy-dark);
+  --c-accent: var(--color-gold);
+  --c-bg: var(--color-white);
+  --c-bg-sub: var(--color-off-white);
+  --c-text: var(--color-text);
+  --c-text-muted: var(--color-text-muted);
+  --c-border: var(--color-border);
+  --c-border-strong: var(--color-border-strong);
+
+  --radius-card: 6px;
+  --radius-tag: 4px;
+  --radius-button: 4px;
+
+  --content-space: 28px;
+}
+
+/*
+ * ダークテーマ（本アプリ限定）。
+ *
+ * --color-white / --color-off-white は「面の色」を指す名前として使われており
+ * （auth.css・このファイルの各所が背景色にそのまま使う）、ライトモードでは
+ * 文字どおり白系だが、ダークモードでは意図的に暗い面色へ置き換える。
+ * 名前と実際の色が食い違って見えるのは承知のうえで、共通のトークン名を
+ * 保つことで auth.css 側の記述を一切変えずに配色だけ反転させている。
+ *
+ * --c-main 等は `var(--color-navy)` のような参照であり、ここで --color-*
+ * だけを上書きすれば、使用側（auth.css を含む）は自動的に新しい値を解決する
+ * （CSSカスタムプロパティは使用時点で解決されるため、再定義は不要）。
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-navy: #5fd68a;
+    --color-navy-dark: #46b873;
+    --color-navy-light: #8ee6ae;
+    --color-gold: #7cc9f0;
+    --color-gold-text: #bfe6fa;
+    --color-gold-light: #1d3b4d;
+    --color-white: #161b22;
+    --color-off-white: #1f2733;
+    --color-text: #e6edf3;
+    --color-text-muted: #9aa7b2;
+    --color-border: #2c3542;
+    --color-border-strong: #3d4a59;
+  }
+}
+
+/*
+ * hidden 属性は auth.css の [hidden] { display: none !important; } が保証する。
+ * ここで重ねて定義しない。
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  line-height: 1.8;
+}
+
+/* ---------- スキップリンク ---------- */
+
+.mm-skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  z-index: 10;
+  padding: 8px 16px;
+  background-color: var(--c-main);
+  color: var(--color-white);
+  text-decoration: none;
+}
+
+.mm-skip-link:focus {
+  top: 0;
+}
+
+/* ---------- レイアウト ---------- */
+
+.mm-main {
+  /* 320pxでも横スクロールが出ない下限。1024px以上は左右2カラムに広がる。 */
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.mm-header {
+  margin-bottom: 16px;
+}
+
+.mm-header h1 {
+  margin: 0 0 8px;
+  color: var(--c-main);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.mm-lede {
+  margin: 0;
+  color: var(--c-text-muted);
+}
+
+.mm-footer {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border);
+}
+
+.mm-footer a {
+  color: var(--c-main);
+}
+
+/* ---------- 案内・注意書き ---------- */
+
+.mm-note {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+#mm-key-note.mm-note {
+  padding: 10px 14px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--c-bg-sub);
+  margin-bottom: 16px;
+}
+
+#mm-key-note a {
+  color: var(--c-main);
+}
+
+.mm-banner {
+  padding: 14px 16px;
+  border: 1px solid var(--c-border-strong);
+  border-left-width: 4px;
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg-sub);
+  margin-bottom: 16px;
+}
+
+.mm-banner p:first-child {
+  margin-top: 0;
+}
+
+.mm-notice {
+  padding: 14px 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg-sub);
+}
+
+.mm-notice p {
+  margin: 0 0 8px;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.mm-notice p:last-child {
+  margin-bottom: 0;
+}
+
+.mm-alert {
+  padding: 10px 14px;
+  border-radius: var(--radius-tag);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.mm-alert--error {
+  border: 1px solid #e6b4b0;
+  background-color: #fdf3f2;
+  color: #8c1d18;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mm-alert--error {
+    border-color: #7a3b36;
+    background-color: #3a2220;
+    color: #f3b3ac;
+  }
+}
+
+.mm-message {
+  min-height: 1.4em;
+  padding: 4px 0;
+  font-size: 0.875rem;
+}
+
+.mm-message--error {
+  color: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mm-message--error {
+    color: #f3b3ac;
+  }
+}
+
+/* ---------- ステップ表示 ---------- */
+
+.mm-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+  counter-reset: mm-step;
+}
+
+.mm-steps li {
+  padding: 6px 12px 6px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.mm-steps li::before {
+  counter-increment: mm-step;
+  content: counter(mm-step) ". ";
+  font-weight: 700;
+}
+
+.mm-steps li[aria-current="step"] {
+  border-color: var(--c-main);
+  background-color: var(--c-bg-sub);
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+/* ---------- ステップ本体 ---------- */
+
+.mm-step {
+  padding-top: var(--content-space);
+  border-top: 1px solid var(--c-border);
+}
+
+.mm-step h2 {
+  margin: 0 0 16px;
+  color: var(--c-main);
+  font-size: 1.125rem;
+}
+
+.mm-step h2:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+.mm-step h3 {
+  margin: 0 0 8px;
+  color: var(--c-main);
+  font-size: 1rem;
+}
+
+.mm-step h4 {
+  margin: 0 0 8px;
+  color: var(--c-main);
+  font-size: 0.9375rem;
+}
+
+/* ---------- フォーム部品 ---------- */
+
+.mm-field {
+  margin-bottom: 16px;
+}
+
+.mm-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.mm-field input[type="text"],
+.mm-field input[type="date"],
+.mm-field input[type="time"],
+.mm-field textarea,
+.mm-search input[type="text"] {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 0.9375rem;
+}
+
+.mm-field textarea {
+  min-height: unset;
+  resize: vertical;
+  line-height: 1.8;
+}
+
+.mm-field input:focus-visible,
+.mm-field textarea:focus-visible,
+.mm-search input:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 1px;
+}
+
+#mm-transcript,
+.mm-original,
+.mm-markdown-preview {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+  line-height: 1.9;
+  resize: vertical;
+  overflow-wrap: anywhere;
+}
+
+.mm-original {
+  background-color: var(--c-bg-sub);
+}
+
+.mm-count-line {
+  margin: 6px 0 0;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.mm-count-over {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mm-count-over {
+    color: #f3b3ac;
+  }
+}
+
+.mm-fieldset {
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+}
+
+.mm-fieldset legend {
+  padding: 0 6px;
+  color: var(--c-main);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.mm-grid-2 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+.mm-checkbox {
+  display: flex;
+  min-height: 44px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 0.9375rem;
+}
+
+.mm-checkbox input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+/* ---------- テンプレート選択カード ---------- */
+
+.mm-template-cards {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+.mm-template-card {
+  position: relative;
+}
+
+.mm-template-card input {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  margin: 0;
+}
+
+.mm-template-card label {
+  display: block;
+  padding: 14px 14px 14px 40px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+  cursor: pointer;
+}
+
+.mm-template-card input:checked + label {
+  border-color: var(--c-main);
+  background-color: var(--c-bg-sub);
+  box-shadow: inset 0 0 0 1px var(--c-main);
+}
+
+.mm-template-card input:focus-visible + label {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+.mm-template-card__name {
+  display: block;
+  color: var(--c-main);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.mm-template-card__desc {
+  display: block;
+  margin-top: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+/* ---------- ボタン列 ---------- */
+
+.mm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.mm-actions .auth-button {
+  width: auto;
+  min-height: 44px;
+  margin-top: 0;
+  padding: 10px 18px;
+}
+
+@media (max-width: 479px) {
+  .mm-actions .auth-button {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- ステップ2: 概要 ---------- */
+
+.mm-summary-list {
+  display: grid;
+  gap: 6px 16px;
+  grid-template-columns: max-content 1fr;
+  margin: 0 0 16px;
+  font-size: 0.9375rem;
+}
+
+.mm-summary-list dt {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.mm-summary-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- ステップ3: 生成中 ---------- */
+
+.mm-status {
+  padding: 12px 14px;
+  border-left: 3px solid var(--c-main);
+  background-color: var(--c-bg-sub);
+  font-size: 0.9375rem;
+}
+
+/* ---------- ステップ4: 確認・編集 ---------- */
+
+.mm-review-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 1fr;
+}
+
+.mm-search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.mm-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mm-meeting-summary {
+  display: grid;
+  gap: 4px 12px;
+  grid-template-columns: max-content 1fr;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg-sub);
+  margin: 0 0 16px;
+  font-size: 0.875rem;
+}
+
+.mm-meeting-summary dt {
+  color: var(--c-text-muted);
+}
+
+.mm-meeting-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.mm-edit-section {
+  margin-bottom: 20px;
+}
+
+.mm-edit-section textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.mm-edit-list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.mm-edit-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.mm-edit-item label {
+  display: block;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.mm-edit-item input,
+.mm-edit-item textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.mm-edit-list > li > input[type="text"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+}
+
+/* 未決事項・補足のように「入力＋操作」だけの行 */
+.mm-edit-list > li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mm-edit-list > li.mm-edit-item {
+  display: grid;
+  align-items: stretch;
+}
+
+.mm-sublabel {
+  margin: 4px 0 0;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.mm-subitems {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mm-subitems li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mm-subitems input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+}
+
+.mm-add-button,
+.mm-icon-button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-tag);
+  background-color: transparent;
+  color: var(--c-main);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.mm-add-button:hover,
+.mm-icon-button:hover {
+  border-color: var(--c-main);
+  background-color: var(--c-bg-sub);
+}
+
+.mm-row-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.mm-evidence {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--color-gold-light);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.mm-evidence-jump {
+  border: none;
+  background: none;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.mm-regen-options {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.mm-regen-options label {
+  display: flex;
+  min-height: 36px;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.9375rem;
+}
+
+/* ---------- 視覚的には隠すが読み上げには残す ---------- */
+
+.mm-visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- 画面幅 ---------- */
+
+@media (min-width: 480px) {
+  .mm-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 768px) {
+  .mm-template-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* 1024px以上: 原文と議事録を左右に並べる（要件書 §6-6）。 */
+@media (min-width: 1024px) {
+  .mm-review-grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+
+  .mm-original {
+    /* 長い原文でもビューポート内に収まるよう、パネル自体をスクロールさせる。 */
+    max-height: calc(100vh - 220px);
+  }
+}
+
+/* 動きを減らす設定を尊重する（要件書 §6-4）。 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

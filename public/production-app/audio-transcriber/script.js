@@ -100,6 +100,8 @@ import {
   replaceSpeakerName,
 } from './result-exporter.js';
 
+import { HandoffResultReason, saveHandoff } from './minutes-handoff.js';
+
 /* guardPage() のリンク生成が正しい深さを指すように、最初に階層を宣言する。 */
 setScreenDepth(SCREEN_DEPTH);
 
@@ -288,7 +290,7 @@ function cacheElements() {
     'at-status', 'at-progress', 'at-progress-fill', 'at-progress-label', 'at-error',
     'at-start', 'at-cancel',
     'at-result', 'at-result-count', 'at-result-mode', 'at-result-elapsed',
-    'at-copy', 'at-download', 'at-save-drive', 'at-clear-result',
+    'at-copy', 'at-download', 'at-save-drive', 'at-clear-result', 'at-create-minutes',
     'at-speaker-from', 'at-speaker-to', 'at-speaker-apply', 'at-toast',
   ];
 
@@ -518,6 +520,7 @@ function render(snapshot) {
   el.saveDrive.disabled = !hasResult || busy;
   el.clearResult.disabled = !hasResult;
   el.speakerApply.disabled = !hasResult;
+  el.createMinutes.disabled = !hasResult;
 
   setText(el.resultCount, `${countCharacters(result)}文字`);
 
@@ -1337,6 +1340,58 @@ function onClearResult() {
   showToast('結果をクリアしました。');
 }
 
+/*
+ * sessionStorage が使えるかどうかを確かめてから返す。
+ *
+ * プライベートモード等では window.sessionStorage への参照そのものが
+ * 例外を投げるブラウザがあるため、KeyStore の localStorage 参照
+ * （public/auth/keystore.js の getStorage）と同じ形で防御する。
+ */
+function getSessionStorage() {
+  try {
+    return window.sessionStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/*
+ * AI議事録アプリ（meeting-minutes）への引継ぎ。
+ *
+ * 結果テキスト（タイムスタンプ付きならそのまま）を sessionStorage へ保存し、
+ * 同一タブで ../meeting-minutes/ へ遷移する。window.open は使わない。
+ * sessionStorage はタブごとに独立しており、別タブで開くと meeting-minutes 側が
+ * 引継ぎデータを読めないため（meeting-minutes-requirements-v1.md §5-3）。
+ *
+ * URLのクエリ・ハッシュへ本文を載せない（同 §5-1）。遷移先は相対パスの固定文字列のみ。
+ */
+function onCreateMinutes() {
+  const snapshot = getState();
+  const durationSec = snapshot.file?.durationSec;
+
+  const result = saveHandoff(
+    {
+      transcript: el.result.value,
+      metadata: {
+        title: snapshot.file?.name ?? '',
+        durationSeconds: Number.isFinite(durationSec) ? durationSec : undefined,
+      },
+    },
+    { storage: getSessionStorage() },
+  );
+
+  if (!result.ok) {
+    showToast(
+      result.reason === HandoffResultReason.STORAGE_UNAVAILABLE
+        ? 'AI議事録アプリへ引き継げませんでした。この端末では一時保存ができないようです。'
+        : 'AI議事録アプリへ引き継げませんでした。文字起こし結果をご確認ください。',
+    );
+    return;
+  }
+
+  window.location.href = '../meeting-minutes/';
+}
+
 function onSpeakerReplace() {
   const replaced = replaceSpeakerName(el.result.value, el.speakerFrom.value, el.speakerTo.value);
 
@@ -1424,6 +1479,7 @@ function bindEvents() {
   el.download.addEventListener('click', onDownload);
   el.saveDrive.addEventListener('click', () => void onSaveToDrive());
   el.clearResult.addEventListener('click', onClearResult);
+  el.createMinutes.addEventListener('click', onCreateMinutes);
   el.speakerApply.addEventListener('click', onSpeakerReplace);
 
   /*

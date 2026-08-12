@@ -314,6 +314,12 @@
           <button id="at-download" class="auth-button auth-button--ghost" type="button" disabled>TXTで保存</button>
           <button id="at-save-drive" class="auth-button at-btn-quiet" type="button" disabled>Googleドライブへ保存</button>
           <button id="at-clear-result" class="auth-button at-btn-quiet" type="button" disabled>結果をクリア</button>
+          <!--
+            AI議事録アプリ（meeting-minutes）への引継ぎ導線。
+            結果を sessionStorage（tsam-meeting-minutes-handoff-v1）へ保存してから
+            同一タブで ../meeting-minutes/ へ遷移する（script.js）。
+          -->
+          <button id="at-create-minutes" class="auth-button" type="button" disabled>AI議事録を作成</button>
         </div>
 
         <details class="at-tools">

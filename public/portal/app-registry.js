@@ -162,4 +162,10 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/note-post/',
     icon: 'n',
   }),
+  Object.freeze({
+    id: 'meeting-minutes',
+    name: 'AI議事録',
+    href: 'production-app/meeting-minutes/',
+    icon: '議',
+  }),
 ]);

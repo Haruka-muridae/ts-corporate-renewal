@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI議事録｜TSAM AI</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<!-- 本アプリは独自にダークテーマへ対応する（style.css の :root 上書きを参照）。 -->
+<meta name="color-scheme" content="light dark">
+
+<!--
+  ==================================================================
+  Content-Security-Policy
+  ==================================================================
+  note-post / threads-post と同じ形。connect-src の内訳:
+    - 'self'                              … 自分の JS / CSS
+    - generativelanguage.googleapis.com   … Gemini（議事録の生成）
+    - script.google.com /
+      script.googleusercontent.com        … TSAM AI 認証（guardPage）
+
+  本アプリは録音・OAuth・外部フォントを使わないため、上記以外は許可しない。
+  APIキーは KeyStore（localStorage）だけが扱い、外部へ送るのは Gemini のみ。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<a class="mm-skip-link" href="#mm-main-content">本文へスキップ</a>
+
+<main id="mm-main-content" class="mm-main" tabindex="-1">
+
+  <!--
+    guardPage() が利用者を返すまで中身を出さない（note-post / audio-transcriber と同じ約束）。
+    hidden を外すのは app.js だけ。
+  -->
+  <p id="mm-loading" class="auth-loading">読み込んでいます…</p>
+
+  <div id="mm-content" hidden>
+
+    <header class="mm-header">
+      <h1>AI議事録</h1>
+      <p class="mm-lede">
+        文字起こしをGeminiで整理し、確認・編集できる議事録を作成します。
+        AIの出力は誤りや抜けがあり得るため、原文と照合してから確定してください。
+      </p>
+    </header>
+
+    <p id="mm-key-note" class="mm-note" hidden>
+      Gemini APIキーが未設定です。<a href="../../portal/">ポータル</a>で設定すると議事録を生成できます。
+    </p>
+
+    <!-- ステップ表示。見た目の目印であり、判断根拠は各セクションの見出し（h2）に持たせる。 -->
+    <ol class="mm-steps" aria-label="作業手順">
+      <li>入力</li>
+      <li>設定・送信確認</li>
+      <li>生成中</li>
+      <li>確認・編集</li>
+      <li>出力</li>
+    </ol>
+
+    <!-- ============================================================
+         1. 入力
+         ============================================================ -->
+    <section id="mm-step-1" class="mm-step" aria-labelledby="mm-step-1-title">
+      <h2 id="mm-step-1-title">1. 入力</h2>
+
+      <div id="mm-handoff" class="mm-banner" hidden>
+        <p id="mm-handoff-text"></p>
+        <div class="mm-checkbox">
+          <input id="mm-handoff-use-title" type="checkbox">
+          <label for="mm-handoff-use-title">ファイル名（表示）を会議名として使う</label>
+        </div>
+        <p class="mm-actions">
+          <button id="mm-handoff-accept" type="button" class="auth-button">取り込む</button>
+          <button id="mm-handoff-discard" type="button" class="auth-button auth-button--ghost">破棄する</button>
+        </p>
+      </div>
+
+      <div id="mm-draft-banner" class="mm-banner" hidden>
+        <p id="mm-draft-text"></p>
+        <p class="mm-actions">
+          <button id="mm-draft-restore" type="button" class="auth-button">復元する</button>
+          <button id="mm-draft-dismiss" type="button" class="auth-button auth-button--ghost">削除する</button>
+        </p>
+      </div>
+
+      <div class="mm-field">
+        <label for="mm-transcript">文字起こし</label>
+        <textarea id="mm-transcript" rows="12" placeholder="文字起こしを貼り付けてください" spellcheck="false"></textarea>
+        <!-- 上限値は直書きせず、app.js の初期化時に config.js の値で埋める。 -->
+        <p class="mm-count-line"><span id="mm-char-count">0</span> / <span id="mm-char-limit"></span> 文字</p>
+        <p id="mm-char-warning" class="mm-note" hidden>文字数が上限に近づいています。短縮または分割をご検討ください。</p>
+        <p id="mm-char-limit-message" class="mm-message" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="mm-field">
+        <!-- input は視覚的に隠し、操作はボタンから行う（audio-transcriber と同じ方式）。 -->
+        <input id="mm-file-input" class="mm-visually-hidden" type="file" accept=".txt,.md" tabindex="-1" aria-hidden="true">
+        <button id="mm-file-button" type="button" class="auth-button auth-button--ghost">.txt / .md ファイルを選択</button>
+        <p class="mm-note">端末上のファイルをブラウザ内で読み込みます。当社サーバーへは送信しません。</p>
+        <p id="mm-file-error" class="mm-alert mm-alert--error" hidden></p>
+      </div>
+
+      <fieldset class="mm-fieldset">
+        <legend>会議情報（任意）</legend>
+        <p class="mm-note">未入力の項目はAIに推測させず「記載なし」として扱います。</p>
+
+        <div class="mm-grid-2">
+          <div class="mm-field">
+            <label for="mm-meeting-title">会議名</label>
+            <input id="mm-meeting-title" type="text" autocomplete="off">
+          </div>
+          <div class="mm-field">
+            <label for="mm-meeting-date">開催日</label>
+            <input id="mm-meeting-date" type="date">
+          </div>
+          <div class="mm-field">
+            <label for="mm-meeting-start">開始時刻</label>
+            <input id="mm-meeting-start" type="time">
+          </div>
+          <div class="mm-field">
+            <label for="mm-meeting-end">終了時刻</label>
+            <input id="mm-meeting-end" type="time">
+          </div>
+        </div>
+
+        <div class="mm-field">
+          <label for="mm-meeting-participants">参加者（改行・カンマ区切りで複数入力できます）</label>
+          <textarea id="mm-meeting-participants" rows="2"></textarea>
+        </div>
+
+        <div class="mm-field">
+          <label for="mm-meeting-purpose">会議の目的</label>
+          <textarea id="mm-meeting-purpose" rows="2"></textarea>
+        </div>
+
+        <div class="mm-field">
+          <label for="mm-meeting-notes">補足事項（固有名詞・専門用語・出力上の注意）</label>
+          <textarea id="mm-meeting-notes" rows="2"></textarea>
+        </div>
+      </fieldset>
+
+      <fieldset class="mm-fieldset">
+        <legend>議事録テンプレート</legend>
+
+        <div class="mm-template-cards">
+          <div class="mm-template-card">
+            <input id="mm-template-standard" type="radio" name="mm-template" value="standard" checked>
+            <label for="mm-template-standard">
+              <span class="mm-template-card__name">標準</span>
+              <span class="mm-template-card__desc">一般的な社内会議向け。概要・議題・決定事項・タスク・未決事項を整理します。</span>
+            </label>
+          </div>
+          <div class="mm-template-card">
+            <input id="mm-template-concise" type="radio" name="mm-template" value="concise">
+            <label for="mm-template-concise">
+              <span class="mm-template-card__name">要点重視</span>
+              <span class="mm-template-card__desc">短時間で内容を確認したいとき向け。要約・決定事項・タスクだけに絞ります。</span>
+            </label>
+          </div>
+          <div class="mm-template-card">
+            <input id="mm-template-detailed" type="radio" name="mm-template" value="detailed">
+            <label for="mm-template-detailed">
+              <span class="mm-template-card__name">詳細</span>
+              <span class="mm-template-card__desc">経緯を残したい会議向け。議題別の要旨・主な意見・決定事項・タスク・未決事項を残します。</span>
+            </label>
+          </div>
+          <div class="mm-template-card">
+            <input id="mm-template-one-on-one" type="radio" name="mm-template" value="one-on-one">
+            <label for="mm-template-one-on-one">
+              <span class="mm-template-card__name">1on1・面談</span>
+              <span class="mm-template-card__desc">面談や定期対話向け。話題・本人の認識・合意事項・次回までの行動を残します。</span>
+            </label>
+          </div>
+        </div>
+      </fieldset>
+
+      <p class="mm-actions">
+        <button id="mm-clear-storage" type="button" class="auth-button auth-button--ghost">端末内の作業データを削除</button>
+      </p>
+
+      <p id="mm-step1-message" class="mm-message" role="status" aria-live="polite"></p>
+
+      <p class="mm-actions">
+        <button id="mm-to-confirm" type="button" class="auth-button" disabled>確認へ進む</button>
+      </p>
+    </section>
+
+    <!-- ============================================================
+         2. 設定・送信確認
+         ============================================================ -->
+    <section id="mm-step-2" class="mm-step" aria-labelledby="mm-step-2-title" hidden>
+      <h2 id="mm-step-2-title">2. 設定・送信確認</h2>
+
+      <dl class="mm-summary-list">
+        <dt>文字数</dt>
+        <dd><span id="mm-confirm-chars">0</span> 文字</dd>
+        <dt>会議名</dt>
+        <dd id="mm-confirm-title">（未入力）</dd>
+        <dt>テンプレート</dt>
+        <dd id="mm-confirm-template">標準</dd>
+      </dl>
+
+      <div class="mm-notice">
+        <p>「議事録を生成」を押すと、文字起こしと入力した会議情報がGoogle AI APIへ直接送信されます。</p>
+        <p>当社サーバーを経由せず、当社が入力内容・生成結果を保存することはありません。</p>
+        <p>機密情報・個人情報を含む場合は、ご自身の組織のルールをあらかじめご確認ください。</p>
+        <p>AIの出力には誤りや抜けがあり得ます。原文と照合してご確認ください。</p>
+      </div>
+
+      <p id="mm-step2-message" class="mm-message" role="status" aria-live="polite"></p>
+
+      <p class="mm-actions">
+        <button id="mm-confirm-back" type="button" class="auth-button auth-button--ghost">戻る</button>
+        <button id="mm-confirm-generate" type="button" class="auth-button">議事録を生成</button>
+      </p>
+    </section>
+
+    <!-- ============================================================
+         3. 生成中
+         ============================================================ -->
+    <section id="mm-step-3" class="mm-step" aria-labelledby="mm-step-3-title" hidden>
+      <h2 id="mm-step-3-title">3. 生成中</h2>
+
+      <p id="mm-generating-status" class="mm-status" role="status" aria-live="polite">議事録を生成しています…</p>
+      <p class="mm-note">完了までの時間は文字起こしの長さやGemini側の状況によって変わるため、完了時刻はお約束できません。</p>
+
+      <p class="mm-actions">
+        <button id="mm-cancel-generate" type="button" class="auth-button auth-button--ghost" hidden>中止する</button>
+      </p>
+    </section>
+
+    <!-- ============================================================
+         4. 確認・編集
+         ============================================================ -->
+    <section id="mm-step-4" class="mm-step" aria-labelledby="mm-step-4-title" hidden>
+      <h2 id="mm-step-4-title">4. 確認・編集</h2>
+
+      <div class="mm-review-grid">
+        <div class="mm-review-col">
+          <h3 id="mm-original-title">原文</h3>
+
+          <div class="mm-field">
+            <label for="mm-search-input">原文内を検索</label>
+            <div class="mm-search">
+              <input id="mm-search-input" type="text" placeholder="原文内を検索">
+              <button id="mm-search-button" type="button" class="auth-button auth-button--ghost">検索</button>
+            </div>
+          </div>
+          <p id="mm-search-status" class="mm-note" role="status" aria-live="polite"></p>
+
+          <label for="mm-original" class="mm-visually-hidden">文字起こし原文（編集できません）</label>
+          <textarea id="mm-original" class="mm-original" rows="20" readonly spellcheck="false"></textarea>
+        </div>
+
+        <div class="mm-review-col">
+          <h3 id="mm-minutes-title">議事録（編集できます）</h3>
+
+          <dl id="mm-meeting-summary" class="mm-meeting-summary" aria-label="会議情報"></dl>
+
+          <div id="mm-summary-section" class="mm-edit-section">
+            <h4>概要</h4>
+            <label for="mm-edit-summary" class="mm-visually-hidden">概要</label>
+            <textarea id="mm-edit-summary" rows="4"></textarea>
+          </div>
+
+          <div id="mm-topics-section" class="mm-edit-section">
+            <h4>議題</h4>
+            <ul id="mm-topics-list" class="mm-edit-list"></ul>
+            <button id="mm-topic-add" type="button" class="mm-add-button">議題を追加</button>
+          </div>
+
+          <div id="mm-decisions-section" class="mm-edit-section">
+            <h4>決定事項</h4>
+            <ul id="mm-decisions-list" class="mm-edit-list"></ul>
+            <button id="mm-decision-add" type="button" class="mm-add-button">決定事項を追加</button>
+          </div>
+
+          <div id="mm-actionitems-section" class="mm-edit-section">
+            <h4>タスク</h4>
+            <ul id="mm-actionitems-list" class="mm-edit-list"></ul>
+            <button id="mm-actionitem-add" type="button" class="mm-add-button">タスクを追加</button>
+          </div>
+
+          <div id="mm-openissues-section" class="mm-edit-section">
+            <h4>未決事項</h4>
+            <ul id="mm-openissues-list" class="mm-edit-list"></ul>
+            <button id="mm-openissue-add" type="button" class="mm-add-button">未決事項を追加</button>
+          </div>
+
+          <div class="mm-edit-section">
+            <h4>補足</h4>
+            <p class="mm-note">構造化されたテンプレート項目に収まらない所感・注記を残せます（1on1テンプレートでは「本人の認識」として扱います）。</p>
+            <ul id="mm-notes-list" class="mm-edit-list"></ul>
+            <button id="mm-note-add" type="button" class="mm-add-button">補足を追加</button>
+          </div>
+        </div>
+      </div>
+
+      <fieldset class="mm-fieldset">
+        <legend>再生成</legend>
+        <p class="mm-note">対象外のセクションは、いま編集している内容のまま保持されます。</p>
+
+        <div class="mm-regen-options">
+          <label><input type="radio" name="mm-regen-target" value="all" checked> 議事録全体</label>
+          <label><input type="radio" name="mm-regen-target" value="summary"> 要約のみ</label>
+          <label><input type="radio" name="mm-regen-target" value="decisions"> 決定事項のみ</label>
+          <label><input type="radio" name="mm-regen-target" value="actionItems"> タスクのみ</label>
+        </div>
+
+        <button id="mm-regenerate" type="button" class="auth-button auth-button--ghost">選択範囲を再生成</button>
+      </fieldset>
+
+      <p id="mm-review-message" class="mm-message" role="status" aria-live="polite"></p>
+
+      <p class="mm-actions">
+        <button id="mm-restart-4" type="button" class="auth-button auth-button--ghost">最初からやり直す</button>
+        <button id="mm-to-output" type="button" class="auth-button">出力へ進む</button>
+      </p>
+    </section>
+
+    <!-- ============================================================
+         5. 出力
+         ============================================================ -->
+    <section id="mm-step-5" class="mm-step" aria-labelledby="mm-step-5-title" hidden>
+      <h2 id="mm-step-5-title">5. 出力</h2>
+
+      <div class="mm-checkbox">
+        <input id="mm-include-evidence" type="checkbox">
+        <label for="mm-include-evidence">根拠を含めて出力する（既定では省略されます）</label>
+      </div>
+
+      <label for="mm-markdown-preview" class="mm-visually-hidden">生成されたMarkdown</label>
+      <textarea id="mm-markdown-preview" class="mm-markdown-preview" rows="16" readonly spellcheck="false"></textarea>
+
+      <p id="mm-output-message" class="mm-message" role="status" aria-live="polite"></p>
+
+      <p class="mm-actions">
+        <button id="mm-copy-markdown" type="button" class="auth-button">Markdownをコピー</button>
+        <button id="mm-download-markdown" type="button" class="auth-button auth-button--ghost">Markdownを保存（.md）</button>
+      </p>
+      <p class="mm-actions">
+        <button id="mm-back-to-review" type="button" class="auth-button auth-button--ghost">編集に戻る</button>
+        <button id="mm-restart-5" type="button" class="auth-button auth-button--ghost">最初からやり直す</button>
+      </p>
+    </section>
+
+    <footer class="mm-footer">
+      <p><a href="../../portal/">ポータルへ戻る</a></p>
+    </footer>
+
+  </div>
+
+  <noscript>
+    <p class="mm-alert mm-alert--error">このアプリはJavaScriptが必要です。ブラウザの設定を確認してください。</p>
+  </noscript>
+
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -10,6 +10,8 @@
  *   state.js           … 状態機械（DOM を参照しない）
  *   result-exporter.js … 整形の純関数（copyText / downloadText は呼ばない）
  *   drive-client.js    … クエリ組み立てとエラー分類（fetch は呼ばない）
+ *   minutes-handoff.js … AI議事録への引継ぎデータの組み立てと保存
+ *                        （storage / now を引数注入。sessionStorage には触れない）
  *
  * 次のモジュールは DOM / Worker / fetch に依存するため対象にしない。
  *   script.js（guardPage と document 前提の UI 層）
@@ -31,6 +33,7 @@ try {
   const state = await import(`${base}/state.js`);
   const exporter = await import(`${base}/result-exporter.js`);
   const drive = await import(`${base}/drive-client.js`);
+  const minutesHandoff = await import(`${base}/minutes-handoff.js`);
 
   /* 突き合わせ用。録音アプリ側の定義（複製元の正）。 */
   const vrConfig = await import('../../public/production-app/voice-recorder/config.js');
@@ -247,6 +250,104 @@ try {
   const boundary = drive.createBoundary();
   check('境界文字列は tsam- で始まる', boundary.startsWith('tsam-'));
   check('境界文字列は毎回変わる', drive.createBoundary() !== boundary);
+
+  /* ================================================================ */
+  section('AI議事録への引継ぎ（minutes-handoff.js）');
+
+  /*
+   * sessionStorage の代わり。Map ベースの偽物にする
+   * （card-ocr.mjs の installLocalStorage と同じ流儀）。
+   */
+  function createMemoryStorage(initial = {}) {
+    const map = new Map(Object.entries(initial));
+
+    return {
+      map,
+      getItem: (key) => (map.has(key) ? map.get(key) : null),
+      setItem: (key, value) => { map.set(key, String(value)); },
+      removeItem: (key) => { map.delete(key); },
+    };
+  }
+
+  const FIXED_NOW = () => new Date('2026-08-12T09:00:00.000Z');
+
+  check('★引継ぎキーは固定名 tsam-meeting-minutes-handoff-v1',
+    minutesHandoff.HANDOFF_STORAGE_KEY === 'tsam-meeting-minutes-handoff-v1');
+  check('引継ぎバージョンは1', minutesHandoff.HANDOFF_VERSION === 1);
+
+  {
+    const storage = createMemoryStorage();
+    const result = minutesHandoff.saveHandoff(
+      { transcript: 'おはようございます。本日の議題です。', metadata: { title: '会議.mp3', durationSeconds: 125 } },
+      { storage, now: FIXED_NOW },
+    );
+
+    check('正常なデータは保存に成功する', result.ok === true);
+
+    const raw = storage.map.get(minutesHandoff.HANDOFF_STORAGE_KEY);
+    check('固定キーへ書き込まれる', typeof raw === 'string');
+
+    const saved = JSON.parse(raw);
+    check('version は1', saved.version === 1);
+    check('sourceApp は audio-transcriber', saved.sourceApp === 'audio-transcriber');
+    check('★createdAt はISO 8601形式', saved.createdAt === '2026-08-12T09:00:00.000Z');
+    check('transcript は全文をそのまま保持', saved.transcript === 'おはようございます。本日の議題です。');
+    check('metadata.title は判明している値を入れる', saved.metadata.title === '会議.mp3');
+    check('metadata.durationSeconds は判明している値を入れる', saved.metadata.durationSeconds === 125);
+    check('metadata.speakers は常に空配列', Array.isArray(saved.metadata.speakers) && saved.metadata.speakers.length === 0);
+    check('★不明な項目（recordedAt）は入れない', Object.hasOwn(saved.metadata, 'recordedAt') === false);
+  }
+
+  {
+    /* ★空文字起こしは拒否し、storage へは書き込まない。 */
+    const storage = createMemoryStorage();
+    const empty = minutesHandoff.saveHandoff({ transcript: '' }, { storage, now: FIXED_NOW });
+    check('★空文字起こしは拒否される', empty.ok === false);
+    check('理由は empty-transcript', empty.reason === minutesHandoff.HandoffResultReason.EMPTY_TRANSCRIPT);
+    check('★空文字起こしは書き込まれない', storage.map.has(minutesHandoff.HANDOFF_STORAGE_KEY) === false);
+  }
+
+  {
+    /* ★空白のみの文字起こしも空として拒否する。 */
+    const storage = createMemoryStorage();
+    const blank = minutesHandoff.saveHandoff({ transcript: '   \n\t  ' }, { storage, now: FIXED_NOW });
+    check('★空白のみの文字起こしも拒否される', blank.ok === false);
+    check('空白のみでも書き込まれない', storage.map.has(minutesHandoff.HANDOFF_STORAGE_KEY) === false);
+  }
+
+  {
+    /* metadata を渡さない・不明な項目のときは推測で埋めず、speakers だけを持つ。 */
+    const storage = createMemoryStorage();
+    const result = minutesHandoff.saveHandoff({ transcript: '本文のみ' }, { storage, now: FIXED_NOW });
+    check('metadata未指定でも保存に成功する', result.ok === true);
+
+    const saved = JSON.parse(storage.map.get(minutesHandoff.HANDOFF_STORAGE_KEY));
+    check('★不明なtitleは入れない', Object.hasOwn(saved.metadata, 'title') === false);
+    check('★不明なdurationSecondsは入れない', Object.hasOwn(saved.metadata, 'durationSeconds') === false);
+    check('★不明なrecordedAtは入れない', Object.hasOwn(saved.metadata, 'recordedAt') === false);
+    check('metadataのキーはspeakersだけ', Object.keys(saved.metadata).join(',') === 'speakers');
+  }
+
+  {
+    /* storage が使えない（未指定）場合は書き込まず理由を返す。 */
+    const result = minutesHandoff.saveHandoff({ transcript: '本文' }, { storage: null, now: FIXED_NOW });
+    check('storage未指定では失敗する', result.ok === false);
+    check('理由は storage-unavailable', result.reason === minutesHandoff.HandoffResultReason.STORAGE_UNAVAILABLE);
+  }
+
+  {
+    /* 空文字列や空白のtitle・不正なdurationSecondsは無視する。 */
+    const storage = createMemoryStorage();
+    minutesHandoff.saveHandoff(
+      { transcript: '本文', metadata: { title: '   ', durationSeconds: -1, recordedAt: '' } },
+      { storage, now: FIXED_NOW },
+    );
+
+    const saved = JSON.parse(storage.map.get(minutesHandoff.HANDOFF_STORAGE_KEY));
+    check('空白だけのtitleは入れない', Object.hasOwn(saved.metadata, 'title') === false);
+    check('負のdurationSecondsは入れない', Object.hasOwn(saved.metadata, 'durationSeconds') === false);
+    check('空文字のrecordedAtは入れない', Object.hasOwn(saved.metadata, 'recordedAt') === false);
+  }
 
   finish();
 } catch (error) {
