@@ -158,10 +158,10 @@ export function buildPostRequest(theme, { maxOutputTokens = MAX_OUTPUT_TOKENS, s
     + '# 記事の方針\n'
     + `- 本文は ${BODY_TARGET_MIN}〜${BODY_TARGET_MAX} 文字程度にすること。\n`
     + '- 見出し（## 見出し）を適度に入れ、読みやすく構成すること。\n'
+    + '- タイトルは内容を正確に表し、誇張しないこと。\n'
     + '- 過度に煽らないこと。「衝撃」のような誇張表現は使わないこと。\n'
     + '- テーマ・指示に無い数字・固有名詞・具体的なエピソードを追加しないこと（創作の禁止）。\n'
     + '- 未確認の情報を断定しないこと。一般論は「一般的には」と明示すること。\n'
-    + '- 前置き・後書き・コードブロックを付けず、記事本文そのものだけを出力すること。\n'
     /*
      * 利用者の調整プロンプト（画面で常設保存）。方針の一部として
      * テーマより前に置く。長すぎる指示は要点がぼけるため頭打ちにする。
@@ -171,7 +171,16 @@ export function buildPostRequest(theme, { maxOutputTokens = MAX_OUTPUT_TOKENS, s
       : '')
     + '\n'
     + '# テーマ・指示\n'
-    + String(theme ?? '').slice(0, THEME_MAX_LENGTH);
+    + String(theme ?? '').slice(0, THEME_MAX_LENGTH)
+    + '\n'
+    + '\n'
+    /*
+     * note はタイトルと本文が別枠のため、分けて受け取る。
+     * JSON 指定（responseMimeType）と合わせ、note-auto-fill-gas と同じ考え方。
+     */
+    + '# 出力形式\n'
+    + '次のJSONだけを出力してください。説明文やコードブロックは不要です。\n'
+    + '{ "title": "記事タイトル", "body": "記事本文" }';
 
   return {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -179,15 +188,18 @@ export function buildPostRequest(theme, { maxOutputTokens = MAX_OUTPUT_TOKENS, s
       /* 数値が小さいほど、事実に沿った落ち着いた文章になりやすい。 */
       temperature: 0.4,
       maxOutputTokens,
+      /* JSONで返すよう指示する。コードブロックが付きにくくなる。 */
+      responseMimeType: 'application/json',
     },
   };
 }
 
 /*
- * 応答から本文を取り出す。コードフェンス（``` …```）や前後の空白は
- * 指示していても稀に付くため、剥がしておく。
+ * 応答からタイトルと本文を取り出す。
+ * responseMimeType を指定していても、コードフェンス（```json …```）が
+ * 稀に付くため剥がしてから JSON として読む。
  */
-export function extractPostText(payload) {
+export function extractArticle(payload) {
   const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (typeof text !== 'string') {
@@ -200,11 +212,22 @@ export function extractPostText(payload) {
     .replace(/\s*```$/i, '')
     .trim();
 
-  if (cleaned === '') {
-    throw new GeminiError(GeminiErrorCode.EMPTY_TEXT, 0, 'empty_text');
+  let parsed = null;
+
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    throw new GeminiError(GeminiErrorCode.EMPTY_TEXT, 0, 'not_json');
   }
 
-  return cleaned;
+  const title = typeof parsed?.title === 'string' ? parsed.title.trim() : '';
+  const body = typeof parsed?.body === 'string' ? parsed.body.trim() : '';
+
+  if (body === '') {
+    throw new GeminiError(GeminiErrorCode.EMPTY_TEXT, 0, 'empty_body');
+  }
+
+  return { title, body };
 }
 
 /*
@@ -254,11 +277,11 @@ async function callOnce({ apiKey, model, theme, stylePrompt, fetchImpl, signal }
     throw new GeminiError(GeminiErrorCode.EMPTY_TEXT, 200, 'body_not_json');
   }
 
-  return extractPostText(payload);
+  return extractArticle(payload);
 }
 
 /*
- * テーマから投稿文を生成する。
+ * テーマから記事を生成する。戻り値は { title, body }。
  *
  * 主モデルが 404 のときだけ、フォールバックモデルで1回試す。
  * それ以外のエラーでは再試行しない（401/403 を繰り返しても結果は

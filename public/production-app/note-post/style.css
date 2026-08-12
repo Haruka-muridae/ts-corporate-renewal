@@ -54,6 +54,16 @@ section + section {
   border-radius: 6px;
 }
 
+#np-title {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #bbc;
+  border-radius: 6px;
+  margin-bottom: 0.6rem;
+}
+
 #np-text {
   width: 100%;
   box-sizing: border-box;

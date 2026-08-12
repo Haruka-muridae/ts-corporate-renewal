@@ -93,8 +93,12 @@ function makeId() {
     ?? `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/* 下書きを保存する。戻り値は保存した1件。 */
-export function saveDraft(text, { storage = globalThis.localStorage, now = Date.now() } = {}) {
+/*
+ * 下書きを保存する。戻り値は保存した1件。
+ * note はタイトルと本文が別枠のため、下書きも別々に持つ
+ * （タイトルは空でも保存できる。note 側も無題を許すため）。
+ */
+export function saveDraft(text, { title = '', storage = globalThis.localStorage, now = Date.now() } = {}) {
   const value = String(text ?? '');
 
   if (!value.trim()) {
@@ -102,7 +106,7 @@ export function saveDraft(text, { storage = globalThis.localStorage, now = Date.
   }
 
   const state = readState(storage);
-  const draft = { id: makeId(), text: value, createdAt: now };
+  const draft = { id: makeId(), title: String(title ?? ''), text: value, createdAt: now };
 
   state.drafts.push(draft);
   writeState(storage, state);
@@ -124,10 +128,12 @@ export function deleteDraft(id, { storage = globalThis.localStorage } = {}) {
  * 履歴へ1件記録する。note 側で本当に公開されたかは観測できないため、
  * 記録するのは「作成画面を開いた」という事実まで。
  */
-export function recordHistory(kind, text, { storage = globalThis.localStorage, now = Date.now() } = {}) {
+export function recordHistory(kind, text, { title = '', storage = globalThis.localStorage, now = Date.now() } = {}) {
   const state = readState(storage);
 
-  state.history.push({ id: makeId(), at: now, kind, text: String(text ?? '') });
+  state.history.push({
+    id: makeId(), at: now, kind, title: String(title ?? ''), text: String(text ?? ''),
+  });
 
   /* 増え続けないよう古い順に捨てる。 */
   if (state.history.length > HISTORY_LIMIT) {

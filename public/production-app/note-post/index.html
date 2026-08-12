@@ -86,14 +86,23 @@
       </section>
 
       <section class="np-compose" aria-labelledby="np-compose-heading">
-        <h2 id="np-compose-heading">投稿文</h2>
-        <label for="np-text" class="np-visually-hidden">投稿文</label>
+        <h2 id="np-compose-heading">記事</h2>
+        <label for="np-title">タイトル</label>
+        <input type="text" id="np-title" autocomplete="off"
+          placeholder="記事タイトル（note のタイトル欄に貼り付けます）">
+        <label for="np-text">本文</label>
         <textarea id="np-text" rows="16"
           placeholder="記事本文を書く／貼り付ける（「AIで生成」の結果もここに入ります）"></textarea>
         <p class="np-count-line"><span id="np-count">0</span> / <span id="np-limit">30000</span> 文字</p>
+        <p class="np-note">
+          note はタイトルと本文が別枠のため、流し込みは2段階です。
+          「note で書く」で<strong>タイトル</strong>をコピーして作成画面を開き、
+          貼り付けたらこのタブに戻って「本文をコピー」を押し、本文欄へ貼り付けてください。
+        </p>
         <p class="np-actions">
           <button type="button" id="np-save" class="auth-button auth-button--secondary">下書き保存</button>
-          <button type="button" id="np-post" class="auth-button">note で書く</button>
+          <button type="button" id="np-post" class="auth-button">note で書く（タイトルをコピー）</button>
+          <button type="button" id="np-copy-body" class="auth-button auth-button--secondary">本文をコピー</button>
         </p>
         <p id="np-message" class="np-message" role="status" aria-live="polite"></p>
       </section>

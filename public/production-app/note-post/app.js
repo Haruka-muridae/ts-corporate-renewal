@@ -40,6 +40,8 @@ const dom = {
   generateButton: document.getElementById('np-generate'),
   theme: document.getElementById('np-theme'),
   style: document.getElementById('np-style'),
+  title: document.getElementById('np-title'),
+  copyBody: document.getElementById('np-copy-body'),
   text: document.getElementById('np-text'),
   count: document.getElementById('np-count'),
   limit: document.getElementById('np-limit'),
@@ -92,7 +94,9 @@ function renderDrafts() {
 
     const meta = document.createElement('p');
     meta.className = 'np-item-meta';
-    meta.textContent = formatTime(draft.createdAt);
+    meta.textContent = draft.title
+      ? `${formatTime(draft.createdAt)}　${draft.title}`
+      : formatTime(draft.createdAt);
 
     const text = document.createElement('p');
     text.className = 'np-item-text';
@@ -107,6 +111,7 @@ function renderDrafts() {
     load.type = 'button';
     load.textContent = '呼び出す';
     load.addEventListener('click', () => {
+      dom.title.value = draft.title ?? '';
       dom.text.value = draft.text;
       updateCount();
       dom.text.focus();
@@ -144,7 +149,9 @@ function renderHistory() {
 
     const meta = document.createElement('p');
     meta.className = 'np-item-meta';
-    meta.textContent = `${formatTime(item.at)}　${item.kind}`;
+    meta.textContent = item.title
+      ? `${formatTime(item.at)}　${item.kind}　${item.title}`
+      : `${formatTime(item.at)}　${item.kind}`;
 
     const text = document.createElement('p');
     text.className = 'np-item-text';
@@ -165,7 +172,7 @@ function handleSave() {
   }
 
   try {
-    saveDraft(dom.text.value);
+    saveDraft(dom.text.value, { title: dom.title.value });
     say('下書きを保存しました');
     renderDrafts();
   } catch (error) {
@@ -182,14 +189,17 @@ async function handlePost() {
   }
 
   /*
-   * note には本文プリフィルの URL が無い（config.js の注記）ため、
-   * 本文をクリップボードへコピーしてから作成画面を開く。
+   * note には本文プリフィルの URL が無く、タイトルと本文が別枠
+   * （config.js の注記）。クリップボードは一度に1つしか持てないため、
+   * まず**タイトル**をコピーして作成画面を開く（最初のカーソルは
+   * タイトル欄）。本文は「本文をコピー」で2段階目として貼り付ける。
    * window.open はクリックと同じイベント内で行う（ポップアップ扱いの回避）。
    */
+  const title = dom.title.value.trim();
   let copied = false;
 
   try {
-    await navigator.clipboard.writeText(dom.text.value);
+    await navigator.clipboard.writeText(title !== '' ? title : dom.text.value);
     copied = true;
   } catch {
     /* 許可が無い環境ではコピーだけ諦め、作成画面は開く。 */
@@ -203,13 +213,34 @@ async function handlePost() {
   }
 
   if (storageOk) {
-    recordHistory('作成画面を開いた', dom.text.value);
+    recordHistory('作成画面を開いた', dom.text.value, { title });
     renderHistory();
   }
 
-  say(copied
-    ? '本文をコピーして note の作成画面を開きました。エディタに貼り付けてください。'
-    : 'note の作成画面を開きました（コピーは許可されませんでした。本文は手動でコピーしてください）。');
+  if (!copied) {
+    say('note の作成画面を開きました（コピーは許可されませんでした。タイトルと本文は手動でコピーしてください）。');
+    return;
+  }
+
+  say(title !== ''
+    ? 'タイトルをコピーして note の作成画面を開きました。貼り付けたら、このタブに戻って「本文をコピー」を押してください。'
+    : 'タイトルが空のため本文をコピーして note の作成画面を開きました。本文欄に貼り付けてください。');
+}
+
+async function handleCopyBody() {
+  const problem = validatePostText(dom.text.value);
+
+  if (problem) {
+    say(problem, true);
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(dom.text.value);
+    say('本文をコピーしました。note の本文欄に貼り付けてください。');
+  } catch {
+    say('コピーが許可されませんでした。本文を選択して手動でコピーしてください。', true);
+  }
 }
 
 async function handleGenerate(event) {
@@ -223,8 +254,8 @@ async function handleGenerate(event) {
     return;
   }
 
-  if (dom.text.value.trim() !== ''
-    && !confirm('入力中の本文を生成結果で置き換えます。よろしいですか？')) {
+  if ((dom.text.value.trim() !== '' || dom.title.value.trim() !== '')
+    && !confirm('入力中のタイトル・本文を生成結果で置き換えます。よろしいですか？')) {
     return;
   }
 
@@ -235,10 +266,11 @@ async function handleGenerate(event) {
   say('生成しています…');
 
   try {
-    const text = await generatePost({ apiKey: apiKey ?? '', theme, stylePrompt: dom.style.value });
-    dom.text.value = text;
+    const article = await generatePost({ apiKey: apiKey ?? '', theme, stylePrompt: dom.style.value });
+    dom.title.value = article.title;
+    dom.text.value = article.body;
     updateCount();
-    say('生成しました。内容を確認・編集してから保存/投稿してください。');
+    say('生成しました。タイトルと本文を確認・編集してから保存/note で書くへ進んでください。');
   } catch (error) {
     const described = describeGeminiError(error);
     say(`${described.text}（${described.errorCode}）`, true);
@@ -266,6 +298,7 @@ async function init() {
   dom.text.addEventListener('input', updateCount);
   dom.save.addEventListener('click', handleSave);
   dom.post.addEventListener('click', handlePost);
+  dom.copyBody.addEventListener('click', handleCopyBody);
   dom.generateForm.addEventListener('submit', handleGenerate);
 
   /* ポータルでキーを設定して戻ってきたら、案内を消す。 */
