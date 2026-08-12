@@ -10,49 +10,19 @@
  *
  * 色・フォント・角丸・余白は css/style.css のカスタムプロパティを使い、
  * 個別の色をここで新しく作らない（コーポレートサイトと見た目を揃えるため）。
- * 直下のテーマ層だけが例外で、そこでも新しい色は増やさない（下記）。
  */
 
 /*
- * テーマ層（白 × 緑 × 水色）。
+ * 配色（白 × 深緑 × 空色）。
  *
- * /event/ と /potenitas/ は先にこの配色へ刷新済みで、認証系だけが
- * 旧来の紺 × 金のまま取り残されていた。同じサイト内で2つの配色が
- * 混在すると、画面を移動するたびに見た目が変わり読み手の負担になる。
- * そのため style.css の :root を、刷新側と同じ値で上書きする。
+ * 認証系のHTMLは style.css と auth.css の2枚しか読み込まない。テーマを
+ * 当てるために24ページへ link を足して回るより、共通CSSの側で1回
+ * 取り込むほうが、あとから増えるページも自動で揃う。
  *
- * 値は public/event/theme.css と同一。色を増やしているのではなく、
- * サイト内に既にある配色へ揃えている。片方を変えるときは両方を変える。
- *
- * --c-main / --c-accent / --c-bg などのレガシー別名は style.css 側で
- * var(--color-*) を参照しているため、ここでの再定義に自動で追従する。
+ * @import はこのファイルの位置に展開されるため、HTMLで先に読まれた
+ * style.css の :root を上書きできる。他の規則より前に置くこと。
  */
-:root {
-  /* メイン色。紺 → 緑（/potenitas/ の POTEN と同じ）。
-     変数名は navy のまま置く（既存CSSの参照を壊さないため）。 */
-  --color-navy: #166534;
-  --color-navy-dark: #14532d;
-  --color-navy-light: #15803d;
-
-  /* アクセント。金 → 水色（/potenitas/ の ITAS と同じ）。
-     フォーカスリング・罫線など、面ではなく点と線にだけ使う。 */
-  --color-gold: #0284c7;
-  --color-gold-dark: #0369a1;
-  --color-gold-text: #0369a1;
-  --color-gold-light: #bae6fd;
-
-  /* 地色。ページもカードも白で統一し、区別は罫線と影で付ける。 */
-  --color-white: #ffffff;
-  --color-off-white: #ffffff;
-
-  /* 文字色。 */
-  --color-text: #1e293b;
-  --color-text-muted: #64748b;
-
-  /* 罫線。 */
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
-}
+@import url("../css/theme.css");
 
 /*
  * hidden 属性の保証。
