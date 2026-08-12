@@ -555,6 +555,11 @@ body.is-menu-open .global-nav {
   font-style: normal;
 }
 
+.site-footer__brand-note {
+  margin-top: 16px;
+  font-size: 0.8125rem;
+}
+
 .site-footer__address a,
 .footer-nav a {
   text-decoration: underline;
@@ -1520,6 +1525,24 @@ details.business-card[open] {
   border-radius: 4px;
   color: var(--c-bg);
   background-color: var(--c-main);
+}
+
+/* Potenitas（運営ブランド） */
+.potenitas {
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--c-bg-sub);
+}
+
+.potenitas__inner {
+  max-width: 760px;
+}
+
+.potenitas .section-heading {
+  margin-bottom: 0;
+}
+
+.potenitas__action {
+  margin-top: 28px;
 }
 
 /* Members */
