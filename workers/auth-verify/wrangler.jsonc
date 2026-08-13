@@ -1,0 +1,98 @@
+/*
+ * auth-verify（セッション検証の代理）の Workers 設定。
+ *
+ * ------------------------------------------------------------------
+ * リポジトリ直下の wrangler.jsonc とは別サービス
+ * ------------------------------------------------------------------
+ * 直下のものは tsam-ai.com を配信する OpenNext の Worker
+ * （name: ts-corporate-renewal）。こちらは検証だけを行う独立した
+ * サービスで、デプロイも別に行う。
+ *
+ *   wrangler deploy --config workers/auth-verify/wrangler.jsonc
+ *   （npm run deploy:auth-verify と同じ）
+ *
+ * **`npm run deploy` はこの Worker を更新しない。** 逆もまた同じ。
+ * notifier-gate と同じ関係である。
+ * ------------------------------------------------------------------
+ *
+ * デプロイ前に必要な作業は README.md §3 にまとめてある。
+ * とくに KV namespace の id を埋めないと deploy は失敗する。
+ */
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "auth-verify",
+	"account_id": "4a71eb14d3889124d4afedd48c1458d8",
+	"main": "src/index.mjs",
+	/* 直下の Worker・notifier-gate と同じ日付にそろえる（実績のある値）。 */
+	"compatibility_date": "2026-08-05",
+	/*
+	 * nodejs_compat は付けない。使っているのは WebCrypto と fetch だけで、
+	 * Node の API に依存していない（notifier-gate と同じ判断）。
+	 */
+
+	/*
+	 * 公開先は workers.dev の既定ドメイン。
+	 *
+	 *   https://auth-verify.potenitas-lp.workers.dev
+	 *
+	 * **routes は書かない。** tsam-ai.com は直下の Worker が Custom Domain で
+	 * 押さえており、そこへ同居させるとルーティングの優先関係を検証する必要が
+	 * 出る。別オリジンでよい理由は、フロントが CORS 越しに POST するだけで
+	 * 済むため（Cookie を使わない認証なので credentials も要らない）。
+	 */
+	"workers_dev": true,
+
+	/*
+	 * 検証結果のキャッシュ。
+	 *
+	 * **id は運用者が埋める。** 作成コマンド:
+	 *   wrangler kv namespace create VERIFY_CACHE --config workers/auth-verify/wrangler.jsonc
+	 * 出力された id をここへ貼る。
+	 *
+	 * notifier-gate の LICENSE_CACHE とは別の namespace にする。
+	 * 用途が違ううえ、無料枠の書き込み上限（1,000/日）を食い合う量を
+	 * 見分けられなくなるため。
+	 */
+	"kv_namespaces": [
+		{
+			"binding": "VERIFY_CACHE",
+			"id": "TODO_KV_NAMESPACE_ID"
+		}
+	],
+
+	/*
+	 * 平文の環境変数。**秘密は入れない。**
+	 *
+	 * この Worker は共有シークレットを持たない。GAS へ送るのは利用者の
+	 * セッショントークン（それ自体が資格証明）だけで、GAS の verifySession は
+	 * 元から公開エンドポイントである。つまり新しい秘密を導入していない。
+	 *
+	 * wrangler deploy は、この設定に無い平文の環境変数を Worker から削除する。
+	 */
+	"vars": {
+		/*
+		 * CORS を許すオリジン（カンマ区切り）。
+		 * 呼ぶのは tsam-ai.com 上の保護ページだけ。
+		 */
+		"ALLOWED_ORIGINS": "https://tsam-ai.com",
+		/*
+		 * 認証系 GAS（gas-auth）の /exec URL。
+		 * public/auth/config.js の apiUrl と同じ値で、公開値である
+		 * （フロントの JS にも書かれている）。
+		 */
+		"AUTH_GAS_URL": "https://script.google.com/macros/s/AKfycbwK-Kw9ynTbDpUG7e5pHgXSPLFg1ur62ukbHLHdHBogqcz3YT0Hn3nQg74SpHOzvXAN/exec"
+	},
+
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+			/*
+			 * リクエスト本文にはセッショントークンが入る。
+			 * 本文を残す設定は入れないこと（SECURITY_NOTES の
+			 * 「ログに残さないもの」に該当する）。
+			 */
+			"enabled": true
+		}
+	}
+}
