@@ -106,6 +106,7 @@ POST /exec?path=stripe-webhook&k=＜合言葉＞
 | `benchmarkPasswordHashing()` | ハッシュ所要時間の実測 | なし |
 | `selfTestAuthFlow()` | 通し確認（作った行は自動削除） | あり |
 | `cleanupExpiredSessions()` | 古いセッション行の削除 | あり |
+| `keepAlive()` | コールドスタート回避（自分の `?action=health` を叩くだけ） | なし |
 | `cleanupExpiredTokens()` | 古いトークン行の削除 | あり |
 | `previewLegalDocs()` | 法務ページを Drive へ書き出す（公開しない） | Drive のみ |
 | `publishLegalDocs()` | 法務ページを生成して GitHub の `main` へコミット | あり／**外部** |
