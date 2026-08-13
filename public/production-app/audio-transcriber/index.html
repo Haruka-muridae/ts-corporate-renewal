@@ -84,16 +84,174 @@
   -->
   <div id="at-app" class="at-app" data-app-state="idle" data-mode="local">
 
-    <!--
-      Gemini APIの利用可否。キー未設定・保存不可・接続エラー・接続済みの
-      4通りを文言で出し分ける（色だけに頼らない）。値そのものは表示しない。
-      確認は起動時と設定変更時だけ行い、定期的なポーリングはしない
-      （script.js の refreshGeminiConnectionStatus）。
-    -->
-    <p id="at-gemini-connection" class="at-connection-status" role="status" aria-live="polite" data-tone="unset"></p>
+    <!-- ============================================================
+         設定
+
+         Gemini APIの状態、音声ファイルの入力元、文字起こしの方法、
+         言語・タイムスタンプ・AIモデルなど、利用者が選ぶ項目をすべて
+         1つのアコーディオンへまとめたもの（利用者フィードバックにより、
+         当初の複数アコーディオン構成から統合・並べ替えを重ねた）。
+         「音声ファイルを選ぶ」より前に置き、
+         「状態を確認 → 入力元・方法を選ぶ → ファイルを選ぶ → 実行」の
+         自然な順序にする。
+
+         上から (1) Gemini API → (2) 音声ファイルの入力元 →
+         (3) 文字起こしの方法 → (4) 言語 → (5) タイムスタンプ →
+         (6) AIモデル、の順。
+
+         閉じても入力値・選択値は破棄しない（<details> はDOMを維持したまま
+         非表示にするだけで、値は保持される）。
+         ============================================================ -->
+    <details id="at-settings-accordion" class="at-block at-accordion">
+      <summary class="at-accordion__summary">
+        <span class="at-accordion__marker" aria-hidden="true"></span>
+        <span class="at-accordion__title">設定</span>
+        <!--
+          閉じた状態でもGemini APIキーの利用可否が分かるよう、
+          「Gemini キー」の固定ラベル＋角括弧つきの状態バッジで示す
+          （当初要件「画面上でAPIの利用可否を目視確認できる」を維持するため）。
+          角括弧＋バッジの背景色の両方で状態値であることを示し、
+          色だけに頼らずテキスト（未設定/確認中/接続済み/接続エラー）も併記する。
+          文言はセクション内の詳しい状態表示（#at-gemini-connection）と
+          「Gemini キー」表記で揃える。
+        -->
+        <span class="at-accordion__badge-label">Gemini キー</span>
+        <span id="at-settings-connection-badge" class="at-accordion__badge" data-tone="unset"></span>
+        <!-- 閉じた状態でも現在の文字起こし方法が分かるよう、ここへ入れる（script.js）。 -->
+        <span id="at-settings-current" class="at-accordion__current"></span>
+      </summary>
+
+      <div class="at-panel">
+        <!-- (1) Gemini API -->
+        <div class="at-settings-section">
+          <h3 class="at-subtitle">Gemini API</h3>
+
+          <!--
+            Gemini APIの利用可否。キー未設定・保存不可・接続エラー・接続済みの
+            4通りを文言で出し分ける（色だけに頼らない）。値そのものは表示しない。
+            確認は起動時と設定変更時だけ行い、定期的なポーリングはしない
+            （script.js の refreshGeminiConnectionStatus）。
+          -->
+          <p id="at-gemini-connection" class="at-connection-status" role="status" aria-live="polite" data-tone="unset"></p>
+
+          <!--
+            APIキーはこの画面では入力させない。ポータルの「API設定」で
+            KeyStore（端末内 localStorage のみ）へ保存したものを、実行の
+            瞬間にだけ読む（docs/specs/keystore-spec-v1.md）。
+            未設定・保存不可のときだけ下の案内を出す。文言は script.js が
+            textContent で入れる（innerHTML を使わない）。
+            文字起こしの方法にGeminiを選んでいるかどうかに関わらず表示する
+            （Gemini APIの状態そのものを扱う区画のため）。
+          -->
+          <div id="at-key-guidance" class="at-key-guidance" aria-live="polite" hidden>
+            <h4 id="at-key-guidance-title" class="at-subtitle"></h4>
+            <p id="at-key-guidance-text" class="at-note"></p>
+            <div class="at-actions">
+              <a id="at-portal-link" class="auth-button" href="../../portal/" hidden>ポータルでキーを設定する</a>
+            </div>
+          </div>
+        </div>
+
+        <!--
+          (2) よく使う入力元
+
+          「音声ファイルを選ぶ」アコーディオンには端末・Googleドライブの
+          両方の取得操作を常に出すため、ここは「どちらを優先して
+          強調表示するか」の既定値の選択（実機フィードバックにより、
+          片方を隠す方式から強調の差をつけて両方出す方式へ変更した）。
+          ここでの選択変更それ自体はOAuth認可を一切起動しない
+          （認可は利用者がファイル取得操作を行った時点でのみ開始する）。
+        -->
+        <div class="at-settings-section">
+          <h3 class="at-subtitle">よく使う入力元</h3>
+          <p class="at-note">「音声ファイルを選ぶ」でどちらを優先して強調表示するかを選べます。どちらもいつでも使えます。</p>
+
+          <fieldset class="at-fieldset">
+            <legend class="at-visually-hidden">よく使う入力元</legend>
+
+            <div class="at-checkbox">
+              <input id="at-source-local" type="radio" name="at-file-source" value="local" checked>
+              <label for="at-source-local">端末</label>
+            </div>
+            <p class="at-note">この端末に保存されている音声ファイル</p>
+
+            <div class="at-checkbox">
+              <input id="at-source-drive" type="radio" name="at-file-source" value="drive">
+              <label for="at-source-drive">Googleドライブ</label>
+            </div>
+            <p class="at-note">ブラウザ録音アプリで保存した録音（マイドライブ ＞ TSAM AI ＞ Voice Recorder）</p>
+          </fieldset>
+        </div>
+
+        <!-- (3) 文字起こしの方法 -->
+        <div class="at-settings-section">
+          <h3 class="at-subtitle">文字起こしの方法</h3>
+
+          <fieldset class="at-fieldset">
+            <legend class="at-visually-hidden">文字起こしの方法</legend>
+
+            <div class="at-mode-cards">
+              <div class="at-mode-card">
+                <input id="at-mode-local" class="at-mode-card__input" type="radio" name="at-mode" value="local" checked>
+                <label class="at-mode-card__label" for="at-mode-local">
+                  <span class="at-mode-card__name">完全無料・端末内処理<span class="at-mode-card__badge">推奨</span></span>
+                  <span class="at-mode-card__desc">音声を外部サーバーへ送信せず、この端末内で文字起こしします。APIキーは不要です。</span>
+                  <span class="at-mode-card__note">初回はAIモデルをダウンロードします。端末性能や音声の長さによって処理時間が変わります。</span>
+                </label>
+              </div>
+
+              <div class="at-mode-card">
+                <input id="at-mode-gemini" class="at-mode-card__input" type="radio" name="at-mode" value="gemini">
+                <label class="at-mode-card__label" for="at-mode-gemini">
+                  <span class="at-mode-card__name">Gemini API<span class="at-mode-card__badge at-mode-card__badge--beta">ベータ</span></span>
+                  <span class="at-mode-card__desc">ユーザー自身のGemini APIキーを使用して文字起こしします。</span>
+                  <span class="at-mode-card__note">音声ファイルはGoogleのGemini APIへ送信されます。利用上限や料金は、ご自身のGoogle Cloudプロジェクトの設定に従います。</span>
+                  <!--
+                    実APIキーでの通信は未確認のため、その旨を明示する（テスト版と同じ状態）。
+                    確認できたら、この一文を削除する。
+                  -->
+                  <span class="at-mode-card__note">APIキーが必要です。実環境によって利用できない場合があります。</span>
+                </label>
+              </div>
+            </div>
+          </fieldset>
+        </div>
+
+        <!-- (4) 言語 -->
+        <div class="at-field">
+          <label class="at-label" for="at-language">言語</label>
+          <select id="at-language" class="at-select"></select>
+        </div>
+
+        <!-- (5) タイムスタンプ -->
+        <div class="at-checkbox">
+          <input id="at-timestamps" type="checkbox" checked>
+          <label for="at-timestamps">タイムスタンプを付ける（取得できた場合）</label>
+        </div>
+
+        <!-- (6) AIモデル（端末内モードの設定） -->
+        <div id="at-local-settings" class="at-mode-settings">
+          <div class="at-field">
+            <label class="at-label" for="at-whisper-model">AIモデル</label>
+            <select id="at-whisper-model" class="at-select"></select>
+            <p id="at-whisper-model-note" class="at-note"></p>
+          </div>
+          <p id="at-device-note" class="at-note"></p>
+        </div>
+
+        <!-- (6) AIモデル（Geminiモードの設定） -->
+        <div id="at-gemini-settings" class="at-mode-settings" hidden>
+          <div class="at-field">
+            <label class="at-label" for="at-gemini-model">Geminiモデル</label>
+            <select id="at-gemini-model" class="at-select"></select>
+            <p class="at-note">「自動」を選ぶと、お使いのAPIキーで利用できるモデルから自動的に選びます。</p>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <!-- ============================================================
-         1. 音声ファイルを選択
+         音声ファイルを選択
 
          <details> によるアコーディオン。初期状態は閉（open属性なし）。
          開閉してもDOMは破棄しないため、選択済みのファイルや再生位置は
@@ -117,23 +275,27 @@
         <input id="at-file-input" class="at-visually-hidden" type="file" tabindex="-1" aria-hidden="true">
 
         <!--
-          取得元は「端末」と「Googleドライブの固定フォルダ」の2つだけ。
-          どちらから取るのかが一目で分かるよう、選択肢として並べる。
+          端末・Googleドライブの両方の取得操作を常に出す（実機フィードバックにより、
+          「設定」で選んだ側だけを表示する方式をやめた。片方が隠れていると、
+          その手段が使えないと誤解されるため）。
+
+          「設定」の『よく使う入力元』は、どちらを主要ボタン（強調）にするかの
+          既定値だけを決める（script.js の applyFileSourceEmphasis）。
+          もう一方は補助的な見た目（.auth-button--ghost）で並べるだけで、
+          押せば従来どおり動作する（Driveボタン押下時にのみOAuth認可が始まる）。
         -->
-        <p class="at-source-label" id="at-source-label">音声ファイルの取得元</p>
+        <p class="at-note">強調されているボタンは「設定」の「よく使う入力元」です。どちらもいつでも使えます。</p>
 
-        <div class="at-sources" role="group" aria-labelledby="at-source-label">
-          <div class="at-source">
-            <button id="at-local-button" class="auth-button at-source__button" type="button">端末から選択</button>
-            <p class="at-source__hint">この端末に保存されている音声ファイル</p>
-          </div>
+        <div class="at-source">
+          <button id="at-local-button" class="auth-button at-source__button" type="button">端末から選択</button>
+          <p class="at-source__hint">この端末に保存されている音声ファイル</p>
+        </div>
 
-          <div class="at-source">
-            <button id="at-drive-button" class="auth-button auth-button--ghost at-source__button" type="button">Google Driveから選択</button>
-            <!-- 対象フォルダは固定。Drive全体は検索しない。 -->
-            <p class="at-source__path">マイドライブ ＞ TSAM AI ＞ Voice Recorder</p>
-            <p class="at-source__hint">ブラウザ録音アプリで保存した録音</p>
-          </div>
+        <div class="at-source">
+          <button id="at-drive-button" class="auth-button auth-button--ghost at-source__button" type="button">Google Driveから選択</button>
+          <!-- 対象フォルダは固定。Drive全体は検索しない。 -->
+          <p class="at-source__path">マイドライブ ＞ TSAM AI ＞ Voice Recorder</p>
+          <p class="at-source__hint">ブラウザ録音アプリで保存した録音</p>
         </div>
 
         <p class="at-note">対応形式：MP3 / WAV / M4A / AAC / OGG / WebM / FLAC</p>
@@ -175,109 +337,25 @@
     </details>
 
     <!-- ============================================================
-         2. 設定
+         文字起こし
 
-         「文字起こしの方法を選ぶ」と、旧「設定」（言語・タイムスタンプ・
-         モデル選択など）を1つのアコーディオンへ統合したもの
-         （利用者フィードバックにより、当初の2アコーディオン構成から変更）。
-         上から「文字起こしの方法」→ 既存の各設定項目、の順で並べる。
+         「実行」と「結果」を1つのセクションへ統合したもの（利用者
+         フィードバックにより、別セクションだと分かりにくいという指摘を受けて
+         変更）。実行系（状態・進捗・開始/中止ボタン）と結果系（本文・
+         保存/コピー/ダウンロード等）を、同じ枠の中で上から下へ連続した
+         流れに置く。
 
-         閉じても入力値・選択値は破棄しない（<details> はDOMを維持したまま
-         非表示にするだけで、値は保持される）。
-         ============================================================ -->
-    <details id="at-settings-accordion" class="at-block at-accordion">
-      <summary class="at-accordion__summary">
-        <span class="at-accordion__marker" aria-hidden="true"></span>
-        <span class="at-accordion__title">設定</span>
-        <!-- 閉じた状態でも現在の文字起こし方法が分かるよう、ここへ入れる（script.js）。 -->
-        <span id="at-settings-current" class="at-accordion__current"></span>
-      </summary>
+         結果系（#at-result-section）は、結果が無い間は非表示にする
+         （script.js の render が hasResult で切り替える）。実行前・処理中は
+         実行ボタンと状態・進捗だけが見え、完了して結果が入ってから
+         結果欄と操作ボタンが現れる。トースト通知（#at-toast）は結果の
+         有無に関わらず使うため、この非表示の対象には含めない。
 
-      <div class="at-panel">
-        <div class="at-settings-section">
-          <h3 class="at-subtitle">文字起こしの方法</h3>
-
-          <fieldset class="at-fieldset">
-            <legend class="at-visually-hidden">文字起こしの方法</legend>
-
-            <div class="at-mode-cards">
-              <div class="at-mode-card">
-                <input id="at-mode-local" class="at-mode-card__input" type="radio" name="at-mode" value="local" checked>
-                <label class="at-mode-card__label" for="at-mode-local">
-                  <span class="at-mode-card__name">完全無料・端末内処理<span class="at-mode-card__badge">推奨</span></span>
-                  <span class="at-mode-card__desc">音声を外部サーバーへ送信せず、この端末内で文字起こしします。APIキーは不要です。</span>
-                  <span class="at-mode-card__note">初回はAIモデルをダウンロードします。端末性能や音声の長さによって処理時間が変わります。</span>
-                </label>
-              </div>
-
-              <div class="at-mode-card">
-                <input id="at-mode-gemini" class="at-mode-card__input" type="radio" name="at-mode" value="gemini">
-                <label class="at-mode-card__label" for="at-mode-gemini">
-                  <span class="at-mode-card__name">Gemini API<span class="at-mode-card__badge at-mode-card__badge--beta">ベータ</span></span>
-                  <span class="at-mode-card__desc">ユーザー自身のGemini APIキーを使用して文字起こしします。</span>
-                  <span class="at-mode-card__note">音声ファイルはGoogleのGemini APIへ送信されます。利用上限や料金は、ご自身のGoogle Cloudプロジェクトの設定に従います。</span>
-                  <!--
-                    実APIキーでの通信は未確認のため、その旨を明示する（テスト版と同じ状態）。
-                    確認できたら、この一文を削除する。
-                  -->
-                  <span class="at-mode-card__note">APIキーが必要です。実環境によって利用できない場合があります。</span>
-                </label>
-              </div>
-            </div>
-          </fieldset>
-        </div>
-
-        <div class="at-field">
-          <label class="at-label" for="at-language">言語</label>
-          <select id="at-language" class="at-select"></select>
-        </div>
-
-        <div class="at-checkbox">
-          <input id="at-timestamps" type="checkbox" checked>
-          <label for="at-timestamps">タイムスタンプを付ける（取得できた場合）</label>
-        </div>
-
-        <!-- 端末内モードの設定 -->
-        <div id="at-local-settings" class="at-mode-settings">
-          <div class="at-field">
-            <label class="at-label" for="at-whisper-model">AIモデル</label>
-            <select id="at-whisper-model" class="at-select"></select>
-            <p id="at-whisper-model-note" class="at-note"></p>
-          </div>
-          <p id="at-device-note" class="at-note"></p>
-        </div>
-
-        <!-- Gemini モードの設定 -->
-        <div id="at-gemini-settings" class="at-mode-settings" hidden>
-          <div class="at-field">
-            <label class="at-label" for="at-gemini-model">Geminiモデル</label>
-            <select id="at-gemini-model" class="at-select"></select>
-            <p class="at-note">「自動」を選ぶと、お使いのAPIキーで利用できるモデルから自動的に選びます。</p>
-          </div>
-
-          <!--
-            APIキーはこの画面では入力させない。ポータルの「API設定」で
-            KeyStore（端末内 localStorage のみ）へ保存したものを、実行の
-            瞬間にだけ読む（docs/specs/keystore-spec-v1.md）。
-            未設定・保存不可のときだけ下の案内を出す。文言は script.js が
-            textContent で入れる（innerHTML を使わない）。
-          -->
-          <div id="at-key-guidance" class="at-key-guidance" aria-live="polite" hidden>
-            <h3 id="at-key-guidance-title" class="at-subtitle"></h3>
-            <p id="at-key-guidance-text" class="at-note"></p>
-            <div class="at-actions">
-              <a id="at-portal-link" class="auth-button" href="../../portal/" hidden>ポータルでキーを設定する</a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </details>
-
-    <!-- ============================================================
-         4. 実行
+         アコーディオン化はしない（「設定」「音声ファイルを選ぶ」とは異なり、
+         常時表示のメイン操作エリアのため）。
          ============================================================ -->
     <section class="at-block" aria-labelledby="at-run-title">
-      <h2 id="at-run-title" class="at-section-title">4. 文字起こしを開始する</h2>
+      <h2 id="at-run-title" class="at-section-title">文字起こし</h2>
 
       <div class="at-panel">
         <!--
@@ -311,76 +389,74 @@
           驚かせないために開始ボタンの近くへ置くが、控えめな見た目にする。
         -->
         <p class="at-note">長時間の音声は、音声時間と同程度以上の処理時間がかかる場合があります。端末の性能やブラウザによって処理速度は異なります。</p>
-      </div>
-    </section>
-
-    <!-- ============================================================
-         5. 結果
-         ============================================================ -->
-    <section class="at-block" aria-labelledby="at-result-title">
-      <h2 id="at-result-title" class="at-section-title">5. 文字起こし結果</h2>
-
-      <div class="at-panel">
-        <div class="at-result-meta">
-          <p id="at-result-count" class="at-result-meta__item">0文字</p>
-          <p id="at-result-mode" class="at-result-meta__item" hidden></p>
-          <p id="at-result-elapsed" class="at-result-meta__item" hidden></p>
-        </div>
-
-        <label class="at-visually-hidden" for="at-result">文字起こし結果（編集できます）</label>
-        <textarea
-          id="at-result"
-          class="at-textarea"
-          rows="14"
-          placeholder="ここに文字起こしの結果が表示されます。内容はそのまま編集できます。"
-          spellcheck="false"
-        ></textarea>
 
         <!--
-          保存操作の優先順位。
-
-          「Googleドライブへ保存」を主要アクション（.auth-button のプレーンな
-          塗りつぶし＝このデザインで最も強いトーン）として最初に置く。
-          「全文をコピー」「TXTで保存（ローカル保存）」は補助的な操作として
-          セカンダリの見た目（.auth-button--ghost）へ降格し、Drive保存の
-          あとに続ける。3つとも機能は維持し、削除・非表示にはしない。
-
-          Drive保存自体の仕様（保存先「マイドライブ＞TSAM AI＞Audio Transcriber」・
-          初回保存時のフォルダ自動作成・drive.fileスコープ・OAuthはこの
-          ボタン押下起点）は変えていない（onSaveToDrive はそのまま）。
-          文字起こし完了時の自動アップロードは行わない。
+          結果と結果操作。結果が無い（result が空文字）間は id="at-result-section"
+          ごと hidden にする（render 参照）。文字起こしが完了すると現れる。
         -->
-        <div class="at-actions">
-          <button id="at-save-drive" class="auth-button" type="button" disabled>Googleドライブへ保存</button>
-          <button id="at-copy" class="auth-button auth-button--ghost" type="button" disabled>全文をコピー</button>
-          <button id="at-download" class="auth-button auth-button--ghost" type="button" disabled>TXTで保存</button>
-          <button id="at-clear-result" class="auth-button at-btn-quiet" type="button" disabled>結果をクリア</button>
+        <div id="at-result-section" hidden>
+          <div class="at-result-meta">
+            <p id="at-result-count" class="at-result-meta__item">0文字</p>
+            <p id="at-result-mode" class="at-result-meta__item" hidden></p>
+            <p id="at-result-elapsed" class="at-result-meta__item" hidden></p>
+          </div>
+
+          <label class="at-visually-hidden" for="at-result">文字起こし結果（編集できます）</label>
+          <textarea
+            id="at-result"
+            class="at-textarea"
+            rows="14"
+            placeholder="ここに文字起こしの結果が表示されます。内容はそのまま編集できます。"
+            spellcheck="false"
+          ></textarea>
+
           <!--
-            AI議事録アプリ（meeting-minutes）への引継ぎ導線。
-            結果を sessionStorage（tsam-meeting-minutes-handoff-v1）へ保存してから
-            同一タブで ../meeting-minutes/ へ遷移する（script.js）。
+            保存操作の優先順位。
+
+            「Googleドライブへ保存」を主要アクション（.auth-button のプレーンな
+            塗りつぶし＝このデザインで最も強いトーン）として最初に置く。
+            「全文をコピー」「TXTで保存（ローカル保存）」は補助的な操作として
+            セカンダリの見た目（.auth-button--ghost）へ降格し、Drive保存の
+            あとに続ける。3つとも機能は維持し、削除・非表示にはしない。
+
+            Drive保存自体の仕様（保存先「マイドライブ＞TSAM AI＞Audio Transcriber」・
+            初回保存時のフォルダ自動作成・drive.fileスコープ・OAuthはこの
+            ボタン押下起点）は変えていない（onSaveToDrive はそのまま）。
+            文字起こし完了時の自動アップロードは行わない。
           -->
-          <button id="at-create-minutes" class="auth-button" type="button" disabled>AI議事録を作成</button>
+          <div class="at-actions">
+            <button id="at-save-drive" class="auth-button" type="button" disabled>Googleドライブへ保存</button>
+            <button id="at-copy" class="auth-button auth-button--ghost" type="button" disabled>全文をコピー</button>
+            <button id="at-download" class="auth-button auth-button--ghost" type="button" disabled>TXTで保存</button>
+            <button id="at-clear-result" class="auth-button at-btn-quiet" type="button" disabled>結果をクリア</button>
+            <!--
+              AI議事録アプリ（meeting-minutes）への引継ぎ導線。
+              結果を sessionStorage（tsam-meeting-minutes-handoff-v1）へ保存してから
+              同一タブで ../meeting-minutes/ へ遷移する（script.js）。
+            -->
+            <button id="at-create-minutes" class="auth-button" type="button" disabled>AI議事録を作成</button>
+          </div>
+
+          <details class="at-tools">
+            <summary>話者名をまとめて置き換える</summary>
+            <div class="at-tools__body">
+              <div class="at-field">
+                <label class="at-label" for="at-speaker-from">置き換える話者名</label>
+                <input id="at-speaker-from" class="at-input" type="text" placeholder="話者1">
+              </div>
+              <div class="at-field">
+                <label class="at-label" for="at-speaker-to">新しい名前</label>
+                <input id="at-speaker-to" class="at-input" type="text" placeholder="山田">
+              </div>
+              <div class="at-actions">
+                <button id="at-speaker-apply" class="auth-button at-btn-quiet" type="button">置き換える</button>
+              </div>
+              <p class="at-note">行頭の「話者1：」のような表記だけを置き換えます。本文中の同じ語は変更しません。</p>
+            </div>
+          </details>
         </div>
 
-        <details class="at-tools">
-          <summary>話者名をまとめて置き換える</summary>
-          <div class="at-tools__body">
-            <div class="at-field">
-              <label class="at-label" for="at-speaker-from">置き換える話者名</label>
-              <input id="at-speaker-from" class="at-input" type="text" placeholder="話者1">
-            </div>
-            <div class="at-field">
-              <label class="at-label" for="at-speaker-to">新しい名前</label>
-              <input id="at-speaker-to" class="at-input" type="text" placeholder="山田">
-            </div>
-            <div class="at-actions">
-              <button id="at-speaker-apply" class="auth-button at-btn-quiet" type="button">置き換える</button>
-            </div>
-            <p class="at-note">行頭の「話者1：」のような表記だけを置き換えます。本文中の同じ語は変更しません。</p>
-          </div>
-        </details>
-
+        <!-- 結果の有無に関わらず使うため、#at-result-section の外に置く。 -->
         <p id="at-toast" class="at-toast" role="status" aria-live="polite" hidden></p>
       </div>
     </section>

@@ -198,6 +198,54 @@ body {
   font-weight: 700;
 }
 
+/*
+ * 「設定」アコーディオンを閉じた状態でも見える、固定ラベル「Gemini キー」。
+ * すぐ後ろのバッジ（.at-accordion__badge）が状態値だと分かるよう、
+ * ラベルと値を分けて置く。
+ */
+.at-accordion__badge-label {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/*
+ * 「設定」アコーディオンを閉じた状態でも見える、Gemini キーの状態バッジ。
+ * 当初は画面上部に常時表示していたが、設定への統合に伴いここへ移した
+ * （画面上でAPIの利用可否を確認できる、という当初要件は維持する）。
+ * テキストは角括弧つき（例: [接続済み]）にして、色を判別できない環境でも
+ * 「ラベルに続く状態値である」ことが分かるようにする（色だけに頼らない）。
+ */
+.at-accordion__badge {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-tag);
+  background-color: var(--c-border-strong);
+  color: var(--color-white);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.at-accordion__badge[data-tone="ok"] {
+  background-color: var(--color-navy);
+}
+
+.at-accordion__badge[data-tone="error"] {
+  background-color: #b3261e;
+}
+
+.at-accordion__badge[data-tone="checking"] {
+  background-color: var(--color-navy-light);
+}
+
+.at-accordion__badge[data-tone="unset"] {
+  background-color: var(--c-border-strong);
+}
+
 /* 閉じた状態でも見える、選択中の内容（ファイル名・文字起こし方法）。 */
 .at-accordion__current {
   color: var(--c-text-muted);
@@ -229,6 +277,20 @@ body {
 }
 
 .at-panel > * + * {
+  margin-top: 16px;
+}
+
+/*
+ * 「文字起こし」セクションの結果まわり（#at-result-section）。
+ * 結果が無い間は非表示にするための無地の div で1階層挟んだため、
+ * .at-panel > * + * の対象から外れる中の要素へ同じリズムを与え直す。
+ */
+.at-panel > #at-result-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border);
+}
+
+#at-result-section > * + * {
   margin-top: 16px;
 }
 
@@ -343,18 +405,10 @@ body {
   margin-top: 16px;
 }
 
-/* ---------- 取得元の選択 ---------- */
-
-.at-source-label {
-  color: var(--c-main);
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.at-sources {
-  display: grid;
-  gap: 12px;
-}
+/* ---------- 取得元の選択 ----------
+   選択そのものは「設定」アコーディオン（.at-checkbox の radio）で行う。
+   ここは、選ばれた入力元に対応する取得操作（ボタン）の見た目だけを持つ。
+*/
 
 .at-source {
   padding: 16px;

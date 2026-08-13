@@ -11,13 +11,26 @@
  *   4. Gemini APIキーの都度入力を廃し、KeyStore（ポータルの「API設定」）へ
  *      置き換えた（docs/specs/keystore-spec-v1.md。short-script と同じ流儀）
  * これに加え、本番版だけの機能として次を持つ。
- *   5. 画面上部にGemini APIの利用可否（接続済み/未設定/接続エラー）を表示する
- *   6. 「音声ファイルを選ぶ」と「設定」（文字起こしの方法の選択を含む）を
- *      details/summary のアコーディオンにし、初期状態を閉にする
- *      （利用者フィードバックにより、当初は方法選択と設定を別アコーディオンに
- *      していたが「設定」1つへ統合した）
- *   7. 音声ファイル本体・APIキーを除く選択・設定値を settings-store.js で
- *      次回起動時に復元する
+ *   5. Gemini APIの利用可否（接続済み/未設定/接続エラー）を表示する。
+ *      詳しい文言は「設定」アコーディオンの先頭区画、短いバッジは
+ *      「設定」の summary（閉じた状態でも見える）の2か所に出す
+ *      （利用者フィードバックにより、当初の画面最上部固定表示から移した）
+ *   6. 「設定」（Gemini APIの状態・音声ファイルの入力元・文字起こしの方法・
+ *      言語・タイムスタンプ・AIモデル）と「音声ファイルを選ぶ」を
+ *      details/summary のアコーディオンにし、初期状態を閉にする。
+ *      「設定」を先頭に置く（状態確認・入力元/方法の選択 → ファイル選択 →
+ *      実行、の順にするため。利用者フィードバックにより、構成・順序を
+ *      複数回変更した）
+ *   7. 音声ファイル本体・APIキーを除く選択・設定値（入力元を含む）を
+ *      settings-store.js で次回起動時に復元する
+ *   8. 「音声ファイルを選ぶ」には端末・Googleドライブ両方の取得操作を常に出し、
+ *      「設定」の『よく使う入力元』で選んだ側だけを主要ボタン（強調）にする
+ *      （実機フィードバックにより、片方を隠す方式から強調の差をつけて
+ *      両方出す方式へ変更した。applyFileSourceEmphasis 参照）。
+ *      「設定」側の選択変更自体はOAuth認可を起動しない
+ *      （認可は「Google Driveから選択」ボタン押下でのみ開始する）。
+ *      実際に取得できた入力元は、次回以降の手数を減らすため『よく使う
+ *      入力元』として保存し直す（rememberFileSourceDefault 参照）
  *
  * 担当するのは「DOMの更新」「利用者の操作の受け取り」「文言」の3つだけ。
  * 音声処理・API呼び出し・認可のロジックは各モジュールへ置く。
@@ -301,16 +314,17 @@ function cacheElements() {
     'at-app', 'at-file-input', 'at-local-button', 'at-drive-button', 'at-drive-note',
     'at-drive-dialog', 'at-dialog-status', 'at-dialog-error', 'at-drive-list',
     'at-drive-reload', 'at-drive-cancel',
+    'at-source-local', 'at-source-drive',
     'at-file-current', 'at-file-info', 'at-file-name', 'at-file-type', 'at-file-size', 'at-file-duration',
     'at-file-source', 'at-player', 'at-clear-file',
-    'at-settings-current', 'at-mode-local', 'at-mode-gemini',
+    'at-settings-current', 'at-settings-connection-badge', 'at-mode-local', 'at-mode-gemini',
     'at-language', 'at-timestamps',
     'at-local-settings', 'at-whisper-model', 'at-whisper-model-note', 'at-device-note',
     'at-gemini-settings', 'at-gemini-model',
     'at-key-guidance', 'at-key-guidance-title', 'at-key-guidance-text', 'at-portal-link',
     'at-status', 'at-progress', 'at-progress-fill', 'at-progress-label', 'at-error',
     'at-start', 'at-cancel',
-    'at-result', 'at-result-count', 'at-result-mode', 'at-result-elapsed',
+    'at-result-section', 'at-result', 'at-result-count', 'at-result-mode', 'at-result-elapsed',
     'at-copy', 'at-download', 'at-save-drive', 'at-clear-result', 'at-create-minutes',
     'at-speaker-from', 'at-speaker-to', 'at-speaker-apply', 'at-toast',
   ];
@@ -452,8 +466,12 @@ function populateSelects(saved = {}) {
 }
 
 /*
- * 文字起こしの方法（モード）とタイムスタンプの有無を、保存済み設定から復元する。
+ * 文字起こしの方法（モード）・入力元・タイムスタンプの有無を、保存済み設定から復元する。
  * 音声ファイル本体・APIキーはここでは扱わない（対象外。settings-store.js 冒頭参照）。
+ *
+ * 前バージョンの保存値（fileSource キーが無い状態）を読み込んでもエラーにならず、
+ * 既定値（'local'）へ静かにフォールバックする（他の項目と同じ「壊れた値・
+ * 存在しないキーでも画面を止めない」考え方。KeyStore §3-3 参照）。
  */
 function applySavedSettings(saved) {
   const mode = saved.mode === 'gemini' ? 'gemini' : 'local';
@@ -462,6 +480,33 @@ function applySavedSettings(saved) {
   update({ mode });
 
   el.timestamps.checked = typeof saved.withTimestamps === 'boolean' ? saved.withTimestamps : true;
+
+  const fileSource = saved.fileSource === 'drive' ? 'drive' : 'local';
+  el.sourceLocal.checked = fileSource === 'local';
+  el.sourceDrive.checked = fileSource === 'drive';
+  applyFileSourceEmphasis(fileSource);
+}
+
+/*
+ * 「音声ファイルを選ぶ」アコーディオン内の、端末／Googleドライブ両ボタンの強調度の切替。
+ *
+ * 実機フィードバックにより、「設定」で選ばれていない側を hidden にする方式は
+ * やめた。設定を開いて切り替えないとドライブが使えない、という状態を
+ * 作らないため、**常に両方のボタンを表示**し、既定（よく使う入力元）の
+ * 側だけを主要ボタン（.auth-button のプレーンな塗りつぶし）にし、
+ * もう一方は補助的な見た目（.auth-button--ghost）にする。
+ * どちらのボタンを押しても、押した側の取得操作が普通に動く
+ * （Driveボタン押下時にのみ onDriveButtonClick が OAuth 認可を始める）。
+ *
+ * ここを呼んでもOAuth認可は一切起動しない（ensureAccessToken を呼ばない）。
+ * 認可は利用者が「Google Driveから選択」ボタンを押した時点でのみ始まる。
+ * 設定の変更それ自体を認可のトリガーにしないための境界を、
+ * 関数を分けることで明示している。
+ */
+function applyFileSourceEmphasis(defaultSource) {
+  const isDriveDefault = defaultSource === 'drive';
+  el.localButton.classList.toggle('auth-button--ghost', isDriveDefault);
+  el.driveButton.classList.toggle('auth-button--ghost', !isDriveDefault);
 }
 
 function updateWhisperModelNote() {
@@ -548,20 +593,49 @@ function refreshKeyState() {
 }
 
 /*
- * 画面上部の「Gemini API：接続済み / 未設定 / 接続エラー」表示。
+ * 「設定」アコーディオンの summary（閉じたタイトル行）に出す、
+ * 「Gemini キー [接続済み / 未設定 / 接続エラー / 確認中]」の角括弧の中身。
+ * 長い説明文（at-gemini-connection）とは別に、閉じた状態でも読める
+ * 短い語だけを持つ。角括弧は「ラベルに続く状態値である」ことを、
+ * 色を判別できない環境でも分かるようにするため（色だけに頼らない）。
+ */
+const CONNECTION_BADGE_LABELS = Object.freeze({
+  unset: '未設定',
+  checking: '確認中',
+  ok: '接続済み',
+  error: '接続エラー',
+});
+
+/*
+ * Gemini キー（APIキー）の状態表示。呼ばれるのは起動時と、キーの有無が
+ * 変わったとき・利用者がこの画面でGeminiモードへ切り替えたときだけ
+ * （bindEvents 参照）。定期実行はしない。
  *
- * 呼ばれるのは起動時と、キーの有無が変わったとき・利用者がこの画面で
- * Geminiモードへ切り替えたときだけ（bindEvents 参照）。定期実行はしない。
+ * 表示先は2か所（同じ状態を同時に更新する。ラベルの表記は両方とも
+ * 「Gemini キー」に揃え、片方だけ変わって表記が割れないようにする）。
+ *   - el.geminiConnection … 「設定」アコーディオンを開いたときの詳しい文言
+ *     （「Gemini キー：<状態>」。role="status" aria-live="polite" で
+ *     読み上げに乗る）
+ *   - el.settingsConnectionBadge … 「設定」の summary に出す角括弧つきの
+ *     短いバッジ（「[<状態>]」。閉じた状態でも接続状態が分かるようにする
+ *     ため。当初要件の「画面上でAPIの利用可否を目視確認できる」を維持する）
  *
  * 値を読むのはこの確認の間だけで、確認が終わればどこにも残さない
  * （KeyStore の外にキーを保持しないという方針は変えない。§8-2 の
  * 疎通テストと同じ、参照系のみを使う軽量な確認）。
  */
 function setConnectionStatus(tone, text) {
-  setText(el.geminiConnection, `Gemini API：${text}`);
+  setText(el.geminiConnection, `Gemini キー：${text}`);
 
   if (el.geminiConnection) {
     el.geminiConnection.dataset.tone = tone;
+  }
+
+  const badgeLabel = CONNECTION_BADGE_LABELS[tone];
+  setText(el.settingsConnectionBadge, badgeLabel ? `[${badgeLabel}]` : '');
+
+  if (el.settingsConnectionBadge) {
+    el.settingsConnectionBadge.dataset.tone = tone;
   }
 }
 
@@ -648,14 +722,25 @@ function render(snapshot) {
   el.localButton.disabled = busy;
   el.driveButton.disabled = busy;
   el.clearFile.disabled = busy;
+  el.sourceLocal.disabled = busy;
+  el.sourceDrive.disabled = busy;
   el.modeLocal.disabled = busy;
   el.modeGemini.disabled = busy;
   el.whisperModel.disabled = busy;
   el.geminiModel.disabled = busy;
   el.language.disabled = busy;
 
-  /* ---- 結果の操作 ---- */
+  /* ---- 結果と結果操作 ---- */
   const hasResult = result.trim() !== '';
+
+  /*
+   * 結果が無い間は結果欄・結果操作ボタンごと隠す。
+   * 実行前・処理中は実行ボタンと状態・進捗だけが見え、完了して結果が
+   * 入ってから現れる（トースト #at-toast はこの対象に含めない。結果の
+   * 有無に関わらず使うため、index.html で hidden 対象の外に置いてある）。
+   */
+  setHidden(el.resultSection, !hasResult);
+
   el.copy.disabled = !hasResult;
   el.download.disabled = !hasResult;
   el.saveDrive.disabled = !hasResult || busy;
@@ -776,7 +861,30 @@ async function acceptFile({ blob, name, source }) {
     },
   });
 
+  /*
+   * 実際に使えた入力元を「よく使う入力元」として覚え直す。
+   * 補助側のボタン（設定の既定と異なる側）から取得できた場合、
+   * 次回以降は毎回強調を切り替える手間を減らすため、その入力元を
+   * 新しい既定にする（次回起動時にも settings-store.js 経由で復元される）。
+   */
+  rememberFileSourceDefault(source);
+
   return true;
+}
+
+/*
+ * 実際にファイルを取得できた入力元を「よく使う入力元」として保存し直す。
+ * 「設定」のラジオ・強調表示・保存済み設定のすべてを、この入力元へ揃える。
+ */
+function rememberFileSourceDefault(source) {
+  if (source !== 'local' && source !== 'drive') {
+    return;
+  }
+
+  el.sourceLocal.checked = source === 'local';
+  el.sourceDrive.checked = source === 'drive';
+  applyFileSourceEmphasis(source);
+  saveSettings({ fileSource: source });
 }
 
 /* 処理中に新しいファイルを選ばせない。 */
@@ -1590,6 +1698,20 @@ function bindEvents() {
   /* Escape で閉じた場合もここを通る。 */
   el.driveDialog.addEventListener('close', onDialogClose);
   el.clearFile.addEventListener('click', clearFile);
+
+  /*
+   * よく使う入力元（端末／Googleドライブ）の選択。
+   * ここでは主要/補助の強調度の切替と設定の保存だけを行い、OAuth認可は
+   * 起動しない（認可は「Google Driveから選択」ボタン押下 = onDriveButtonClick でのみ）。
+   */
+  el.sourceLocal.addEventListener('change', () => {
+    applyFileSourceEmphasis('local');
+    saveSettings({ fileSource: 'local' });
+  });
+  el.sourceDrive.addEventListener('change', () => {
+    applyFileSourceEmphasis('drive');
+    saveSettings({ fileSource: 'drive' });
+  });
 
   el.modeLocal.addEventListener('change', () => {
     update({ mode: 'local', errorMessage: null });

@@ -383,6 +383,32 @@ try {
     && settingsStore.loadSettings().language === 'en'
     && settingsStore.loadSettings().withTimestamps === false);
 
+  /*
+   * 音声ファイルの入力元（fileSource）の永続化。
+   * script.js の applySavedSettings が行うのと同じフォールバック式
+   * （saved.fileSource === 'drive' ? 'drive' : 'local'）で検証する。
+   */
+  check('入力元（drive）を保存できる',
+    settingsStore.saveSettings({ fileSource: 'drive' }) === true
+    && settingsStore.loadSettings().fileSource === 'drive');
+
+  check('入力元（local）を保存できる',
+    settingsStore.saveSettings({ fileSource: 'local' }) === true
+    && settingsStore.loadSettings().fileSource === 'local');
+
+  /*
+   * ★後方互換: 前バージョン（fileSource キーが無い）の保存値を読み込んでも
+   * 例外にならず、既定値（'local'）へフォールバックできること。
+   */
+  settingsMap.set(settingsStore.SETTINGS_STORAGE_KEY, JSON.stringify({ mode: 'local', language: 'ja' }));
+  {
+    const loaded = settingsStore.loadSettings();
+    check('★fileSourceキーが無い旧形式でも例外を投げない', Object.hasOwn(loaded, 'fileSource') === false);
+
+    const fallbackSource = loaded.fileSource === 'drive' ? 'drive' : 'local';
+    check('★fileSource未保存時は既定値localへフォールバック', fallbackSource === 'local');
+  }
+
   /* 手で書き換えられた値でも壊れない（KeyStore §3-3 と同じ判断）。 */
   for (const broken of ['{', 'null', '"text"', '[1,2]', '']) {
     settingsMap.set(settingsStore.SETTINGS_STORAGE_KEY, broken);
