@@ -60,8 +60,16 @@
   --color-border-strong: #cbd5e1;
 
   /*
-   * --c-main / --c-accent / --c-bg などのレガシー別名は style.css 側で
-   * var(--color-*) を参照しているため、上の再定義に自動で追従する。
-   * ここで再定義する必要はない。
+   * --c-main / --c-accent / --c-bg などのレガシー別名は、style.css を
+   * 一緒に読むページでは var(--color-*) 経由で上の再定義に追従する。
+   * だからここでは再定義しない（このファイルは色の値だけを持つ層で、
+   * public/event/theme.css と値が対になっている）。
+   *
+   * ただし「style.css を一緒に読む」は前提条件であって保証ではない。
+   * public/auth/auth.css はここから @import されるが、その auth.css を
+   * style.css 抜きで読むページが /production-app/ に実在し、そこでは
+   * --c-main が未定義になってボタンが消えた（2026-08-13）。
+   * 別名の既定値は auth.css 自身が持たせてある。経緯は auth.css の
+   * :root のコメントを参照。ここへ移さないこと（上記の対が崩れる）。
    */
 }

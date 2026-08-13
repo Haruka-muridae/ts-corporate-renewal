@@ -5,6 +5,9 @@
  * css/style.css を読み込んだうえで、この2〜3種類の画面に固有の
  * クラスだけを追加する。既存クラスは上書きしない。
  *
+ * ただし style.css を読まないページ（/production-app/ の一部）からも
+ * 読まれるため、使うトークンの既定値はこのファイル自身が持つ（下記）。
+ *
  * 320px から積み上げるモバイルファースト。
  * 375 / 768 / 1024 / 1440px で横スクロールが出ないことを前提に組む。
  *
@@ -23,6 +26,78 @@
  * style.css の :root を上書きできる。他の規則より前に置くこと。
  */
 @import url("../css/theme.css");
+
+/*
+ * このファイルが使うトークンの土台。
+ *
+ * ------------------------------------------------------------------
+ * なぜ必要か（2026-08-13 の障害）
+ * ------------------------------------------------------------------
+ * このファイルの規則は --c-main / --radius-button / --font-en などを
+ * 参照している。これらを定義しているのは css/style.css だけで、上の
+ * theme.css は色トークン（--color-*）を上書きするだけの層なので持って
+ * いない。つまり auth.css は「style.css も一緒に読まれていること」を
+ * 暗黙の前提にしていた。
+ *
+ * ところが /production-app/ のうち receipt-ocr と voice-recorder は
+ * style.css を読まず、auth.css と自前の style.css の2枚だけを読む。
+ * この2つでは --c-main が未定義のままで、.auth-button の
+ *   background-color: var(--c-main);  → 解決できず transparent
+ *   color: var(--color-white);        → theme.css があるので #ffffff
+ * となり、白地に白文字のボタン（＝見えないボタン）になった。
+ *
+ * theme.css を入れる前は --color-white も未定義で、文字色は継承した
+ * 黒のままだった。だから「配色を替えたら消えた」という形で出た。
+ * 原因は配色ではなく、この依存関係が保証されていなかったこと。
+ *
+ * ------------------------------------------------------------------
+ * ここで定義する理由（各アプリ側に足さない理由）
+ * ------------------------------------------------------------------
+ * トークンを必要としているのは auth.css の規則そのものなので、
+ * 保証も auth.css が持つのが筋。読み込む側（HTML）の作り方に依存させる
+ * と、ページが増えるたび同じ穴が空く。
+ *
+ * theme.css 側には置かない。あちらは public/event/theme.css と値が対に
+ * なっている色の上書き層で、「片方だけ変えない」という制約がある。
+ * 角丸やフォントの定義を混ぜると、その対が色の話でなくなる。
+ *
+ * ------------------------------------------------------------------
+ * 二重定義になるページで値が変わらないこと
+ * ------------------------------------------------------------------
+ * auth.css を読む24ページのうち20ページは style.css も読む（認証系11
+ * ページと、card-mail / card-ocr / note-post / short-script /
+ * threads-post / x-post の9ページ）。そこでは同じトークンが2回
+ * 宣言される。右辺は style.css と同一にしてあるため
+ * 結果は変わらない。値を変えるときは css/style.css を直し、ここを
+ * 合わせる（tests/unit/css-tokens.mjs が一致を見ている）。
+ *
+ * style.css が @media の中で上書きしているトークン（--container-padding
+ * --header-height --section-space --content-space）は、ここに書くと
+ * 後勝ちで幅ごとの値を潰すため置かない。同テストが検出する。
+ *
+ * 自前の配色を持つアプリ（audio-transcriber / meeting-minutes）は
+ * auth.css より後に style.css を読むので、あちらの定義が勝つ。
+ */
+:root {
+  /* 色は theme.css / style.css の --color-* を指すだけ。新しい色は作らない。 */
+  --c-main: var(--color-navy);
+  --c-main-dark: var(--color-navy-dark);
+  --c-accent: var(--color-gold);
+  --c-bg: var(--color-white);
+  --c-bg-sub: var(--color-off-white);
+  --c-text: var(--color-text);
+  --c-text-muted: var(--color-text-muted);
+  --c-border: var(--color-border);
+  --c-border-strong: var(--color-border-strong);
+
+  --font-ja: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  --font-en: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-num: "Inter", "Roboto Mono", ui-monospace, monospace;
+
+  --radius-card: 6px;
+  --radius-tag: 4px;
+  --radius-button: 4px;
+}
 
 /*
  * hidden 属性の保証。

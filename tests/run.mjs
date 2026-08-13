@@ -39,6 +39,7 @@ const SUITES = [
   { name: 'legal', file: 'unit/legal.mjs', kind: 'unit' },
   { name: 'setup', file: 'unit/setup.mjs', kind: 'unit' },
   { name: 'frontend', file: 'unit/frontend.mjs', kind: 'unit' },
+  { name: 'css-tokens', file: 'unit/css-tokens.mjs', kind: 'unit' },
   { name: 'event-pricing', file: 'unit/event-pricing.mjs', kind: 'unit' },
   { name: 'event-mail', file: 'unit/event-mail.mjs', kind: 'unit' },
   { name: 'event-application', file: 'unit/event-application.mjs', kind: 'unit' },
