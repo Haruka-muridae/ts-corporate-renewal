@@ -322,6 +322,7 @@ function cacheElements() {
     'at-local-settings', 'at-whisper-model', 'at-whisper-model-note', 'at-device-note',
     'at-gemini-settings', 'at-gemini-model',
     'at-key-guidance', 'at-key-guidance-title', 'at-key-guidance-text', 'at-portal-link',
+    'at-recheck-connection',
     'at-status', 'at-progress', 'at-progress-fill', 'at-progress-label', 'at-error',
     'at-start', 'at-cancel',
     'at-result-section', 'at-result', 'at-result-count', 'at-result-mode', 'at-result-elapsed',
@@ -550,11 +551,92 @@ function updateDriveNote() {
  * 利用者がポータルの別タブでキーを設定して戻ってくることがあるため、
  * 画面が再表示された（visibilitychange / focus）ときにも呼び直す。
  */
-function refreshKeyState() {
-  const storageOk = isKeyStoreAvailable();
-  geminiKeyOk = storageOk && KeyStore.has(PROVIDERS.gemini);
+/*
+ * 直近の疎通確認が失敗した理由（{ code, status }）。成功・未確認のときは null。
+ * refreshGeminiConnectionStatus だけが書き換え、案内の描画はこれを読む。
+ */
+let lastConnectionFailure = null;
 
-  if (!storageOk) {
+/*
+ * 「キーが登録済みなのに接続に失敗した」ときの案内。
+ *
+ * ------------------------------------------------------------------
+ * エラーだと言うなら、理由と次の一手を必ず添える
+ * ------------------------------------------------------------------
+ * 以前は「登録済みなら案内を隠す」だけだったため、接続エラーの表示に対して
+ * 画面が何も示さず、ポータルへ行く導線も出なかった。「エラーです」とだけ
+ * 言って直し方を示さない画面は、状態表示として成り立っていない。
+ * ------------------------------------------------------------------
+ */
+const CONNECTION_FAILURE_GUIDANCE = Object.freeze({
+  [GeminiErrorCode.API_KEY_INVALID]: {
+    badge: 'キーが無効',
+    title: 'APIキーが正しくないようです',
+    text: '登録されているキーではGemini APIに接続できませんでした。'
+      + 'ポータルの「API設定」で、Google AI Studio で発行したキーを登録し直してください。',
+    portal: true,
+  },
+  [GeminiErrorCode.PERMISSION_DENIED]: {
+    badge: '権限なし',
+    title: 'このAPIキーには必要な権限がありません',
+    text: 'キーは届いていますが、利用が拒否されました。Google Cloud プロジェクトで '
+      + 'Generative Language API が有効になっているか、キーにAPI制限・'
+      + 'リファラー制限がかかっていないかをご確認ください。',
+    portal: true,
+  },
+  [GeminiErrorCode.QUOTA_EXCEEDED]: {
+    badge: '利用上限',
+    title: '利用上限に達しています',
+    text: '無料枠または割り当ての上限を超えています。キー自体は有効なので、'
+      + '時間をおいてから「再確認」を押してください。',
+    portal: false,
+  },
+  [GeminiErrorCode.NETWORK]: {
+    badge: '通信不可',
+    title: 'Gemini APIへ接続できませんでした',
+    text: 'ネットワークに届いていません。通信環境や、拡張機能による'
+      + '通信の遮断をご確認のうえ「再確認」を押してください。',
+    portal: false,
+  },
+  [GeminiErrorCode.SERVER_ERROR]: {
+    badge: 'サーバー障害',
+    title: 'Gemini API側で問題が起きています',
+    text: 'Google側の一時的な障害の可能性があります。時間をおいてから'
+      + '「再確認」を押してください。',
+    portal: false,
+  },
+});
+
+/* 上の表に無いコードのための既定。理由が分からないことを隠さない。 */
+function describeConnectionFailure(failure) {
+  const known = CONNECTION_FAILURE_GUIDANCE[failure?.code];
+
+  if (known) {
+    return known;
+  }
+
+  const status = Number(failure?.status) || 0;
+
+  return {
+    badge: '接続エラー',
+    title: 'Gemini APIに接続できませんでした',
+    text: status > 0
+      ? `接続の確認に失敗しました（HTTP ${status}）。時間をおいてから「再確認」を押してください。`
+      : '接続の確認に失敗しました。時間をおいてから「再確認」を押してください。',
+    portal: true,
+  };
+}
+
+/*
+ * キーの案内（#at-key-guidance）の描画。
+ *
+ * 保存可否・キーの有無・直近の疎通結果の3つから決まる。判定を1か所に
+ * まとめてあるのは、refreshKeyState と refreshGeminiConnectionStatus の
+ * 両方が同じ要素を書くため。別々に持たせると、片方が消した案内を
+ * もう片方が出し直す取り合いになる。
+ */
+function renderKeyGuidance() {
+  if (!isKeyStoreAvailable()) {
     setText(el.keyGuidanceTitle, 'この端末ではキーを保存できません');
     setText(
       el.keyGuidanceText,
@@ -562,8 +644,12 @@ function refreshKeyState() {
       + '通常のウィンドウでお試しください。',
     );
     setHidden(el.portalLink, true);
+    setHidden(el.recheckConnection, true);
     setHidden(el.keyGuidance, false);
-  } else if (!geminiKeyOk) {
+    return;
+  }
+
+  if (!geminiKeyOk) {
     setText(el.keyGuidanceTitle, 'Gemini APIキーの設定が必要です');
     setText(
       el.keyGuidanceText,
@@ -572,10 +658,30 @@ function refreshKeyState() {
       + 'キーはこの端末にのみ保存され、当社サーバーには送信されません。',
     );
     setHidden(el.portalLink, false);
+    setHidden(el.recheckConnection, true);
     setHidden(el.keyGuidance, false);
-  } else {
-    setHidden(el.keyGuidance, true);
+    return;
   }
+
+  if (lastConnectionFailure !== null) {
+    const guidance = describeConnectionFailure(lastConnectionFailure);
+
+    setText(el.keyGuidanceTitle, guidance.title);
+    setText(el.keyGuidanceText, guidance.text);
+    setHidden(el.portalLink, !guidance.portal);
+    setHidden(el.recheckConnection, false);
+    setHidden(el.keyGuidance, false);
+    return;
+  }
+
+  setHidden(el.keyGuidance, true);
+}
+
+function refreshKeyState() {
+  const storageOk = isKeyStoreAvailable();
+  geminiKeyOk = storageOk && KeyStore.has(PROVIDERS.gemini);
+
+  renderKeyGuidance();
 
   /*
    * キーの「有無」が前回確認時から変わっていたら（起動時の初回判定を含む）、
@@ -624,14 +730,19 @@ const CONNECTION_BADGE_LABELS = Object.freeze({
  * （KeyStore の外にキーを保持しないという方針は変えない。§8-2 の
  * 疎通テストと同じ、参照系のみを使う軽量な確認）。
  */
-function setConnectionStatus(tone, text) {
+function setConnectionStatus(tone, text, badgeOverride = null) {
   setText(el.geminiConnection, `Gemini キー：${text}`);
 
   if (el.geminiConnection) {
     el.geminiConnection.dataset.tone = tone;
   }
 
-  const badgeLabel = CONNECTION_BADGE_LABELS[tone];
+  /*
+   * バッジは閉じた summary に出るため短くする。失敗の種類が分かっている
+   * ときは「接続エラー」ではなくその語（利用上限・権限なし等）を出す。
+   * 閉じたままでも「何が起きているか」が読めるようにするため。
+   */
+  const badgeLabel = badgeOverride ?? CONNECTION_BADGE_LABELS[tone];
   setText(el.settingsConnectionBadge, badgeLabel ? `[${badgeLabel}]` : '');
 
   if (el.settingsConnectionBadge) {
@@ -650,12 +761,16 @@ async function refreshGeminiConnectionStatus() {
   const storageOk = isKeyStoreAvailable();
 
   if (!storageOk) {
+    lastConnectionFailure = null;
     setConnectionStatus('unset', '未設定（この端末ではキーを保存できません）');
+    renderKeyGuidance();
     return;
   }
 
   if (!KeyStore.has(PROVIDERS.gemini)) {
+    lastConnectionFailure = null;
     setConnectionStatus('unset', '未設定');
+    renderKeyGuidance();
     return;
   }
 
@@ -667,7 +782,7 @@ async function refreshGeminiConnectionStatus() {
   try {
     result = await checkGeminiConnection({ apiKey });
   } catch {
-    result = { ok: false };
+    result = { ok: false, code: GeminiErrorCode.UNKNOWN, status: 0 };
   }
 
   /* 確認中に、有無の変化などで新しい確認が始まっていたら、古い結果は捨てる。 */
@@ -675,7 +790,22 @@ async function refreshGeminiConnectionStatus() {
     return;
   }
 
-  setConnectionStatus(result.ok ? 'ok' : 'error', result.ok ? '接続済み' : '接続エラー');
+  if (result.ok) {
+    lastConnectionFailure = null;
+    setConnectionStatus('ok', '接続済み');
+  } else {
+    lastConnectionFailure = { code: result.code ?? null, status: result.status ?? 0 };
+
+    const guidance = describeConnectionFailure(lastConnectionFailure);
+
+    setConnectionStatus('error', guidance.title, guidance.badge);
+  }
+
+  /*
+   * 状態表示と案内は必ず同時に更新する。片方だけ更新すると
+   * 「エラーと出ているのに案内が出ない」という以前の状態へ戻る。
+   */
+  renderKeyGuidance();
 }
 
 /* ============================================================
@@ -1752,6 +1882,14 @@ function bindEvents() {
     }
   });
   window.addEventListener('focus', () => refreshKeyState());
+
+  /*
+   * 「再確認」。refreshKeyState はキーの有無が変わったときしか疎通確認を
+   * 呼ばないため、有無が変わらないまま状況だけ変わった場合（利用上限の
+   * 解消、通信の復旧）に押してもらう。利用者の操作でのみ走るので、
+   * ポーリングしないという方針は崩れない。
+   */
+  el.recheckConnection.addEventListener('click', () => void refreshGeminiConnectionStatus());
 
   el.start.addEventListener('click', () => void onStart());
   el.cancel.addEventListener('click', onCancel);

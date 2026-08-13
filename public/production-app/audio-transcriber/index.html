@@ -138,8 +138,10 @@
             APIキーはこの画面では入力させない。ポータルの「API設定」で
             KeyStore（端末内 localStorage のみ）へ保存したものを、実行の
             瞬間にだけ読む（docs/specs/keystore-spec-v1.md）。
-            未設定・保存不可のときだけ下の案内を出す。文言は script.js が
-            textContent で入れる（innerHTML を使わない）。
+            未設定・保存不可のときに加え、**キーは登録済みだが接続に失敗した**
+            ときにも出す。以前は登録済みなら一律で隠していたため、
+            「接続エラー」とだけ表示されて直す手立てが画面から消えていた。
+            文言は script.js が textContent で入れる（innerHTML を使わない）。
             文字起こしの方法にGeminiを選んでいるかどうかに関わらず表示する
             （Gemini APIの状態そのものを扱う区画のため）。
           -->
@@ -148,6 +150,13 @@
             <p id="at-key-guidance-text" class="at-note"></p>
             <div class="at-actions">
               <a id="at-portal-link" class="auth-button" href="../../portal/" hidden>ポータルでキーを設定する</a>
+              <!--
+                疎通確認は起動時とキーの有無が変わったときにしか走らない
+                （ポーリングしない方針）。そのため一時的な失敗（利用上限・
+                通信の瞬断）で出たエラーが、キーが正常になっても残り続ける。
+                利用者が明示的に確認し直せる手段をここに置く。
+              -->
+              <button id="at-recheck-connection" class="auth-button auth-button--ghost" type="button" hidden>再確認</button>
             </div>
           </div>
         </div>

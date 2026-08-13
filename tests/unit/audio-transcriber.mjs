@@ -419,6 +419,82 @@ try {
   settingsMap.delete(settingsStore.SETTINGS_STORAGE_KEY);
   delete globalThis.localStorage;
 
+  /* ================================================================ */
+  section('疎通確認が失敗の理由を返す（gemini-transcriber.js）');
+
+  /*
+   * 以前は ok だけを返しており、画面は「接続エラー」としか言えなかった。
+   * キーが無効なのか・権限が無いのか・利用上限なのか・通信不能なのかを
+   * 呼び出し側が出し分けられることを、ここで固定する。
+   *
+   * 通信はしない。fetch を差し替えて応答だけを作る。
+   */
+  const gemini = await import(`${base}/gemini-transcriber.js`);
+  const realFetch = globalThis.fetch;
+
+  /* status を返す偽の応答。body は mapGeminiError が読む形だけ持たせる。 */
+  const stubFetch = (status, errorBody = {}) => {
+    globalThis.fetch = async () => ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => ({ error: errorBody }),
+    });
+  };
+
+  {
+    stubFetch(200);
+    const ok = await gemini.checkGeminiConnection({ apiKey: 'dummy-key' });
+    check('接続できたら ok=true・code=null', ok.ok === true && ok.code === null);
+  }
+
+  {
+    stubFetch(401);
+    const result = await gemini.checkGeminiConnection({ apiKey: 'dummy-key' });
+    check('401 は API_KEY_INVALID を返す',
+      result.ok === false && result.code === gemini.GeminiErrorCode.API_KEY_INVALID);
+    check('401 のとき status を保持する', result.status === 401);
+  }
+
+  {
+    stubFetch(403, { message: 'permission denied', status: 'PERMISSION_DENIED' });
+    const result = await gemini.checkGeminiConnection({ apiKey: 'dummy-key' });
+    check('403 は PERMISSION_DENIED を返す',
+      result.ok === false && result.code === gemini.GeminiErrorCode.PERMISSION_DENIED);
+  }
+
+  {
+    stubFetch(429);
+    const result = await gemini.checkGeminiConnection({ apiKey: 'dummy-key' });
+    check('★429 は QUOTA_EXCEEDED を返す（利用上限をキー無効と混同しない）',
+      result.ok === false && result.code === gemini.GeminiErrorCode.QUOTA_EXCEEDED);
+  }
+
+  {
+    stubFetch(503);
+    const result = await gemini.checkGeminiConnection({ apiKey: 'dummy-key' });
+    check('5xx は SERVER_ERROR を返す',
+      result.ok === false && result.code === gemini.GeminiErrorCode.SERVER_ERROR);
+  }
+
+  {
+    /* fetch 自体が失敗する（通信が届かない）ケース。 */
+    globalThis.fetch = async () => { throw new TypeError('failed to fetch'); };
+    const result = await gemini.checkGeminiConnection({ apiKey: 'dummy-key' });
+    check('★通信不能は NETWORK を返し status=0（サーバー応答と区別する）',
+      result.ok === false && result.code === gemini.GeminiErrorCode.NETWORK && result.status === 0);
+  }
+
+  {
+    /* キーが空のときは通信せずに判定する（無駄な呼び出しをしない）。 */
+    let called = false;
+    globalThis.fetch = async () => { called = true; throw new Error('should not be called'); };
+    const result = await gemini.checkGeminiConnection({ apiKey: '   ' });
+    check('空のキーは通信せず API_KEY_MISSING を返す',
+      called === false && result.code === gemini.GeminiErrorCode.API_KEY_MISSING);
+  }
+
+  globalThis.fetch = realFetch;
+
   finish();
 } catch (error) {
   fatal(error);

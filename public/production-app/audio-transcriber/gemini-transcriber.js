@@ -283,24 +283,43 @@ export function resolveModelOrder({ preferredId, availableIds }) {
  * APIキーは引数で受け取って使うだけで、ここにも保持しない。
  * 例外は投げない（呼び出し側の状態表示を止めないため）。
  *
- * 戻り値: { ok: boolean }
+ * ------------------------------------------------------------------
+ * 失敗の理由を捨てない
+ * ------------------------------------------------------------------
+ * 以前は ok だけを返していた。geminiFetch は HTTP ステータスを持つ
+ * GeminiError を投げているのに、それをここで握り潰していたため、
+ * 画面は「接続エラー」としか言えず、キーが無効なのか・権限が無いのか・
+ * 利用上限なのか・そもそも通信できていないのかを、利用者も開発者も
+ * 判別できなかった（実際にその状態の問い合わせが起きた）。
+ *
+ * detail（応答本文）は返さない。GeminiError.detail はこちらで決めた
+ * 固定の識別子だけを持つ約束だが、ここでは code と status しか要らない。
+ * ------------------------------------------------------------------
+ *
+ * 戻り値: { ok: boolean, code: string|null, status: number }
+ *   code   … GeminiErrorCode のいずれか（成功時は null）
+ *   status … HTTP ステータス。通信自体が届かなかったときは 0
  */
 export async function checkGeminiConnection({ apiKey, signal } = {}) {
   const key = normalizeApiKey(apiKey);
 
   if (key === '') {
-    return { ok: false };
+    return { ok: false, code: GeminiErrorCode.API_KEY_MISSING, status: 0 };
   }
 
   try {
     await geminiFetch(`${baseUrl()}/models?pageSize=1`, { apiKey: key, signal });
-    return { ok: true };
+    return { ok: true, code: null, status: 200 };
   } catch (error) {
     if (error instanceof GeminiError && error.code === GeminiErrorCode.CANCELLED) {
       throw error;
     }
 
-    return { ok: false };
+    if (error instanceof GeminiError) {
+      return { ok: false, code: error.code, status: error.status };
+    }
+
+    return { ok: false, code: GeminiErrorCode.UNKNOWN, status: 0 };
   }
 }
 
