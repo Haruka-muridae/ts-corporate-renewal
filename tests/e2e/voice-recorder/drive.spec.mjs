@@ -180,6 +180,42 @@ test.describe('Google Drive への保存', () => {
     await expect(page.locator('#vr-connect')).toHaveText('連携しなおす');
   });
 
+  /*
+   * 「連携しなおす」は #vr-connect にしかなく、それは「利用の準備」の中にある。
+   * updatePrepPanel() が呼ばれるたびに open を書いていたころは、開き直しても
+   * 次の録音停止・破棄（updateSaveButton 経由）が閉じてしまい、期限切れ
+   * エラーが出ていない場面では**連携をやり直す手段が画面から消えていた**。
+   */
+  test('畳んだ準備パネルを開き直すと、その後の操作で閉じない（§7）', async ({ page }) => {
+    await stubGis(page, 'grant');
+    await stubDrive(page);
+    await gotoRecorder(page);
+
+    const prepOpen = () => page.locator('#vr-prep').evaluate((node) => node.open);
+
+    /* 未連携の間は開いたまま（§7「1つでも問題があれば開いたまま」）。 */
+    expect(await prepOpen()).toBe(true);
+
+    await page.locator('#vr-connect').click();
+    await expect(page.locator('#vr-state-oauth')).toHaveText('drive-user@example.com');
+
+    /* 4項目すべて正常になった時点で畳む（§7）。 */
+    await expect.poll(prepOpen).toBe(false);
+    await expect(page.locator('#vr-prep-summary')).toHaveText('利用の準備 — 完了');
+
+    /* 利用者が自分で開き直す。 */
+    await page.locator('#vr-prep-summary').click();
+    expect(await prepOpen()).toBe(true);
+
+    await recordAndStop(page, 3);
+    expect(await prepOpen()).toBe(true);
+    await expect(page.locator('#vr-connect')).toBeVisible();
+
+    await page.locator('#vr-discard').click();
+    expect(await prepOpen()).toBe(true);
+    await expect(page.locator('#vr-connect')).toBeVisible();
+  });
+
   test('アプリを開いただけでは認可を要求しない（§FR-02）', async ({ page }) => {
     await stubGis(page, 'grant');
     await stubDrive(page);
