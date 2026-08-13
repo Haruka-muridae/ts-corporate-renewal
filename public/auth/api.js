@@ -86,6 +86,34 @@ async function readResult(response) {
  * POST する。body は JSON へ直列化して text/plain で送る。
  * パスワードはここを通るが、保存も記録もしない。
  */
+/*
+ * 送り先を決める。
+ *
+ * ------------------------------------------------------------------
+ * 宛先を変えるのは verifySession だけ
+ * ------------------------------------------------------------------
+ * 保護ページを開くたびに走る verifySession だけを auth-verify Worker
+ * （キャッシュ付きの代理）へ向ける。ログイン・ログアウト・パスワード系は
+ * Apps Script へ直接送る。**パスワードを Worker へ通さない**という線引きを
+ * ここで守っている。
+ *
+ * verifyApiUrl が空なら従来どおり apiUrl へ送る。設定漏れや切り戻しで
+ * 壊れない形にしてあり、**切り戻しは config.js の値を消すだけで済む**。
+ *
+ * 応答の形は Worker 側が Apps Script と一致させているため、readResult は
+ * 宛先を意識しない（docs/specs/auth-verify-cache-spec-v1.md §8）。
+ * ------------------------------------------------------------------
+ */
+function endpointFor(action) {
+  const verifyUrl = AUTH_CONFIG.verifyApiUrl;
+
+  if (action === 'verifySession' && typeof verifyUrl === 'string' && verifyUrl.trim() !== '') {
+    return verifyUrl;
+  }
+
+  return AUTH_CONFIG.apiUrl;
+}
+
 export async function postAction(action, body = {}) {
   if (!isApiConfigured()) {
     throw new ApiError(ApiErrorCode.NOT_CONFIGURED, NOT_CONFIGURED_MESSAGE);
@@ -105,7 +133,7 @@ export async function postAction(action, body = {}) {
   let response;
 
   try {
-    response = await fetchWithTimeout(AUTH_CONFIG.apiUrl, {
+    response = await fetchWithTimeout(endpointFor(action), {
       method: 'POST',
       /* プリフライトを起こさないため text/plain のままにする。 */
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },

@@ -37,6 +37,31 @@ export const AUTH_CONFIG = Object.freeze({
    */
   apiUrl: 'https://script.google.com/macros/s/AKfycbwK-Kw9ynTbDpUG7e5pHgXSPLFg1ur62ukbHLHdHBogqcz3YT0Hn3nQg74SpHOzvXAN/exec',
 
+  /*
+   * ------------------------------------------------------------------
+   * セッション検証だけを向ける先（auth-verify Worker）
+   * ------------------------------------------------------------------
+   * 保護ページは開くたびに verifySession を呼ぶ。それを Apps Script へ
+   * 直接投げると実測 1.85〜2.60 秒かかり、画面はその間ずっと空白になる
+   * （Apps Script は何もしなくても往復に 1.2 秒かかるため、あちら側の
+   * 最適化では下回れない）。
+   *
+   * この Worker は「Apps Script が有効と答えた事実」を 30 分だけ覚えて
+   * 返す代理でしかない。判定はしないので、有効かどうかを決めるのは
+   * これまでどおり Apps Script（sessions シート）だけである。
+   * 仕様: docs/specs/auth-verify-cache-spec-v1.md
+   *
+   * **ここへ向けるのは verifySession だけ。** ログイン・ログアウト・
+   * パスワード系は Apps Script へ直接送る（api.js を参照）。
+   * パスワードをこの Worker へ通さないのは意図的な線引きである。
+   *
+   * 秘密情報ではない。空にすれば従来どおり Apps Script へ直接投げる形へ
+   * 戻る（api.js の postAction が apiUrl を使う）。**切り戻しはこの値を
+   * 消して再デプロイするだけで済み、Apps Script 側の作業は要らない。**
+   * ------------------------------------------------------------------
+   */
+  verifyApiUrl: 'https://auth-verify.potenitas-lp.workers.dev/',
+
   /* 通信のタイムアウト（ミリ秒）。パスワードハッシュの計算があるため長めにとる。 */
   requestTimeoutMs: 30000,
 

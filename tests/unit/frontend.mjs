@@ -433,6 +433,43 @@ try {
   );
 
   /* ---------------------------------------------------------------- */
+  section('セッション検証だけを auth-verify Worker へ向ける');
+
+  /*
+   * 保護ページを開くたびに走る verifySession だけをキャッシュ付きの代理
+   * （workers/auth-verify/）へ向ける。**パスワードを Worker へ通さない**
+   * という線引きが崩れていないことを、宛先の実物で確かめる。
+   */
+  {
+    const api = await import('../../public/auth/api.js');
+    const realFetch = globalThis.fetch;
+    const sent = [];
+
+    globalThis.fetch = async (url) => {
+      sent.push(String(url));
+
+      return {
+        ok: true,
+        json: async () => ({ success: true, data: {} }),
+      };
+    };
+
+    await api.verifySession('token');
+    check('★verifySession は Worker へ向かう', sent[0] === config.AUTH_CONFIG.verifyApiUrl);
+
+    await api.login({ email: 'someone@example.com', password: 'secret', remember: false });
+    check('★ログイン（パスワードを含む）は Worker を通さず Apps Script へ',
+      sent[1] === config.AUTH_CONFIG.apiUrl);
+
+    await api.logout('token');
+    check('ログアウトも Apps Script へ', sent[2] === config.AUTH_CONFIG.apiUrl);
+
+    check('検証の宛先とログインの宛先が別であること', sent[0] !== sent[1]);
+
+    globalThis.fetch = realFetch;
+  }
+
+  /* ---------------------------------------------------------------- */
   section('検証中にログインし直されたトークンを消さない');
 
   /*
