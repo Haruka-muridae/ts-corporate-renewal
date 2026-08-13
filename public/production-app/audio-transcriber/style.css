@@ -108,6 +108,112 @@ body {
   font-size: 1.0625rem;
 }
 
+/* ---------- Gemini APIの接続状態 ---------- */
+
+/*
+ * 「Gemini API：接続済み / 未設定 / 接続エラー」の表示。
+ * .at-status（4. 実行）と同じく、色（左の線）だけでなく文言でも状態を示す。
+ */
+.at-connection-status {
+  margin-bottom: var(--content-space);
+  padding: 10px 14px;
+  border-left: 3px solid var(--c-border-strong);
+  background-color: var(--color-off-white);
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.at-connection-status[data-tone="ok"] {
+  border-left-color: var(--color-navy);
+  color: var(--c-main);
+}
+
+.at-connection-status[data-tone="error"] {
+  border-left-color: #b3261e;
+  color: #8c1d18;
+}
+
+.at-connection-status[data-tone="checking"] {
+  border-left-color: var(--color-navy-light);
+  color: var(--c-text-muted);
+}
+
+.at-connection-status[data-tone="unset"] {
+  border-left-color: var(--c-border-strong);
+  color: var(--c-text-muted);
+}
+
+/* ---------- アコーディオン（1〜3） ---------- */
+
+/*
+ * <details>/<summary> を使う。開閉の実装（表示・非表示・キーボード操作・
+ * スクリーンリーダーへの状態通知）はブラウザのネイティブ機能に任せ、
+ * ここでは見た目だけを整える。開閉してもDOMは破棄されないため、
+ * 中の入力値・選択値は維持される。
+ */
+.at-accordion__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  padding: 4px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+/* Chromium系のマーカー（三角）は自前の記号に差し替えるため消す。 */
+.at-accordion__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Firefox のマーカー。 */
+.at-accordion__summary::marker {
+  content: "";
+}
+
+.at-accordion__summary:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+/* 開閉状態は色だけでなく記号（▶/▼）そのもので示す。 */
+.at-accordion__marker {
+  flex: 0 0 auto;
+  color: var(--c-main);
+  font-size: 0.75rem;
+}
+
+.at-accordion__marker::before {
+  content: "▶";
+}
+
+.at-accordion[open] > .at-accordion__summary .at-accordion__marker::before {
+  content: "▼";
+}
+
+.at-accordion__title {
+  color: var(--c-main);
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+/* 閉じた状態でも見える、選択中の内容（ファイル名・文字起こし方法）。 */
+.at-accordion__current {
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.at-accordion__current:empty {
+  display: none;
+}
+
+.at-accordion > .at-panel {
+  margin-top: 12px;
+}
+
 .at-subtitle {
   margin-bottom: 8px;
   color: var(--c-main);
@@ -593,6 +699,16 @@ body {
 .at-mode-settings {
   padding-top: 16px;
   border-top: 1px solid var(--c-border);
+}
+
+/*
+ * 「設定」アコーディオンの中の「文字起こしの方法」区画。
+ * 統合前は別アコーディオンだったため、境界線を引いて区別を残す
+ * （.at-mode-settings が local/gemini 個別設定の前に引くのと同じ考え方）。
+ */
+.at-settings-section {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--c-border);
 }
 
 /* ---------- 状態・進捗 ---------- */

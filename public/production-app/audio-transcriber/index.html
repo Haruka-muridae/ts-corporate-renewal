@@ -84,11 +84,30 @@
   -->
   <div id="at-app" class="at-app" data-app-state="idle" data-mode="local">
 
+    <!--
+      Gemini APIの利用可否。キー未設定・保存不可・接続エラー・接続済みの
+      4通りを文言で出し分ける（色だけに頼らない）。値そのものは表示しない。
+      確認は起動時と設定変更時だけ行い、定期的なポーリングはしない
+      （script.js の refreshGeminiConnectionStatus）。
+    -->
+    <p id="at-gemini-connection" class="at-connection-status" role="status" aria-live="polite" data-tone="unset"></p>
+
     <!-- ============================================================
          1. 音声ファイルを選択
+
+         <details> によるアコーディオン。初期状態は閉（open属性なし）。
+         開閉してもDOMは破棄しないため、選択済みのファイルや再生位置は
+         そのまま維持される。キーボード操作・スクリーンリーダー対応は
+         details/summary のネイティブ機能に任せる（button + aria-expanded の
+         自前実装はしない）。
          ============================================================ -->
-    <section class="at-block" aria-labelledby="at-file-title">
-      <h2 id="at-file-title" class="at-section-title">1. 音声ファイルを選ぶ</h2>
+    <details id="at-file-accordion" class="at-block at-accordion">
+      <summary class="at-accordion__summary">
+        <span class="at-accordion__marker" aria-hidden="true"></span>
+        <span class="at-accordion__title">音声ファイルを選ぶ</span>
+        <!-- 閉じた状態でも選択中のファイル名が分かるよう、ここへ入れる（script.js）。 -->
+        <span id="at-file-current" class="at-accordion__current"></span>
+      </summary>
 
       <div class="at-panel">
         <!--
@@ -153,53 +172,61 @@
           </div>
         </div>
       </div>
-    </section>
+    </details>
 
     <!-- ============================================================
-         2. 文字起こし方法
+         2. 設定
+
+         「文字起こしの方法を選ぶ」と、旧「設定」（言語・タイムスタンプ・
+         モデル選択など）を1つのアコーディオンへ統合したもの
+         （利用者フィードバックにより、当初の2アコーディオン構成から変更）。
+         上から「文字起こしの方法」→ 既存の各設定項目、の順で並べる。
+
+         閉じても入力値・選択値は破棄しない（<details> はDOMを維持したまま
+         非表示にするだけで、値は保持される）。
          ============================================================ -->
-    <section class="at-block" aria-labelledby="at-mode-title">
-      <h2 id="at-mode-title" class="at-section-title">2. 文字起こしの方法を選ぶ</h2>
+    <details id="at-settings-accordion" class="at-block at-accordion">
+      <summary class="at-accordion__summary">
+        <span class="at-accordion__marker" aria-hidden="true"></span>
+        <span class="at-accordion__title">設定</span>
+        <!-- 閉じた状態でも現在の文字起こし方法が分かるよう、ここへ入れる（script.js）。 -->
+        <span id="at-settings-current" class="at-accordion__current"></span>
+      </summary>
 
       <div class="at-panel">
-        <fieldset class="at-fieldset">
-          <legend class="at-visually-hidden">文字起こしの方法</legend>
+        <div class="at-settings-section">
+          <h3 class="at-subtitle">文字起こしの方法</h3>
 
-          <div class="at-mode-cards">
-            <div class="at-mode-card">
-              <input id="at-mode-local" class="at-mode-card__input" type="radio" name="at-mode" value="local" checked>
-              <label class="at-mode-card__label" for="at-mode-local">
-                <span class="at-mode-card__name">完全無料・端末内処理<span class="at-mode-card__badge">推奨</span></span>
-                <span class="at-mode-card__desc">音声を外部サーバーへ送信せず、この端末内で文字起こしします。APIキーは不要です。</span>
-                <span class="at-mode-card__note">初回はAIモデルをダウンロードします。端末性能や音声の長さによって処理時間が変わります。</span>
-              </label>
+          <fieldset class="at-fieldset">
+            <legend class="at-visually-hidden">文字起こしの方法</legend>
+
+            <div class="at-mode-cards">
+              <div class="at-mode-card">
+                <input id="at-mode-local" class="at-mode-card__input" type="radio" name="at-mode" value="local" checked>
+                <label class="at-mode-card__label" for="at-mode-local">
+                  <span class="at-mode-card__name">完全無料・端末内処理<span class="at-mode-card__badge">推奨</span></span>
+                  <span class="at-mode-card__desc">音声を外部サーバーへ送信せず、この端末内で文字起こしします。APIキーは不要です。</span>
+                  <span class="at-mode-card__note">初回はAIモデルをダウンロードします。端末性能や音声の長さによって処理時間が変わります。</span>
+                </label>
+              </div>
+
+              <div class="at-mode-card">
+                <input id="at-mode-gemini" class="at-mode-card__input" type="radio" name="at-mode" value="gemini">
+                <label class="at-mode-card__label" for="at-mode-gemini">
+                  <span class="at-mode-card__name">Gemini API<span class="at-mode-card__badge at-mode-card__badge--beta">ベータ</span></span>
+                  <span class="at-mode-card__desc">ユーザー自身のGemini APIキーを使用して文字起こしします。</span>
+                  <span class="at-mode-card__note">音声ファイルはGoogleのGemini APIへ送信されます。利用上限や料金は、ご自身のGoogle Cloudプロジェクトの設定に従います。</span>
+                  <!--
+                    実APIキーでの通信は未確認のため、その旨を明示する（テスト版と同じ状態）。
+                    確認できたら、この一文を削除する。
+                  -->
+                  <span class="at-mode-card__note">APIキーが必要です。実環境によって利用できない場合があります。</span>
+                </label>
+              </div>
             </div>
+          </fieldset>
+        </div>
 
-            <div class="at-mode-card">
-              <input id="at-mode-gemini" class="at-mode-card__input" type="radio" name="at-mode" value="gemini">
-              <label class="at-mode-card__label" for="at-mode-gemini">
-                <span class="at-mode-card__name">Gemini API<span class="at-mode-card__badge at-mode-card__badge--beta">ベータ</span></span>
-                <span class="at-mode-card__desc">ユーザー自身のGemini APIキーを使用して文字起こしします。</span>
-                <span class="at-mode-card__note">音声ファイルはGoogleのGemini APIへ送信されます。利用上限や料金は、ご自身のGoogle Cloudプロジェクトの設定に従います。</span>
-                <!--
-                  実APIキーでの通信は未確認のため、その旨を明示する（テスト版と同じ状態）。
-                  確認できたら、この一文を削除する。
-                -->
-                <span class="at-mode-card__note">APIキーが必要です。実環境によって利用できない場合があります。</span>
-              </label>
-            </div>
-          </div>
-        </fieldset>
-      </div>
-    </section>
-
-    <!-- ============================================================
-         3. モード別の設定
-         ============================================================ -->
-    <section class="at-block" aria-labelledby="at-settings-title">
-      <h2 id="at-settings-title" class="at-section-title">3. 設定</h2>
-
-      <div class="at-panel">
         <div class="at-field">
           <label class="at-label" for="at-language">言語</label>
           <select id="at-language" class="at-select"></select>
@@ -244,7 +271,7 @@
           </div>
         </div>
       </div>
-    </section>
+    </details>
 
     <!-- ============================================================
          4. 実行
@@ -309,10 +336,24 @@
           spellcheck="false"
         ></textarea>
 
+        <!--
+          保存操作の優先順位。
+
+          「Googleドライブへ保存」を主要アクション（.auth-button のプレーンな
+          塗りつぶし＝このデザインで最も強いトーン）として最初に置く。
+          「全文をコピー」「TXTで保存（ローカル保存）」は補助的な操作として
+          セカンダリの見た目（.auth-button--ghost）へ降格し、Drive保存の
+          あとに続ける。3つとも機能は維持し、削除・非表示にはしない。
+
+          Drive保存自体の仕様（保存先「マイドライブ＞TSAM AI＞Audio Transcriber」・
+          初回保存時のフォルダ自動作成・drive.fileスコープ・OAuthはこの
+          ボタン押下起点）は変えていない（onSaveToDrive はそのまま）。
+          文字起こし完了時の自動アップロードは行わない。
+        -->
         <div class="at-actions">
+          <button id="at-save-drive" class="auth-button" type="button" disabled>Googleドライブへ保存</button>
           <button id="at-copy" class="auth-button auth-button--ghost" type="button" disabled>全文をコピー</button>
           <button id="at-download" class="auth-button auth-button--ghost" type="button" disabled>TXTで保存</button>
-          <button id="at-save-drive" class="auth-button at-btn-quiet" type="button" disabled>Googleドライブへ保存</button>
           <button id="at-clear-result" class="auth-button at-btn-quiet" type="button" disabled>結果をクリア</button>
           <!--
             AI議事録アプリ（meeting-minutes）への引継ぎ導線。

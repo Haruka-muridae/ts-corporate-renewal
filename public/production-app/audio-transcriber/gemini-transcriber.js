@@ -268,6 +268,42 @@ export function resolveModelOrder({ preferredId, availableIds }) {
   ));
 }
 
+/*
+ * 画面の「Gemini API：接続済み / 未設定 / 接続エラー」表示のための軽量な疎通確認。
+ *
+ * listUsableModels と同じ GET /models を使うが、あちらは「使えるモデルの
+ * 絞り込み」が目的でページを最後まで辿り、失敗も握りつぶして null を返す。
+ * こちらは画面表示用の ok/ng だけが欲しいので、1件だけ取得して即座に判定する
+ * （pageSize=1。生成系 generateContent は使わない＝押しただけで課金は発生しない。
+ * keystore-spec-v1.md §8-2 の疎通テストと同じ判断）。
+ *
+ * 新しい fetch 経路は作らず、このファイル内の geminiFetch をそのまま使う
+ * （Gemini 呼び出しを二重化しない）。
+ *
+ * APIキーは引数で受け取って使うだけで、ここにも保持しない。
+ * 例外は投げない（呼び出し側の状態表示を止めないため）。
+ *
+ * 戻り値: { ok: boolean }
+ */
+export async function checkGeminiConnection({ apiKey, signal } = {}) {
+  const key = normalizeApiKey(apiKey);
+
+  if (key === '') {
+    return { ok: false };
+  }
+
+  try {
+    await geminiFetch(`${baseUrl()}/models?pageSize=1`, { apiKey: key, signal });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof GeminiError && error.code === GeminiErrorCode.CANCELLED) {
+      throw error;
+    }
+
+    return { ok: false };
+  }
+}
+
 /* ---------- Files API ---------- */
 
 /*

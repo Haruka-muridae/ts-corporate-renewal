@@ -4,12 +4,20 @@
  * public/apps/audio-transcriber/script.js からの複製・適合。
  * 複製であって import ではないのは、本番アプリからテスト環境（public/apps/）を
  * 参照しないという境界（docs/repository-structure.md §1）による。
- * テスト版との差分は次の4点だけで、文字起こしの挙動は変えていない。
+ * テスト版との差分は次の4点で、文字起こしの挙動は変えていない。
  *   1. 認可を ../drive-auth.js から自前の ./oauth.js へ置き換えた
  *   2. フォルダ名を ../drive-folders.js から ./config.js の DRIVE_NAMES へ移した
  *   3. 起動時に guardPage() でポータル認証を確認し、通るまで main を隠す
  *   4. Gemini APIキーの都度入力を廃し、KeyStore（ポータルの「API設定」）へ
  *      置き換えた（docs/specs/keystore-spec-v1.md。short-script と同じ流儀）
+ * これに加え、本番版だけの機能として次を持つ。
+ *   5. 画面上部にGemini APIの利用可否（接続済み/未設定/接続エラー）を表示する
+ *   6. 「音声ファイルを選ぶ」と「設定」（文字起こしの方法の選択を含む）を
+ *      details/summary のアコーディオンにし、初期状態を閉にする
+ *      （利用者フィードバックにより、当初は方法選択と設定を別アコーディオンに
+ *      していたが「設定」1つへ統合した）
+ *   7. 音声ファイル本体・APIキーを除く選択・設定値を settings-store.js で
+ *      次回起動時に復元する
  *
  * 担当するのは「DOMの更新」「利用者の操作の受け取り」「文言」の3つだけ。
  * 音声処理・API呼び出し・認可のロジックは各モジュールへ置く。
@@ -18,8 +26,13 @@
  * APIキーの扱い（このファイルで最も重要な点）
  * ------------------------------------------------------------------
  * 画面では KeyStore の**有無だけ**を見る（KeyStore.has）。
- * **値を読むのは実行の瞬間の KeyStore.get 1回だけ**（runGemini）で、
- * モジュール変数・DOM・state・console のどこにも保持しない。
+ * **値を読むのは次の2か所だけ**で、モジュール変数・DOM・state・console の
+ * どこにも保持しない。
+ *   - 実行の瞬間の KeyStore.get 1回（runGemini）
+ *   - 接続状態の確認（refreshGeminiConnectionStatus）。起動時と、キーの有無が
+ *     変わったとき・利用者がGeminiモードへ切り替えたときだけ行い、
+ *     ポーリングはしない（keystore-spec-v1.md §8-2 の疎通テストと同じ、
+ *     参照系のみの軽量な確認）
  * KeyStore の外で localStorage を触らない（keystore-spec-v1.md §2-1）。
  * ------------------------------------------------------------------
  *
@@ -87,8 +100,15 @@ import { WhisperError, WhisperErrorCode, disposeWorker, transcribeBlob } from '.
 import {
   GeminiError,
   GeminiErrorCode,
+  checkGeminiConnection,
   transcribeWithGemini,
 } from './gemini-transcriber.js';
+
+/*
+ * 音声ファイル・APIキーを含まない、利用者の選択・設定だけの永続化。
+ * APIキーは引き続き KeyStore（public/auth/keystore.js）だけが扱う。
+ */
+import { loadSettings, saveSettings } from './settings-store.js';
 
 import {
   buildTextFileName,
@@ -277,12 +297,13 @@ const el = {};
 
 function cacheElements() {
   const ids = [
+    'at-gemini-connection',
     'at-app', 'at-file-input', 'at-local-button', 'at-drive-button', 'at-drive-note',
     'at-drive-dialog', 'at-dialog-status', 'at-dialog-error', 'at-drive-list',
     'at-drive-reload', 'at-drive-cancel',
-    'at-file-info', 'at-file-name', 'at-file-type', 'at-file-size', 'at-file-duration',
+    'at-file-current', 'at-file-info', 'at-file-name', 'at-file-type', 'at-file-size', 'at-file-duration',
     'at-file-source', 'at-player', 'at-clear-file',
-    'at-mode-local', 'at-mode-gemini',
+    'at-settings-current', 'at-mode-local', 'at-mode-gemini',
     'at-language', 'at-timestamps',
     'at-local-settings', 'at-whisper-model', 'at-whisper-model-note', 'at-device-note',
     'at-gemini-settings', 'at-gemini-model',
@@ -314,6 +335,19 @@ function cacheElements() {
  * refreshKeyState() が visibilitychange / focus で読み直す。
  */
 let geminiKeyOk = false;
+
+/*
+ * 直前に確認したキーの「有無」。null は「まだ一度も確認していない」。
+ * 接続確認（refreshGeminiConnectionStatus）は、これが変わったとき
+ * （起動時の初回判定を含む）だけ行い、ポーリングはしない。
+ */
+let lastKnownKeyPresence = null;
+
+/*
+ * 接続確認の世代カウンタ。
+ * 確認中に次の確認が始まったら、古い応答が届いても画面へ反映しない。
+ */
+let geminiConnectionGeneration = 0;
 
 /* 進行中の処理を止めるための AbortController。 */
 let abortController = null;
@@ -361,42 +395,73 @@ function releaseObjectUrl() {
    初期描画
    ============================================================ */
 
-function populateSelects() {
+/*
+ * saved は settings-store.js から読んだ保存済み設定（無ければ {}）。
+ * 壊れた値・存在しない選択肢が入っていても、既定値へ静かに落とす
+ * （KeyStore §3-3 と同じ「壊れた値でも画面を止めない」考え方）。
+ */
+function populateSelects(saved = {}) {
   el.fileInput.accept = FILE_ACCEPT;
+
+  const savedLanguage = LANGUAGES.some((language) => language.value === saved.language)
+    ? saved.language
+    : DEFAULT_LANGUAGE;
 
   LANGUAGES.forEach((language) => {
     const option = document.createElement('option');
     option.value = language.value;
     option.textContent = language.label;
-    option.selected = language.value === DEFAULT_LANGUAGE;
+    option.selected = language.value === savedLanguage;
     el.language.append(option);
   });
+
+  const savedWhisperModelId = WHISPER.models.some((model) => model.id === saved.whisperModelId)
+    ? saved.whisperModelId
+    : WHISPER.defaultModelId;
 
   WHISPER.models.forEach((model) => {
     const option = document.createElement('option');
     option.value = model.id;
     option.textContent = model.label;
-    option.selected = model.id === WHISPER.defaultModelId;
+    option.selected = model.id === savedWhisperModelId;
     el.whisperModel.append(option);
   });
+
+  const geminiModelIds = ['auto', ...GEMINI.models.map((model) => model.id)];
+  const savedGeminiModelId = geminiModelIds.includes(saved.geminiModelId)
+    ? saved.geminiModelId
+    : GEMINI.defaultModelId;
 
   const autoOption = document.createElement('option');
   autoOption.value = 'auto';
   autoOption.textContent = '自動（推奨）';
-  autoOption.selected = GEMINI.defaultModelId === 'auto';
+  autoOption.selected = savedGeminiModelId === 'auto';
   el.geminiModel.append(autoOption);
 
   GEMINI.models.forEach((model) => {
     const option = document.createElement('option');
     option.value = model.id;
     option.textContent = model.label;
-    option.selected = model.id === GEMINI.defaultModelId;
+    option.selected = model.id === savedGeminiModelId;
     el.geminiModel.append(option);
   });
 
   updateWhisperModelNote();
   updateDeviceNote();
   updateDriveNote();
+}
+
+/*
+ * 文字起こしの方法（モード）とタイムスタンプの有無を、保存済み設定から復元する。
+ * 音声ファイル本体・APIキーはここでは扱わない（対象外。settings-store.js 冒頭参照）。
+ */
+function applySavedSettings(saved) {
+  const mode = saved.mode === 'gemini' ? 'gemini' : 'local';
+  el.modeLocal.checked = mode === 'local';
+  el.modeGemini.checked = mode === 'gemini';
+  update({ mode });
+
+  el.timestamps.checked = typeof saved.withTimestamps === 'boolean' ? saved.withTimestamps : true;
 }
 
 function updateWhisperModelNote() {
@@ -467,9 +532,76 @@ function refreshKeyState() {
     setHidden(el.keyGuidance, true);
   }
 
+  /*
+   * キーの「有無」が前回確認時から変わっていたら（起動時の初回判定を含む）、
+   * 画面上部の接続状態を確認し直す。値が変わっていなければ何もしない
+   * （ポーリングしない。visibilitychange / focus のたびに毎回叩かない）。
+   */
+  if (geminiKeyOk !== lastKnownKeyPresence) {
+    lastKnownKeyPresence = geminiKeyOk;
+    void refreshGeminiConnectionStatus();
+  }
+
   /* 開始ボタンの可否は render が geminiKeyOk を見て決める。 */
   render(getState());
   return geminiKeyOk;
+}
+
+/*
+ * 画面上部の「Gemini API：接続済み / 未設定 / 接続エラー」表示。
+ *
+ * 呼ばれるのは起動時と、キーの有無が変わったとき・利用者がこの画面で
+ * Geminiモードへ切り替えたときだけ（bindEvents 参照）。定期実行はしない。
+ *
+ * 値を読むのはこの確認の間だけで、確認が終わればどこにも残さない
+ * （KeyStore の外にキーを保持しないという方針は変えない。§8-2 の
+ * 疎通テストと同じ、参照系のみを使う軽量な確認）。
+ */
+function setConnectionStatus(tone, text) {
+  setText(el.geminiConnection, `Gemini API：${text}`);
+
+  if (el.geminiConnection) {
+    el.geminiConnection.dataset.tone = tone;
+  }
+}
+
+async function refreshGeminiConnectionStatus() {
+  /*
+   * 呼ばれるたびに世代を進める（早期returnする分岐でも進める）。
+   * こうしておかないと、「キー有り→確認中」に入った直後に「キー無し」へ
+   * 変わった場合、後から届く古い確認結果が同じ世代番号のまま生き残り、
+   * 同期的に確定させた「未設定」を後から上書きしてしまう。
+   */
+  const generation = (geminiConnectionGeneration += 1);
+  const storageOk = isKeyStoreAvailable();
+
+  if (!storageOk) {
+    setConnectionStatus('unset', '未設定（この端末ではキーを保存できません）');
+    return;
+  }
+
+  if (!KeyStore.has(PROVIDERS.gemini)) {
+    setConnectionStatus('unset', '未設定');
+    return;
+  }
+
+  setConnectionStatus('checking', '確認しています…');
+
+  const apiKey = KeyStore.get(PROVIDERS.gemini);
+  let result;
+
+  try {
+    result = await checkGeminiConnection({ apiKey });
+  } catch {
+    result = { ok: false };
+  }
+
+  /* 確認中に、有無の変化などで新しい確認が始まっていたら、古い結果は捨てる。 */
+  if (generation !== geminiConnectionGeneration) {
+    return;
+  }
+
+  setConnectionStatus(result.ok ? 'ok' : 'error', result.ok ? '接続済み' : '接続エラー');
 }
 
 /* ============================================================
@@ -481,6 +613,15 @@ function render(snapshot) {
 
   el.app.dataset.appState = state;
   el.app.dataset.mode = mode;
+
+  /*
+   * ---- アコーディオンを閉じたときの表示 ----
+   * :empty で消えるCSS（.at-accordion__current:empty）を使うため、
+   * 値が無いときは空文字にする（要素そのものを hidden にしない）。
+   */
+  setText(el.fileCurrent, file ? `　｜　${file.name}` : '');
+  /* 「設定」アコーディオン（文字起こしの方法＋各種設定を統合）の閉時表示。 */
+  setText(el.settingsCurrent, `　｜　${MODE_LABELS[mode] ?? ''}`);
 
   /* ---- ファイル情報 ---- */
   setHidden(el.fileInfo, !file);
@@ -1450,15 +1591,34 @@ function bindEvents() {
   el.driveDialog.addEventListener('close', onDialogClose);
   el.clearFile.addEventListener('click', clearFile);
 
-  el.modeLocal.addEventListener('change', () => update({ mode: 'local', errorMessage: null }));
+  el.modeLocal.addEventListener('change', () => {
+    update({ mode: 'local', errorMessage: null });
+    saveSettings({ mode: 'local' });
+  });
   el.modeGemini.addEventListener('change', () => {
     update({ mode: 'gemini', errorMessage: null });
     /* Gemini モードに入った時点でキーの有無を確かめ、案内を出し分ける。 */
     refreshKeyState();
+    /* 利用者がこの画面で明示的にGeminiモードへ切り替えた操作なので、接続状態も確かめ直す。 */
+    void refreshGeminiConnectionStatus();
+    saveSettings({ mode: 'gemini' });
   });
 
-  el.whisperModel.addEventListener('change', updateWhisperModelNote);
-  el.timestamps.addEventListener('change', onTimestampToggle);
+  el.language.addEventListener('change', () => saveSettings({ language: el.language.value }));
+
+  el.whisperModel.addEventListener('change', () => {
+    updateWhisperModelNote();
+    saveSettings({ whisperModelId: el.whisperModel.value });
+  });
+
+  el.geminiModel.addEventListener('change', () => {
+    saveSettings({ geminiModelId: el.geminiModel.value });
+  });
+
+  el.timestamps.addEventListener('change', () => {
+    onTimestampToggle();
+    saveSettings({ withTimestamps: el.timestamps.checked });
+  });
 
   /*
    * ポータルの別タブでキーを設定して戻ってきたときに拾う。
@@ -1513,10 +1673,20 @@ async function init() {
     return;
   }
 
-  populateSelects();
+  /*
+   * 保存済みの選択・設定を復元する（音声ファイル本体・APIキーは対象外）。
+   * populateSelects より前に読み、プルダウンの初期選択へ反映する。
+   */
+  const savedSettings = loadSettings();
+  applySavedSettings(savedSettings);
+  populateSelects(savedSettings);
   bindEvents();
   subscribe(render);
-  /* キーの有無の初期判定（render も内側で走る）。値は読まない。 */
+  /*
+   * キーの有無の初期判定（render も内側で走る）。値は読まない。
+   * 有無は初回なので必ず接続確認（refreshGeminiConnectionStatus）が走る
+   * （lastKnownKeyPresence の初期値が null のため）。
+   */
   refreshKeyState();
 
   /* 認証が確認できてから中身を出す。hidden を外すのはここだけ。 */

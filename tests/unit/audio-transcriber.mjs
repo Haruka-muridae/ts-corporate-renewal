@@ -34,6 +34,7 @@ try {
   const exporter = await import(`${base}/result-exporter.js`);
   const drive = await import(`${base}/drive-client.js`);
   const minutesHandoff = await import(`${base}/minutes-handoff.js`);
+  const settingsStore = await import(`${base}/settings-store.js`);
 
   /* 突き合わせ用。録音アプリ側の定義（複製元の正）。 */
   const vrConfig = await import('../../public/production-app/voice-recorder/config.js');
@@ -348,6 +349,49 @@ try {
     check('負のdurationSecondsは入れない', Object.hasOwn(saved.metadata, 'durationSeconds') === false);
     check('空文字のrecordedAtは入れない', Object.hasOwn(saved.metadata, 'recordedAt') === false);
   }
+
+  /* ================================================================ */
+  section('設定の永続化（settings-store.js）');
+
+  check('保存キーは tsam-audio-transcriber-settings-v1',
+    settingsStore.SETTINGS_STORAGE_KEY === 'tsam-audio-transcriber-settings-v1');
+  check('★KeyStoreの保存キー（tsam-api-keys）とは別物',
+    settingsStore.SETTINGS_STORAGE_KEY !== 'tsam-api-keys');
+
+  /* localStorage が無い環境。例外を投げず、使えない・空として扱うこと。 */
+  check('保存先が無ければ利用不可と答える', settingsStore.isSettingsStoreAvailable() === false);
+  check('読み出しは空オブジェクト', Object.keys(settingsStore.loadSettings()).length === 0);
+  check('保存先が無ければ書き込みは false', settingsStore.saveSettings({ mode: 'gemini' }) === false);
+
+  /* ここから先は localStorage を差し替えて、保存の形そのものを見る（KeyStoreのテストと同じ流儀）。 */
+  const settingsMap = new Map();
+
+  globalThis.localStorage = {
+    getItem: (k) => (settingsMap.has(k) ? settingsMap.get(k) : null),
+    setItem: (k, v) => { settingsMap.set(k, String(v)); },
+    removeItem: (k) => { settingsMap.delete(k); },
+  };
+
+  check('差し替え後は利用可能と答える', settingsStore.isSettingsStoreAvailable() === true);
+  check('保存できる', settingsStore.saveSettings({ mode: 'gemini', language: 'en' }) === true);
+  check('保存した値が読める',
+    settingsStore.loadSettings().mode === 'gemini' && settingsStore.loadSettings().language === 'en');
+
+  check('★部分更新は既存の値と統合される（上書きで消えない）',
+    settingsStore.saveSettings({ withTimestamps: false }) === true
+    && settingsStore.loadSettings().mode === 'gemini'
+    && settingsStore.loadSettings().language === 'en'
+    && settingsStore.loadSettings().withTimestamps === false);
+
+  /* 手で書き換えられた値でも壊れない（KeyStore §3-3 と同じ判断）。 */
+  for (const broken of ['{', 'null', '"text"', '[1,2]', '']) {
+    settingsMap.set(settingsStore.SETTINGS_STORAGE_KEY, broken);
+    check(`壊れた保存値（${broken || '空文字'}）でも例外を投げず空オブジェクト`,
+      Object.keys(settingsStore.loadSettings()).length === 0);
+  }
+
+  settingsMap.delete(settingsStore.SETTINGS_STORAGE_KEY);
+  delete globalThis.localStorage;
 
   finish();
 } catch (error) {
