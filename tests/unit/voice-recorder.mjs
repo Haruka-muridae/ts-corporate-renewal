@@ -93,6 +93,14 @@ try {
   check('★月日時分秒は0埋めする',
     /^\d{8}_\d{6}_録音\.mp3$/.test(filename.buildDefaultFileName(sample)));
 
+  /* お客様名・イベント名欄（§FR-07）。入力があれば `_録音` の代わりに使う。 */
+  check('お客様名・イベント名を入れると既定値に使う',
+    filename.buildDefaultFileName(sample, '田中様') === '20260806_090503_田中様.mp3');
+  check('お客様名・イベント名が空なら従来どおり',
+    filename.buildDefaultFileName(sample, '') === '20260806_090503_録音.mp3');
+  check('お客様名・イベント名にもサニタイズ方針を適用する（パス区切りを落とす）',
+    filename.buildDefaultFileName(sample, 'A/B') === '20260806_090503_AB.mp3');
+
   check('拡張子が無ければ付ける', filename.ensureExtension('会議') === '会議.mp3');
   check('拡張子があれば足さない', filename.ensureExtension('会議.mp3') === '会議.mp3');
   check('大文字の拡張子も二重に付けない', filename.ensureExtension('会議.MP3') === '会議.MP3');

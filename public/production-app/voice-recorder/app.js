@@ -56,12 +56,13 @@ const el = {};
 
 for (const id of [
   'vr-main',
+  'vr-prep', 'vr-prep-summary',
   'vr-state-auth', 'vr-state-oauth', 'vr-state-folder', 'vr-state-device',
   'vr-device-reason', 'vr-connect',
   'vr-time', 'vr-limit', 'vr-indicator', 'vr-indicator-label',
   'vr-size', 'vr-free', 'vr-start', 'vr-stop',
   'vr-save-panel', 'vr-player', 'vr-recorded-meta',
-  'vr-name', 'vr-save-folder', 'vr-save-hint', 'vr-save', 'vr-discard',
+  'vr-customer', 'vr-name', 'vr-save-folder', 'vr-save-hint', 'vr-save', 'vr-discard',
   'vr-progress-panel', 'vr-progress', 'vr-progress-title', 'vr-progress-bar', 'vr-progress-text',
   'vr-result-panel', 'vr-result-name', 'vr-result-folder', 'vr-result-link', 'vr-again',
   'vr-message', 'vr-error', 'vr-retry-actions',
@@ -79,6 +80,7 @@ const current = {
   file: null,          // 確定した MP3（File）
   fileName: null,      // OPFS 上の一時ファイル名
   previewUrl: null,    // createObjectURL の戻り。必ず revoke する
+  startDate: null,     // 録音開始時刻。既定ファイル名の日時部分の基準（§FR-07）
   defaultName: null,   // 保存名の初期値（§FR-07）
   saved: false,
 };
@@ -147,6 +149,26 @@ function setIndicator(state, label) {
 }
 
 /* ---------- 準備の確認 ---------- */
+
+/*
+ * 「利用の準備」（#vr-prep）の折りたたみ。
+ *
+ * ------------------------------------------------------------------
+ * 畳むのは「すべて正常」と分かったときだけ（card-ocr の #co-prep と同じ判断）
+ * ------------------------------------------------------------------
+ * 4項目（ログイン／連携／保存先／録音環境）はどれも setState() /
+ * showFolder() が dataset.kind へ 'ok' を書き込んでいる。ここでは
+ * 新しい判定を作らず、その値をそのまま読むだけにする
+ * （準備状態を判定する処理を二重に持たないため）。
+ * ------------------------------------------------------------------
+ */
+function updatePrepPanel() {
+  const ids = ['vr-state-auth', 'vr-state-oauth', 'vr-state-folder', 'vr-state-device'];
+  const allReady = ids.every((id) => el[id].dataset.kind === 'ok');
+
+  el['vr-prep-summary'].textContent = allReady ? '利用の準備 — 完了' : '利用の準備';
+  el['vr-prep'].open = !allReady;
+}
 
 /*
  * 保存先は「マイドライブ ＞ TSAM AI ＞ Voice Recorder」で固定（§FR-03）。
@@ -363,10 +385,11 @@ function showFinalized(result) {
 
   /*
    * 初期値の基準は「録音開始時刻」（§FR-07）。停止時刻ではない。
-   * 開始ボタンを押した時点で current.defaultName に入れてある。
+   * 開始ボタンを押した時点で current.startDate / current.defaultName に入れてある。
    * null になるのは想定外の経路だけで、そのときは停止時刻で代用する。
    */
-  current.defaultName = current.defaultName ?? buildDefaultFileName(new Date());
+  current.defaultName = current.defaultName
+    ?? buildDefaultFileName(current.startDate ?? new Date(), el['vr-customer'].value);
   el['vr-name'].value = current.defaultName;
   el['vr-name'].placeholder = current.defaultName;
 
@@ -394,12 +417,14 @@ async function discardRecording() {
 
   current.file = null;
   current.fileName = null;
+  current.startDate = null;
   current.defaultName = null;
   current.saved = false;
 
   el['vr-save-panel'].hidden = true;
   el['vr-result-panel'].hidden = true;
   el['vr-progress-panel'].hidden = true;
+  el['vr-customer'].value = '';
   el['vr-name'].value = '';
   el['vr-time'].textContent = formatDuration(0);
   el['vr-size'].textContent = formatBytes(0);
@@ -483,6 +508,7 @@ function refreshOauthState() {
  */
 function updateSaveButton() {
   const linked = refreshOauthState();
+  updatePrepPanel();
   const hasRecording = current.file !== null && !current.saved;
 
   el['vr-save'].disabled = !(hasRecording && linked);
@@ -715,10 +741,17 @@ async function main() {
 
   await checkDevice();
 
+  /*
+   * ここまでで auth・folder・device の3項目が確定する（oauth は
+   * updateSaveButton() 経由の refreshOauthState() が確定させる）。
+   * 初回描画時点の開閉を決めるため、一度呼んでおく。
+   */
+  updatePrepPanel();
 
   el['vr-start'].addEventListener('click', () => {
     /* 保存名の基準は録音開始時刻（§FR-07）。押した時点で確定させる。 */
-    current.defaultName = buildDefaultFileName(new Date());
+    current.startDate = new Date();
+    current.defaultName = buildDefaultFileName(current.startDate, el['vr-customer'].value);
     startRecording();
   });
   el['vr-stop'].addEventListener('click', stopRecording);
@@ -726,6 +759,18 @@ async function main() {
   el['vr-again'].addEventListener('click', discardRecording);
   el['vr-connect'].addEventListener('click', connectGoogle);
   el['vr-save'].addEventListener('click', saveToDrive);
+
+  /*
+   * お客様名・イベント名（§FR-07）。既定ファイル名（#vr-name）の初期値に
+   * 使うだけで、それ自体は保存しない（§FR-07・個人情報を端末に残さない）。
+   * 「ファイル名欄を編集したかどうか」は判定せず、単純にこの欄の値で
+   * 既定値を作り直して #vr-name へそのまま反映する（既存の仕組みのまま）。
+   */
+  el['vr-customer'].addEventListener('input', () => {
+    current.defaultName = buildDefaultFileName(current.startDate ?? new Date(), el['vr-customer'].value);
+    el['vr-name'].value = current.defaultName;
+    el['vr-name'].placeholder = current.defaultName;
+  });
 
   window.addEventListener('beforeunload', handleBeforeUnload);
   window.addEventListener('pagehide', () => {

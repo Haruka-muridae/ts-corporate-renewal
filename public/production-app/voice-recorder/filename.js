@@ -14,12 +14,22 @@ import { FILE_EXTENSION, FILE_NAME_SUFFIX } from './config.js';
  * 初期値：YYYYMMDD_HHmmss_録音.mp3
  * 基準は録音開始時刻・ブラウザのローカル日時（§FR-07）。
  * UTC ではないので、利用者の手元の時計と一致する。
+ *
+ * label（「お客様名・イベント名」欄。§FR-07）を渡すと、末尾の固定文言
+ * `_録音` の代わりに `_<label>` を使う（例: `20260813_150000_○○様.mp3`）。
+ * label が空（未入力・サニタイズ後に空）のときは従来どおり `_録音` のまま。
+ *
+ * サニタイズは stripUnsafe を通す（制御文字と / \ を落とす。記号や空白は
+ * 落とさない — ドットを落とすと拡張子が壊れ、空白を落とすと利用者が
+ * 付けた区切りが消えるため）。resolveFileName と同じ方針を使い回す。
  */
-export function buildDefaultFileName(date) {
+export function buildDefaultFileName(date, label) {
   const p2 = (n) => String(n).padStart(2, '0');
   const stamp = `${date.getFullYear()}${p2(date.getMonth() + 1)}${p2(date.getDate())}`
     + `_${p2(date.getHours())}${p2(date.getMinutes())}${p2(date.getSeconds())}`;
-  return `${stamp}${FILE_NAME_SUFFIX}${FILE_EXTENSION}`;
+  const cleanedLabel = stripUnsafe(label ?? '');
+  const suffix = cleanedLabel === '' ? FILE_NAME_SUFFIX : `_${cleanedLabel}`;
+  return `${stamp}${suffix}${FILE_EXTENSION}`;
 }
 
 /* 拡張子が無ければ付ける。大文字の .MP3 も拡張子ありとみなす。 */

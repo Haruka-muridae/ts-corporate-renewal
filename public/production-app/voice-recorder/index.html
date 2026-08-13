@@ -56,9 +56,23 @@
   </header>
 
 
-  <!-- 利用の準備（§7: Google連携ボタン・連携アカウント・保存先フォルダ）。 -->
-  <section class="vr-panel">
-    <h2 class="vr-panel__title">利用の準備</h2>
+  <!--
+    利用の準備（§7: Google連携ボタン・連携アカウント・保存先フォルダ）。
+
+    ------------------------------------------------------------------
+    アコーディオン化（card-ocr の #co-prep と同じ判断）
+    ------------------------------------------------------------------
+    **`open` を最初から付けてある。** JavaScript が動く前は開いた状態にし、
+    畳むのは「4項目すべて正常」と分かったとき（app.js の updatePrepPanel）
+    だけにする。逆（既定で閉じ、異常時に開く）にすると、JavaScript が
+    途中で失敗したときに準備の状態が見えないまま残ってしまう。
+
+    「連携する」ボタンはこの中にある。畳むのは連携済みで不要になった
+    ときだけなので、操作が必要な間は開いたままになる。
+    ------------------------------------------------------------------
+  -->
+  <details id="vr-prep" class="vr-panel" open>
+    <summary id="vr-prep-summary" class="vr-panel__title vr-prep-summary">利用の準備</summary>
     <ol class="vr-steps">
       <li class="vr-step">
         <span class="vr-step__label">TSAM AI ログイン</span>
@@ -79,7 +93,7 @@
       </li>
     </ol>
     <p class="vr-note" id="vr-device-reason" hidden></p>
-  </section>
+  </details>
 
   <!-- 録音（§FR-04）。 -->
   <section class="vr-panel" id="vr-record-panel">
@@ -127,13 +141,22 @@
     <p class="vr-note" id="vr-recorded-meta"></p>
 
     <label class="vr-field">
+      <span class="vr-field__label" id="vr-customer-label">お客様名・イベント名（任意）</span>
+      <input type="text" id="vr-customer" class="vr-input" autocomplete="off" spellcheck="false"
+             aria-describedby="vr-customer-help">
+    </label>
+    <p class="vr-note" id="vr-customer-help">
+      入力すると、下のファイル名欄の初期値（日時のあと）に使います。端末や当社サーバーには保存しません。
+    </p>
+
+    <label class="vr-field">
       <span class="vr-field__label" id="vr-name-label">ファイル名</span>
       <input type="text" id="vr-name" class="vr-input" autocomplete="off" spellcheck="false"
              aria-describedby="vr-name-help">
     </label>
     <p class="vr-note" id="vr-name-help">
-      未入力のときは初期値を使います。拡張子が無ければ <code>.mp3</code> を付けます。
-      同じ名前が保存先にある場合は <code>_2</code>、<code>_3</code>… を付けます。
+      未入力のときは初期値を使います（上の「お客様名・イベント名」を入力していれば、そちらを使って組み立てます）。
+      拡張子が無ければ <code>.mp3</code> を付けます。同じ名前が保存先にある場合は <code>_2</code>、<code>_3</code>… を付けます。
     </p>
 
     <p class="vr-note" id="vr-save-folder"></p>

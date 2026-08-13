@@ -47,6 +47,16 @@
   margin: 0 0 0.875rem;
 }
 
+/* 「利用の準備」の折りたたみ（card-ocr の #co-prep と同じ見た目の考え方）。 */
+.vr-prep-summary {
+  cursor: pointer;
+}
+
+.vr-prep-summary:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
 .vr-note {
   margin: 0 0 1rem;
   font-size: 0.875rem;
