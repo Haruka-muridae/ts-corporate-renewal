@@ -28,15 +28,17 @@
 
 ## 3. デプロイ前に必要な作業
 
-**① KV namespace を作り、id を `wrangler.jsonc` へ貼る**
+**① KV namespace（作成済み・2026-08-13）**
+
+`VERIFY_CACHE` は作成済みで、id は `wrangler.jsonc` に記入済み。作り直す必要はない。
+
+作り直す場合のコマンドは次のとおり。
 
 ```
 wrangler kv namespace create VERIFY_CACHE --config workers/auth-verify/wrangler.jsonc
 ```
 
-出力された id を `kv_namespaces[0].id` の `TODO_KV_NAMESPACE_ID` と置き換える。**貼るまで deploy は失敗する。**
-
-notifier-gate の `LICENSE_CACHE` とは別の namespace にすること。無料枠の書き込み上限（1,000/日）を食い合う量が見分けられなくなるため。
+notifier-gate の `LICENSE_CACHE` とは**別の namespace にすること**。無料枠の書き込み上限（1,000/日）を食い合う量が見分けられなくなるため。
 
 **② デプロイ**
 
