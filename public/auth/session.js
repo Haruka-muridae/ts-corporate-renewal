@@ -102,6 +102,34 @@ export function clearSessionToken() {
   }
 }
 
+/*
+ * 「いま検証した当のトークン」がまだ入っているときだけ消す。
+ *
+ * ------------------------------------------------------------------
+ * 古い検証結果で、新しいトークンを消さない
+ * ------------------------------------------------------------------
+ * 検証はサーバーへの往復で、Apps Script の応答は数秒かかることがある。
+ * その待ち時間のあいだに、利用者が同じ画面でログインを済ませ、
+ * **別の（有効な）トークンが保存されている**ことがある。
+ *
+ * 実際にログイン画面でこれが起きていた。redirectIfSignedIn() は
+ * 読み込み時に走り、期限切れの古いトークンを検証する。応答が返るころには
+ * 利用者はログインを終えて新しいトークンを保存し、ポータルへ遷移している。
+ * そこへ古い検証の失敗が届いて clearSessionToken() が走り、
+ * **たった今発行された有効なトークンを消していた。**
+ * その結果ログイン画面へ戻され、2回目のログインで初めて入れる
+ * （2回目は古いトークンが無いので、この競合自体が起きない）という
+ * 症状になっていた。
+ *
+ * 消す前に読み直して同一性を確かめれば、この取り違えは起きない。
+ * ------------------------------------------------------------------
+ */
+function clearSessionTokenIfUnchanged(verifiedToken) {
+  if (readSessionToken() === verifiedToken) {
+    clearSessionToken();
+  }
+}
+
 /* ---------- 遷移 ---------- */
 
 /*
@@ -251,7 +279,7 @@ export async function guardPage({ next = 'portal', params = null } = {}) {
     const data = await verifySessionApi(token);
 
     if (!data?.user) {
-      clearSessionToken();
+      clearSessionTokenIfUnchanged(token);
       goToLogin({ next, params });
       return null;
     }
@@ -262,9 +290,14 @@ export async function guardPage({ next = 'portal', params = null } = {}) {
      * 期限切れ・失効・改ざんはここへ来る。手元のトークンも捨てる。
      * 通信エラーの場合はトークンを残す（オフラインで消してしまわない）が、
      * 画面へは入れない。
+     *
+     * 消すのは「いま検証した当のトークン」がまだ入っているときだけにする
+     * （clearSessionTokenIfUnchanged の注記を参照）。待っているあいだに
+     * 別タブでログインし直された場合に、その新しいトークンを巻き添えに
+     * しないため。
      */
     if (error instanceof ApiError && error.code !== 'NETWORK') {
-      clearSessionToken();
+      clearSessionTokenIfUnchanged(token);
     }
 
     goToLogin({ next, params });
@@ -292,13 +325,22 @@ export async function redirectIfSignedIn(nextName = 'portal', params = null) {
   try {
     const data = await verifySessionApi(token);
 
+    /*
+     * 待っているあいだに利用者がログインを終えていることがある。
+     * その場合、この古い検証結果で画面を動かしてはいけない
+     * （ログイン後の遷移先を、こちらの nextName で上書きしてしまう）。
+     */
+    if (readSessionToken() !== token) {
+      return false;
+    }
+
     if (data?.user) {
       goToScreen(safeNextName(nextName), params);
       return true;
     }
   } catch (error) {
     if (error instanceof ApiError && error.code !== 'NETWORK') {
-      clearSessionToken();
+      clearSessionTokenIfUnchanged(token);
     }
   }
 

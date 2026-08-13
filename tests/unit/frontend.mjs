@@ -433,6 +433,66 @@ try {
   );
 
   /* ---------------------------------------------------------------- */
+  section('検証中にログインし直されたトークンを消さない');
+
+  /*
+   * ログイン画面は読み込み時に redirectIfSignedIn() を await せずに走らせる
+   * （login.js）。Apps Script の応答は数秒かかることがあり、その待ち時間に
+   * 利用者がログインを終えて**新しい有効なトークン**が保存される。
+   *
+   * そこへ古い検証の失敗が届いて無条件に消していたため、発行されたばかりの
+   * トークンが巻き添えで消え、ログイン直後にログイン画面へ戻されていた。
+   * 2回目は古いトークンが無いので競合が起きず入れる、という症状になる。
+   */
+  {
+    const store = new Map();
+
+    globalThis.localStorage = {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => { store.set(key, String(value)); },
+      removeItem: (key) => { store.delete(key); },
+    };
+
+    const realFetch = globalThis.fetch;
+
+    /* 応答は success:false（＝通信は成功、セッションが無効）。従来なら消す経路。 */
+    const invalidSession = {
+      ok: true,
+      json: async () => ({ success: false, error: { code: 'SESSION_INVALID', message: '無効です' } }),
+    };
+
+    let releaseFetch;
+    const gate = new Promise((resolve) => { releaseFetch = resolve; });
+
+    globalThis.fetch = () => gate.then(() => invalidSession);
+
+    session.writeSessionToken('old-token');
+
+    const pending = session.redirectIfSignedIn('portal', null);
+
+    /* fetch が呼ばれるところまで進めてから、ログイン成立を模す。 */
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    session.writeSessionToken('new-token');
+
+    releaseFetch();
+    await pending;
+
+    check('★検証中に入れ替わった新しいトークンを消さない',
+      session.readSessionToken() === 'new-token');
+
+    /* 入れ替わっていない場合は、従来どおり消すこと（緩めすぎていない）。 */
+    globalThis.fetch = () => Promise.resolve(invalidSession);
+    session.writeSessionToken('stale-token');
+
+    await session.redirectIfSignedIn('portal', null);
+
+    check('入れ替わっていなければ従来どおり消す', session.readSessionToken() === null);
+
+    globalThis.fetch = realFetch;
+    delete globalThis.localStorage;
+  }
+
+  /* ---------------------------------------------------------------- */
   section('アプリの配置解決（portal/app-layout.js）');
 
   const layout = await import('../../public/portal/app-layout.js');
