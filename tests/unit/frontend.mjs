@@ -470,6 +470,89 @@ try {
   }
 
   /* ---------------------------------------------------------------- */
+  section('保護ページの CSP が verifySession の宛先を許可している');
+
+  /*
+   * 宛先を auth-verify Worker へ切り替えたとき、production-app 各ページの
+   * CSP（connect-src）が追従しておらず、guardPage の fetch がページ自身の
+   * CSP に遮断された。ログイン画面とポータルには CSP が無いため素通りし、
+   * 「ログインもポータルも動くのに、アプリを開くとログインへ弾かれる」
+   * という症状になった（2026-08-14）。
+   *
+   * CSP はブラウザが実行時に効かせるもので、Node のテストでは作用しない。
+   * だからここでは HTML を実物として読み、**宛先の設定（config.js）と
+   * 許可リスト（各ページの connect-src）が食い違っていないこと**を確かめる。
+   * 宛先を今後また変えるときは、このテストが全ページの直し漏れを挙げる。
+   */
+  {
+    const { readFileSync, readdirSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+
+    const appsRoot = fileURLToPath(new URL('../../public/production-app/', import.meta.url));
+
+    /* production-app 配下の HTML を全部集める（help/ や measure/ の下も含む）。 */
+    const htmlFiles = [];
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+          walk(path);
+        } else if (entry.name.endsWith('.html')) {
+          htmlFiles.push(path);
+        }
+      }
+    };
+
+    walk(appsRoot);
+    check('検査対象の HTML が見つかる', htmlFiles.length > 0, appsRoot);
+
+    /* 検証の宛先のオリジン。verifyApiUrl が空なら Apps Script 直なので対象外。 */
+    const verifyUrl = String(config.AUTH_CONFIG.verifyApiUrl ?? '').trim();
+    const verifyOrigin = verifyUrl === '' ? null : new URL(verifyUrl).origin;
+
+    for (const path of htmlFiles) {
+      const html = readFileSync(path, 'utf8');
+      const meta = /<meta http-equiv="Content-Security-Policy" content="([\s\S]*?)">/.exec(html);
+
+      /* CSP の無いページは、そもそも fetch を遮断しない。 */
+      if (!meta) {
+        continue;
+      }
+
+      const connectSrc = meta[1]
+        .split(';')
+        .map((directive) => directive.trim())
+        .find((directive) => directive.startsWith('connect-src'));
+
+      /*
+       * connect-src の無い CSP は default-src に落ちる。ここでは
+       * 「認証系へ届く形か」だけを見たいので、connect-src がある
+       * ページだけを対象にする（現状は全ページが明示している）。
+       */
+      if (!connectSrc) {
+        continue;
+      }
+
+      /* guardPage を使うページは、認証系（script.google.com）を必ず許可している。 */
+      const usesAuth = connectSrc.includes('https://script.google.com');
+
+      if (!usesAuth || verifyOrigin === null) {
+        continue;
+      }
+
+      const name = path.slice(appsRoot.length);
+
+      check(
+        `★${name} の connect-src が verifySession の宛先（${verifyOrigin}）を許可している`,
+        connectSrc.includes(verifyOrigin),
+        connectSrc,
+      );
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
   section('検証中にログインし直されたトークンを消さない');
 
   /*

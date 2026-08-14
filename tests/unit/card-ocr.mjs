@@ -845,6 +845,11 @@ try {
       'https://generativelanguage.googleapis.com',
       'https://script.google.com',
       'https://script.googleusercontent.com',
+      /*
+       * 認証系の一部。セッション検証（verifySession）の宛先
+       * （public/auth/config.js の verifyApiUrl）で、guardPage が呼ぶ。
+       */
+      'https://auth-verify.potenitas-lp.workers.dev',
     ];
 
     check(

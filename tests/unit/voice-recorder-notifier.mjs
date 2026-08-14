@@ -513,6 +513,10 @@ try {
      * 戻すときは足し直す（docs/notifier-v2-resume.md §4）。
      * そのときも `*.workers.dev` にはしない——workers.dev は誰でも使える
      * 共有ドメインで、他人の Worker まで許可することになる。
+     *
+     * なお auth-verify.potenitas-lp.workers.dev は通知ゲートとは別物で、
+     * セッション検証（verifySession）の宛先（public/auth/config.js の
+     * verifyApiUrl）。guardPage が呼ぶため connect-src に残る。
      * ------------------------------------------------------------------
      */
     const html = readProdApp('index.html');
@@ -521,13 +525,14 @@ try {
 
     check('★connect-src から通知ゲートを外した',
       connectSrc.includes(NOTIFIER_GATE_ORIGIN) === false, connectSrc);
-    check('★ワイルドカードで代用していない', csp.includes('workers.dev') === false, csp);
+    check('★ワイルドカードで代用していない', csp.includes('*.workers.dev') === false, csp);
     check('既存の接続先は落としていない',
       connectSrc.includes('https://www.googleapis.com')
       && connectSrc.includes('https://script.google.com')
       && connectSrc.includes('https://script.googleusercontent.com'));
-    check('★残ったのは3オリジンだけ',
-      connectSrc.split(/\s+/).filter((value) => value.startsWith('https://')).length === 3,
+    check('★残ったのは4オリジンだけ（Google と認証系。認証系は Apps Script ＋ auth-verify）',
+      connectSrc.split(/\s+/).filter((value) => value.startsWith('https://')).length === 4
+      && connectSrc.includes('https://auth-verify.potenitas-lp.workers.dev'),
       connectSrc);
 
     /*
