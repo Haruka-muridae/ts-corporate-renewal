@@ -96,8 +96,12 @@ function applyCalendarItems_(items, nowMs) {
     }
 
     var eid = eventEid_(id);
+    var built = buildEventSkeletons_(event, eid, settings);
 
-    skeletons.push(buildEventSkeleton_(event, eid));
+    for (var s = 0; s < built.length; s++) {
+      skeletons.push(built[s]);
+    }
+
     byEid[eid] = event;
   }
 
@@ -165,17 +169,20 @@ function applyGateDecision_(evaluated, byEid, nowMs) {
       continue;
     }
 
-    var key = queueKey_(eid, item.timing);
+    var feature = String(item.feature || 'calendar');
+    var key = queueKey_(eid, item.timing, feature);
     var record = {
       key: key,
       eid: eid,
       eventId: String(event.id || ''),
-      feature: String(item.feature || 'calendar'),
+      feature: feature,
       timing: Number(item.timing),
       title: eventTitle_(event),
       startTime: toMs_(Date.parse(String(item.startAt || ''))),
       notifyAt: toMs_(Date.parse(String(item.notifyAt || ''))),
-      updatedAt: nowMs
+      updatedAt: nowMs,
+      /* 行き先はここで確定させる。送信時には予定を読み直さない。 */
+      openUrl: feature === 'openurl' ? resolveOpenUrl_(event) : ''
     };
 
     keep[key] = true;
@@ -229,6 +236,9 @@ function applyGateDecision_(evaluated, byEid, nowMs) {
  *
  * **ここに列挙した項目しか外へ出ない。** 予定名・説明・参加者・カレンダーIDを
  * 足さないこと。足しても Workers 側が要求ごと拒否する（design-notes §3）。
+ *
+ * URL通知アプリの行き先（URL）もここへ入れない。URL は説明欄から取るもので、
+ * 予定名と同じ扱いにする（calendar-url-notifier-requirements-v1.md §2-2）。
  */
 function buildEventSkeleton_(event, eid) {
   var start = (event && event.start) || {};
@@ -243,6 +253,43 @@ function buildEventSkeleton_(event, eid) {
     allDay: !timed,
     cancelled: String((event && event.status) || '') === 'cancelled'
   };
+}
+
+/**
+ * 1つの予定から、有効な機能ぶんの骨格を作る（純関数）。
+ *
+ * 録音アプリの通知（calendar）は従来どおり常に作る。
+ * URL通知（openurl）は設定が ON のときだけ足す。
+ * 両方 ON なら同じ予定について通知が2件出るが、行き先が違う別のアプリであり、
+ * 片方だけを止めたい利用者が設定で切れる（要件 §1）。
+ */
+function buildEventSkeletons_(event, eid, settings) {
+  var base = buildEventSkeleton_(event, eid);
+  var out = [base];
+
+  if (!settings || settings.openUrlEnabled !== true) {
+    return out;
+  }
+
+  var openUrl = {
+    eid: base.eid,
+    feature: 'openurl',
+    startAt: base.startAt,
+    status: base.status,
+    allDay: base.allDay,
+    cancelled: base.cancelled
+  };
+
+  /* 予定ごとの OPEN_BEFORE。指定が無ければゲートが設定の既定値を使う。 */
+  var before = resolveOpenBefore_(event);
+
+  if (isFinite(before)) {
+    openUrl.timingMin = before;
+  }
+
+  out.push(openUrl);
+
+  return out;
 }
 
 /**

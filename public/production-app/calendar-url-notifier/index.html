@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>カレンダーURL通知｜TSAM AI</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy
+  ==================================================================
+  connect-src の内訳:
+    - 'self'                              … 自分の JS / CSS
+    - script.google.com /
+      script.googleusercontent.com        … TSAM AI 認証（guardPage）と
+                                            利用者の通知シート（Web アプリ）
+    - auth-verify.potenitas-lp.workers.dev … セッション検証（verifySession）の
+                                            キャッシュ付き代理。guardPage の
+                                            宛先はここになる（public/auth/
+                                            config.js の verifyApiUrl）。
+                                            *.workers.dev に広げないこと
+
+  **notifier-gate は入れない。** このアプリからゲートを呼ばないためである。
+  ゲートと話すのは利用者の Apps Script であって、ブラウザではない
+  （docs/notifier-design-notes.md §1）。
+
+  ワイルドカードにしない。`*.workers.dev` や `*.google.com` は
+  他人の資産まで許可することになる。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://auth-verify.potenitas-lp.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../css/style.css">
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main" tabindex="-1">
+  <div class="auth-shell auth-shell--medium">
+
+    <!--
+      guardPage() が利用者を返すまで中身を出さない。
+      hidden を外すのは app.js だけ（他の本番アプリと同じ約束）。
+    -->
+    <p id="cun-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="cun-content" hidden>
+
+      <header class="cun-header">
+        <h1>カレンダーURL通知</h1>
+        <p class="cun-lede">
+          予定の開始前に通知を出し、通知を押した端末でその予定の URL を開きます。
+          予定の説明欄に <code>OPEN_URL:</code> を書くとそのページへ、
+          何も書かない予定はカレンダーの予定画面へ移動します。
+        </p>
+      </header>
+
+      <p id="cun-message" class="cun-message" role="status" hidden></p>
+
+      <section class="cun-panel" aria-labelledby="cun-connection-heading">
+        <h2 id="cun-connection-heading">通知シートとの接続</h2>
+        <p class="cun-status">
+          状態: <strong id="cun-connection-state">確認中…</strong>
+        </p>
+
+        <div id="cun-setup" hidden>
+          <p>
+            この機能は、ご自身の Google アカウントにコピーした通知シートが動かします。
+            予定の内容も URL も、当社のサーバーへは送られません。
+          </p>
+          <ol class="cun-steps">
+            <li>通知シートをコピーし、シートのメニューからセットアップを実行します。</li>
+            <li>ウィザードの最後に出る<strong>引き継ぎリンク</strong>を、この端末で開きます。</li>
+            <li>この画面に戻ると「接続済み」になります。</li>
+          </ol>
+        </div>
+      </section>
+
+      <div id="cun-configured" hidden>
+
+        <section class="cun-panel" aria-labelledby="cun-settings-heading">
+          <h2 id="cun-settings-heading">通知の設定</h2>
+
+          <p class="cun-field cun-field--check">
+            <label>
+              <input type="checkbox" id="cun-enabled">
+              URL通知を受け取る
+            </label>
+          </p>
+
+          <p class="cun-field">
+            <label for="cun-timing">通知するタイミング</label>
+            <select id="cun-timing">
+              <option value="0">開始時刻</option>
+              <option value="5">5分前</option>
+              <option value="10">10分前</option>
+              <option value="15">15分前</option>
+            </select>
+          </p>
+          <p class="cun-note">
+            予定の説明欄に <code>OPEN_BEFORE: 30</code> と書くと、その予定だけ別の時刻になります。
+          </p>
+
+          <fieldset class="cun-field">
+            <legend>通知する予定（出欠の回答）</legend>
+            <label><input type="checkbox" id="cun-accepted"> 参加</label>
+            <label><input type="checkbox" id="cun-tentative"> 未定</label>
+            <label><input type="checkbox" id="cun-needsAction"> 未回答</label>
+            <label><input type="checkbox" id="cun-declined"> 欠席</label>
+          </fieldset>
+          <p class="cun-note">終日の予定は通知しません。</p>
+
+          <p class="cun-actions">
+            <button type="button" id="cun-save" class="auth-button">設定を保存する</button>
+          </p>
+        </section>
+
+        <section class="cun-panel" aria-labelledby="cun-device-heading">
+          <h2 id="cun-device-heading">この端末</h2>
+          <p>
+            通知を受け取る端末ごとに登録が要ります。スマートフォンでも同じ画面を開いて
+            登録してください。<strong>URL が開くのは、通知を押した端末だけです。</strong>
+          </p>
+          <p class="cun-actions">
+            <button type="button" id="cun-subscribe" class="auth-button">この端末で通知を受け取る</button>
+            <button type="button" id="cun-test" class="auth-button auth-button--quiet">テスト通知を送る</button>
+          </p>
+        </section>
+
+        <section class="cun-panel" aria-labelledby="cun-upcoming-heading">
+          <h2 id="cun-upcoming-heading">直近の通知予定</h2>
+          <p id="cun-upcoming-empty" class="cun-note" hidden>予定されている通知はありません。</p>
+          <ul id="cun-upcoming-list" class="cun-upcoming"></ul>
+          <p class="cun-actions">
+            <button type="button" id="cun-sync" class="auth-button auth-button--quiet">カレンダーを読み直す</button>
+          </p>
+        </section>
+
+      </div>
+
+      <p class="cun-back">
+        <a href="../../portal/">ポータルへ戻る</a>
+      </p>
+
+    </div>
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

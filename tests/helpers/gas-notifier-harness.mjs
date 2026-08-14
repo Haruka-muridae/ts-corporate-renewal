@@ -491,15 +491,28 @@ export function installGateStub(env, {
         return { status: evaluateStatus, body: { ok: false, error: { code: 'RATE_LIMITED', message: '' } } };
       }
 
+      /*
+       * 既定の応答は本物の evaluate に合わせる。
+       * feature をそのまま返し、予定単位の timingMin があればそちらを優先する
+       * （workers/notifier-gate/src/evaluate.mjs の resolveTimingMin）。
+       * 固定値を返すスタブにすると、機能を増やしたときに
+       * 「テストは通るが実物では別の値になる」ずれを拾えない。
+       */
       const decided = evaluate
         ? evaluate(body)
-        : { notify: body.events.map((event) => ({
-          eid: event.eid,
-          feature: 'calendar',
-          timing: body.settings.timingMin,
-          startAt: event.startAt,
-          notifyAt: new Date(Date.parse(event.startAt) - body.settings.timingMin * 60000).toISOString(),
-        })), remove: [] };
+        : { notify: body.events.map((event) => {
+          const timing = event.timingMin === undefined || event.timingMin === null
+            ? body.settings.timingMin
+            : Number(event.timingMin);
+
+          return {
+            eid: event.eid,
+            feature: event.feature || 'calendar',
+            timing,
+            startAt: event.startAt,
+            notifyAt: new Date(Date.parse(event.startAt) - timing * 60000).toISOString(),
+          };
+        }), remove: [] };
 
       return {
         status: 200,
