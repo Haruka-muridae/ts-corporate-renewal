@@ -1,0 +1,107 @@
+/*
+ * カレンダーURL通知アプリの画面。auth.css の土台（auth-shell / auth-button）に
+ * 乗せ、ここではこのアプリ固有の並びだけを整える。
+ *
+ * 色は css/style.css のカスタムプロパティを使い、この画面専用の色を作らない
+ * （docs/specs/portal-spec-v1.md §9 と同じ約束）。
+ */
+
+.cun-header h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.5rem;
+}
+
+.cun-lede {
+  color: #445;
+  margin: 0 0 1rem;
+}
+
+.cun-note {
+  background: #eef4fb;
+  border-radius: 6px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}
+
+.cun-panel + .cun-panel,
+#cun-configured .cun-panel:first-child {
+  margin-top: 1.5rem;
+}
+
+.cun-panel h2 {
+  font-size: 1rem;
+  border-bottom: 1px solid #dde;
+  padding-bottom: 0.3rem;
+  margin: 0 0 0.6rem;
+}
+
+.cun-status {
+  margin: 0 0 0.6rem;
+}
+
+.cun-steps {
+  margin: 0.6rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.cun-steps li + li {
+  margin-top: 0.3rem;
+}
+
+.cun-field {
+  margin: 0.6rem 0;
+}
+
+/* 出欠の選択は横並び。狭い幅では折り返す（幅ごとの分岐を持たない）。 */
+.cun-field legend {
+  font-weight: 600;
+  padding: 0;
+}
+
+.cun-field label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-right: 0.9rem;
+  /* 指で押せる高さを確保する。見た目は変えない。 */
+  min-height: 44px;
+}
+
+.cun-field--check label {
+  font-weight: 600;
+}
+
+.cun-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.9rem 0 0;
+}
+
+.cun-upcoming {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.cun-upcoming li + li {
+  margin-top: 0.3rem;
+}
+
+.cun-message {
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  margin: 0 0 1rem;
+}
+
+.cun-message[data-kind='success'] {
+  background: #eaf6ec;
+}
+
+.cun-message[data-kind='error'] {
+  background: #fdecec;
+}
+
+.cun-back {
+  margin: 1.5rem 0 0;
+}

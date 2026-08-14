@@ -176,9 +176,15 @@ export const DEFAULT_FEATURE = 'calendar';
  *
  *   attendanceFilter … 出欠（accepted / tentative / …）で絞るか
  *   allDayFilter     … 「時間指定のみ」設定で終日予定を落とすか
+ *
+ * `openurl` はカレンダーURL通知アプリ
+ * （docs/specs/calendar-url-notifier-requirements-v1.md §4）。
+ * 判定は calendar と同じで、違うのは通知タップ後の行き先だけ。
+ * その行き先（URL）はここへ来ない。利用者のシートから Service Worker へ直接渡る。
  */
 export const FEATURE_RULES = {
   calendar: { attendanceFilter: true, allDayFilter: true },
+  openurl: { attendanceFilter: true, allDayFilter: true },
 };
 
 /**

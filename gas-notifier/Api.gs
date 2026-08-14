@@ -436,7 +436,9 @@ function takePending_(subId, nowMs) {
       title: String(row.title),
       startTime: toIsoOrEmpty_(row.startTime),
       timing: Number(row.timing),
-      purpose: String(row.purpose || 'calendar')
+      purpose: String(row.purpose || 'calendar'),
+      /* URL通知の行き先。運営を経由せず、ここで初めて端末へ渡る（要件 §2-2）。 */
+      openUrl: String(row.openUrl || '')
     });
 
     fetchedBy.push(subId);
@@ -451,7 +453,8 @@ function takePending_(subId, nowMs) {
       startTime: row.startTime,
       sentAt: row.sentAt,
       purpose: row.purpose,
-      fetchedBy: formatFetchedBy_(fetchedBy)
+      fetchedBy: formatFetchedBy_(fetchedBy),
+      openUrl: row.openUrl
     });
   }
 
@@ -475,6 +478,11 @@ function listUpcoming_(nowMs) {
       startTime: toIsoOrEmpty_(rows[i].startTime),
       notifyAt: new Date(notifyAt).toISOString(),
       timing: Number(rows[i].timing),
+      /*
+       * どの機能の通知かを添える。1つのシートで録音通知と URL通知が
+       * 動くため、これが無いと画面が他方の予定まで自分のものとして並べる。
+       */
+      feature: String(rows[i].feature || 'calendar'),
       sortKey: notifyAt
     });
   }
@@ -492,7 +500,8 @@ function listUpcoming_(nowMs) {
       title: items[k].title,
       startTime: items[k].startTime,
       notifyAt: items[k].notifyAt,
-      timing: items[k].timing
+      timing: items[k].timing,
+      feature: items[k].feature
     });
   }
 

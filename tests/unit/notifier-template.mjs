@@ -250,6 +250,166 @@ try {
   }
 
   /* ================================================================ */
+  /* ================================================================ */
+  section('★カレンダーURL通知（feature: openurl）');
+
+  {
+    /* 既定では従来どおり。コピー済みのシートで通知が2倍にならないこと。 */
+    const env = createReadyNotifierEnvironment();
+    const calls = installGateStub(env);
+
+    env.setCalendarItems([makeEvent({ id: 'ev-a' })]);
+    env.api.syncCalendar_(env.getTime());
+
+    const events = calls.find((call) => call.path === '/v1/evaluate').body.events;
+
+    check('★既定では openurl の骨格を作らない', events.length === 1 && events[0].feature === 'calendar',
+      JSON.stringify(events));
+  }
+
+  {
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+    const start = env.getTime() + HOUR;
+    const calls = installGateStub(env);
+
+    gas.writeSettings_({ openUrlEnabled: true });
+
+    env.setCalendarItems([
+      Object.assign(makeEvent({ id: 'ev-a', startMs: start }), {
+        description: 'OPEN_URL: https://example.com/task/123',
+      }),
+    ]);
+
+    gas.syncCalendar_(env.getTime());
+
+    const body = calls.find((call) => call.path === '/v1/evaluate').body;
+    const payload = JSON.stringify(body);
+
+    check('設定 ON で openurl の骨格が増える',
+      body.events.length === 2 && body.events.some((event) => event.feature === 'openurl'), payload);
+    check('★行き先の URL をゲートへ送らない', payload.includes('example.com') === false, payload);
+    check('★説明欄そのものも送らない', payload.includes('OPEN_URL') === false);
+
+    const queue = env.readSheet('notify_queue');
+    const openRow = queue.find((row) => row.feature === 'openurl');
+    const calendarRow = queue.find((row) => row.feature === 'calendar');
+
+    check('キューは機能ごとに1行ずつ', queue.length === 2, JSON.stringify(queue));
+    check('★キーが衝突しない', String(openRow.key) !== String(calendarRow.key));
+    check('★録音通知側のキーの形は変えない（配布済みのシートと揃える）',
+      String(calendarRow.key).split('|').length === 2, String(calendarRow.key));
+    check('URL はシート側に持つ', openRow.openUrl === 'https://example.com/task/123', String(openRow.openUrl));
+  }
+
+  {
+    /* URL の解決順と検証（要件 §2）。 */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    const resolve = (event) => gas.resolveOpenUrl_(event);
+
+    check('OPEN_URL: を最優先で採る',
+      resolve({
+        description: 'OPEN_URL: https://example.com/open\n参考 https://example.com/body',
+        location: 'https://example.com/loc',
+        hangoutLink: 'https://meet.google.com/x',
+      }) === 'https://example.com/open');
+
+    check('次に場所欄',
+      resolve({ location: 'https://example.com/loc', description: '参考 https://example.com/body' })
+        === 'https://example.com/loc');
+
+    check('次に説明欄の URL',
+      resolve({ description: '資料は https://example.com/body を参照' }) === 'https://example.com/body');
+
+    check('次に Meet リンク',
+      resolve({ hangoutLink: 'https://meet.google.com/abc-defg-hij', htmlLink: 'https://www.google.com/calendar/event?eid=E' })
+        === 'https://meet.google.com/abc-defg-hij');
+
+    check('★何も書いていない予定は予定ページへ落ちる',
+      resolve({ htmlLink: 'https://www.google.com/calendar/event?eid=E' })
+        === 'https://www.google.com/calendar/event?eid=E');
+
+    check('★http:// は採らず、通知は消さずに予定ページへ回す',
+      resolve({ description: 'OPEN_URL: http://example.com/a', htmlLink: 'https://www.google.com/calendar/event?eid=E' })
+        === 'https://www.google.com/calendar/event?eid=E');
+
+    check('★見かけのホストを偽装した URL を採らない',
+      resolve({ description: 'OPEN_URL: https://example.com@evil.test/a', htmlLink: 'https://www.google.com/calendar/event?eid=E' })
+        === 'https://www.google.com/calendar/event?eid=E');
+
+    check('説明欄が HTML でも読める',
+      resolve({ description: '<div>OPEN_URL: <a href="https://example.com/a?x=1&amp;y=2">link</a></div>' })
+        === 'https://example.com/a?x=1&y=2');
+
+    check('OPEN_BEFORE を読む', gas.resolveOpenBefore_({ description: 'OPEN_BEFORE: 15' }) === 15);
+    check('OPEN_BEFORE 0 は開始時刻', gas.resolveOpenBefore_({ description: 'OPEN_BEFORE: 0' }) === 0);
+    check('不正な OPEN_BEFORE は既定へ落とす',
+      isFinite(gas.resolveOpenBefore_({ description: 'OPEN_BEFORE: -5' })) === false);
+  }
+
+  {
+    /* 予定ごとの OPEN_BEFORE が通知時刻に効くこと。 */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+    const start = env.getTime() + HOUR;
+
+    installGateStub(env);
+    gas.writeSettings_({ openUrlEnabled: true });
+
+    env.setCalendarItems([
+      Object.assign(makeEvent({ id: 'ev-a', startMs: start }), {
+        description: 'OPEN_URL: https://example.com/a\nOPEN_BEFORE: 15',
+      }),
+    ]);
+
+    gas.syncCalendar_(env.getTime());
+
+    const rows = env.readSheet('notify_queue');
+    const openRow = rows.find((row) => row.feature === 'openurl');
+    const calendarRow = rows.find((row) => row.feature === 'calendar');
+
+    check('★OPEN_BEFORE が openurl 側の通知時刻になる',
+      Number(openRow.notifyAt) === start - 15 * MINUTE, String(openRow.notifyAt));
+    check('★録音通知側は設定の分数のまま', Number(calendarRow.notifyAt) === start - 5 * MINUTE);
+  }
+
+  {
+    /* 送信と pending。URL が端末まで届くのはここが初めて。 */
+    const env = createReadyNotifierEnvironment();
+    const gas = env.api;
+
+    installGateStub(env);
+
+    gas.upsertSubscription_(subscription('one'), env.getTime());
+    gas.tableAppend_('notify_queue', {
+      key: 'k1|openurl', eid: 'EID-1', eventId: 'ev-a', feature: 'openurl', timing: 10,
+      title: '打合せ', startTime: env.getTime() + 10 * MINUTE, notifyAt: env.getTime() - MINUTE,
+      updatedAt: env.getTime(), openUrl: 'https://example.com/task/123',
+    });
+
+    gas.sendDueNotifications_(env.getTime());
+
+    const sent = env.readSheet('sent_log')[0];
+
+    check('purpose で行き先の種類が分かる', sent.purpose === 'openurl', String(sent.purpose));
+    check('sent_log も URL を持つ', sent.openUrl === 'https://example.com/task/123');
+
+    const subId = String(env.readSheet('subscriptions')[0].subId);
+    const pending = gas.takePending_(subId, env.getTime());
+
+    const upcomingBefore = gas.listUpcoming_(env.getTime());
+
+    check('★upcoming は機能を添える（画面が自分のぶんだけ出せる）',
+      upcomingBefore.every((item) => typeof item.feature === 'string'), JSON.stringify(upcomingBefore));
+
+    check('pending が1件返る', pending.length === 1, JSON.stringify(pending));
+    check('★pending の応答に URL が入る（Service Worker の行き先）',
+      pending[0].openUrl === 'https://example.com/task/123', JSON.stringify(pending[0]));
+    check('予定名も返る', pending[0].title === '打合せ');
+  }
+
   section('送信（ゲートの署名が要る）');
 
   {

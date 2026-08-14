@@ -26,8 +26,8 @@ var SHEET = {
 var HEADERS = {
   settings: ['key', 'value'],
   subscriptions: ['subId', 'endpoint', 'p256dh', 'auth', 'createdAt', 'lastSuccessAt', 'lastErrorAt', 'lastError'],
-  notify_queue: ['key', 'eid', 'eventId', 'feature', 'timing', 'title', 'startTime', 'notifyAt', 'updatedAt'],
-  sent_log: ['key', 'eid', 'eventId', 'feature', 'timing', 'title', 'startTime', 'sentAt', 'purpose', 'fetchedBy']
+  notify_queue: ['key', 'eid', 'eventId', 'feature', 'timing', 'title', 'startTime', 'notifyAt', 'updatedAt', 'openUrl'],
+  sent_log: ['key', 'eid', 'eventId', 'feature', 'timing', 'title', 'startTime', 'sentAt', 'purpose', 'fetchedBy', 'openUrl']
 };
 
 var SHEET_ORDER = [SHEET.SETTINGS, SHEET.SUBSCRIPTIONS, SHEET.QUEUE, SHEET.SENT_LOG];
@@ -82,7 +82,15 @@ var DEFAULT_SETTINGS = {
   needsAction: true,
   declined: false,
   timedOnly: true,
-  timing: 5
+  timing: 5,
+
+  /*
+   * カレンダーURL通知（feature: openurl）を出すか。
+   * **既定は false。** このテンプレートは録音アプリの通知として配ってあり、
+   * コピー済みのシートで勝手に通知が2倍にならないようにする。
+   * URL通知アプリの設定画面が ON にする。
+   */
+  openUrlEnabled: false
 };
 
 /* 通知タイミングの選択肢（分前）。0 は「開始時刻」。FR-10。 */
@@ -259,6 +267,7 @@ function normalizeSettings_(input) {
 
   out.timedOnly = toBool_(source.timedOnly, DEFAULT_SETTINGS.timedOnly);
   out.timing = toTiming_(source.timing);
+  out.openUrlEnabled = toBool_(source.openUrlEnabled, DEFAULT_SETTINGS.openUrlEnabled);
 
   return out;
 }
@@ -300,7 +309,7 @@ function writeSettings_(patch) {
   var current = readSettings_();
   var source = patch && typeof patch === 'object' ? patch : {};
   var merged = {};
-  var keys = RESPONSE_STATUSES.concat(['timedOnly', 'timing']);
+  var keys = RESPONSE_STATUSES.concat(['timedOnly', 'timing', 'openUrlEnabled']);
 
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
@@ -421,9 +430,19 @@ function removeSubscriptionByEndpoint_(endpoint) {
 
 /* ---------- notify_queue ---------- */
 
-/** キューの行キー。eid と timing の組で1件とする。 */
-function queueKey_(eid, timing) {
-  return String(eid) + '|' + String(timing);
+/**
+ * キューの行キー。eid と timing の組で1件とする。
+ *
+ * feature を末尾へ足すのは calendar 以外だけにしてある。
+ * 全機能に足すと、**すでに配布済みのシートにある行と形が変わり**、
+ * 更新直後の同期で同じ予定が「新しい行」として積み直される。
+ * 既存の形を保てば、増えるのは新機能ぶんの行だけで済む。
+ */
+function queueKey_(eid, timing, feature) {
+  var base = String(eid) + '|' + String(timing);
+  var name = String(feature || 'calendar');
+
+  return name === 'calendar' ? base : base + '|' + name;
 }
 
 /* ---------- sent_log の取得済み（購読単位） ---------- */

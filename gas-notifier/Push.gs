@@ -45,17 +45,21 @@ function sendDueNotifications_(nowMs) {
   var sentRows = [];
 
   for (var i = 0; i < due.length; i++) {
+    var feature = String(due[i].feature || 'calendar');
+
     tableAppend_(SHEET.SENT_LOG, {
       key: due[i].key,
       eid: due[i].eid,
       eventId: due[i].eventId,
-      feature: due[i].feature,
+      feature: feature,
       timing: due[i].timing,
       title: due[i].title,
       startTime: due[i].startTime,
       sentAt: nowMs,
-      purpose: 'calendar',
-      fetchedBy: ''
+      /* purpose は Service Worker がどの画面へ行くかを決める手がかり。 */
+      purpose: feature === 'openurl' ? 'openurl' : 'calendar',
+      fetchedBy: '',
+      openUrl: String(due[i].openUrl || '')
     });
 
     sentRows.push(due[i].__row);
@@ -97,7 +101,8 @@ function collectDueRows_(nowMs) {
       feature: String(row.feature || 'calendar'),
       timing: row.timing,
       title: String(row.title),
-      startTime: toMs_(row.startTime)
+      startTime: toMs_(row.startTime),
+      openUrl: String(row.openUrl || '')
     });
   }
 

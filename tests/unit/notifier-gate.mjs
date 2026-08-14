@@ -211,6 +211,28 @@ async function run() {
       unknownFeature.include === false && unknownFeature.reason === 'unknown-feature',
       unknownFeature.reason,
     );
+
+    /*
+     * カレンダーURL通知アプリ（docs/specs/calendar-url-notifier-requirements-v1.md §4）。
+     * FEATURE_RULES から openurl の行が落ちると、通知が1件も出ない状態になる。
+     * 症状は「テンプレートは動いているのに通知が来ない」で、原因が見えにくい。
+     */
+    const openUrl = decideEvent(makeEvent({ feature: 'openurl' }), SETTINGS);
+    check('openurl は判定を通る', openUrl.include === true && openUrl.feature === 'openurl', openUrl.reason);
+
+    const openUrlDeclined = decideEvent(makeEvent({ feature: 'openurl', status: 'declined' }), SETTINGS);
+    check(
+      'openurl も出欠フィルタに従う',
+      openUrlDeclined.include === false && openUrlDeclined.reason === 'status-off',
+      openUrlDeclined.reason,
+    );
+
+    const openUrlAllDay = decideEvent(makeEvent({ feature: 'openurl', allDay: true }), SETTINGS);
+    check(
+      'openurl も終日予定を落とす',
+      openUrlAllDay.include === false && openUrlAllDay.reason === 'all-day',
+      openUrlAllDay.reason,
+    );
   }
 
   section('設定の正規化');
@@ -351,7 +373,15 @@ async function run() {
   section('匿名化 — 運営サーバーが受け取らないもの');
 
   {
-    const forbidden = ['summary', 'title', 'description', 'attendees', 'email', 'calendarId', 'eventId'];
+    /*
+     * openUrl / url は、カレンダーURL通知アプリが扱う「通知タップ後の行き先」。
+     * 予定の説明欄から取るため、予定名と同じく運営が受け取ってよいものではない
+     * （docs/specs/calendar-url-notifier-requirements-v1.md §2-2）。
+     */
+    const forbidden = [
+      'summary', 'title', 'description', 'attendees', 'email', 'calendarId', 'eventId',
+      'openUrl', 'url',
+    ];
 
     for (const field of forbidden) {
       const result = validateEvents([makeEvent({ [field]: 'なにか' })]);
