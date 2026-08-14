@@ -126,8 +126,19 @@ window.fetch = (url, options) => {
   const urlText = String(url);
   window.__cmFetchCalls.push({ url: urlText, method: options?.method ?? 'GET' });
 
-  /* TSAM AI 認証系（guardPage の verifySession）。 */
-  if (urlText.startsWith('https://script.google.com/')) {
+  /*
+   * TSAM AI 認証系（guardPage の verifySession）。
+   *
+   * verifySession の宛先は auth-verify Worker（キャッシュ付き代理。
+   * public/auth/config.js の verifyApiUrl）で、それ以外の action は
+   * Apps Script 直。どちらも同じ応答形なので、ここでは両方の宛先を
+   * 同じ分岐で受ける。URL だけで判定して Worker 宛を「想定外」に
+   * 落とすと、宛先切替のたびにこのスイートが丸ごと死ぬ（2026-08-14 に
+   * 実際に起きた。auth-screens.mjs の portalStub が action で判定して
+   * いて無傷だったのと対照的だった）。
+   */
+  if (urlText.startsWith('https://script.google.com/')
+    || urlText.startsWith('https://auth-verify.potenitas-lp.workers.dev')) {
     let body = {};
     try { body = JSON.parse(options?.body ?? '{}'); } catch { /* 空のまま扱う */ }
 

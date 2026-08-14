@@ -20,12 +20,17 @@
     - generativelanguage.googleapis.com   … Gemini（議事録の生成）
     - script.google.com /
       script.googleusercontent.com        … TSAM AI 認証（guardPage）
+    - auth-verify.potenitas-lp.workers.dev … セッション検証（verifySession）の
+                                            キャッシュ付き代理。guardPage の
+                                            宛先はここになる（public/auth/
+                                            config.js の verifyApiUrl）。
+                                            *.workers.dev に広げないこと
 
   本アプリは録音・OAuth・外部フォントを使わないため、上記以外は許可しない。
   APIキーは KeyStore（localStorage）だけが扱い、外部へ送るのは Gemini のみ。
   ==================================================================
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com https://auth-verify.potenitas-lp.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
 
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">

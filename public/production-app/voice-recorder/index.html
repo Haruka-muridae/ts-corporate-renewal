@@ -17,7 +17,9 @@
 
   worker-src … 逐次エンコード用の Worker と AudioWorklet を自前で持つため 'self'。
   media-src blob: … 停止後のプレビュー再生（§FR-05）が blob: URL を使う。
-  connect-src … Google API と当社の認証系（Apps Script）に限る。
+  connect-src … Google API と当社の認証系に限る。認証系は Apps Script に加え、
+  セッション検証（verifySession）の宛先である auth-verify Worker
+  （public/auth/config.js の verifyApiUrl）を含む。
 
   通知ゲート（notifier-gate）は 2026-08-11 に外した。カレンダー通知を
   テスト環境へ移設し、**この画面からゲートを呼ぶ経路が無くなった**ため。
@@ -28,7 +30,7 @@
   **ワイルドカード（*.workers.dev）にはしない。** workers.dev は誰でも
   使える共有ドメインで、他人の Worker まで許可することになる。
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://script.google.com https://script.googleusercontent.com https://auth-verify.potenitas-lp.workers.dev; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'">
 
 <!--
   ホーム画面へ追加したときの表示（カレンダー通知の受け口として常駐させる想定）。

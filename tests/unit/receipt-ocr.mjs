@@ -934,11 +934,17 @@ try {
       'generativelanguage.googleapis.com',
       'script.google.com',
       'script.googleusercontent.com',
+      /*
+       * セッション検証（verifySession）の宛先（public/auth/config.js の
+       * verifyApiUrl）。guardPage が呼ぶため connect-src に要る。
+       * CSP と設定の食い違いは frontend.mjs が全ページ横断で検査する。
+       */
+      'auth-verify.potenitas-lp.workers.dev',
     ]);
 
     const outside = [...new Set(hosts)].filter((host) => !allowed.has(host));
 
-    check(`index.html が読む外部ホストは Google だけ（ほか: ${outside.join(', ') || 'なし'}）`,
+    check(`index.html が読む外部ホストは Google と認証系だけ（ほか: ${outside.join(', ') || 'なし'}）`,
       outside.length === 0);
   }
 

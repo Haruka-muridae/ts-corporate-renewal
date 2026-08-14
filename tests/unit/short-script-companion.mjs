@@ -364,13 +364,19 @@ try {
       'https://generativelanguage.googleapis.com',
       'https://script.google.com',
       'https://script.googleusercontent.com',
+      /*
+       * 認証系の一部。セッション検証（verifySession）の宛先
+       * （public/auth/config.js の verifyApiUrl）で、guardPage が呼ぶ。
+       * コンパニオン（127.0.0.1:3000）とは無関係の許可。
+       */
+      'https://auth-verify.potenitas-lp.workers.dev',
       'http://127.0.0.1:3000',
       'http://localhost:3000',
     ];
 
     check('CSP を宣言している', csp !== '');
     check(
-      '**connect-src が従来の許可先のまま（新しい原点を足していない）**',
+      '**connect-src が許可済みの宛先に収まっている（勝手に増やしていない）**',
       connect.trim().split(/\s+/).every((host) => allowedConnect.includes(host)),
       connect,
     );
