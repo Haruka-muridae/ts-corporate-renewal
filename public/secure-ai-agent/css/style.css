@@ -1,0 +1,1256 @@
+/* ==================================================================
+ * セキュアAIエージェント開発環境 導入支援 LP
+ *
+ * デザイントークン・ボタン・カード・FAQ・fade モーション・
+ * アクセシビリティ実装は public/labs/ai-corporate-training/css/style.css を
+ * 複製したもの（複製日: 2026年8月16日）。配色は WCAG AA を実測済みの
+ * 白ベース＋ブルーの組をそのまま使う。
+ *
+ * このページだけにある部品（構成比較図・Agent役割図・セキュリティ原則
+ * カード・Maximum Restriction の初期状態パネル・問い合わせフォーム）を
+ * 末尾に足してある。
+ *
+ * **共通化はしない。** LPは別々に育つ想定で、片方の都合で共有CSSを
+ * 変えるともう片方が壊れる。docs/repository-structure.md §4-1 と同じ理由。
+ *
+ * モバイルファースト。サイズは clamp() で 375px 〜 1440px を連続で埋め、
+ * ブレークポイントは「clamp では表現できないもの」だけに使う。
+ * 色とフォントは必ず :root の変数を経由する。
+ * ================================================================== */
+
+/* ------------------------------------------------------------------
+ * デザイントークン
+ * ------------------------------------------------------------------ */
+:root {
+  --color-primary: #245B8A;
+  /*
+   * 複製元と同じ値。12px の英語ラベルに使っても4種の背景すべてで
+   * 4.5:1（WCAG AA）を満たすことが複製元の qa/ で実測済みの組。
+   */
+  --color-secondary: #567185;
+  --color-pale-blue: #EAF2F7;
+  --color-bg: #FAFAF8;
+  --color-surface: #FFFFFF;
+  --color-text: #202326;
+  --color-text-sub: #687078;
+  --color-border: #E5E8EA;
+  /* 「原則拒否」の状態表示に使う枠色。赤にすると警告に見えるため使わない。 */
+  --color-deny-bg: #F1F4F6;
+
+  /*
+   * Inter を先に置くのは、英数字だけを Inter に落とすため。
+   * Inter は日本語グリフを持たないので、日本語は自動で Zen Kaku へ落ちる。
+   */
+  --font-base: "Inter", "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-en: "Inter", system-ui, sans-serif;
+
+  --container: 760px;
+  --container-wide: 1120px;
+
+  /* 左右 20px（モバイル）〜 40px（デスクトップ）。 */
+  --gutter: clamp(1.25rem, 5vw, 2.5rem);
+  /* 上下 92px（モバイル）〜 140px（デスクトップ）。 */
+  --section-space: clamp(5.75rem, 9vw, 8.75rem);
+
+  /* sticky ヘッダーの実高。アンカー着地位置の計算に使う。 */
+  --header-height: 69px;
+}
+
+/* ------------------------------------------------------------------
+ * ベース
+ * ------------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  /* アンカー先が sticky ヘッダーの下に潜らないようにする。 */
+  scroll-padding-top: calc(var(--header-height) + 1.5rem);
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-base);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.85;
+  letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+dl,
+dd {
+  margin: 0;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------------
+ * レイアウト
+ * ------------------------------------------------------------------ */
+.container {
+  width: 100%;
+  max-width: var(--container);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* 図解と料金カードだけ、本文より広い幅を使う。 */
+.container--wide {
+  max-width: var(--container-wide);
+}
+
+.section {
+  padding-block: var(--section-space);
+}
+
+.section--surface { background: var(--color-surface); }
+.section--pale-blue { background: var(--color-pale-blue); }
+
+/*
+ * 改行はデスクトップでの読みやすさのための指定。
+ * 狭い画面では自然に折り返させる。
+ * br-lg … 768px 以上だけ出る ／ br-sp … 600px 以下だけ出る。
+ * **1つの br に br-lg と br-sp を併記しないこと。** どちらが効くかが
+ * CSS の記述順で決まってしまう。両方要るときは br を2つ並べる。
+ */
+.br-lg { display: none; }
+
+@media (min-width: 768px) {
+  .br-lg { display: inline; }
+}
+
+.br-sp { display: none; }
+
+@media (max-width: 600px) {
+  .br-sp { display: inline; }
+}
+
+/* ------------------------------------------------------------------
+ * タイポグラフィ
+ * ------------------------------------------------------------------ */
+.eyebrow {
+  font-family: var(--font-en);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+  margin-bottom: 1.5rem;
+}
+
+/* 折り返しで最後の行に1〜2文字だけ残さない。 */
+.h-hero,
+.h-section,
+.value-message {
+  text-wrap: balance;
+}
+
+/*
+ * 36px（モバイル）〜 46px（デスクトップ）。
+ * 複製元は最大 52px だが、このLPのメインコピーは1行目が14文字あり、
+ * 52px だと本文幅（680px）に収まらず意図しない位置で折れる。
+ * 「AIを賢くするだけではなく、」が1行で収まる上限に合わせた。
+ */
+.h-hero {
+  font-size: clamp(2.25rem, 5.4vw, 2.875rem);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+
+/* 26px（モバイル）〜 32px（デスクトップ）。 */
+.h-section {
+  font-size: clamp(1.625rem, 3.2vw, 2rem);
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+.em-primary {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.em {
+  font-weight: 500;
+}
+
+/*
+ * 淡色背景（Pale Blue）の上に直接置く補助テキストは本文色へ上げる。
+ * --color-text-sub は淡色の上で 4.44:1 になり AA にわずかに届かないため
+ * （複製元の実測に従う。白カードの中は白背景なので対象外）。
+ */
+.section--pale-blue .lead-sub,
+.section--pale-blue .closing-note {
+  color: var(--color-text);
+}
+
+/* 各セクション見出し直後の導入文。 */
+.lead-sub {
+  margin-top: 2rem;
+  color: var(--color-text-sub);
+}
+
+/* セクション末尾の締め。 */
+.closing-note {
+  margin-top: 2.5rem;
+  font-size: 1.0625rem;
+  line-height: 1.9;
+}
+
+/* セクション途中に置く CTA ボタンの行。 */
+.cta-row {
+  margin-top: 3rem;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------
+ * ボタン
+ * ------------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.875rem 2.25rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #FFFFFF;
+  font-family: var(--font-base);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 250ms ease, box-shadow 250ms ease;
+}
+
+/* 色は変えず、浮き上がりだけで反応を返す。 */
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(36, 91, 138, 0.16);
+}
+
+/* 送信中の二重送信防止。押せないことを透明度でも示す。 */
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn--sm {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------------
+ * ヘッダー
+ * ------------------------------------------------------------------ */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(250, 250, 248, 0.82);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(229, 232, 234, 0.7);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: var(--container-wide);
+  margin-inline: auto;
+  padding: 10px var(--gutter);
+}
+
+.site-name {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  /*
+   * flex アイテムの既定（min-width: auto）だと内容幅より縮まず、
+   * サイト名が長いこのLPでは 375px でヘッダー全体が画面からはみ出す
+   * （ページ全体に横スクロールが出る）。0 にして2行への折り返しを許す。
+   */
+  min-width: 0;
+}
+
+/* 狭い画面ではサイト名を小さくし、折り返しても2行で収まるようにする。 */
+@media (max-width: 480px) {
+  .site-name {
+    font-size: 0.8125rem;
+    letter-spacing: 0.01em;
+  }
+
+  .btn--sm {
+    padding: 0.75rem 1.125rem;
+    font-size: 0.8125rem;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Hero
+ * ------------------------------------------------------------------ */
+.hero {
+  text-align: center;
+}
+
+.hero-lead {
+  margin-top: 1.75rem;
+  margin-inline: auto;
+  max-width: 36em;
+  color: var(--color-text-sub);
+  line-height: 1.9;
+}
+
+.hero-meta {
+  margin-top: 2rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0.08em;
+  color: var(--color-text-sub);
+}
+
+.hero .btn {
+  margin-top: 2.5rem;
+}
+
+/* ------------------------------------------------------------------
+ * リスク提示（罫線区切りのリスト）
+ * ------------------------------------------------------------------ */
+.line-list {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.line-list li {
+  padding-block: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/*
+ * 顧客が抱く「問い」のリスト。断定ではなく疑問文の引用として見せるため、
+ * 罫線リストと区別して鉤括弧の書体感を残したカードにする。
+ */
+.question-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2.5rem;
+}
+
+.question-list li {
+  padding: 1rem 1.25rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  line-height: 1.8;
+}
+
+/* ------------------------------------------------------------------
+ * 価値（考え方の転換）
+ * ------------------------------------------------------------------ */
+.value-strike {
+  color: var(--color-text-sub);
+}
+
+.value-strike s {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.1em;
+}
+
+/* 28px 〜 36px。見出しより大きくし、このセクションの主役にする。 */
+.value-message {
+  margin-top: 1rem;
+  font-size: clamp(1.75rem, 3.8vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+}
+
+.value-note {
+  margin-top: 2.25rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * 構成比較図（一般的な利用 vs 本サービス）
+ * ------------------------------------------------------------------
+ * 外部画像を使わず、ノード（カード）と矢印（記号）だけで描く。
+ * 図は ol で「上から下へ流れる」順序を持たせ、矢印は装飾として
+ * aria-hidden にする（順序の意味は ol が担保している）。
+ * ------------------------------------------------------------------ */
+.compare-grid {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+/* 図が縦に2枚並ぶと比較しづらいので、余裕がある幅では横に並べる。 */
+@media (min-width: 768px) {
+  .compare-grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.compare-panel {
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+}
+
+/* 本サービス側の枠だけ主色にして「こちらが提案」だと示す。 */
+.compare-panel--ours {
+  border-color: var(--color-primary);
+}
+
+.compare-title {
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.flow-stack {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-node {
+  width: 100%;
+  max-width: 320px;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+/* 英語のノード名は Inter で。 */
+.flow-node,
+.chip {
+  font-family: var(--font-base);
+}
+
+.flow-node--accent {
+  border-color: var(--color-primary);
+  background: var(--color-pale-blue);
+}
+
+.flow-arrow {
+  color: var(--color-secondary);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+/*
+ * Security Enforcement Layer。中に制御部品のチップを並べる。
+ * ここが図の主役なので、唯一の塗りつぶし主色にする。
+ */
+.flow-layer {
+  width: 100%;
+  max-width: 320px;
+  padding: 0.875rem 1rem 1rem;
+  border-radius: 12px;
+  background: var(--color-primary);
+  text-align: center;
+}
+
+.flow-layer-name {
+  color: #FFFFFF;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.layer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  padding: 0.2rem 0.625rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  color: #FFFFFF;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  line-height: 1.6;
+}
+
+.compare-caption {
+  margin-top: 2.5rem;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------
+ * Agent 役割分担図
+ * ------------------------------------------------------------------ */
+.agent-grid {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+@media (min-width: 768px) {
+  .agent-grid {
+    grid-template-columns: repeat(3, 1fr);
+    align-items: start;
+  }
+}
+
+.agent-panel {
+  padding: clamp(1.5rem, 4vw, 2rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+}
+
+.agent-panel .flow-stack {
+  margin-top: 1.25rem;
+}
+
+.agent-panel .flow-node {
+  max-width: none;
+}
+
+/* 並走するレビュー役（Critic）。主系の下に半歩ずらして添える。 */
+.flow-node--aside {
+  border-style: dashed;
+  background: var(--color-surface);
+  color: var(--color-text-sub);
+}
+
+/*
+ * モデル対応表。表組みは幅が狭いと崩れるため dl の縦積みにし、
+ * 768px 以上でだけ2カラムのグリッドへ広げる。
+ */
+.model-map {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2.5rem;
+}
+
+@media (min-width: 768px) {
+  .model-map {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.model-map > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.model-map dt {
+  flex: none;
+  min-width: 4.5em;
+  font-family: var(--font-en);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.model-map dd {
+  color: var(--color-text-sub);
+  font-size: 0.9375rem;
+}
+
+/* ------------------------------------------------------------------
+ * セキュリティ原則カード
+ * ------------------------------------------------------------------ */
+.sec-grid {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 3rem;
+}
+
+@media (min-width: 600px) {
+  .sec-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1024px) {
+  .sec-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.sec-card {
+  padding: clamp(1.5rem, 4vw, 2rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+}
+
+.sec-card-title {
+  font-family: var(--font-en);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-primary);
+}
+
+.sec-card-sub {
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  color: var(--color-secondary);
+}
+
+.sec-card-body {
+  margin-top: 0.875rem;
+  font-size: 0.9375rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * Maximum Restriction（初期状態パネル）
+ * ------------------------------------------------------------------
+ * 「許可一覧」ではなく「拒否から始まる状態」を見せる図。
+ * 各行は 項目名＋初期状態 の対で、状態は小さな角丸ラベルにする。
+ * ------------------------------------------------------------------ */
+.policy-panel {
+  margin-top: 3rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+}
+
+.policy-panel-title {
+  font-family: var(--font-en);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+  text-align: center;
+}
+
+.policy-list {
+  margin: 1.25rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.policy-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-block: 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.policy-list dt {
+  font-family: var(--font-en);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.policy-list dd {
+  font-size: 0.875rem;
+  letter-spacing: 0.03em;
+}
+
+/*
+ * 状態ラベル。拒否＝グレー、限定許可＝淡青。
+ * 赤や黄の警告色は使わない（初期状態が「正常」であることを示すため）。
+ */
+.policy-state {
+  display: inline-block;
+  padding: 0.125rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-deny-bg);
+  color: var(--color-text-sub);
+}
+
+.policy-state--scoped {
+  border-color: var(--color-primary);
+  background: var(--color-pale-blue);
+  color: var(--color-primary);
+}
+
+/* ------------------------------------------------------------------
+ * 対応サービス（タグ）
+ * ------------------------------------------------------------------ */
+.tag-group-title {
+  margin-top: 2.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--color-text-sub);
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.tag-list li {
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  color: var(--color-text-sub);
+}
+
+.tag-note {
+  margin-top: 2rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * 導入の流れ
+ * ------------------------------------------------------------------ */
+/* ol はベースのリセット（ul のみ）に含まれないため、ここで潰す。 */
+.step-list {
+  margin: 2.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+  counter-reset: step;
+}
+
+.step-list li {
+  padding-block: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  counter-increment: step;
+}
+
+.step-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  line-height: 1.7;
+  letter-spacing: 0.03em;
+}
+
+/* 番号は ol の意味づけが持つ。ここは見た目の番号だけを出す。 */
+.step-title::before {
+  content: counter(step, decimal-leading-zero);
+  flex: none;
+  margin-right: 0.75rem;
+  font-family: var(--font-en);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--color-secondary);
+}
+
+.step-body {
+  margin-top: 0.5rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * 料金
+ * ------------------------------------------------------------------ */
+.price-grid {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+@media (min-width: 768px) {
+  .price-grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.price-card {
+  padding: clamp(2rem, 5vw, 3rem) clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  text-align: center;
+}
+
+.price-plan-name {
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.price-amount {
+  margin-top: 1rem;
+  font-family: var(--font-en);
+  font-size: clamp(2.25rem, 6vw, 3rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.price-unit {
+  margin-left: 0.4rem;
+  font-family: var(--font-base);
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--color-text-sub);
+}
+
+.price-includes {
+  display: inline-grid;
+  gap: 0.5rem;
+  margin-top: 1.75rem;
+  text-align: left;
+}
+
+.price-includes li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+.price-includes li::before {
+  content: "\2713"; /* ✓ */
+  flex: none;
+  color: var(--color-secondary);
+  font-size: 0.875rem;
+}
+
+/*
+ * 範囲の注記。**小さくはするが、薄くして隠さない。**
+ * 白カードの上なので --color-text-sub で AA を満たす（複製元の実測）。
+ */
+.price-note {
+  margin-top: 1.75rem;
+  margin-inline: auto;
+  max-width: 34em;
+  font-size: 0.8125rem;
+  line-height: 1.85;
+  color: var(--color-text-sub);
+  text-align: left;
+}
+
+/*
+ * 別途見積の一覧。料金カードの外に独立して置き、
+ * 「含まれない範囲」が注記に埋もれないようにする。
+ */
+.extra-scope {
+  margin-top: 2.5rem;
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-bg);
+}
+
+.extra-scope-title {
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.extra-scope-list {
+  display: grid;
+  gap: 0.375rem;
+  margin-top: 1rem;
+}
+
+@media (min-width: 600px) {
+  .extra-scope-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.extra-scope-list li {
+  position: relative;
+  padding-left: 1.125rem;
+  font-size: 0.9375rem;
+  color: var(--color-text-sub);
+}
+
+/* 中黒の代わりの印。色は罫線と同系にして目立たせない。 */
+.extra-scope-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.8em;
+  width: 6px;
+  height: 1px;
+  background: var(--color-secondary);
+}
+
+.extra-scope-note {
+  margin-top: 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * FAQ
+ * ------------------------------------------------------------------ */
+.faq-list {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.faq-item summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-height: 44px;
+  padding-block: 1.25rem;
+  font-weight: 500;
+  line-height: 1.7;
+  list-style: none;
+  cursor: pointer;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+/* 開閉の目印。「押せば開く」ことを伝えるための表示。 */
+.faq-item summary::after {
+  content: "+";
+  flex: none;
+  font-family: var(--font-en);
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--color-secondary);
+}
+
+.faq-item[open] summary::after {
+  content: "\2212"; /* 全角ではないマイナス記号。+ と同じ幅で収まる。 */
+}
+
+.faq-answer {
+  padding-bottom: 1.5rem;
+  padding-right: 2.5rem;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * 問い合わせフォーム
+ * ------------------------------------------------------------------ */
+.contact {
+  text-align: center;
+}
+
+.contact-lead {
+  margin-top: 1.75rem;
+}
+
+.contact-form {
+  margin-top: 3rem;
+  padding: clamp(1.75rem, 5vw, 3rem) clamp(1.25rem, 4vw, 2.5rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  text-align: left;
+}
+
+.field {
+  margin-top: 1.5rem;
+}
+
+/* fieldset をレイアウト上ただの .field として扱う。 */
+.field--group {
+  border: 0;
+  padding: 0;
+  margin-inline: 0;
+}
+
+.field:first-child {
+  margin-top: 0;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+/* 必須の印。色だけに頼らず「必須」と文字で書く。 */
+.field-required {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-primary);
+}
+
+.field-optional {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-sub);
+}
+
+.field input[type="text"],
+.field input[type="email"],
+.field select,
+.field textarea {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-base);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.field textarea {
+  min-height: 7.5rem;
+  resize: vertical;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* 接続したいサービスの複数選択。 */
+.check-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1rem;
+  margin-top: 0.75rem;
+  border: 0;
+  padding: 0;
+}
+
+@media (min-width: 600px) {
+  .check-group {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.check-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.check-group input {
+  width: 1.125rem;
+  height: 1.125rem;
+  accent-color: var(--color-primary);
+}
+
+/*
+ * ボット対策のおとり欄。人間には見せず、入力補助にも拾わせない。
+ * display:none にすると単純なボットも飛ばすことがあるため、画面外へ出す。
+ */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.contact-form .btn {
+  margin-top: 2rem;
+  width: 100%;
+}
+
+@media (min-width: 600px) {
+  .contact-form .btn {
+    width: auto;
+    min-width: 280px;
+  }
+}
+
+.form-actions {
+  text-align: center;
+}
+
+/* 送信結果。成功・失敗どちらも色に頼らず文言で伝える。 */
+.form-status {
+  margin-top: 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.form-status a {
+  color: var(--color-primary);
+}
+
+.contact-alt {
+  margin-top: 2rem;
+  font-size: 0.875rem;
+  color: var(--color-text-sub);
+}
+
+.contact-alt a {
+  color: var(--color-secondary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+/* ------------------------------------------------------------------
+ * コーポレートサイトへのクロスリンク（フッター直上）
+ * ------------------------------------------------------------------ */
+.cross-link {
+  padding-top: 3.5rem;
+}
+
+.cross-link > .container {
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cross-link p {
+  font-size: 0.875rem;
+  line-height: 1.9;
+  text-align: center;
+  text-wrap: balance;
+  line-break: strict;
+  color: var(--color-text-sub);
+}
+
+.cross-link a {
+  color: var(--color-secondary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.cross-link a:hover {
+  color: var(--color-primary);
+}
+
+/* ------------------------------------------------------------------
+ * フッター
+ * ------------------------------------------------------------------ */
+.site-footer {
+  padding-block: 3rem;
+}
+
+.site-footer p {
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: var(--color-text-sub);
+}
+
+/* ------------------------------------------------------------------
+ * スクロール表示（Fade Up）
+ * ------------------------------------------------------------------
+ * .js が付いているとき（＝JavaScript が動くとき）だけ隠す。
+ * JS が無効なら最初から見えている状態が既定になる。
+ * ------------------------------------------------------------------ */
+.js .reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 700ms ease, transform 700ms ease;
+}
+
+.js .reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ------------------------------------------------------------------
+ * アニメーションの軽減
+ * ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* 表示のきっかけを待たず、最初から見えている状態にする。 */
+  .js .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .btn:hover {
+    transform: none;
+  }
+}
