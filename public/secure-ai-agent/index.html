@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>セキュアAIエージェント開発環境 導入支援</title>
+<meta name="description" content="Claude Codeを中核に、AI Agent・MCP・OAuth・外部サービス連携を、最小権限・Secret分離・Human Approvalを前提として設計・導入。初期導入100万円（税別）〜、運用保守 月額10万円（税別）〜。">
+
+<link rel="canonical" href="https://tsam-ai.com/secure-ai-agent/">
+
+<!-- OGP。文言は上の title / description をそのまま使う（新しいコピーを作らない）。 -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tsam-ai.com/secure-ai-agent/">
+<meta property="og:title" content="セキュアAIエージェント開発環境 導入支援">
+<meta property="og:description" content="Claude Codeを中核に、AI Agent・MCP・OAuth・外部サービス連携を、最小権限・Secret分離・Human Approvalを前提として設計・導入。初期導入100万円（税別）〜、運用保守 月額10万円（税別）〜。">
+<meta property="og:image" content="https://tsam-ai.com/secure-ai-agent/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="css/style.css">
+
+<!--
+  スクロール表示は JavaScript が動く環境でだけ「隠してから出す」。
+  この1行が無いと、JS を切った利用者に本文が一切見えなくなる。
+-->
+<script>document.documentElement.classList.add('js');</script>
+
+<!--
+  構造化データ。
+  FAQPage の質問・回答は本文の <details> と一字一句同じでなければならない
+  （食い違うと Google はスパムとみなす）。
+
+  AggregateRating / Review は使わない（第三者評価が存在しないため）。
+  セキュリティ認証（ISO 27001 / SOC 2 等）に関する記述は入れない
+  （取得していないため。要件定義書 §19）。
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Service",
+      "name": "セキュアAIエージェント開発環境 導入支援",
+      "description": "Claude Codeを中核に、AI Agent・MCP・OAuth・外部サービス連携を、最小権限・Secret分離・Human Approvalを前提として設計・導入するサービス。",
+      "url": "https://tsam-ai.com/secure-ai-agent/",
+      "provider": {
+        "@type": "Organization",
+        "name": "TSアセットマネジメント合同会社"
+      },
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "初期導入",
+          "priceSpecification": {
+            "@type": "PriceSpecification",
+            "minPrice": 1000000,
+            "priceCurrency": "JPY",
+            "valueAddedTaxIncluded": false
+          }
+        },
+        {
+          "@type": "Offer",
+          "name": "運用保守",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "minPrice": 100000,
+            "priceCurrency": "JPY",
+            "valueAddedTaxIncluded": false,
+            "billingDuration": 1,
+            "unitCode": "MON"
+          }
+        }
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "ホーム", "item": "https://tsam-ai.com/" },
+        { "@type": "ListItem", "position": 2, "name": "セキュアAIエージェント開発環境 導入支援", "item": "https://tsam-ai.com/secure-ai-agent/" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "AIにAPIキーを渡すのですか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "通常Agentが平文のSecretへ恒常的にアクセスする構成を避け、Credential StoreやCredential Broker等を利用して分離する設計を基本とします。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "AIが勝手にメールを送ることはありませんか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "初期構成では外部への書き込みを制限し、送信・削除・共有等の高リスク操作についてHuman Approvalを要求する設計を基本とします。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Google Workspace以外にも対応できますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "MCPまたは公式API等が利用できるサービスについて個別に検討します。追加連携は別途費用が発生する場合があります。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Claude以外のAIも利用できますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "用途・セキュリティ要件・モデル特性に応じて複数モデルを役割分担させることを想定しています。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "導入後に権限を増やせますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "可能です。ただし初期状態では権限を限定し、業務上必要になった権限をリスク確認後に段階的に追加する方式を基本とします。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "100万円ですべてのシステム開発が含まれますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "含まれません。100万円は標準的な初期設計・導入を基準とした価格です。独自システム開発、新規サービス連携、大規模なカスタマイズ等は別途見積となります。"
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <p class="site-name">セキュアAIエージェント開発環境</p>
+    <a class="btn btn--sm" href="#contact">導入について相談する</a>
+  </div>
+</header>
+
+<main>
+
+  <!-- ==============================================================
+       SECTION 1: ファーストビュー
+       ============================================================== -->
+  <section class="section hero" aria-labelledby="hero-title">
+    <div class="container">
+      <p class="eyebrow reveal">Secure AI Agent Environment</p>
+      <h1 class="h-hero reveal" id="hero-title">AIを賢くするだけではなく、<br class="br-lg">AIが安全に働ける環境を。</h1>
+      <p class="hero-lead reveal">Claude Codeを中核に、AI Agent・MCP・OAuth・外部サービス連携を、権限管理・Secret分離・Human Approvalを前提として設計・導入します。</p>
+      <p class="hero-meta reveal">初期導入 100万円（税別）〜 ｜ 運用保守 月額10万円（税別）〜</p>
+      <!-- CTA 1/4（ファーストビュー） -->
+      <p class="reveal"><a class="btn" href="#contact">導入について相談する</a></p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       SECTION 2: AI Agent 導入の新しいリスク
+       ============================================================== -->
+  <section class="section section--surface" aria-labelledby="risk-title">
+    <div class="container">
+      <p class="eyebrow reveal">New Risks</p>
+      <h2 class="h-section reveal" id="risk-title">AI Agentが「実行」を始めると、<br class="br-lg">新しいリスクが生まれる。</h2>
+
+      <p class="lead-sub reveal">AIがチャットに答えるだけなら、できることは限られています。しかしAI Agentが業務を実行するようになると、AIの誤判断がそのまま実際の業務操作につながります。</p>
+
+      <ul class="line-list reveal">
+        <li>メールを読む・送る</li>
+        <li>カレンダーを操作する</li>
+        <li>Driveのファイルへアクセスする</li>
+        <li>GitHubを操作する</li>
+        <li>APIを実行する</li>
+        <li>ファイルを作成・削除する</li>
+      </ul>
+
+      <p class="closing-note reveal">そのとき、こんな不安が現実の問題になります。</p>
+
+      <ul class="question-list reveal">
+        <li>「AIにメールやGoogle Driveを操作させて、本当に大丈夫なのか？」</li>
+        <li>「AIにAPIキーやOAuth Tokenを見せても問題ないのか？」</li>
+        <li>「AIが間違えてメールを送信したら？」</li>
+        <li>「外部文書に悪意のある指示が含まれていたら？」</li>
+        <li>「AIが顧客Aの情報を顧客Bへ出してしまったら？」</li>
+        <li>「AI Agentにどこまで権限を与えるべきなのか？」</li>
+      </ul>
+
+      <p class="closing-note reveal"><span class="em">「便利さ」と「権限」は別の問題です。</span>AIの性能がどれだけ上がっても、この問題はAI自身には解決できません。</p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       考え方の転換（お願いではなく、仕組みで制御する）
+       ============================================================== -->
+  <section class="section" aria-labelledby="idea-eyebrow">
+    <div class="container">
+      <p class="eyebrow reveal" id="idea-eyebrow">Core Idea</p>
+      <p class="value-strike reveal"><s>「AIに、安全に行動するようお願いする」</s>のではなく、</p>
+      <p class="value-message reveal"><span class="em-primary">AIが間違えることを前提に、<br class="br-lg">システム側で制御する。</span></p>
+      <p class="value-note reveal">AIに仕事を任せるなら、権限までAI任せにしない。本サービスが提供するのは、AI Agentを実業務へ接続するための安全な実行基盤です。</p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       SECTION 3: 一般的なAI利用との違い（構成比較図）
+       ============================================================== -->
+  <section class="section section--pale-blue" aria-labelledby="compare-title">
+    <div class="container container--wide">
+      <p class="eyebrow reveal">Architecture</p>
+      <h2 class="h-section reveal" id="compare-title">AIと実行のあいだに、<br class="br-sp">制御の層を置く。</h2>
+
+      <!--
+        図はノードと矢印の自作（外部画像を使わない）。
+        流れの順序は ol が持ち、矢印記号は装飾として aria-hidden にする。
+      -->
+      <div class="compare-grid">
+        <div class="compare-panel reveal">
+          <h3 class="compare-title">一般的なAI利用</h3>
+          <ol class="flow-stack" aria-label="一般的なAI利用の流れ">
+            <li class="flow-node">User</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node">AI</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node">External Service</li>
+          </ol>
+          <p class="sec-card-body">AIの判断が、そのまま外部サービスの操作になる。</p>
+        </div>
+
+        <div class="compare-panel compare-panel--ours reveal">
+          <h3 class="compare-title">本サービスの構成</h3>
+          <ol class="flow-stack" aria-label="本サービスの実行の流れ">
+            <li class="flow-node">User</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node">AI Agent</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-layer">
+              <span class="flow-layer-name">Security Enforcement Layer</span>
+              <ul class="layer-chips">
+                <li class="chip">Policy Gateway</li>
+                <li class="chip">Human Approval</li>
+                <li class="chip">Secret Boundary</li>
+                <li class="chip">Audit Log</li>
+                <li class="chip">Sandbox</li>
+              </ul>
+            </li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node">MCP / API / CLI</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node">External Service</li>
+          </ol>
+          <p class="sec-card-body">実行の可否は、AIとは独立した制御層が決める。</p>
+        </div>
+      </div>
+
+      <p class="closing-note compare-caption reveal">「AIが安全だと判断したから実行する」のではなく、<br class="br-lg"><span class="em">AIとは独立したシステム側の制御</span>によって実行可否を決めます。</p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       AIモデルの役割分担
+       ============================================================== -->
+  <section class="section section--surface" aria-labelledby="roles-title">
+    <div class="container container--wide">
+      <p class="eyebrow reveal">Agent Roles</p>
+      <h2 class="h-section reveal" id="roles-title">処理の重さではなく、<br class="br-sp">責任で分ける。</h2>
+
+      <p class="lead-sub reveal">複数のAIモデルを使うこと自体が目的ではありません。判断・実装・検証・秘密情報の取り扱いを別々のAgentに分け、1つのAIにすべての権限と責任が集中しない構成にします。</p>
+
+      <div class="agent-grid">
+        <div class="agent-panel reveal">
+          <h3 class="compare-title">通常の業務</h3>
+          <ol class="flow-stack" aria-label="通常の業務の流れ">
+            <li class="flow-node">User</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node flow-node--accent">Executive Agent</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node">Lead Agent</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node">Worker Agent</li>
+          </ol>
+          <p class="sec-card-body">統括役が計画し、実務役が実行する。</p>
+        </div>
+
+        <div class="agent-panel reveal">
+          <h3 class="compare-title">重要な判断</h3>
+          <ol class="flow-stack" aria-label="重要な判断の流れ">
+            <li class="flow-node">Lead Agent</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node flow-node--aside">Critic Agent による検証</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node flow-node--accent">Executive Agent の最終判断</li>
+          </ol>
+          <p class="sec-card-body">独立した検証役を挟み、1つのAIの結論だけで進めない。</p>
+        </div>
+
+        <div class="agent-panel reveal">
+          <h3 class="compare-title">秘密情報の処理</h3>
+          <ol class="flow-stack" aria-label="秘密情報の処理の流れ">
+            <li class="flow-node">通常 Agent</li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-layer"><span class="flow-layer-name">Secret Boundary</span></li>
+            <li class="flow-arrow" aria-hidden="true">↓</li>
+            <li class="flow-node">Secure Agent / Credential Broker</li>
+          </ol>
+          <p class="sec-card-body">通常AgentはSecretの生値に触れず、境界の先に委譲する。</p>
+        </div>
+      </div>
+
+      <!--
+        現在の想定構成。特定モデルへの恒久的な依存を示さない
+        （要件定義書 §8）。文言を変えるときはこの前提を崩さないこと。
+      -->
+      <dl class="model-map reveal">
+        <div><dt>Fable</dt><dd>Executive — 要件の裁定・最終判断</dd></div>
+        <div><dt>Opus</dt><dd>Lead / Critic — 計画・難所の実装・検証</dd></div>
+        <div><dt>Sonnet</dt><dd>Worker — 通常の実装・調査</dd></div>
+        <div><dt>Codex</dt><dd>Secure — 秘密情報境界内の処理</dd></div>
+      </dl>
+
+      <p class="tag-note reveal">※ 現在の想定構成です。特定のモデルに恒久的に依存せず、技術の進化に応じて構成を変更できるように設計します。</p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       セキュリティ設計（7つの原則）
+       ============================================================== -->
+  <section class="section" aria-labelledby="security-title">
+    <div class="container container--wide">
+      <p class="eyebrow reveal">Security by Design</p>
+      <h2 class="h-section reveal" id="security-title">抽象的な安心ではなく、<br class="br-sp">具体的な設計で。</h2>
+
+      <p class="lead-sub reveal">本サービスのセキュリティは、強さの主張ではなく、リスクを抑えるための具体的な設計思想の組み合わせです。</p>
+
+      <div class="sec-grid">
+        <article class="sec-card reveal">
+          <h3 class="sec-card-title">Least Privilege</h3>
+          <p class="sec-card-sub">最小権限</p>
+          <p class="sec-card-body">必要以上の権限をAIへ与えません。業務に要る範囲だけを、対象を絞って許可します。</p>
+        </article>
+        <article class="sec-card reveal">
+          <h3 class="sec-card-title">Read-only First</h3>
+          <p class="sec-card-sub">閲覧から始める</p>
+          <p class="sec-card-body">初期導入では可能な限り閲覧権限から開始し、書き込みは必要になってから検討します。</p>
+        </article>
+        <article class="sec-card reveal">
+          <h3 class="sec-card-title">Human Approval</h3>
+          <p class="sec-card-sub">人間による承認</p>
+          <p class="sec-card-body">送信・削除・共有・権限変更などの高リスク操作は、人間による承認を前提とします。</p>
+        </article>
+        <article class="sec-card reveal">
+          <h3 class="sec-card-title">Secret Separation</h3>
+          <p class="sec-card-sub">Secretの分離</p>
+          <p class="sec-card-body">API Key・Token・Passwordなどを、通常のAIコンテキストから分離して管理します。</p>
+        </article>
+        <article class="sec-card reveal">
+          <h3 class="sec-card-title">Sandbox</h3>
+          <p class="sec-card-sub">隔離された実行環境</p>
+          <p class="sec-card-body">秘密情報を扱う処理や検証中の操作は、隔離された実行環境の中で行います。</p>
+        </article>
+        <article class="sec-card reveal">
+          <h3 class="sec-card-title">Prompt Injection 対策</h3>
+          <p class="sec-card-sub">外部情報は命令にしない</p>
+          <p class="sec-card-body">メール・文書・Webページなどの外部情報を「命令」ではなくUntrusted Dataとして扱います。</p>
+        </article>
+        <article class="sec-card reveal">
+          <h3 class="sec-card-title">Auditability</h3>
+          <p class="sec-card-sub">監査可能性</p>
+          <p class="sec-card-body">誰が、どのAI・ツールを通じて、何を実行したかを追跡できる構成を目指します。</p>
+        </article>
+      </div>
+
+      <!-- CTA 2/4（セキュリティ説明後） -->
+      <p class="cta-row reveal"><a class="btn" href="#contact">導入について相談する</a></p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       Maximum Restriction（初期状態）
+       ============================================================== -->
+  <section class="section section--pale-blue" aria-labelledby="restriction-title">
+    <div class="container">
+      <p class="eyebrow reveal">Maximum Restriction</p>
+      <h2 class="h-section reveal" id="restriction-title">最初から何でも許可しない。<br class="br-lg">必要になったものだけ解禁する。</h2>
+
+      <p class="lead-sub reveal">新規導入は、次の初期状態から始めます。業務上必要になった機能について、目的とリスクを確認しながら段階的に許可していきます。</p>
+
+      <!-- 初期状態のポリシー。図解として自作（外部画像を使わない）。 -->
+      <div class="policy-panel reveal">
+        <p class="policy-panel-title">Initial State</p>
+        <dl class="policy-list">
+          <div><dt>Filesystem</dt><dd><span class="policy-state">原則拒否</span></dd></div>
+          <div><dt>Network</dt><dd><span class="policy-state">原則拒否</span></dd></div>
+          <div><dt>Secret</dt><dd><span class="policy-state">直接取得を原則拒否</span></dd></div>
+          <div><dt>Command</dt><dd><span class="policy-state policy-state--scoped">許可されたもののみ</span></dd></div>
+          <div><dt>External Write</dt><dd><span class="policy-state">原則拒否</span></dd></div>
+          <div><dt>Tenant Access</dt><dd><span class="policy-state policy-state--scoped">対象顧客のみ</span></dd></div>
+          <div><dt>Sandbox</dt><dd><span class="policy-state policy-state--scoped">タスク終了後破棄</span></dd></div>
+        </dl>
+      </div>
+
+      <p class="closing-note reveal">拒否から始まる設計（deny-by-default）だからこそ、「なぜこの権限を許可したのか」を1つずつ説明できる状態を保てます。</p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       対応サービス
+       ============================================================== -->
+  <section class="section section--surface" aria-labelledby="services-title">
+    <div class="container">
+      <p class="eyebrow reveal">Integrations</p>
+      <h2 class="h-section reveal" id="services-title">業務で使うサービスと、<br class="br-sp">安全につなぐ。</h2>
+
+      <p class="tag-group-title reveal">初期対応候補</p>
+      <ul class="tag-list reveal">
+        <li>Gmail</li>
+        <li>Google Calendar</li>
+        <li>Google Drive</li>
+        <li>Google Docs</li>
+        <li>Google Sheets</li>
+        <li>GitHub</li>
+      </ul>
+
+      <p class="tag-group-title reveal">追加対応候補</p>
+      <ul class="tag-list reveal">
+        <li>Slack</li>
+        <li>Notion</li>
+        <li>その他 MCP / API 対応サービス</li>
+      </ul>
+
+      <p class="tag-note reveal">※ 追加サービスとの接続は、要件によって別途見積となる場合があります。</p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       導入フロー
+       ============================================================== -->
+  <section class="section" aria-labelledby="steps-title">
+    <div class="container">
+      <p class="eyebrow reveal">Steps</p>
+      <h2 class="h-section reveal" id="steps-title">導入までの流れ。</h2>
+
+      <ol class="step-list reveal">
+        <li>
+          <p class="step-title">ヒアリング</p>
+          <p class="step-body">業務内容、AIへ任せたい作業、利用サービス、セキュリティ要件を確認します。</p>
+        </li>
+        <li>
+          <p class="step-title">権限・アーキテクチャ設計</p>
+          <p class="step-body">Agent構成、MCP / API、OAuth Scope、Human Approvalなどを設計します。</p>
+        </li>
+        <li>
+          <p class="step-title">初期環境構築</p>
+          <p class="step-body">Claude Codeを中心とした開発・実行環境を構築します。</p>
+        </li>
+        <li>
+          <p class="step-title">外部サービス連携</p>
+          <p class="step-body">必要なGoogle Workspaceなどとの接続を設定します。</p>
+        </li>
+        <li>
+          <p class="step-title">セキュリティ設定・試験</p>
+          <p class="step-body">Secret分離、権限制御、Sandbox、Prompt Injection対策などについて確認します。</p>
+        </li>
+        <li>
+          <p class="step-title">運用開始</p>
+          <p class="step-body">Maximum Restrictionを基本状態として運用を開始します。</p>
+        </li>
+        <li>
+          <p class="step-title">段階的改善</p>
+          <p class="step-body">実際の利用状況を確認しながら、必要な機能・権限のみを追加します。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       料金
+       ============================================================== -->
+  <section class="section section--pale-blue" id="price" aria-labelledby="price-title">
+    <div class="container container--wide">
+      <p class="eyebrow reveal">Pricing</p>
+      <h2 class="h-section reveal" id="price-title">料金。</h2>
+
+      <p class="lead-sub reveal">お支払いいただく対象は、ツールの設定作業ではなく、AI Agent設計・外部サービス接続・権限制御・Secret管理・セキュリティ設計・運用設計を含む環境全体です。</p>
+
+      <div class="price-grid">
+        <div class="price-card reveal">
+          <p class="price-plan-name">セキュアAIエージェント開発環境<br>初期設計・導入</p>
+          <p class="price-amount">100<span class="price-unit">万円（税別）〜</span></p>
+          <ul class="price-includes">
+            <li>AI Agent環境設計</li>
+            <li>Claude Code環境構築</li>
+            <li>Agent役割設計</li>
+            <li>基本セキュリティ設計</li>
+            <li>Secret分離設計</li>
+            <li>基本Policy設計</li>
+            <li>Google Workspace等の初期連携</li>
+            <li>初期セキュリティ確認</li>
+            <li>導入支援</li>
+          </ul>
+          <p class="price-note">100万円は標準的な初期設計・導入を基準とした価格であり、<span class="em">すべてのシステム開発が含まれるものではありません。</span>顧客固有の追加開発・大規模連携は別途見積となります。</p>
+        </div>
+
+        <div class="price-card reveal">
+          <p class="price-plan-name">運用保守</p>
+          <p class="price-amount">月額10<span class="price-unit">万円（税別）〜</span></p>
+          <ul class="price-includes">
+            <li>稼働状況の確認</li>
+            <li>軽微な障害調査・対応</li>
+            <li>既存設定の軽微な変更</li>
+            <li>セキュリティ関連設定の確認</li>
+            <li>MCP / API / AIモデル等の仕様変更に伴う軽微な追従</li>
+            <li>権限・監査ログ等の定期確認</li>
+            <li>軽微なAgent設定調整</li>
+          </ul>
+          <p class="price-note">初期顧客向けの導入パートナー価格です。将来的な標準価格は月額15万円程度を想定しています。</p>
+        </div>
+      </div>
+
+      <div class="extra-scope reveal">
+        <p class="extra-scope-title">以下は原則として別途見積となります</p>
+        <ul class="extra-scope-list">
+          <li>新規AI Agent追加</li>
+          <li>新規SaaS / MCP / API連携</li>
+          <li>大規模な業務フロー変更</li>
+          <li>大幅なPolicy変更</li>
+          <li>管理画面等の新規システム開発</li>
+          <li>顧客独自システムとの連携</li>
+          <li>大規模な追加開発</li>
+        </ul>
+        <p class="extra-scope-note">範囲の線引きに迷う場合は、ヒアリングの際にご相談ください。見積の前提を明示してからお出しします。</p>
+      </div>
+
+      <!-- CTA 3/4（料金説明後） -->
+      <p class="cta-row reveal"><a class="btn" href="#contact">導入について相談する</a></p>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       FAQ
+       ============================================================== -->
+  <section class="section section--surface" aria-labelledby="faq-title">
+    <div class="container">
+      <p class="eyebrow reveal">FAQ</p>
+      <h2 class="h-section reveal" id="faq-title">よくある質問。</h2>
+
+      <div class="faq-list reveal">
+        <details class="faq-item">
+          <summary>AIにAPIキーを渡すのですか？</summary>
+          <p class="faq-answer">通常Agentが平文のSecretへ恒常的にアクセスする構成を避け、Credential StoreやCredential Broker等を利用して分離する設計を基本とします。</p>
+        </details>
+        <details class="faq-item">
+          <summary>AIが勝手にメールを送ることはありませんか？</summary>
+          <p class="faq-answer">初期構成では外部への書き込みを制限し、送信・削除・共有等の高リスク操作についてHuman Approvalを要求する設計を基本とします。</p>
+        </details>
+        <details class="faq-item">
+          <summary>Google Workspace以外にも対応できますか？</summary>
+          <p class="faq-answer">MCPまたは公式API等が利用できるサービスについて個別に検討します。追加連携は別途費用が発生する場合があります。</p>
+        </details>
+        <details class="faq-item">
+          <summary>Claude以外のAIも利用できますか？</summary>
+          <p class="faq-answer">用途・セキュリティ要件・モデル特性に応じて複数モデルを役割分担させることを想定しています。</p>
+        </details>
+        <details class="faq-item">
+          <summary>導入後に権限を増やせますか？</summary>
+          <p class="faq-answer">可能です。ただし初期状態では権限を限定し、業務上必要になった権限をリスク確認後に段階的に追加する方式を基本とします。</p>
+        </details>
+        <details class="faq-item">
+          <summary>100万円ですべてのシステム開発が含まれますか？</summary>
+          <p class="faq-answer">含まれません。100万円は標準的な初期設計・導入を基準とした価格です。独自システム開発、新規サービス連携、大規模なカスタマイズ等は別途見積となります。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==============================================================
+       問い合わせ（CTA 4/4: ページ最下部）
+       ============================================================== -->
+  <section class="section section--pale-blue contact" id="contact" aria-labelledby="contact-title">
+    <div class="container">
+      <p class="eyebrow reveal">Contact</p>
+      <h2 class="h-section reveal" id="contact-title">まずは、AI Agentに任せたい業務を<br class="br-lg">お聞かせください。</h2>
+      <p class="contact-lead reveal">その場での契約は不要です。内容を確認のうえ、担当よりご連絡します。</p>
+
+      <!--
+        送信先は Next.js のルートハンドラ /secure-ai-agent/api/contact/。
+        trailingSlash: true のため末尾スラッシュ必須（CLAUDE.md「配信構成」参照）。
+        JS が動かない環境では送信できないため、フォーム下に mailto の代替導線を常設する。
+      -->
+      <form class="contact-form reveal" id="contact-form" novalidate>
+        <div class="field">
+          <label class="field-label" for="cf-company">会社名<span class="field-required">必須</span></label>
+          <input type="text" id="cf-company" name="company" required maxlength="200" autocomplete="organization">
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="cf-name">担当者名<span class="field-required">必須</span></label>
+          <input type="text" id="cf-name" name="name" required maxlength="100" autocomplete="name">
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="cf-email">メールアドレス<span class="field-required">必須</span></label>
+          <input type="email" id="cf-email" name="email" required maxlength="254" autocomplete="email">
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="cf-ai">利用したいAI・AI Agent<span class="field-optional">任意</span></label>
+          <select id="cf-ai" name="aiPreference">
+            <option value="">選択してください</option>
+            <option value="これから検討したい">これから検討したい</option>
+            <option value="Claude（Claude Code）">Claude（Claude Code）</option>
+            <option value="Claudeと他モデルの併用">Claudeと他モデルの併用</option>
+            <option value="その他・未定">その他・未定</option>
+          </select>
+        </div>
+
+        <fieldset class="field field--group">
+          <legend class="field-label">接続したいサービス<span class="field-optional">任意・複数選択可</span></legend>
+          <div class="check-group">
+            <label><input type="checkbox" name="services" value="Gmail">Gmail</label>
+            <label><input type="checkbox" name="services" value="Google Calendar">Google Calendar</label>
+            <label><input type="checkbox" name="services" value="Google Drive">Google Drive</label>
+            <label><input type="checkbox" name="services" value="Google Docs">Google Docs</label>
+            <label><input type="checkbox" name="services" value="Google Sheets">Google Sheets</label>
+            <label><input type="checkbox" name="services" value="GitHub">GitHub</label>
+            <label><input type="checkbox" name="services" value="Slack">Slack</label>
+            <label><input type="checkbox" name="services" value="Notion">Notion</label>
+            <label><input type="checkbox" name="services" value="その他">その他</label>
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label class="field-label" for="cf-tasks">AIへ任せたい業務<span class="field-optional">任意</span></label>
+          <textarea id="cf-tasks" name="tasks" maxlength="2000" placeholder="例）問い合わせメールの下書き、議事録の整理、リポジトリの調査 など"></textarea>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="cf-challenges">現在の課題<span class="field-optional">任意</span></label>
+          <textarea id="cf-challenges" name="challenges" maxlength="2000" placeholder="例）セキュリティが不安で進められない、AIに詳しい人材が社内にいない など"></textarea>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="cf-timing">導入希望時期<span class="field-optional">任意</span></label>
+          <select id="cf-timing" name="timing">
+            <option value="">選択してください</option>
+            <option value="1〜3か月以内">1〜3か月以内</option>
+            <option value="半年以内">半年以内</option>
+            <option value="1年以内">1年以内</option>
+            <option value="時期は未定">時期は未定</option>
+          </select>
+        </div>
+
+        <!--
+          ボット対策のおとり欄（honeypot）。人間には見えない位置にあり、
+          値が入っていたらサーバー側で送信を握りつぶす。
+        -->
+        <div class="hp-field" aria-hidden="true">
+          <label for="cf-website">このフィールドは空のままにしてください</label>
+          <input type="text" id="cf-website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="form-actions">
+          <button class="btn" type="submit" id="cf-submit">導入について相談する</button>
+          <p class="form-status" id="cf-status" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+
+      <p class="contact-alt reveal">フォームが利用できない場合は、<a href="mailto:architect@potenitas.com?subject=%E5%B0%8E%E5%85%A5%E7%9B%B8%E8%AB%87%EF%BC%88%E3%82%BB%E3%82%AD%E3%83%A5%E3%82%A2AI%E3%82%A8%E3%83%BC%E3%82%B8%E3%82%A7%E3%83%B3%E3%83%88%E9%96%8B%E7%99%BA%E7%92%B0%E5%A2%83%EF%BC%89">architect@potenitas.com</a> へ直接ご連絡ください。</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- コーポレートサイトへの案内。CTA と競合させないためテキストリンク1行に留める。 -->
+<aside class="cross-link">
+  <div class="container">
+    <p>運営会社について — <a href="/">TSアセットマネジメント合同会社 コーポレートサイト</a></p>
+  </div>
+</aside>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© TSアセットマネジメント合同会社</p>
+  </div>
+</footer>
+
+<script src="js/main.js" defer></script>
+</body>
+</html>
