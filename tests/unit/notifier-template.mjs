@@ -1074,12 +1074,19 @@ try {
     /* 記録が無い状態は「未設定」でも「空文字」でもよい（消すときに書き足さない）。 */
     check('失敗の記録を残さない', !env.properties.LAST_GATE_ERROR, String(env.properties.LAST_GATE_ERROR));
 
-    /* --- evaluate 側も同じ応答で通す --- */
+    /*
+     * --- evaluate 側も同じ応答で通す ---
+     *
+     * 開始時刻は実時刻（Date.now）基準にする。本物の Worker は実時計で
+     * stale 判定（QUEUE_RETENTION_MS＝7日）をするため、偽環境の固定時刻
+     * （env.getTime）から作ると、固定時刻の7日後に必ず落ち始める
+     * （2026-08-17 に実際に起きた）。
+     */
     const withEvent = await captureGateResponses({
       events: [{
         eid: 'EID-FIXTURE',
         feature: 'calendar',
-        startAt: new Date(env.getTime() + HOUR).toISOString(),
+        startAt: new Date(Date.now() + HOUR).toISOString(),
         status: 'accepted',
         allDay: false,
         cancelled: false,
