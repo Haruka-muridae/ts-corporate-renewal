@@ -34,6 +34,7 @@ import {
 import { calculatePrice } from '../../lib/event/pricing.mjs';
 
 const VALID = {
+  eventId: '11111111-2222-3333-4444-555555555555',
   name: '山田 太郎',
   nameKana: 'ヤマダ タロウ',
   email: 'taro@example.com',
@@ -64,6 +65,7 @@ try {
   check('部署名・役職名は任意でも保存される',
     ok.value.department === '開発部' && ok.value.jobTitle === '課長');
   check('出禁の申告は false', ok.value.isBannedDeclared === false);
+  check('参加日（eventId）が保存される', ok.value.eventId === VALID.eventId);
 
   const optional = validateApplicationInput({ ...VALID, department: '', jobTitle: '' });
   check('部署名・役職名は空でも合格する', optional.ok === true);
@@ -90,6 +92,24 @@ try {
 
   check('空白だけの必須項目は空とみなす',
     validateApplicationInput({ ...VALID, name: '　　' }).ok === false);
+
+  /* ---------------------------------------------------------------- */
+  section('参加日（events.id）');
+
+  check('未選択なら不合格（「参加日を選択してください」）',
+    validateApplicationInput({ ...VALID, eventId: '' }).errors.eventId
+      === '参加日を選択してください');
+
+  check('UUID形式でなければ不合格',
+    validateApplicationInput({ ...VALID, eventId: 'not-a-uuid' }).ok === false);
+
+  check('数字だけの値も不合格（旧仕様の連番IDを誤って送っても通さない）',
+    validateApplicationInput({ ...VALID, eventId: '12345' }).ok === false);
+
+  check('大文字のUUIDも通る（Google側の表記ゆれを想定しない前提だが、形式は緩める）',
+    validateApplicationInput({
+      ...VALID, eventId: VALID.eventId.toUpperCase(),
+    }).ok === true);
 
   /* ---------------------------------------------------------------- */
   section('同意項目（受入条件8）');

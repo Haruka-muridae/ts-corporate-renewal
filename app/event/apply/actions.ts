@@ -10,12 +10,13 @@ import {
   findApplicationById,
   findEventById,
   findPaymentByApplicationId,
-  findPublishedEvent,
   insertApplication,
   insertPayment,
   updateApplicationStatus,
 } from "@/lib/event/db.mjs";
+import { formatEventDateLabel } from "@/lib/event/mail/confirmation.mjs";
 import { calculatePrice } from "@/lib/event/pricing.mjs";
+import { isEventAcceptingNow } from "@/lib/event/schedule.mjs";
 import { createCheckoutSession } from "@/lib/event/stripe.mjs";
 
 export type ApplyFormState = {
@@ -26,6 +27,7 @@ export type ApplyFormState = {
 
 /* 再入力のために保持する項目。同意チェックは毎回入れ直してもらう。 */
 const KEPT_FIELDS = [
+  "eventId",
   "name",
   "nameKana",
   "email",
@@ -76,23 +78,21 @@ export async function submitApplication(
   }
 
   const config = supabaseConfig();
-  const event = await findPublishedEvent(config);
 
-  if (event === null) {
-    return {
-      errors: { form: "現在、お申し込みを受け付けているイベントがありません。" },
-      values: kept,
-    };
-  }
-
+  /*
+   * クライアントが選んだ eventId は信用しない（金額と同じ方針）。
+   * 実在し、公開中で、受付期間内であることをここで確かめ直す。
+   * 3つのどれか1つでも欠けたら、区別せず同じ文言で止める
+   * （不正なIDと、選んだ後に受付終了になったケースを利用者側で分ける意味がないため）。
+   */
+  const event = await findEventById(config, result.value.eventId);
   const now = new Date();
 
-  if (new Date(event.apply_start_at) > now) {
-    return { errors: { form: "お申し込みの受付開始前です。" }, values: kept };
-  }
-
-  if (new Date(event.apply_end_at) < now) {
-    return { errors: { form: "お申し込みの受付は終了しました。" }, values: kept };
+  if (event === null || !isEventAcceptingNow(event, now)) {
+    return {
+      errors: { form: "選択された開催日は現在受け付けていません。" },
+      values: kept,
+    };
   }
 
   /*
@@ -157,6 +157,21 @@ export async function startCheckout(formData: FormData): Promise<void> {
   }
 
   /*
+   * 公開状態と受付期間の最終確認。
+   *
+   * 確認画面のURL（?id=）は申込者の手元に残るため、受付が終わったあと・
+   * カレンダー側で回が消えて非公開になったあとに開き直せる。そこから
+   * 決済を始められると、受け付けていない回の支払いが発生してしまう
+   * （返金は「参加者都合ではないキャンセル」として手作業になる）。
+   *
+   * 満席のときと同じく申込ページへ戻す。申込ページ側が
+   * 「受け付けている回が無い」案内を出すため、行き止まりにならない。
+   */
+  if (!isEventAcceptingNow(event, new Date())) {
+    redirect("/event/apply/");
+  }
+
+  /*
    * 定員の最終確認。ここが防波堤になる。
    *
    * 申込ページの表示と submitApplication でも見ているが、どちらも通り抜ける
@@ -181,7 +196,8 @@ export async function startCheckout(formData: FormData): Promise<void> {
 
   const session = await createCheckoutSession({
     secretKey: stripeSecretKey(),
-    eventName: event.name,
+    /* 開催日が複数あるため、Stripeの明細・レシートにどの回かが分かるようにする。 */
+    eventName: `${event.name}（${formatEventDateLabel(event.event_date)}）`,
     amount: breakdown.finalPrice,
     email: application.email,
     applicationId: application.id,

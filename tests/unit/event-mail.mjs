@@ -24,6 +24,7 @@ import {
 
 import {
   buildConfirmationMail,
+  formatEventDateLabel,
   formatEventDateTime,
   formatYen,
   CONTACT_EMAIL,
@@ -66,6 +67,13 @@ try {
   check('金額に桁区切りが入る', formatYen(11000) === '11,000円', formatYen(11000));
   check('4桁でも桁区切りが入る', formatYen(3300) === '3,300円', formatYen(3300));
 
+  check('formatEventDateLabel は「年月日」だけ（時刻を含まない）',
+    formatEventDateLabel(EVENT.startAt) === '2026年8月30日',
+    formatEventDateLabel(EVENT.startAt));
+
+  check('formatEventDateLabel もサーバーの時間帯に関わらずJST（UTC表記の入力）',
+    formatEventDateLabel('2026-08-30T05:30:00Z') === '2026年8月30日');
+
   /* ---------------------------------------------------------------- */
   section('本文に載る項目（仕様書6.1）');
 
@@ -91,6 +99,9 @@ try {
   check('件名に交流会名と受付番号が入る',
     mail.subject.includes('TSAMビジネス&フレンド交流会') && mail.subject.includes('TSAM-0001'),
     mail.subject);
+
+  check('件名に開催日が入る（開催日が複数あるため、どの回への確認かを示す）',
+    mail.subject.includes('2026年8月30日'), mail.subject);
 
   check('宛名が入る', mail.text.startsWith('山田 太郎 様'));
 
@@ -320,6 +331,34 @@ try {
   check('raw が base64url（記号を含まない）',
     !/[+/=]/.test(JSON.parse(calls[1].options.body).raw));
   check('送信結果のIDを返す', sent.id === 'msg-1' && sent.threadId === 'thread-1');
+
+  /*
+   * トークン取得は signal を受け取れるようにしたが（カレンダー同期が
+   * 取得全体に制限時間を掛けるため）、メール送信は従来どおり制限時間を
+   * 持たない。途中で切ると「送ったのか分からない」状態になるため。
+   */
+  check('メール送信では中断の指定を付けない',
+    !('signal' in calls[0].options) && !('signal' in calls[1].options),
+    JSON.stringify(Object.keys(calls[0].options)));
+
+  const signalCalls = [];
+  const signalFetch = async (url, options = {}) => {
+    signalCalls.push({ url, options });
+    return { ok: true, status: 200, json: async () => ({ access_token: 'ya29.test-token' }) };
+  };
+
+  const tokenSignal = AbortSignal.timeout(60_000);
+
+  await getAccessToken({
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+    refreshToken: 'refresh-token',
+    fetchImpl: signalFetch,
+    signal: tokenSignal,
+  });
+
+  check('渡されたときだけ中断の指定を付ける',
+    signalCalls[0].options.signal === tokenSignal);
 
   /* ---------------------------------------------------------------- */
   section('失敗時に秘密を漏らさない');

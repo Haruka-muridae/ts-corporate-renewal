@@ -30,3 +30,15 @@ export declare function gmailConfig(): {
   credentials: GmailCredentials;
   from: string;
 };
+
+/*
+ * カレンダー用の資格情報も、型としては GmailCredentials と同じ3点
+ * （クライアントID・シークレット・リフレッシュトークン）。
+ * getAccessToken を共用するため、型も同じものを指す。
+ */
+export type CalendarConfig = {
+  calendarId: string;
+  credentials: GmailCredentials;
+};
+
+export declare function calendarConfig(): CalendarConfig;

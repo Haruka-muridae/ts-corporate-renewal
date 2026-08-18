@@ -8,6 +8,7 @@ import {
   OCCUPATION_LABELS,
   POSITION_LABELS,
 } from "@/lib/event/pricing.mjs";
+import type { ScheduleItem } from "@/lib/event/schedule.mjs";
 
 import { submitApplication, type ApplyFormState } from "./actions";
 
@@ -76,7 +77,7 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export function ApplyForm() {
+export function ApplyForm({ events }: { events: ScheduleItem[] }) {
   const [state, formAction, pending] = useActionState(
     submitApplication,
     initialState,
@@ -105,6 +106,33 @@ export function ApplyForm() {
           {errors.form}
         </p>
       ) : null}
+
+      <fieldset className="form-group">
+        <legend className="form-group__legend">参加日</legend>
+
+        <fieldset className="form-field form-choice">
+          <legend className="form-field__label">
+            参加日<span className="form-field__required">必須</span>
+          </legend>
+          {events.map((item) => (
+            <label className="form-choice__item" key={item.id}>
+              <input
+                type="radio"
+                name="eventId"
+                value={item.id}
+                defaultChecked={values.eventId === item.id}
+                disabled={item.soldOut}
+                required
+              />
+              <span>
+                {item.label}
+                {item.soldOut ? "（満席）" : null}
+              </span>
+            </label>
+          ))}
+          <FieldError id={errorId("eventId")} message={errors.eventId} />
+        </fieldset>
+      </fieldset>
 
       <fieldset className="form-group">
         <legend className="form-group__legend">基本情報</legend>

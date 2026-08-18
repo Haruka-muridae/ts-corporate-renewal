@@ -12,6 +12,8 @@ import type {
 
 /** 検証を通ったあとの、DBへ保存できる形。 */
 export type ApplicationInput = {
+  /** 選択された開催回（events.id）。形式（UUID）だけを検証済み。 */
+  eventId: string;
   name: string;
   nameKana: string;
   email: string;
@@ -37,6 +39,12 @@ export declare const MAX_LENGTHS: Record<string, number>;
 export declare const CONSENT_FIELDS: readonly string[];
 
 export declare function toKatakana(value: string): string;
+
+/**
+ * UUIDの形式かどうか（形だけの検査）。
+ * URL の ?eventId= を受け取る管理画面のCSVなど、フォーム以外でも使う。
+ */
+export declare function isUuid(value: unknown): boolean;
 
 export declare function validateApplicationInput(
   raw: Record<string, unknown>,

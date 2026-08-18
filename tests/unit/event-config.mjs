@@ -19,6 +19,7 @@ import { check, section, finish, fatal } from '../../public/apps/tests/helpers/a
 
 import {
   baseUrl,
+  calendarConfig,
   gmailConfig,
   stripeSecretKey,
   supabaseAuthConfig,
@@ -145,6 +146,35 @@ try {
       && gmail.credentials.clientSecret === 'client-secret'
       && gmail.credentials.refreshToken === 'refresh-token');
   check('送信元', gmail.from === 'TS <a@example.com>', gmail.from);
+
+  /* ---------------------------------------------------------------- */
+  section('カレンダーの設定');
+
+  process.env.GOOGLE_CALENDAR_ID = `${BOM}primary `;
+  process.env.GOOGLE_CALENDAR_REFRESH_TOKEN = `${BOM}calendar-refresh-token\n`;
+
+  const calendar = calendarConfig();
+
+  check('カレンダーID', calendar.calendarId === 'primary', calendar.calendarId);
+  check('OAuthクライアントはメール送信と共用する',
+    calendar.credentials.clientId === 'client-id'
+      && calendar.credentials.clientSecret === 'client-secret');
+  check('リフレッシュトークンはメール送信と別に持つ',
+    calendar.credentials.refreshToken === 'calendar-refresh-token'
+      && calendar.credentials.refreshToken !== gmail.credentials.refreshToken);
+
+  delete process.env.GOOGLE_CALENDAR_REFRESH_TOKEN;
+  let calendarError = null;
+
+  try {
+    calendarConfig();
+  } catch (error) {
+    calendarError = error;
+  }
+
+  check('未設定なら変数名だけを出して止める',
+    calendarError?.message === '環境変数 GOOGLE_CALENDAR_REFRESH_TOKEN が設定されていません',
+    calendarError?.message);
 
   restore();
   finish();

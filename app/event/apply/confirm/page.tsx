@@ -11,6 +11,7 @@ import {
   buildBreakdownLines,
   calculatePrice,
 } from "@/lib/event/pricing.mjs";
+import { isEventAcceptingNow } from "@/lib/event/schedule.mjs";
 
 import { startCheckout } from "../actions";
 
@@ -49,6 +50,59 @@ export default async function ConfirmPage({
 
   if (event === null) {
     notFound();
+  }
+
+  /*
+   * 受け付けていない回の確認画面では、決済へ進む導線を出さない。
+   *
+   * このURLは申込者の手元に残るため、受付終了後やカレンダー側で回が消えた
+   * あとに開き直せる。startCheckout 側でも同じ判定で止めているが、
+   * 押しても戻されるだけのボタンを見せると理由が分からないため、
+   * ここでは理由を書いた案内に差し替える（判定は schedule.mjs で共通）。
+   */
+  if (!isEventAcceptingNow(event, new Date())) {
+    return (
+      <section className="section event-hero" aria-labelledby="confirm-title">
+        <div className="container">
+          <nav className="breadcrumb" aria-label="パンくずリスト">
+            <ol className="breadcrumb__list">
+              <li>
+                <a href="/">ホーム</a>
+              </li>
+              <li>
+                <a href="/event/">交流会</a>
+              </li>
+              <li aria-current="page">お申し込み内容の確認</li>
+            </ol>
+          </nav>
+
+          <div className="event-hero__inner">
+            <p className="event-hero__label" lang="en">
+              Closed
+            </p>
+            <h1 id="confirm-title" className="event-hero__title">
+              この回はお申し込みの受付を終了しました
+            </h1>
+            <p className="event-hero__lead">
+              {formatEventDateTime(
+                new Date(event.event_date),
+                event.event_end_at ? new Date(event.event_end_at) : null,
+              )}
+              の回は、受付期間の終了または開催予定の変更により、お申し込みを承れなくなりました。お支払いは発生していません。
+            </p>
+          </div>
+
+          <div className="confirm__actions">
+            <a className="btn btn--primary" href="/event/apply/">
+              ほかの開催日を見る
+            </a>
+            <a className="btn btn--secondary" href="/event/">
+              交流会のご案内へ
+            </a>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   const attributes = {

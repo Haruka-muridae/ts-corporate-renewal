@@ -70,7 +70,7 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 - **外部SDKを使わない。** Stripe・Supabase(PostgREST)・Gmail いずれも `fetch` で REST を直接叩いている。`package.json` の dependencies は `next` / `react` / `react-dom` のみ。ライブラリ追加は [AGENTS.md](AGENTS.md) のとおり事前確認が必要。
 - **環境変数は [lib/event/config.mjs](lib/event/config.mjs) を必ず経由する。** BOM・前後空白を落としたうえで、値が無ければ「使う時点で」名前付きの例外にする（起動時に全体を巻き添えにしない）。`SUPABASE_SERVICE_ROLE_KEY` に `NEXT_PUBLIC_` を付けない。`lib/event/db.mjs` は service role キーを扱うサーバー専用モジュールで、クライアントコンポーネントから import しないこと（`server-only` パッケージは入れていないので、呼び出し側を server action / server component に限定することで守っている）。
 - **金額はサーバーが計算する。** フォームから来た金額は一切使わない。割引率は [lib/event/pricing.mjs](lib/event/pricing.mjs) の定数（DBにルールを持たせない方針）で、申込ごとの内訳は `payments` の列にスナップショットとして保存する。JPY は最小通貨単位が円なので `unit_amount` に円額をそのまま渡す（100倍しない）。
-- **開催日時が2か所にある。** 静的な `public/event/index.html` と `events.event_date`。次回開催時は両方を更新する。受付を止めるときは `events.is_published=false`（即時・サーバー側の判定）を先に、`public/event/index.html` の `data-event-status` は表示合わせ。
+- **開催日時はGoogleカレンダーが真実源（2026-08〜）。** 主催者アカウント（`architect@potenitas.com`）のメイン（primary）カレンダーにある、タイトルが「【SV顧客用】渋谷CAFEご予約」に完全一致する予定を `lib/event/calendar-sync.mjs` が sync-on-read（TTL 10分）で `events` テーブルへ取り込む。予定を追加すれば新しい回が増え、削除・改題すれば該当行が `is_published=false` になり受付が止まる（支払済みがある回は `events.sync_warning` に記録し、管理画面で警告表示）。`public/event/index.html` の `<time>` と `data-event-status` は、`GET /event/api/schedule/` が取得できなかったときだけ使われる静的フォールバック。日常の開催日変更・受付停止は**カレンダー側の操作だけで完結し、コードやHTMLの編集は不要**。
 
 ### Supabase
 
