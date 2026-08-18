@@ -31,9 +31,9 @@
     "test:e2e:soak90": "playwright test --project=voice-recorder-soak90",
     "build:cf": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "deploy:notifier-gate": "wrangler deploy --config workers/notifier-gate/wrangler.jsonc",
-    "deploy:auth-verify": "wrangler deploy --config workers/auth-verify/wrangler.jsonc",
+    "deploy": "node scripts/predeploy-check.mjs && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy:notifier-gate": "node scripts/predeploy-check.mjs && wrangler deploy --config workers/notifier-gate/wrangler.jsonc",
+    "deploy:auth-verify": "node scripts/predeploy-check.mjs && wrangler deploy --config workers/auth-verify/wrangler.jsonc",
     "cf:whoami": "wrangler whoami",
     "cf:versions": "wrangler versions list",
     "check:vendor": "node public/apps/vendor/check-updates.mjs"
