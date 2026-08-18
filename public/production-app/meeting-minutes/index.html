@@ -15,9 +15,12 @@
   ==================================================================
   Content-Security-Policy
   ==================================================================
-  note-post / threads-post と同じ形。connect-src の内訳:
+  note-post / threads-post を土台に、Googleドライブ保存（audio-transcriber と
+  同じ GIS + Drive API）を合成した形。connect-src の内訳:
     - 'self'                              … 自分の JS / CSS
     - generativelanguage.googleapis.com   … Gemini（議事録の生成）
+    - www.googleapis.com                  … Google Drive API（議事録の保存）
+    - accounts.google.com                 … Google Identity Services（Drive認可）
     - script.google.com /
       script.googleusercontent.com        … TSAM AI 認証（guardPage）
     - auth-verify.potenitas-lp.workers.dev … セッション検証（verifySession）の
@@ -26,11 +29,17 @@
                                             config.js の verifyApiUrl）。
                                             *.workers.dev に広げないこと
 
-  本アプリは録音・OAuth・外部フォントを使わないため、上記以外は許可しない。
+  script-src / frame-src の accounts.google.com は GIS のスクリプト読み込みと
+  認可フローに必要（audio-transcriber の CSP と同じ理由）。
+  Google Picker（apis.google.com / docs.google.com）は許可しない。
+  このアプリは固定フォルダへ保存するだけで、Picker を使わない。
+
+  本アプリは録音・外部フォントを使わないため、上記以外は許可しない。
   APIキーは KeyStore（localStorage）だけが扱い、外部へ送るのは Gemini のみ。
+  Drive のアクセストークンはメモリ上のみ（oauth.js）。
   ==================================================================
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com https://script.google.com https://script.googleusercontent.com https://auth-verify.potenitas-lp.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com https://www.googleapis.com https://accounts.google.com https://script.google.com https://script.googleusercontent.com https://auth-verify.potenitas-lp.workers.dev; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
@@ -355,6 +364,11 @@
       <p class="mm-actions">
         <button id="mm-copy-markdown" type="button" class="auth-button">Markdownをコピー</button>
         <button id="mm-download-markdown" type="button" class="auth-button auth-button--ghost">Markdownを保存（.md）</button>
+        <button id="mm-save-drive" type="button" class="auth-button auth-button--ghost">Googleドライブへ保存</button>
+      </p>
+      <p class="mm-note">
+        Googleドライブへの保存は、あなた自身のドライブの「マイドライブ ＞ TSAM AI ＞ 議事録データ」に
+        新しいファイルとして保存します（フォルダがない場合は作成します）。当社が内容を受け取ることはありません。
       </p>
       <p class="mm-actions">
         <button id="mm-back-to-review" type="button" class="auth-button auth-button--ghost">編集に戻る</button>
