@@ -87,6 +87,16 @@
       <input type="file" id="ro-file" class="ro-file" accept="image/jpeg,image/png" capture="environment">
     </label>
 
+    <!--
+      アップロード前の縮小（仕様書 §14 の最終項）。
+      **既定は無効。** 原本は証跡なので、こちらの都合で画質を落とさない。
+      回線が弱い環境で待たされるときだけ、利用者が選ぶ。
+    -->
+    <label class="ro-check">
+      <input type="checkbox" id="ro-shrink">
+      <span>アップロード前に縮小する（長辺2,000px以下・JPEG。回線が遅いとき向け）</span>
+    </label>
+
     <div class="ro-preview" id="ro-preview" hidden>
       <img id="ro-preview-image" class="ro-preview__image" alt="選択した領収書の画像">
       <dl class="ro-meta">

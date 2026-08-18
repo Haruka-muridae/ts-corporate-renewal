@@ -339,6 +339,11 @@ try {
     check(`${code} が定義されている`, errors.isKnownCode(code));
   }
 
+  /* 2026-08-18 に足した分（findings #2〜#5。仕様書 §12 の表も更新済み）。 */
+  for (const code of ['OAUTH-002', 'AI-003', 'DRV-004', 'RATE-001', 'SRV-001', 'NET-001', 'SYS-001']) {
+    check(`${code} が定義されている`, errors.isKnownCode(code));
+  }
+
   check('未知のコードでも例外を投げない',
     errors.describeError('NOPE').code === 'UNKNOWN');
 
@@ -353,9 +358,51 @@ try {
   check('401 は OAUTH-001', errors.mapGoogleError(401) === 'OAUTH-001');
   check('容量不足の 403 は DRV-003',
     errors.mapGoogleError(403, 'storageQuotaExceeded') === 'DRV-003');
-  check('容量以外の 403 は OAUTH-001',
-    errors.mapGoogleError(403, 'forbidden') === 'OAUTH-001');
+  check('insufficientStorage も DRV-003',
+    errors.mapGoogleError(403, 'insufficientStorage') === 'DRV-003');
   check('404 は DRV-001', errors.mapGoogleError(404) === 'DRV-001');
+
+  /*
+   * ここから 2026-08-18 の修正（findings #2・#5）。
+   * **レート制限で認可エラーにしないこと**が眼目である。
+   */
+  for (const reason of ['rateLimitExceeded', 'userRateLimitExceeded', 'sharingRateLimitExceeded', 'dailyLimitExceeded', 'quotaExceeded']) {
+    check(`403 の ${reason} は RATE-001（認可エラーにしない）`,
+      errors.mapGoogleError(403, reason) === 'RATE-001');
+  }
+
+  check('429 も RATE-001', errors.mapGoogleError(429) === 'RATE-001');
+
+  check('**レート制限でトークンを捨てない（guide が REAUTH でない）**',
+    errors.describeError('RATE-001').guide === errors.GUIDE.NONE);
+
+  check('容量不足でもトークンを捨てない',
+    errors.describeError('DRV-003').guide === errors.GUIDE.NONE);
+
+  check('権限不足の 403 は DRV-004（OAUTH-001 と分ける）',
+    errors.mapGoogleError(403, 'insufficientFilePermissions') === 'DRV-004'
+    && errors.mapGoogleError(403, '') === 'DRV-004');
+
+  check('DRV-004 は再連携へ誘導する', errors.describeError('DRV-004').guide === errors.GUIDE.REAUTH);
+
+  check('400 は SYS-001（利用者の操作では直らない）',
+    errors.mapGoogleError(400, 'badRequest') === 'SYS-001');
+
+  for (const status of [500, 502, 503, 504]) {
+    check(`${status} は SRV-001（待てば直ることを伝える）`,
+      errors.mapGoogleError(status) === 'SRV-001');
+  }
+
+  check('分類できないものは従来どおり SHEET-001',
+    errors.mapGoogleError(418) === 'SHEET-001');
+
+  check('スコープ未許可は OAUTH-002 として案内が分かれる',
+    errors.describeError('OAUTH-002').guide === errors.GUIDE.REAUTH
+    && errors.describeError('OAUTH-002').message !== errors.describeError('OAUTH-001').message);
+
+  check('AI-003 はキーの再設定を促さない（KEY-002 と別文言）',
+    !errors.describeError('AI-003').message.includes('ポータル')
+    && errors.describeError('AI-003').guide === errors.GUIDE.NONE);
 
   /* ---------------------------------------------------------------- */
   section('SHA-256（§5-② / §10）');
@@ -783,6 +830,316 @@ try {
   }
 
   /* ================================================================
+     §4-2 OAuth（GISの読み込みとスコープ）
+     2026-08-18 の修正。docs/receipt-ocr-findings-20260804.md #1・#4
+     ================================================================ */
+  section('§4-2 GIS の読み込み（失敗を握り続けない）');
+
+  {
+    const oauth = await import('../../public/production-app/receipt-ocr/oauth.js');
+
+    /* <script> の偽物。append した時点で load / error を起こす。 */
+    let scriptOutcome = 'error';
+    let created = 0;
+
+    globalThis.document = {
+      createElement() {
+        created += 1;
+
+        const handlers = new Map();
+
+        return {
+          set src(_value) { /* 実際には読み込まない */ },
+          async: false,
+          defer: false,
+          addEventListener(name, handler) {
+            handlers.set(name, handler);
+          },
+          fire(name) {
+            handlers.get(name)?.();
+          },
+        };
+      },
+      head: {
+        append(script) {
+          queueMicrotask(() => {
+            /* 読み込みに成功したときだけ google 名前空間が生える。 */
+            if (scriptOutcome === 'load') {
+              installGis();
+            }
+
+            script.fire(scriptOutcome);
+          });
+        },
+      },
+    };
+
+    const grantedScope = 'https://www.googleapis.com/auth/drive.file';
+
+    /* GIS の偽物。callback へ渡す応答をテストごとに差し替える。 */
+    let tokenResponse = null;
+
+    function installGis() {
+      globalThis.google = {
+        accounts: {
+          oauth2: {
+            initTokenClient({ callback }) {
+              return { requestAccessToken: () => callback(tokenResponse) };
+            },
+          },
+        },
+      };
+    }
+
+    async function attempt() {
+      try {
+        await oauth.requestAccess();
+        return null;
+      } catch (error) {
+        return error;
+      }
+    }
+
+    oauth.resetGisLoader();
+    oauth.resetPendingRequest();
+
+    const first = await attempt();
+
+    check('読み込みに失敗すれば OAUTH-001',
+      first?.code === 'OAUTH-001' && first?.detail === 'gis_load_failed');
+
+    /* ここが本題。**2回目も試せること。** */
+    scriptOutcome = 'load';
+    tokenResponse = { access_token: 'token-for-test', expires_in: 3600, scope: grantedScope };
+
+    const second = await attempt();
+
+    check('**一度失敗しても、次の操作でやり直せる（失敗を握り続けない）**', second === null);
+    check('2回目は <script> を作り直している', created === 2);
+    check('連携できたらトークンを持つ', oauth.hasValidToken() === true);
+
+    oauth.forgetToken();
+    check('捨てられる', oauth.hasValidToken() === false);
+
+    /* 読み込み済みなら <script> を足さない。 */
+    const before = created;
+    await attempt();
+    check('読み込み済みなら通信を繰り返さない', created === before);
+    oauth.forgetToken();
+
+    /* ---- §4-2 スコープ（findings #4） ---- */
+
+    tokenResponse = { access_token: 'token-for-test', expires_in: 3600, scope: 'openid email' };
+
+    const denied = await attempt();
+
+    check('**drive.file を外されたらその場で止める（OAUTH-002）**',
+      denied?.code === 'OAUTH-002' && denied?.detail === 'scope_not_granted');
+
+    check('拒否したときトークンを持たない', oauth.hasValidToken() === false);
+
+    /* GIS の hasGrantedAllScopes があればそれを使う。 */
+    globalThis.google.accounts.oauth2.hasGrantedAllScopes = () => false;
+    tokenResponse = { access_token: 'token-for-test', expires_in: 3600, scope: grantedScope };
+
+    const deniedByGis = await attempt();
+
+    check('hasGrantedAllScopes が false なら止める', deniedByGis?.code === 'OAUTH-002');
+
+    globalThis.google.accounts.oauth2.hasGrantedAllScopes = () => true;
+    check('hasGrantedAllScopes が true なら通す', (await attempt()) === null);
+    oauth.forgetToken();
+
+    /* 判定できないとき（scope が返らない）は通す。ここで弾くと正しい利用者まで落ちる。 */
+    delete globalThis.google.accounts.oauth2.hasGrantedAllScopes;
+    tokenResponse = { access_token: 'token-for-test', expires_in: 3600 };
+    check('scope が返らない応答は通す（判定不能で弾かない）', (await attempt()) === null);
+
+    oauth.forgetToken();
+    check('トークンを取り出せないときは OAUTH-001',
+      (() => {
+        try {
+          oauth.currentToken();
+          return false;
+        } catch (error) {
+          return error.code === 'OAUTH-001';
+        }
+      })());
+
+    delete globalThis.document;
+    delete globalThis.google;
+    oauth.resetGisLoader();
+    oauth.resetPendingRequest();
+  }
+
+  /* ================================================================
+     「設定」タブの反映（v1.3 §16.6 / v2.0 §9.1）
+     ================================================================ */
+  section('設定タブ → しきい値');
+
+  {
+    const settings = await import('../../public/production-app/receipt-ocr/settings.js');
+    const validate = await import('../../public/production-app/receipt-ocr/validate.js');
+    const confidence = await import('../../public/production-app/receipt-ocr/confidence.js');
+    const K = schema.SETTINGS_KEYS;
+
+    const empty = settings.resolveSettings({});
+
+    check('設定が無ければ既定の検証しきい値',
+      empty.limits.maxAmount === validate.DEFAULT_LIMITS.maxAmount
+      && empty.limits.pastDateLimitDays === validate.DEFAULT_LIMITS.pastDateLimitDays);
+
+    check('設定が無ければ既定の信頼度しきい値',
+      empty.thresholds.high === confidence.DEFAULT_THRESHOLDS.high
+      && empty.thresholds.medium === confidence.DEFAULT_THRESHOLDS.medium);
+
+    check('無いものを「無視した」と言わない', empty.ignored.length === 0);
+
+    const applied = settings.resolveSettings({
+      [K.maxAmount]: '5,000,000',
+      [K.pastDateLimitDays]: '90',
+      [K.confidenceHigh]: '150',
+      [K.confidenceMedium]: '80',
+      [K.minOcrLength]: '10',
+      [K.geminiEnabled]: 'FALSE',
+    });
+
+    check('シートの値で上書きされる（金額上限・過去日数）',
+      applied.limits.maxAmount === 5000000 && applied.limits.pastDateLimitDays === 90);
+
+    check('シートの値で上書きされる（信頼度しきい値）',
+      applied.thresholds.high === 150 && applied.thresholds.medium === 80);
+
+    check('OCR文字数の最低基準と Gemini 使用も反映する',
+      applied.minOcrLength === 10 && applied.geminiEnabled === false);
+
+    check('設定タブに無い税の許容差は既定のまま',
+      applied.limits.taxToleranceYen === validate.DEFAULT_LIMITS.taxToleranceYen);
+
+    check('全角の数字も読む',
+      settings.resolveSettings({ [K.pastDateLimitDays]: '９０' }).limits.pastDateLimitDays === 90);
+
+    /* ---- 不正値は既定へ落とす（安全側） ---- */
+
+    const broken = settings.resolveSettings({
+      [K.maxAmount]: 'たくさん',
+      [K.pastDateLimitDays]: '0',
+      [K.minOcrLength]: '-5',
+    });
+
+    check('読めない値は既定へ落とす',
+      broken.limits.maxAmount === validate.DEFAULT_LIMITS.maxAmount
+      && broken.limits.pastDateLimitDays === validate.DEFAULT_LIMITS.pastDateLimitDays
+      && broken.minOcrLength === 30);
+
+    check('無視した設定名を返す（黙って捨てない）',
+      broken.ignored.includes(K.maxAmount)
+      && broken.ignored.includes(K.pastDateLimitDays)
+      && broken.ignored.includes(K.minOcrLength));
+
+    check('極端に小さい金額上限は打ち間違いとみなす',
+      settings.resolveSettings({ [K.maxAmount]: '1' }).limits.maxAmount
+        === validate.DEFAULT_LIMITS.maxAmount);
+
+    check('**高 < 中 の逆転は両方とも既定へ落とす**',
+      (() => {
+        const reversed = settings.resolveSettings({
+          [K.confidenceHigh]: '40',
+          [K.confidenceMedium]: '90',
+        });
+
+        return reversed.thresholds.high === confidence.DEFAULT_THRESHOLDS.high
+          && reversed.thresholds.medium === confidence.DEFAULT_THRESHOLDS.medium
+          && reversed.ignored.includes(K.confidenceHigh)
+          && reversed.ignored.includes(K.confidenceMedium);
+      })());
+
+    check('片方だけの指定も既定へ揃える（順序の逆転を作らない）',
+      (() => {
+        const half = settings.resolveSettings({ [K.confidenceHigh]: '150' });
+
+        return half.thresholds.high === confidence.DEFAULT_THRESHOLDS.high
+          && half.ignored.includes(K.confidenceHigh);
+      })());
+
+    check('満点を超えるしきい値は採らない',
+      settings.resolveSettings({
+        [K.confidenceHigh]: String(confidence.MAX_SCORE + 1),
+        [K.confidenceMedium]: '60',
+      }).thresholds.high === confidence.DEFAULT_THRESHOLDS.high);
+
+    check('真偽値の揺れを吸収する',
+      settings.readBoolean('TRUE') === true
+      && settings.readBoolean('false') === false
+      && settings.readBoolean('はい') === true
+      && settings.readBoolean('よくわからない') === null);
+
+    check('壊れた入力でも例外を投げない',
+      settings.resolveSettings(null).limits.maxAmount === validate.DEFAULT_LIMITS.maxAmount);
+
+    /* しきい値が実際に効くこと（配線の意味を確かめる）。 */
+    check('上書きした金額上限が検証に効く',
+      validate.validateAmount('6000000', { limits: applied.limits }).ok === false
+      && validate.validateAmount('6000000').ok === true);
+
+    check('上書きした信頼度しきい値が区分に効く',
+      confidence.levelOf(100, applied.thresholds) === '中'
+      && confidence.levelOf(100) === '中'
+      && confidence.levelOf(130, applied.thresholds) === '中'
+      && confidence.levelOf(130) === '高');
+  }
+
+  /* ================================================================
+     §14 アップロード前の縮小（既定は無効）
+     ================================================================ */
+  section('§14 画像の縮小・HEIC の見分け');
+
+  {
+    const image = await import('../../public/production-app/receipt-ocr/image.js');
+
+    check('長辺の上限は config の IMAGE_MAX_EDGE_PX（§14 の2,000px）',
+      image.MAX_EDGE === config.IMAGE_MAX_EDGE_PX && image.MAX_EDGE === 2000);
+
+    check('**長辺は 1600 を下回らない（OCR精度）**', image.MIN_EDGE === 1600);
+    check('**品質は 0.75 を下回らない**', image.MIN_QUALITY === 0.75);
+
+    check('圧縮の各段が下限を割らない',
+      image.COMPRESSION_STEPS.every(
+        (step) => step.maxEdge >= image.MIN_EDGE && step.quality >= image.MIN_QUALITY,
+      ));
+
+    check('品質を先に落とし、寸法は後で落とす',
+      image.COMPRESSION_STEPS[0].maxEdge === image.MAX_EDGE
+      && image.COMPRESSION_STEPS[1].maxEdge === image.MAX_EDGE
+      && image.COMPRESSION_STEPS[1].quality < image.COMPRESSION_STEPS[0].quality);
+
+    check('長辺が上限以下ならそのまま',
+      JSON.stringify(image.fitSize(1200, 800, 2000)) === '{"width":1200,"height":800}');
+    check('横長を縮める',
+      JSON.stringify(image.fitSize(4000, 2000, 2000)) === '{"width":2000,"height":1000}');
+    check('**元より大きく引き伸ばさない**', image.fitSize(800, 600, 2000).width === 800);
+
+    check('HEIC を type で見分ける', image.isHeic({ type: 'image/heic', name: 'a.heic' }) === true);
+    check('HEIC を拡張子でも見分ける（iOS は type が空のことがある）',
+      image.isHeic({ type: '', name: 'IMG_0001.HEIC' }) === true
+      && image.isHeic({ type: '', name: 'a.heif' }) === true);
+    check('JPEG は HEIC ではない', image.isHeic({ type: 'image/jpeg', name: 'a.jpg' }) === false);
+
+    check('小さい画像は縮めない', image.shouldShrink({ size: 1000 }) === false);
+    check('大きい画像は縮める対象', image.shouldShrink({ size: 5 * 1024 * 1024 }) === true);
+
+    /*
+     * **縮小できなくても例外を投げない。** 縮小は §14 の「オプション」で
+     * あって保存の必須工程ではない。ここで投げると、canvas の無い環境や
+     * 壊れた画像で保存そのものができなくなる。
+     */
+    const failed = await image.shrinkToJpeg({ size: 9999999, type: 'image/jpeg', name: 'a.jpg' });
+
+    check('canvas が無い環境では失敗を返すだけ（例外を投げない）',
+      failed.ok === false && failed.reason === image.ShrinkFailure.UNAVAILABLE);
+  }
+
+  /* ================================================================
      規約の静的確認
      ================================================================ */
   section('規約（§13 / APP_REGISTRY / import の禁止）');
@@ -795,9 +1152,9 @@ try {
     'ai-complete.js', 'amount.js', 'app.js', 'completion-policy.js', 'confidence.js',
     'config.js', 'datetime.js', 'drive.js', 'duplicate.js', 'errors.js',
     'extract.js', 'gateway.js', 'gemini-client.js', 'google-api.js', 'hash.js',
-    'oauth.js', 'ocr.js', 'ocr-drive.js', 'ocr-gemini.js', 'provisioning.js',
-    'record.js', 'review.js', 'schema.js', 'sheets.js', 'status.js',
-    'store.js', 'validate.js',
+    'image.js', 'oauth.js', 'ocr.js', 'ocr-drive.js', 'ocr-gemini.js',
+    'provisioning.js', 'record.js', 'review.js', 'schema.js', 'settings.js',
+    'sheets.js', 'status.js', 'store.js', 'validate.js',
   ];
 
   /*
@@ -956,6 +1313,26 @@ try {
 
   check('KeyStore は読み取りだけ（set / remove を呼ばない）',
     !/KeyStore\.(set|remove)\(/.test(sources.get('app.js')));
+
+  {
+    /*
+     * 設定タブの配線（2026-08-18）。
+     *
+     * ここは「書いたのに呼ばれていない」ことが長く続いた箇所である
+     * （readSettings は定義だけあり、呼び出し元が無かった）。
+     * 呼び出しが消えても純関数のテストは通ってしまうため、
+     * **配線そのものを見る。**
+     */
+    const app = sources.get('app.js');
+
+    check('app.js が設定タブを読む', /readSettings\(/.test(app));
+    check('検証しきい値を設定タブの値で渡している', /limits:\s*settings\.limits/.test(app));
+    check('信頼度しきい値を設定タブの値で渡している', /levelOf\([^)]*settings\.thresholds/.test(app));
+    check('補完の条件（文字数・Gemini使用）も渡している',
+      /minOcrLength:\s*settings\.minOcrLength/.test(app)
+      && /geminiEnabled:\s*settings\.geminiEnabled/.test(app));
+    check('起動時に一時ドキュメントの孤児を回収する', /collectOrphans\(/.test(app));
+  }
 
   check('共有設定を付ける呼び出しが無い（§9.5）',
     [...sources.values()].every((src) => !/permissions/i.test(src)));

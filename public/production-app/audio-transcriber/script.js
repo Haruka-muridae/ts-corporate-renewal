@@ -453,7 +453,11 @@ function populateSelects(saved = {}) {
   autoOption.selected = savedGeminiModelId === 'auto';
   el.geminiModel.append(autoOption);
 
-  GEMINI.models.forEach((model) => {
+  // 表示順は costRank（料金の安い順）。自動選択時の優先順位は GEMINI.models の配列順のままにするため、
+  // 元の配列は変更せず、複製をソートして使う。costRank 未設定の要素は末尾扱いにするフォールバック。
+  const geminiModelsByCost = [...GEMINI.models].sort((a, b) => (a.costRank ?? 99) - (b.costRank ?? 99));
+
+  geminiModelsByCost.forEach((model) => {
     const option = document.createElement('option');
     option.value = model.id;
     option.textContent = model.label;

@@ -50,6 +50,7 @@
 | [x-post-requirements-v1.md](./x-post-requirements-v1.md) | X 投稿アプリ（`public/production-app/x-post/`。アプリID `x-post`）。Threads 版の差分仕様: 280ウェイト計数（全角=2）と x.com intent | v1.0 |
 | [note-post-requirements-v1.md](./note-post-requirements-v1.md) | note 下書きアプリ（`public/production-app/note-post/`。アプリID `note-post`）。Threads 版の差分仕様: 本文コピー＋作成画面を開く方式（note にプリフィルURLが無いため）と記事向け生成 | v1.0 |
 | [meeting-minutes-requirements-v1.md](./meeting-minutes-requirements-v1.md) | AI議事録アプリ（`public/production-app/meeting-minutes/`。アプリID `meeting-minutes`）。audio-transcriber の文字起こしをGeminiで議事録へ整理し、原文と並べて確認・編集できる。根拠（evidence）はクライアント側で原文照合し、確認できない場合は「根拠を確認できません」と表示する | v1.0 |
+| [interview-recorder-requirements-v1.md](./interview-recorder-requirements-v1.md) | 面談録音アプリ（`public/production-app/interview-recorder/`。アプリID `interview-recorder`）。単体公開版からの移植。同意確認モーダル、タブ音声＋マイクのミックス、lamejsによるMP3逐次エンコード（WebM安全網付き）、完全クライアントサイドでの外部送信なしのローカルダウンロード | v1.0 |
 
 要件定義書も**実装の正**です。上の仕様書と同じく、コードと食い違う場合は
 コードのほうが間違っているとみなします。

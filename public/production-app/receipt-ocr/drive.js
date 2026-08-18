@@ -41,12 +41,54 @@ export async function getFileMeta(fileId, { accessToken, signal } = {}) {
     /* ゴミ箱の中は「無い」として扱う。復活させる判断はアプリが持たない。 */
     return meta?.trashed === true ? null : meta;
   } catch (error) {
-    if (error?.code === 'DRV-001' || error?.code === 'OAUTH-001') {
+    /*
+     * 「見つからない（404）」「触れない（401 / 403）」は null にして、
+     * 呼び出し側の名前検索（§9.2-3）へ渡す。
+     *
+     * DRV-004 は 2026-08-18 に 403 を OAUTH-001 から切り出したときに
+     * 加えた。ここへ足さないと、記憶した ID へ触れなくなった利用者が
+     * 名前検索による復旧経路へ進めなくなる（従来は 403 が OAUTH-001 として
+     * ここで null になっていた）。
+     *
+     * **レート制限（RATE-001）と通信断（NET-001）は握らない。**
+     * 「無い」ことの証拠にならず、握ると空のシートをもう1つ作りかねない。
+     */
+    if (error?.code === 'DRV-001' || error?.code === 'OAUTH-001' || error?.code === 'DRV-004') {
       return null;
     }
 
     throw error;
   }
+}
+
+/*
+ * multipart の境界文字列を作る（2026-08-18 追加）。
+ *
+ * 複製元: public/production-app/card-ocr/drive-api.js の createBoundary()
+ * （複製日 2026-08-18。import はしない。docs/repository-structure.md §4-1）。
+ *
+ * boundary の要件は「**その本文の中に同じ並びが現れないこと**」である。
+ * 改訂前は `receipt-${Math.random()}-${blob.size}` や
+ * `ocr-${blob.size}-${blob.type.length}` のように内容から決めており、
+ * 後者は短い ASCII 列なので、画像のバイナリに現れないと言える根拠が無い
+ * （画像の中身は利用者が決める。findings #7）。
+ *
+ * crypto.randomUUID → getRandomValues → 時刻の三段で落とす。
+ * 最後の段は安全ではないが、Web Crypto が無い環境でも動くための保険である。
+ */
+export function createBoundary() {
+  const cryptoObj = globalThis.crypto;
+
+  if (typeof cryptoObj?.randomUUID === 'function') {
+    return `tsam-${cryptoObj.randomUUID()}`;
+  }
+
+  if (typeof cryptoObj?.getRandomValues === 'function') {
+    const bytes = cryptoObj.getRandomValues(new Uint8Array(16));
+    return `tsam-${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  return `tsam-${String(Date.now())}-${String(Math.random()).slice(2)}`;
 }
 
 /*
@@ -76,6 +118,47 @@ export async function findByName(name, {
   url.searchParams.set('fields', 'files(id,name,mimeType,createdTime,parents)');
   url.searchParams.set('orderBy', 'createdTime');
   url.searchParams.set('pageSize', '100');
+
+  const result = await callGoogle(url.href, { accessToken, signal, progress: PROGRESS.NONE });
+
+  return Array.isArray(result?.files) ? result.files : [];
+}
+
+/*
+ * 名前に文字列を含むものを探す（2026-08-18 追加）。
+ *
+ * Drive の q は前方一致を書けないため `name contains` で拾い、
+ * 前方一致の絞り込みは呼び出し側が行う。用途は OCR 一時ドキュメントの
+ * 孤児回収（§9.5・findings #6）だけであり、**drive.file スコープなので
+ * このアプリが作ったものしか返らない。** 利用者の他のファイルには届かない。
+ */
+export async function findByNameContains(fragments, {
+  accessToken,
+  mimeType = GOOGLE_DOC_MIME,
+  pageSize = 50,
+  signal,
+} = {}) {
+  const list = (Array.isArray(fragments) ? fragments : [fragments])
+    .map((value) => String(value ?? '').trim())
+    .filter((value) => value !== '');
+
+  if (list.length === 0) {
+    return [];
+  }
+
+  const nameClause = list
+    .map((fragment) => `name contains ${quoteDriveQueryValue(fragment)}`)
+    .join(' or ');
+
+  const url = new URL(GOOGLE_API.driveFiles);
+  url.searchParams.set('q', [
+    `(${nameClause})`,
+    `mimeType = ${quoteDriveQueryValue(mimeType)}`,
+    'trashed = false',
+  ].join(' and '));
+  url.searchParams.set('fields', 'files(id,name,createdTime)');
+  url.searchParams.set('orderBy', 'createdTime');
+  url.searchParams.set('pageSize', String(pageSize));
 
   const result = await callGoogle(url.href, { accessToken, signal, progress: PROGRESS.NONE });
 
@@ -146,7 +229,8 @@ export async function ensureMonthFolder({ accessToken, originalsFolderId, year, 
  */
 export async function uploadImage({ accessToken, blob, name, parentId, signal }) {
   const metadata = { name: String(name), parents: [parentId] };
-  const boundary = `receipt-${Math.random().toString(36).slice(2)}-${blob.size}`;
+  /* 内容から決めない（findings #7）。 */
+  const boundary = createBoundary();
 
   const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${blob.type || 'application/octet-stream'}\r\n\r\n`;
   const tail = `\r\n--${boundary}--`;

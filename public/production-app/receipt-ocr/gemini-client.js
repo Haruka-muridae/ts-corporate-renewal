@@ -23,11 +23,32 @@ import { AppError, PROGRESS } from './errors.js';
 /*
  * 応答からエラーコードを決める（§12）。
  *
- * 400/403 はキーの問題（KEY-002）、429 はクォータ（AI-002）。
- * 404 はモデルが無い場合で、呼び出し側が1回だけ別モデルへ落とす（§6）。
+ * ==================================================================
+ * 400 をキーの問題にしない（2026-08-18 修正）
+ * ==================================================================
+ * 400 は**こちらが送った要求の形が不正**という意味で、キーとは関係がない。
+ * responseSchema の書き方・generationConfig の値・モデル名の指定など、
+ * 原因はこちら側にある。それを「APIキーを確認してください」と案内すると、
+ * 利用者は自分のキーを疑い、作り直し、それでも直らないことになる。
+ *
+ * 名刺OCRのフェーズ0で実際にこれが起きている（responseSchema の type を
+ * 小文字で送っていたための 400 を、キーの問題として表示していた）。
+ * 複製元の分類: public/production-app/card-ocr/gemini.js mapStatus()
+ * （複製日 2026-08-18。docs/receipt-ocr-findings-20260804.md #3・#5）。
+ *
+ *   400      … AI-003（送信内容の問題。キーを疑わせない）
+ *   401/403  … KEY-002（キーが拒否された）
+ *   404      … MODEL-404（内部コード。1回だけ別モデルへ落とす。§6）
+ *   429      … AI-002（クォータ）
+ *   500番台  … SRV-001（待てば直る。503 は混雑）
+ * ==================================================================
  */
 export function mapGeminiError(status) {
-  if (status === 400 || status === 401 || status === 403) {
+  if (status === 400) {
+    return 'AI-003';
+  }
+
+  if (status === 401 || status === 403) {
     return 'KEY-002';
   }
 
@@ -37,6 +58,10 @@ export function mapGeminiError(status) {
 
   if (status === 404) {
     return 'MODEL-404';
+  }
+
+  if (Number(status) >= 500) {
+    return 'SRV-001';
   }
 
   return 'OCR-001';
@@ -57,8 +82,11 @@ async function callModel(model, { apiKey, body, signal, progress }) {
       body: JSON.stringify(body),
       signal,
     });
-  } catch {
-    throw new AppError('OCR-001', { progress, detail: 'network' });
+  } catch (error) {
+    /* 通信そのものが成立しなかった。OCR の失敗と混ぜない（findings #5）。 */
+    const aborted = error?.name === 'AbortError' || signal?.aborted === true;
+
+    throw new AppError('NET-001', { progress, detail: aborted ? 'aborted' : 'network' });
   }
 
   if (!response.ok) {

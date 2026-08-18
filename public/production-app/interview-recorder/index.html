@@ -1,0 +1,156 @@
+<!--
+  移植元: スタンドアロン版 interview-recorder リポジトリ
+  （/home/yuki9/projects/interview-recorder/public/index.html）。
+  移植日 2026-08-18。録音同意モーダル・画面構成・状態機械はそのまま維持し、
+  本番アプリの流儀（認証ガード・CSP・ポータル導線）を追加している。
+-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ブラウザだけで完結するオンライン面談の録音ツールです。録音データは外部へ送信されず、この端末内でのみ処理されます。">
+<title>面談録音ツール</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+
+<!--
+  ==================================================================
+  Content-Security-Policy
+  ==================================================================
+  connect-src の内訳:
+    - 'self'                              … 自分の JS / CSS
+    - auth-verify.potenitas-lp.workers.dev … セッション検証（verifySession）の
+                                            キャッシュ付き代理。guardPage の
+                                            宛先はここになる（public/auth/
+                                            config.js の verifyApiUrl）。
+                                            *.workers.dev に広げないこと
+
+  本アプリは録音データ・記録情報のいずれも外部へ送信しない
+  （タブ音声＋マイクのミックス、MP3化、ダウンロードはすべて端末内で完結する）。
+  そのため script.google.com / generativelanguage.googleapis.com 等は
+  一切許可しない。worker-src は AudioWorklet（pcm-capture-worklet.js）の
+  読み込みに必要。media-src blob: は録音結果の <audio> 再生に必要。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://auth-verify.potenitas-lp.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<p id="auth-loading" class="auth-loading-message">読み込んでいます…</p>
+
+<!--
+  guardPage() が利用者を返すまで中身を出さない（他の本番アプリと同じ約束）。
+  hidden を外すのは app.js の guard 通過後だけ。
+-->
+<main id="app-main" hidden>
+<div class="app">
+
+  <header class="app-header">
+    <h1>面談録音ツール</h1>
+  </header>
+
+  <div id="screen-root" class="screen-root">
+
+    <!-- 1. 開始画面 -->
+    <section id="screen-idle" class="screen" data-screen="idle">
+      <h2>オンライン面談をブラウザだけで録音</h2>
+      <p class="description">
+        ブラウザのタブ音声共有とマイクを使って、Web 会議の音声をその場で録音できます。
+        インストールやアップロードは不要です。録音データはこの端末内でのみ処理されます。
+      </p>
+      <button id="btn-start" class="btn btn-primary" type="button">録音を開始</button>
+      <p id="idle-error" class="error-message" hidden></p>
+    </section>
+
+    <!-- 3. 音声キャプチャ手順ガイド -->
+    <section id="screen-capture-guide" class="screen" data-screen="capture-guide" hidden>
+      <h2>画面共有の準備</h2>
+      <p class="description">
+        次のダイアログで、<strong>面談中のタブ</strong>を選択し、
+        「<strong>タブの音声も共有する</strong>」を必ずオンにしてください。
+      </p>
+      <button id="btn-capture-continue" class="btn btn-primary" type="button">共有ダイアログを開く</button>
+      <button id="btn-capture-cancel" class="btn btn-secondary" type="button">やめる</button>
+    </section>
+
+    <!-- タブ音声なし警告 -->
+    <section id="screen-no-tab-audio" class="screen" data-screen="no-tab-audio" hidden>
+      <h2 class="warning-heading">タブの音声が共有されていません</h2>
+      <p class="description">
+        このままでは相手の声が録音されません。共有をやり直すか、マイクのみで続行できます。
+      </p>
+      <button id="btn-retry-share" class="btn btn-primary" type="button">やり直す</button>
+      <button id="btn-mic-only" class="btn btn-secondary" type="button">マイクのみで続行</button>
+    </section>
+
+    <!-- 4. 録音中画面 -->
+    <section id="screen-recording" class="screen" data-screen="recording" hidden>
+      <div class="recording-indicator">
+        <span class="rec-dot" aria-hidden="true"></span>
+        <span class="rec-label">録音中</span>
+      </div>
+      <p id="rec-timer" class="rec-timer">00:00:00</p>
+      <p id="rec-warning" class="warning-message" hidden></p>
+      <button id="btn-stop" class="btn btn-danger" type="button">録音を停止</button>
+    </section>
+
+    <!-- 5. 結果画面 -->
+    <section id="screen-done" class="screen" data-screen="done" hidden>
+      <h2>録音が完了しました</h2>
+      <audio id="playback" controls></audio>
+      <p id="consent-info" class="consent-info"></p>
+      <p id="mp3-fallback-note" class="warning-message" hidden>
+        MP3 への変換ができなかったため、元データ（WebM）で保存します。
+      </p>
+      <div class="button-row">
+        <button id="btn-download-audio" class="btn btn-primary" type="button">音声をダウンロード</button>
+        <button id="btn-download-json" class="btn btn-secondary" type="button">記録情報をダウンロード</button>
+      </div>
+      <p class="secondary-link-row">
+        <button id="btn-download-webm-original" class="link-secondary" type="button" hidden>元データ（WebM）をダウンロード</button>
+      </p>
+      <button id="btn-restart" class="btn btn-secondary" type="button">新しい録音を開始</button>
+    </section>
+
+  </div>
+
+  <footer class="app-footer">
+    <p class="notice">
+      相手の同意なく会話を録音することは、法令や利用規約に違反する場合があります。
+      録音前に必ず相手へ通告し、同意を得てください。
+    </p>
+    <p class="notice">
+      <a class="link-secondary" href="./legal.html">プライバシーポリシー・免責事項</a>
+    </p>
+    <p class="notice">
+      <a href="../../portal/">ポータルへ戻る</a>
+    </p>
+  </footer>
+
+  <!-- 2. 録音同意の確認モーダル -->
+  <div id="modal-consent" class="modal-overlay" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-consent-title">
+      <h2 id="modal-consent-title">録音前の確認</h2>
+      <p>面談相手に、録音することを通告しましたか？</p>
+      <p id="modal-consent-denied" class="denied-message" hidden>
+        録音を開始できません。先に面談相手へ録音することを伝え、同意を得てください。
+      </p>
+      <div class="button-row">
+        <button id="btn-consent-yes" class="btn btn-primary" type="button">はい、通告して同意を得ました</button>
+        <button id="btn-consent-no" class="btn btn-secondary" type="button">いいえ、まだです</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<script src="./vendor/lamejs/lame.min.js"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
