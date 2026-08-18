@@ -36,6 +36,7 @@
 | 根拠 | `audio-transcriber-requirements-v1.md`（表 v1.1 / 本文 1.3）、`meeting-minutes-requirements-v1.md`（v1.0 / v1.1）、`note-post-requirements-v1.md`（v1.0 / v1.1）、`short-script-spec-v1.md`（v1.4 / 1.5） |
 | 影響 | 一覧を見て「最新を読んだ」と誤認する |
 | 提案 | 一覧表を本文に合わせる（本文が正）。設計書のコミットとは分けて行う |
+| 状態 | **対応済み（2026-08-18）。** 一覧表を本文の版（v1.5 / v1.3 / v1.1 / v1.1）に合わせた |
 
 ---
 
