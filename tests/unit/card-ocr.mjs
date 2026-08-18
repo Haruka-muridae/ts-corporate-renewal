@@ -1164,6 +1164,42 @@ try {
       '重複でも「それでも登録する」を選べる',
       /skipDuplicateCheck: true/.test(appSource),
     );
+
+    /* 重複時の3つの選択肢（FR-17）。 */
+    check(
+      '**新規登録・既存更新・キャンセルの3つを出す（FR-17）**',
+      /id="co-update"/.test(htmlSource)
+        && /id="co-register-anyway"/.test(htmlSource)
+        && /id="co-duplicate-cancel"/.test(htmlSource),
+    );
+    check(
+      '**差分を出す場所がある（無確認の上書きをさせない）**',
+      /id="co-duplicate-diff"/.test(htmlSource) && /renderDuplicateDiff/.test(appSource),
+    );
+    check(
+      '差分は JS が組み立てる（innerHTML を使わない）',
+      /id="co-duplicate-diff"[^>]*>\s*<\/dl>/.test(htmlSource),
+    );
+    check(
+      '**更新のボタンは既定で隠してある（更新できる行があるときだけ出す）**',
+      /id="co-update"[^>]*hidden/.test(htmlSource),
+    );
+    check(
+      '**更新は record_id を渡して行う（画面の行番号で書かない）**',
+      /register\(\{ updateRecordId: duplicateTarget \}\)/.test(appSource),
+    );
+    check(
+      '管理IDが無い行では更新させない',
+      /result\.duplicate\.updatable \? result\.duplicate\.recordId : null/.test(appSource),
+    );
+    check(
+      '**変更履歴を残せなかったことを画面に出す（§11.3）**',
+      /historyRecorded/.test(appSource) && /変更履歴を記録できませんでした/.test(appSource),
+    );
+    check(
+      '**対象の行が消えていたら別の行を上書きしない**',
+      /result\.missingRow/.test(appSource),
+    );
     check(
       '登録の結果欄と重複の欄は既定で隠してある',
       /id="co-saved"[^>]*hidden/.test(htmlSource) && /id="co-duplicate"[^>]*hidden/.test(htmlSource),
@@ -1206,6 +1242,19 @@ try {
       sanitize.escapeCellText('\t=1').startsWith("'"),
     );
     check('null でも壊れない', sanitize.escapeCellText(null) === '');
+
+    for (const [input] of cases) {
+      check(
+        `unescapeCellText で戻せる（${JSON.stringify(input).slice(0, 20)}）`,
+        sanitize.unescapeCellText(sanitize.escapeCellText(input)) === String(input),
+      );
+    }
+
+    check(
+      "**' で始まるだけの値は触らない（人名の 't Hooft 等）**",
+      sanitize.unescapeCellText("'t Hooft") === "'t Hooft",
+    );
+    check('空でも壊れない', sanitize.unescapeCellText(null) === '');
     check('undefined でも壊れない', sanitize.escapeCellText(undefined) === '');
     check('数値も文字列にして返す', sanitize.escapeCellText(123) === '123');
 
@@ -1447,6 +1496,100 @@ try {
     check('has_back が false なら空欄（§11.2）', noBack[index('has_back')] === '');
   }
 
+  {
+    /* 差分に出す列（FR-17 の差分確認）。 */
+    const contentHeaders = schema.headersOf(schema.CONTENT_COLUMNS);
+
+    check(
+      '**名刺の中身は差分に出す**',
+      ['会社名', '氏名', '役職', 'メールアドレス', '電話番号', 'その他'].every((h) => contentHeaders.includes(h)),
+    );
+    check(
+      '**管理用の列は差分に出さない（判断材料にならず、肝心の差が埋もれる）**',
+      ['record_id', '登録日時', 'duplicate_key', 'has_back',
+        'front_image_hash', 'front_file_id', 'front_file_url',
+        'app_version', 'prompt_version'].every((h) => !contentHeaders.includes(h)),
+    );
+    check('差分の列は台帳の列の部分集合', schema.CONTENT_COLUMNS.length < schema.DATA_COLUMNS.length);
+  }
+
+  {
+    /* 行 → 鍵付きの値（buildDataRow の逆）。更新のときに要る。 */
+    const row = schema.buildDataRow({
+      record_id: 'R1',
+      registeredAt: '2026-08-05 09:00:00',
+      companyName: '株式会社サンプル商事',
+      phone: '+81312345678',
+    });
+
+    const values = schema.rowToValues(row);
+
+    check('record_id を戻せる', values.record_id === 'R1');
+    check('登録日時を戻せる', values.registeredAt === '2026-08-05 09:00:00');
+    check(
+      '**サニタイズのアポストロフィを外して戻す（外さないと毎回「変更あり」になる）**',
+      values.phone === '+81312345678',
+      values.phone,
+    );
+    check('短い行でも欠けた列は空文字', schema.rowToValues(['R1']).companyName === '');
+    check('配列でなくても壊れない', schema.rowToValues(null).record_id === '');
+  }
+
+  {
+    /* 差分（FR-17）。**表に入る形に寄せて比べる。** */
+    const before = { companyName: '株式会社サンプル商事', jobTitle: '課長', email: '' };
+    const after = { companyName: '株式会社サンプル商事', jobTitle: '部長', email: 'taro@example.com' };
+
+    const changes = schema.diffValues(before, after);
+    const keys = changes.map((change) => change.key).sort().join(',');
+
+    check('変わった項目だけを返す', keys === 'email,jobTitle', keys);
+    check(
+      '変更前と変更後を持つ',
+      changes.find((c) => c.key === 'jobTitle').oldValue === '課長'
+        && changes.find((c) => c.key === 'jobTitle').newValue === '部長',
+    );
+    check('見出しを添える（変更履歴の field_name になる）', changes.find((c) => c.key === 'jobTitle').header === '役職');
+    check('同じなら空', schema.diffValues(before, before).length === 0);
+
+    check(
+      '**配列は行と同じ空白区切りで比べる（型の違いを差分にしない）**',
+      schema.diffValues(
+        { backFilledFields: 'address email' },
+        { backFilledFields: ['address', 'email'] },
+        schema.DATA_COLUMNS,
+      ).length === 0,
+    );
+    check(
+      '**true は TRUE として比べる**',
+      schema.diffValues({ hasBack: 'TRUE' }, { hasBack: true }, schema.DATA_COLUMNS).length === 0,
+    );
+    check(
+      '**裏面が外れたことは差分になる**',
+      schema.diffValues({ hasBack: 'TRUE' }, { hasBack: false }, schema.DATA_COLUMNS)
+        .some((c) => c.key === 'hasBack'),
+    );
+  }
+
+  {
+    /* 変更履歴の行（§11.3）。 */
+    const row = schema.buildHistoryRow({
+      historyId: 'H1',
+      changedAt: '2026-08-18 10:00:00',
+      recordId: 'R1',
+      fieldName: '役職',
+      oldValue: '=DANGER()',
+      newValue: '部長',
+    });
+
+    check('列の数が §11.3 と一致する', row.length === schema.HISTORY_COLUMNS.length);
+    check(
+      '**変更前値も無害化する（履歴の側から数式を持ち込ませない）**',
+      row[4] === "'=DANGER()",
+      row[4],
+    );
+  }
+
   /* ================================================================ */
   section('Sheets API（sheets.js）');
 
@@ -1489,6 +1632,57 @@ try {
     check('行として挿入する', seen[0].url.includes('insertDataOption=INSERT_ROWS'));
     check('append を呼んでいる', seen[0].url.includes(':append'));
     check('送信先は Sheets API', seen[0].url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/'));
+  }
+
+  {
+    /* まとめて追記する（変更履歴は1件の更新で何行にもなる）。 */
+    const seen = [];
+
+    const impl = async (url, options = {}) => {
+      seen.push({ url: String(url), body: JSON.parse(options.body) });
+      return { ok: true, status: 200, json: async () => ({ updates: { updatedRange: 'A2' } }) };
+    };
+
+    await sheets.appendRows('S', '変更履歴', [['a'], ['b'], ['c']], { token: 'T', fetchImpl: impl });
+
+    check('**何行でも1回の呼び出しで送る（書き込み上限を使い切らない）**', seen.length === 1);
+    check('行をすべて送る', seen[0].body.values.length === 3);
+
+    seen.length = 0;
+    await sheets.appendRows('S', '変更履歴', [], { token: 'T', fetchImpl: impl });
+    check('行が無ければ通信しない', seen.length === 0);
+  }
+
+  {
+    /* 既存行の読み取りと書き換え（FR-18 の更新）。 */
+    const seen = [];
+
+    const impl = async (url, options = {}) => {
+      seen.push({ url: decodeURIComponent(String(url)), method: options.method ?? 'GET', body: options.body ?? null });
+      return { ok: true, status: 200, json: async () => ({ values: [['a', 'b']], updatedRange: 'x' }) };
+    };
+
+    const row = await sheets.readRow('S', '名刺データ', 5, schema.DATA_COLUMNS.length, { token: 'T', fetchImpl: impl });
+
+    check('行の範囲を1行に絞る', seen[0].url.includes("'名刺データ'!A5:"), seen[0].url);
+    check(
+      '**数式のまま読む（表示結果と突き合わせると毎回「変更あり」になる）**',
+      seen[0].url.includes('valueRenderOption=FORMULA'),
+      seen[0].url,
+    );
+    check('読んだ値を文字列で返す', row.join(',') === 'a,b');
+
+    seen.length = 0;
+    await sheets.updateRow('S', '名刺データ', 5, schema.headersOf(schema.DATA_COLUMNS), { token: 'T', fetchImpl: impl });
+
+    check('更新は PUT（values.update）', seen[0].method === 'PUT');
+    check('更新も USER_ENTERED（HYPERLINK のため）', seen[0].url.includes('valueInputOption=USER_ENTERED'));
+    check(
+      '**列定義の幅ちょうどを書く（利用者が右へ足した列を巻き込まない）**',
+      seen[0].url.includes(`'名刺データ'!A5:${sheets.columnLetter(schema.DATA_COLUMNS.length - 1)}5`),
+      seen[0].url,
+    );
+    check('append ではない（行を増やさない）', !seen[0].url.includes(':append'));
   }
 
   {
@@ -3275,6 +3469,431 @@ try {
     check(
       '止めたときは画像を上げない',
       !calls.some((c) => c.url.startsWith('https://www.googleapis.com/upload/')),
+    );
+  }
+
+  /* ================================================================ */
+  section('既存行の更新（register.js / FR-17・FR-18・§11.3）');
+
+  {
+    /* 行の特定は record_id で行う。位置で当てにいかない。 */
+    const rows = [
+      { rowNumber: 2, recordId: 'R1', frontHash: 'h1', backHash: '', companyName: 'A社', fullName: '甲' },
+      { rowNumber: 3, recordId: 'R2', frontHash: 'h2', backHash: 'h3', companyName: 'B社', fullName: '乙' },
+    ];
+
+    const byHash = register.findDuplicateRow({ front: 'zzz', back: 'h3' }, { companyName: 'X', fullName: 'Y' }, rows);
+
+    check('**画像の一致は行まで特定する**', byHash.row?.recordId === 'R2', String(byHash.row?.recordId));
+    check('どちらの面が一致したかを返す', byHash.side === 'back', String(byHash.side));
+    check('種別は image', byHash.kind === 'image');
+    check(
+      '**表と裏を取り違えて撮っても拾う（§FR-06）**',
+      register.findDuplicateRow({ front: 'h3' }, { companyName: 'X', fullName: 'Y' }, rows).row?.recordId === 'R2',
+    );
+
+    const byName = register.findDuplicateRow({ front: 'zzz' }, { companyName: 'A社', fullName: '甲' }, rows);
+
+    check('会社名＋氏名でも行を特定する', byName.row?.rowNumber === 2, String(byName.row?.rowNumber));
+    check(
+      '**画像の一致を先に見る（根拠が強い）**',
+      register.findDuplicateRow({ front: 'h2' }, { companyName: 'A社', fullName: '甲' }, rows).kind === 'image',
+    );
+    check(
+      '一致しなければ行を返さない',
+      register.findDuplicateRow({ front: 'zzz' }, { companyName: 'C社', fullName: '丙' }, rows).row === null,
+    );
+    check('既存が空でも壊れない', register.findDuplicateRow({ front: 'h1' }, {}, []).found === false);
+  }
+
+  {
+    /* record_id → 行番号。見出しが1行目なので、1件目は2行目。 */
+    const impl = async () => ({ ok: true, status: 200, json: async () => ({ values: [['R1'], ['R2'], ['R3']] }) });
+
+    check(
+      '見出しのぶんをずらして返す',
+      await register.locateRowByRecordId('S', 'R3', { token: 'T', fetchImpl: impl }) === 4,
+    );
+    check(
+      '**無ければ null（推測で別の行を返さない）**',
+      await register.locateRowByRecordId('S', 'GONE', { token: 'T', fetchImpl: impl }) === null,
+    );
+    check(
+      '空の record_id では引かない',
+      await register.locateRowByRecordId('S', '', { token: 'T', fetchImpl: impl }) === null,
+    );
+  }
+
+  /* 台帳に入っている1件（更新の相手）。 */
+  const EXISTING_RECORD = {
+    record_id: 'R2',
+    registeredAt: '2026-01-05 09:00:00',
+    companyName: '株式会社サンプル商事',
+    fullName: '見本 太郎',
+    jobTitle: '課長',
+    email: 'taro@example.com',
+    duplicateKey: 'email:taro@example.com',
+    frontImageHash: 'OLD-HASH',
+    frontFileId: 'OLD-FILE',
+    frontFileUrl: 'https://drive.google.com/file/d/OLD/view',
+    appVersion: '0.0.0',
+    promptVersion: 'old',
+  };
+
+  /*
+   * 2行の台帳を持つスタブ。2行目（R2）が上の1件。
+   * 範囲の形で読み分ける（実際の Sheets と同じく A1 記法で来る）。
+   */
+  function makeLedgerImpl(calls, { recordIds = [['R1'], ['R2']] } = {}) {
+    const existingRow = schema.buildDataRow(EXISTING_RECORD);
+
+    return async (url, options = {}) => {
+      const text = decodeURIComponent(String(url));
+      const method = options.method ?? 'GET';
+      calls.push({ url: text, method, body: options.body ?? null });
+
+      if (text.startsWith('https://www.googleapis.com/upload/')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: 'NEW-IMG', webViewLink: 'https://drive.google.com/file/d/NEW-IMG/view' }),
+        };
+      }
+
+      if (text.includes(':append')) {
+        return { ok: true, status: 200, json: async () => ({ updates: { updatedRange: 'x' } }) };
+      }
+
+      if (text.includes('/values/')) {
+        if (/!A2:A$/.test(text.split('?')[0])) {
+          return { ok: true, status: 200, json: async () => ({ values: recordIds }) };
+        }
+
+        /* 1行ぶんの読み取り（A3:AA3 のような形）。 */
+        if (/!A(\d+):[A-Z]+\1/.test(text) && method === 'GET') {
+          return { ok: true, status: 200, json: async () => ({ values: [existingRow] }) };
+        }
+
+        if (method === 'PUT') {
+          return { ok: true, status: 200, json: async () => ({ updatedRange: 'x' }) };
+        }
+
+        /* ハッシュ列・会社名・氏名など。 */
+        if (/!C2:C$/.test(text.split('?')[0])) {
+          return { ok: true, status: 200, json: async () => ({ values: [[''], ['株式会社サンプル商事']] }) };
+        }
+
+        if (/!F2:F$/.test(text.split('?')[0])) {
+          return { ok: true, status: 200, json: async () => ({ values: [[''], ['見本 太郎']] }) };
+        }
+
+        return { ok: true, status: 200, json: async () => ({ values: [] }) };
+      }
+
+      if (text.includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [{ id: 'MONTH' }] }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ id: 'X' }) };
+    };
+  }
+
+  const EDITED_VALUES = Object.freeze({
+    companyName: '株式会社サンプル商事',
+    fullName: '見本 太郎',
+    jobTitle: '部長',
+    email: 'taro@example.com',
+  });
+
+  {
+    /*
+     * 重複を見つけたところ。**更新に必要なものを返す**
+     * （どの行か・いま何が入っているか・何が変わるか）。
+     */
+    const calls = [];
+
+    const result = await register.registerCard({
+      values: EDITED_VALUES,
+      frontBlob: new Blob(['まったく別の画像'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: makeLedgerImpl(calls),
+    });
+
+    check('重複なら登録しない', result.registered === false);
+    check('**どの行かを返す（record_id）**', result.duplicate.recordId === 'R2', String(result.duplicate.recordId));
+    check('行番号も返す', result.duplicate.rowNumber === 3, String(result.duplicate.rowNumber));
+    check('更新できると伝える', result.duplicate.updatable === true);
+    check('いま入っている値を返す', result.existing?.jobTitle === '課長', String(result.existing?.jobTitle));
+
+    const changed = result.changes.map((c) => c.header).join(',');
+
+    check('**変わる項目だけを返す（差分確認のため）**', changed === '役職', changed);
+    check(
+      '変更前と変更後が分かる',
+      result.changes[0].oldValue === '課長' && result.changes[0].newValue === '部長',
+    );
+    check(
+      '**この段階では書かない（画像も上げない）**',
+      !calls.some((c) => c.url.startsWith('https://www.googleapis.com/upload/'))
+        && !calls.some((c) => c.method === 'PUT' || c.url.includes(':append')),
+    );
+  }
+
+  {
+    /* record_id が空の行は更新できない。位置で当てにいかない。 */
+    const calls = [];
+
+    const result = await register.registerCard({
+      values: EDITED_VALUES,
+      frontBlob: new Blob(['まったく別の画像'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: makeLedgerImpl(calls, { recordIds: [] }),
+    });
+
+    check('重複としては拾う', result.registered === false && result.duplicate.kind === 'attribute');
+    check(
+      '**管理IDが無い行は更新の対象にしない**',
+      result.duplicate.updatable === false,
+      String(result.duplicate.updatable),
+    );
+    check('その行を読みにいかない', !calls.some((c) => /!A\d+:[A-Z]+\d/.test(c.url)));
+    check('差分は空', result.changes.length === 0);
+  }
+
+  {
+    /* 更新の本体。 */
+    const calls = [];
+
+    const result = await register.registerCard({
+      values: EDITED_VALUES,
+      merged: { fromBackFields: [] },
+      frontBlob: new Blob(['新しい画像'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: makeLedgerImpl(calls),
+      at: new Date(2026, 7, 18, 10, 0, 0),
+      updateRecordId: 'R2',
+    });
+
+    check('更新できる', result.registered === true && result.updated === true);
+    check('管理IDは変えない', result.recordId === 'R2');
+    check('**行は追加しない（append を呼ばない）**', !calls.some((c) => c.url.includes(':append') && c.url.includes('名刺データ')));
+
+    const put = calls.find((c) => c.method === 'PUT');
+    const written = JSON.parse(put.body).values[0];
+    const at = (header) => written[schema.headersOf(schema.DATA_COLUMNS).indexOf(header)];
+
+    check('**record_id で特定した行を書き換える（3行目）**', /!A3:[A-Z]+3/.test(put.url), put.url);
+    check('管理IDをそのまま残す', at('record_id') === 'R2', at('record_id'));
+    check(
+      '**登録日時は最初のまま（更新時刻は変更履歴が持つ）**',
+      at('登録日時') === '2026-01-05 09:00:00',
+      at('登録日時'),
+    );
+    check('直した値が入る', at('役職') === '部長', at('役職'));
+    check('画像は差し替わる', at('front_file_id') === 'NEW-IMG', at('front_file_id'));
+
+    /* 変更履歴（§11.3）。 */
+    const history = calls.find((c) => c.url.includes(':append'));
+
+    check('**変更履歴へ書いている**', Boolean(history));
+    check('変更履歴タブへ書いている', history.url.includes('変更履歴'), history.url);
+    check(
+      '**台帳を書いたあとで履歴を書く（失敗しても嘘の履歴を残さない）**',
+      calls.indexOf(put) < calls.indexOf(history),
+    );
+
+    const historyRows = JSON.parse(history.body).values;
+    const index = (header) => schema.headersOf(schema.HISTORY_COLUMNS).indexOf(header);
+    const fields = historyRows.map((row) => row[index('field_name')]);
+    const jobRow = historyRows.find((row) => row[index('field_name')] === '役職');
+
+    check('**変更前値を残す**', jobRow[index('old_value')] === '課長', jobRow[index('old_value')]);
+    check('変更後の値も残す', jobRow[index('new_value')] === '部長');
+    check('record_id を添える', jobRow[index('record_id')] === 'R2');
+    check('changed_at を入れる', jobRow[index('changed_at')] === '2026-08-18 10:00:00', jobRow[index('changed_at')]);
+    check('history_id を作る', jobRow[index('history_id')].length >= 16);
+    check(
+      '**画像やハッシュの入れ替わりも記録する（あとから追えるように）**',
+      fields.includes('front_file_id') && fields.includes('front_image_hash'),
+      fields.join(','),
+    );
+    check('record_id 自体は変更行にしない', !fields.includes('record_id'));
+    check('登録日時を変更行にしない', !fields.includes('登録日時'));
+    check('画面へ返す差分にも役職が入る', result.changes.some((c) => c.header === '役職'));
+    check('履歴を残せたことを返す', result.historyRecorded === true);
+  }
+
+  {
+    /* 対象の行が消えていたら、**別の行を上書きしない。** */
+    const calls = [];
+
+    const result = await register.registerCard({
+      values: EDITED_VALUES,
+      frontBlob: new Blob(['新しい画像'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: makeLedgerImpl(calls),
+      updateRecordId: 'GONE',
+    });
+
+    check('**行が見つからなければ何も書かない**', !calls.some((c) => c.method === 'PUT'));
+    check('画像も上げない', !calls.some((c) => c.url.startsWith('https://www.googleapis.com/upload/')));
+    check('見つからなかったことを返す', result.missingRow === true && result.registered === false);
+  }
+
+  {
+    /*
+     * 追記 → 同じ内容で更新、の一巡（状態を持つ台帳のスタブ）。
+     *
+     * **変えていない項目が差分に出ないこと**を見るのが目的である。
+     * サニタイズのアポストロフィ（`+81…`）や複数行の値で、
+     * 「何も直していないのに全項目が変更扱い」になると、
+     * 変更履歴が意味を失い、差分確認画面も読めなくなる。
+     */
+    const ledger = { rows: [], history: [] };
+
+    const impl = async (url, options = {}) => {
+      const text = decodeURIComponent(String(url));
+      const method = options.method ?? 'GET';
+      const raw = options.body;
+      const body = typeof raw === 'string' && raw.startsWith('{') ? JSON.parse(raw) : null;
+
+      if (text.startsWith('https://www.googleapis.com/upload/')) {
+        const id = `IMG-${ledger.rows.length}-${ledger.history.length}`;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id, webViewLink: `https://drive.google.com/file/d/${id}/view` }),
+        };
+      }
+
+      if (text.includes(':append')) {
+        (text.includes('変更履歴') ? ledger.history : ledger.rows).push(...body.values);
+        return { ok: true, status: 200, json: async () => ({ updates: { updatedRange: 'x' } }) };
+      }
+
+      if (text.includes('/values/')) {
+        const range = text.split('/values/')[1].split('?')[0];
+
+        if (method === 'PUT') {
+          ledger.rows[Number(/!A(\d+):/.exec(range)[1]) - 2] = body.values[0];
+          return { ok: true, status: 200, json: async () => ({ updatedRange: range }) };
+        }
+
+        const single = /!([A-Z]+)2:\1$/.exec(range);
+
+        if (single) {
+          const index = single[1].split('')
+            .reduce((acc, ch) => acc * 26 + (ch.charCodeAt(0) - 64), 0) - 1;
+
+          return { ok: true, status: 200, json: async () => ({ values: ledger.rows.map((row) => [row[index] ?? '']) }) };
+        }
+
+        const oneRow = /!A(\d+):[A-Z]+\1/.exec(range);
+
+        if (oneRow) {
+          return { ok: true, status: 200, json: async () => ({ values: [ledger.rows[Number(oneRow[1]) - 2] ?? []] }) };
+        }
+
+        return { ok: true, status: 200, json: async () => ({ values: [] }) };
+      }
+
+      if (text.includes('q=')) {
+        return { ok: true, status: 200, json: async () => ({ files: [{ id: 'MONTH' }] }) };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ id: 'X' }) };
+    };
+
+    const values = {
+      companyName: '株式会社サンプル商事',
+      fullName: '見本 太郎',
+      jobTitle: '課長',
+      /* 先頭にアポストロフィが付く値。 */
+      phone: '+81312345678',
+      email: 'taro@example.com',
+      /* 複数行の値。 */
+      otherInformation: '創業1950年\n第二事業部',
+    };
+
+    const storageStub = { spreadsheetId: 'S', imageFolderId: 'IMAGES', writable: true };
+    const common = { merged: { fromBackFields: [] }, storage: storageStub, token: 'T', fetchImpl: impl };
+
+    const first = await register.registerCard({
+      ...common,
+      values,
+      frontBlob: new Blob(['front'], { type: 'image/jpeg' }),
+      at: new Date(2026, 0, 5, 9, 0, 0),
+    });
+
+    /* 同じ名刺を撮り直した体で、もう一度出す（画像は別物）。 */
+    const again = await register.registerCard({
+      ...common,
+      values,
+      frontBlob: new Blob(['front-2'], { type: 'image/jpeg' }),
+      at: new Date(2026, 7, 18, 10, 0, 0),
+    });
+
+    check('撮り直しを重複として拾う', again.registered === false && again.duplicate.recordId === first.recordId);
+    check(
+      '**内容が同じなら差分は空（アポストロフィ・複数行で誤検出しない）**',
+      again.changes.length === 0,
+      JSON.stringify(again.changes),
+    );
+
+    const updated = await register.registerCard({
+      ...common,
+      values,
+      frontBlob: new Blob(['front-2'], { type: 'image/jpeg' }),
+      at: new Date(2026, 7, 18, 10, 0, 0),
+      updateRecordId: first.recordId,
+    });
+
+    const after = schema.rowToValues(ledger.rows[0]);
+
+    check('**行は増えない（上書きである）**', ledger.rows.length === 1, String(ledger.rows.length));
+    check('管理IDは変わらない', after.record_id === first.recordId);
+    check('登録日時は最初のまま', after.registeredAt === '2026-01-05 09:00:00', after.registeredAt);
+    check('値は元のまま戻る', after.phone === '+81312345678' && after.otherInformation === '創業1950年\n第二事業部');
+    check(
+      '**変わったのは画像まわりだけ（内容の列は履歴に出ない）**',
+      updated.changes.map((c) => c.header).join(',') === 'front_image_hash,front_file_id,front_file_url',
+      updated.changes.map((c) => c.header).join(','),
+    );
+    check('履歴の行数は変更点の数と一致する', ledger.history.length === updated.changes.length);
+  }
+
+  {
+    /* 変更履歴だけ失敗した場合。**更新そのものは成功として扱う。** */
+    const calls = [];
+    const base = makeLedgerImpl(calls);
+
+    const impl = async (url, options = {}) => {
+      const text = decodeURIComponent(String(url));
+
+      if (text.includes(':append')) {
+        return { ok: false, status: 500, json: async () => ({ error: { message: 'boom' } }) };
+      }
+
+      return base(url, options);
+    };
+
+    const result = await register.registerCard({
+      values: EDITED_VALUES,
+      frontBlob: new Blob(['新しい画像'], { type: 'image/jpeg' }),
+      storage: { spreadsheetId: 'SHEET', imageFolderId: 'IMAGES', writable: true },
+      token: 'T',
+      fetchImpl: impl,
+      updateRecordId: 'R2',
+    });
+
+    check('**台帳が書けていれば更新は成功**', result.registered === true && result.updated === true);
+    check(
+      '**記録できなかったことを伝える（黙って進めない）**',
+      result.historyRecorded === false,
     );
   }
 

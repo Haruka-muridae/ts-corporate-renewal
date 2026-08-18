@@ -201,3 +201,52 @@ export const REGENERATE_TARGETS = Object.freeze({
 
 /* 根拠が原文中に見つからなかったときの表示文言（要件書 §4-10）。 */
 export const EVIDENCE_NOT_CONFIRMED = '根拠を確認できません';
+
+/* ================================================================
+ * Googleドライブへの保存（要件書 §4-15）
+ * ================================================================
+ *
+ * スコープは drive.file のみ。ドライブ全体が見えるスコープは要求しない。
+ * このスコープで見えるのは「同じOAuthクライアントのアプリが作成したファイル」
+ * だけである。
+ *
+ * クライアントIDは録音アプリ（production-app/voice-recorder/config.js）・
+ * 音声文字起こしアプリ（production-app/audio-transcriber/config.js）と
+ * **意図的に同一のものを使う**。本アプリは録音→文字起こし→議事録という
+ * 同じ作業の後段であり、同一クライアントにしておくことで、
+ *   - 承認済みオリジンの設定を追加せずに済む
+ *   - 将来、文字起こしTXT（Audio Transcriber フォルダ）を本アプリから
+ *     直接読む拡張が drive.file のままで成立する
+ * ためである。名刺系（card-ocr / card-mail）が別クライアントを共用している
+ * のと同じ「機能系統ごとの共用」の判断（一致は tests/unit/meeting-minutes.mjs
+ * で検知する）。
+ *
+ * クライアントIDは公開値であり、実質的な防御は Google Cloud 側の
+ * 「承認済みの JavaScript 生成元」。client secret はここへ貼らないこと
+ * （暗黙フローでは不要で、静的サイトに秘密は置けない）。
+ */
+export const OAUTH = Object.freeze({
+  clientId: '603018562548-j2he1aeo96p2igqfk65gaevj55pdaikc.apps.googleusercontent.com',
+  scope: 'https://www.googleapis.com/auth/drive.file',
+});
+
+export function isOauthConfigured(clientId = OAUTH.clientId) {
+  return typeof clientId === 'string' && clientId.trim().endsWith('.apps.googleusercontent.com');
+}
+
+/*
+ * 保存先フォルダの名前。フォルダIDは持たない。
+ * IDは利用者ごとに異なるため、毎回「名前と親の関係」から解決する
+ * （drive-client.js。voice-recorder / audio-transcriber と同じ流儀）。
+ *
+ * root は録音アプリ・文字起こしアプリの DRIVE_NAMES.root と同名であること。
+ * **片方だけ変えないこと。** 名前がずれると、同じ場所を指しているつもりで
+ * 別のフォルダを見ることになる（一致はテストで検知する）。
+ */
+export const DRIVE_NAMES = Object.freeze({
+  /* マイドライブ直下に置く最上位フォルダ。 */
+  root: 'TSAM AI',
+
+  /* TSAM AI 直下。このアプリが議事録（.md）を保存する場所。初回保存時に作成する。 */
+  minutes: '議事録データ',
+});

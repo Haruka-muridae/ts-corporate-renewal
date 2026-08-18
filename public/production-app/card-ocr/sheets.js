@@ -224,6 +224,38 @@ export async function readColumn(spreadsheetId, tabTitle, columnIndex, { token, 
   return values.map((row) => String(row?.[0] ?? ''));
 }
 
+/*
+ * 1行ぶんを読む（更新の前に、いま入っている値を見るため）。
+ *
+ * ==================================================================
+ * valueRenderOption=FORMULA で読む
+ * ==================================================================
+ * 既定（FORMATTED_VALUE）だと、画像リンクの列は数式の**表示結果**
+ * （`表面画像を見る`）が返る。こちらが書く値は `=HYPERLINK(…)` なので、
+ * **何も変えていなくても毎回「変更あり」になる。**
+ *
+ * FORMULA なら書いた形のまま返るので、突き合わせが成立する。
+ * 変更履歴に残す「変更前値」も、書いた形のほうが正確である。
+ * ==================================================================
+ *
+ * 行番号は1起点（見出しが1行目、最初のデータが2行目）。
+ */
+export async function readRow(spreadsheetId, tabTitle, rowNumber, columnCount, { token, fetchImpl, signal } = {}) {
+  const last = columnLetter(Math.max(1, columnCount) - 1);
+  const range = `${quoteTabTitle(tabTitle)}!A${rowNumber}:${last}${rowNumber}`;
+  const params = new URLSearchParams({ valueRenderOption: 'FORMULA' });
+
+  const result = await driveFetchJson(
+    sheetsUrl(spreadsheetId, `/values/${encodeURIComponent(range)}`, params),
+    { token, fetchImpl, signal },
+  );
+
+  const values = Array.isArray(result?.values) ? result.values : [];
+  const row = Array.isArray(values[0]) ? values[0] : [];
+
+  return row.map((value) => String(value ?? ''));
+}
+
 /* ---------- 書き込み ---------- */
 
 /*
@@ -343,7 +375,22 @@ export async function appendMissingColumns(
  * row は schema.js の buildDataRow が作ったもの（＝サニタイズ済み）を
  * 渡すこと。**生の値をここへ渡さない。**
  */
-export async function appendRow(spreadsheetId, tabTitle, row, { token, fetchImpl, signal } = {}) {
+export async function appendRow(spreadsheetId, tabTitle, row, options = {}) {
+  return appendRows(spreadsheetId, tabTitle, [row], options);
+}
+
+/*
+ * 複数行をまとめて追記する。
+ *
+ * **1件の更新で変更履歴が何行にもなる**（変わった項目の数だけ）。
+ * 1行ずつ投げると、Sheets の書き込み上限（利用者あたり60/分。
+ * 計画 §4-3）を1件の登録で使い切りかねない。**1回で送る。**
+ */
+export async function appendRows(spreadsheetId, tabTitle, rows, { token, fetchImpl, signal } = {}) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return '';
+  }
+
   const range = `${quoteTabTitle(tabTitle)}!A1`;
   const params = new URLSearchParams({
     valueInputOption: 'USER_ENTERED',
@@ -359,11 +406,44 @@ export async function appendRow(spreadsheetId, tabTitle, row, { token, fetchImpl
       signal,
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ values: [row] }),
+      body: JSON.stringify({ values: rows }),
     },
   );
 
   return String(result?.updates?.updatedRange ?? '');
+}
+
+/*
+ * 既にある1行を書き換える（FR-18 の「更新は record_id で行を特定して
+ * values.update」）。
+ *
+ * **範囲は列定義の幅ちょうどにする。** A:Z のように広く取ると、
+ * 利用者が右側へ足した独自の列まで巻き込んで消す。台帳は利用者が
+ * 自由に編集してよい領域である（§FR-18 の最後）。
+ *
+ * 行番号は呼び出し側が record_id から求めて渡す。**位置を推測しない。**
+ */
+export async function updateRow(spreadsheetId, tabTitle, rowNumber, row, { token, fetchImpl, signal } = {}) {
+  const last = columnLetter(Math.max(1, row.length) - 1);
+  const range = `${quoteTabTitle(tabTitle)}!A${rowNumber}:${last}${rowNumber}`;
+  const params = new URLSearchParams({
+    valueInputOption: 'USER_ENTERED',
+    fields: 'updatedRange',
+  });
+
+  const result = await driveFetchJson(
+    sheetsUrl(spreadsheetId, `/values/${encodeURIComponent(range)}`, params),
+    {
+      token,
+      fetchImpl,
+      signal,
+      method: 'PUT',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ values: [row] }),
+    },
+  );
+
+  return String(result?.updatedRange ?? '');
 }
 
 /* 欠けているタブを作る。 */

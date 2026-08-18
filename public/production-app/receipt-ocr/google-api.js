@@ -58,9 +58,15 @@ export async function callGoogle(url, {
       body,
       signal,
     });
-  } catch {
-    /* 通信そのものが成立しなかった。トークンの正否は判定できない。 */
-    throw new AppError('SHEET-001', { progress, detail: 'network' });
+  } catch (error) {
+    /*
+     * 通信そのものが成立しなかった。トークンの正否は判定できない。
+     * **シートの話にしない**（2026-08-18 修正。findings #5）。
+     * 中断（利用者が離れた・取りやめた）は失敗と区別できるよう detail に残す。
+     */
+    const aborted = error?.name === 'AbortError' || signal?.aborted === true;
+
+    throw new AppError('NET-001', { progress, detail: aborted ? 'aborted' : 'network' });
   }
 
   if (!response.ok) {
@@ -72,9 +78,17 @@ export async function callGoogle(url, {
       payload = null;
     }
 
-    throw new AppError(mapGoogleError(response.status, reasonOf(payload)), {
+    const reason = reasonOf(payload);
+
+    /*
+     * detail には**分類に使った識別子だけ**を残す。
+     * reason は Google が定義した語彙（`userRateLimitExceeded` 等）であり、
+     * 利用者のデータではない。error.message は取り込まない
+     * （ファイル名などが混じりうるため。§13）。
+     */
+    throw new AppError(mapGoogleError(response.status, reason), {
       progress,
-      detail: `http_${response.status}`,
+      detail: reason === '' ? `http_${response.status}` : `http_${response.status}_${reason}`,
     });
   }
 
@@ -105,11 +119,17 @@ export async function callGoogleText(url, { accessToken, progress, signal } = {}
       headers: { Authorization: `Bearer ${accessToken}` },
       signal,
     });
-  } catch {
-    throw new AppError('SHEET-001', { progress, detail: 'network' });
+  } catch (error) {
+    const aborted = error?.name === 'AbortError' || signal?.aborted === true;
+
+    throw new AppError('NET-001', { progress, detail: aborted ? 'aborted' : 'network' });
   }
 
   if (!response.ok) {
+    /*
+     * export はエラー時も JSON を返すが、本文の読み取りに失敗しても
+     * ステータスだけで分類できるようにしてある（reason は空でよい）。
+     */
     throw new AppError(mapGoogleError(response.status, ''), {
       progress,
       detail: `http_${response.status}`,

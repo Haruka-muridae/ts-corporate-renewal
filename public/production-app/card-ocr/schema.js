@@ -23,7 +23,7 @@
  * ==================================================================
  */
 
-import { escapeCellText, buildImageLink } from './sanitize.js';
+import { escapeCellText, buildImageLink, unescapeCellText } from './sanitize.js';
 
 /*
  * 台帳の見出し行の版（§11.2）。
@@ -88,6 +88,30 @@ export const DATA_COLUMNS = Object.freeze([
    */
   { key: 'otherInformation', header: 'その他' },
 ]);
+
+/*
+ * 記録のための列（＝名刺の中身ではない列）。
+ *
+ * 差分確認画面（FR-17）に出すのは、**利用者が読んで判断できる項目だけ**に
+ * する。管理IDやハッシュやファイルIDを並べても、更新してよいかどうかの
+ * 判断材料にはならず、肝心の「会社名が変わった」が埋もれる。
+ *
+ * **変更履歴（§11.3）はこの限りではない。** そちらは全列を記録する
+ * （下の diffValues の呼び出し側を参照）。画面に出す量と、記録に残す量は
+ * 別の問題である。
+ */
+const BOOKKEEPING_KEYS = Object.freeze(new Set([
+  'record_id', 'registeredAt', 'uncertainFields', 'duplicateKey',
+  'hasBack', 'backFilledFields',
+  'frontImageHash', 'backImageHash',
+  'frontFileId', 'backFileId', 'frontFileUrl', 'backFileUrl',
+  'appVersion', 'promptVersion',
+]));
+
+/* 名刺の中身にあたる列（差分確認画面に出すもの）。 */
+export const CONTENT_COLUMNS = Object.freeze(
+  DATA_COLUMNS.filter((column) => !BOOKKEEPING_KEYS.has(column.key)),
+);
 
 /* 変更履歴タブ（§11.3）。changed_by は本人のみのため持たない。 */
 export const HISTORY_COLUMNS = Object.freeze([
@@ -274,4 +298,79 @@ export function buildDataRow(values = {}, columns = DATA_COLUMNS) {
 
 export function buildHistoryRow(values = {}) {
   return buildDataRow(values, HISTORY_COLUMNS);
+}
+
+/* ---------- 更新（FR-17・FR-18・§11.3） ---------- */
+
+/*
+ * シートから読んだ1行を、列の定義にしたがって鍵付きの値へ戻す。
+ *
+ * **buildDataRow の逆**である。更新のときに「いま入っている値」を
+ * 差分と変更履歴に使うために要る。
+ *
+ * 行が短ければ足りない分は空文字にする（Sheets は右端の空セルを
+ * 返さない）。**長さの違いを「値が消えた」と読み違えないため。**
+ *
+ * 値は unescapeCellText を通す。読み出しは valueRenderOption=FORMULA で
+ * 行うので、こちらが付けたアポストロフィが残っていることがある
+ * （sheets.js の readRow）。
+ */
+export function rowToValues(row = [], columns = DATA_COLUMNS) {
+  const cells = Array.isArray(row) ? row : [];
+  const values = {};
+
+  columns.forEach((column, index) => {
+    values[column.key] = unescapeCellText(cells[index] ?? '');
+  });
+
+  return values;
+}
+
+/*
+ * 2つの値の集まりを突き合わせて、変わった項目だけを返す。
+ *
+ * 戻り値: [{ key, header, oldValue, newValue }]
+ *
+ * **比較はサニタイズを外した形で行う。** `+81…` と `'+81…` は
+ * 同じ値であり、これを差分として出すと「何も変えていないのに
+ * 全項目が変更扱い」になる（sanitize.js の unescapeCellText）。
+ *
+ * 配列（要確認項目・back_filled_fields）は行と同じ空白区切りへ寄せる。
+ * true/false は行と同じ 'TRUE' / '' へ寄せる。**表に入る形で比べる**
+ * ためで、そうしないと型の違いだけで差分になる。
+ */
+function comparable(value) {
+  if (Array.isArray(value)) {
+    return value.join(' ');
+  }
+
+  if (value === true) {
+    return 'TRUE';
+  }
+
+  if (value === false) {
+    return '';
+  }
+
+  return unescapeCellText(value);
+}
+
+export function diffValues(oldValues = {}, newValues = {}, columns = CONTENT_COLUMNS) {
+  const changes = [];
+
+  for (const column of columns) {
+    const before = comparable(oldValues[column.key]);
+    const after = comparable(newValues[column.key]);
+
+    if (before !== after) {
+      changes.push({
+        key: column.key,
+        header: column.header,
+        oldValue: before,
+        newValue: after,
+      });
+    }
+  }
+
+  return changes;
 }

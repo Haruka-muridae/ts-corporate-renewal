@@ -31,6 +31,8 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 
 **配信は Cloudflare Workers（OpenNext）。本番デプロイは手動で `npm run deploy`（= `opennextjs-cloudflare build && opennextjs-cloudflare deploy`）を実行して行う。`main` への push では自動デプロイされない**（GitHub Actions の `nextjs.yml` は無効化済み＝`nextjs.yml.disabled`。動いているのは `test.yml` のみ）。`wrangler.jsonc` の `main` は `.open-next/worker.js`（OpenNext生成物）。本番の応答ヘッダは `Server: cloudflare`。2026-08 に Vercel から Cloudflare Workers へ切替済み（手順は [docs/cloudflare-cutover.md](docs/cloudflare-cutover.md)）。
 
+> **デプロイ前ガード（2026-08-18 導入）**: `npm run deploy` 系 3 コマンドは、先頭で [scripts/predeploy-check.mjs](scripts/predeploy-check.mjs) を実行する。HEAD が origin/main を含まない、または未コミットの実変更（改行コードだけの差は無視）がある場合、デプロイは中止される。**古いクローンからのデプロイが main 取り込み済みの機能を本番から消した事故（2026-08-18）の再発防止**であり、デプロイ前には必ず `git pull` すること。意図的な例外は `DEPLOY_ALLOW_BEHIND=1` / `DEPLOY_ALLOW_DIRTY=1` で明示する。
+
 > **注意（2026-08-08 訂正）**: 以前この項は「Vercel が配信・`main` へのマージが本番公開」と書いていたが、**それは Cloudflare 切替前の古い記述**。DEPLOYMENT.md / docs/production-cutover.md / docs/vercel-migration.md にも同じ古い Vercel 前提が残っている（歴史的記録として保持）。
 
 | URL | 実体 |

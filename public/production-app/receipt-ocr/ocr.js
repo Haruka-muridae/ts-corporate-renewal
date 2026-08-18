@@ -37,6 +37,23 @@ export function requiresApiKey(id = OCR_ENGINE) {
 }
 
 /*
+ * 消し損ねた中間生成物を回収する（§9.5・findings #6）。
+ *
+ * エンジンによっては中間生成物を作らない（案C）。
+ * その場合は何もしないで 0 件を返す。画面側で分岐させないため、
+ * **窓口の形はどちらのエンジンでも同じにしておく。**
+ */
+export async function collectOrphans({ accessToken, signal, engineId = OCR_ENGINE } = {}) {
+  const engine = activeEngine(engineId);
+
+  if (typeof engine.collectOrphanTempDocs !== 'function') {
+    return { found: 0, deleted: 0, skipped: 0 };
+  }
+
+  return engine.collectOrphanTempDocs({ accessToken, signal });
+}
+
+/*
  * 読み取る。
  *
  * キーが要るエンジンで、キーが無ければ KEY-001 で止める。
@@ -55,5 +72,15 @@ export async function recognize({ blob, accessToken, apiKey = null, displayName,
   const result = await engine.recognize({ blob, accessToken, apiKey, displayName, signal });
   const text = String(result?.text ?? '').trim();
 
-  return { engine: engine.ENGINE_ID, text, empty: text === '' };
+  /*
+   * deleted は「中間生成物を残していないか」（案Aのみ意味を持つ）。
+   * 案Cは一時ドキュメントを作らないので、報告が無ければ true とする。
+   * false のときは次回起動時の孤児回収に任せる（§9.5・findings #6）。
+   */
+  return {
+    engine: engine.ENGINE_ID,
+    text,
+    empty: text === '',
+    deleted: result?.deleted !== false,
+  };
 }

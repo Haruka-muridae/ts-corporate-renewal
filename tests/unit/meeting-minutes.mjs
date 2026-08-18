@@ -836,6 +836,149 @@ try {
 
   fakeDb.reset();
 
+  /* ================================================================ */
+  section('Googleドライブ保存（drive-client.js・config.js。要件書 §4-15）');
+
+  const driveClient = await import(`${base}/drive-client.js`);
+  const atConfig = await import('../../public/production-app/audio-transcriber/config.js');
+
+  {
+    /*
+     * クライアントIDと最上位フォルダ名は録音・文字起こし系との意図的な共用。
+     * どちらかを片側だけ変えると、drive.file の可視範囲が分断されたり、
+     * 別の「TSAM AI」フォルダが増えたりする（config.js のコメント参照）。
+     */
+    check('★クライアントIDは audio-transcriber と同一（意図した共用）',
+      config.OAUTH.clientId === atConfig.OAUTH.clientId);
+    check('スコープは drive.file のみ',
+      config.OAUTH.scope === 'https://www.googleapis.com/auth/drive.file');
+    check('isOauthConfigured は設定済みIDで真', config.isOauthConfigured() === true);
+    check('isOauthConfigured は空文字で偽', config.isOauthConfigured('') === false);
+
+    check('★最上位フォルダ名は audio-transcriber と同一',
+      config.DRIVE_NAMES.root === atConfig.DRIVE_NAMES.root);
+    check('最上位は TSAM AI', config.DRIVE_NAMES.root === 'TSAM AI');
+    check('保存先は 議事録データ', config.DRIVE_NAMES.minutes === '議事録データ');
+  }
+
+  {
+    /* Drive 検索クエリのエスケープ（' と \ を通すとクエリが壊れる）。 */
+    const query = driveClient.buildFolderQuery("O'Brien\\メモ", 'parent-1');
+    check("フォルダ名の ' がエスケープされる", query.includes("name='O\\'Brien\\\\メモ'"));
+    check('親フォルダの指定がクエリに入る', query.includes("'parent-1' in parents"));
+    check('ゴミ箱は除外する', query.includes('trashed=false'));
+    check('親省略時はマイドライブ直下（root）', driveClient.buildFolderQuery('X').includes("'root' in parents"));
+  }
+
+  {
+    const b1 = driveClient.createBoundary();
+    const b2 = driveClient.createBoundary();
+    check('boundary は tsam- で始まる', /^tsam-/.test(b1));
+    check('boundary は毎回異なる', b1 !== b2);
+
+    const blob = new Blob(['# 議事録本文'], { type: 'text/markdown; charset=utf-8' });
+    const body = driveClient.buildMultipartBody({ name: 'a.md', parents: ['f1'] }, blob, 'tsam-test');
+    const bodyText = await body.text();
+    check('multipart にメタデータJSONが入る', bodyText.includes('"name":"a.md"'));
+    check('multipart に本文が入る', bodyText.includes('# 議事録本文'));
+    check('multipart が終端 boundary で閉じる', bodyText.trimEnd().endsWith('--tsam-test--'));
+    check('Content-Type に boundary を含む', body.type === 'multipart/related; boundary=tsam-test');
+  }
+
+  {
+    /*
+     * 保存の一連の流れを fetchImpl の差し替えで検証する。
+     * TSAM AI は既存・議事録データ は無い、という初回保存の想定:
+     *   1. TSAM AI を検索 → 見つかる
+     *   2. 議事録データ を検索 → 無い
+     *   3. 議事録データ を作成
+     *   4. multipart アップロード
+     */
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url: String(url), init });
+      const json = (data) => ({ ok: true, json: async () => data });
+
+      if (calls.length === 1) return json({ files: [{ id: 'root-1', name: 'TSAM AI' }] });
+      if (calls.length === 2) return json({ files: [] });
+      if (calls.length === 3) return json({ id: 'minutes-1' });
+      return json({ id: 'file-1', name: '2026-08-18_定例_議事録.md', webViewLink: 'https://drive.google.com/file/d/file-1/view' });
+    };
+
+    const saved = await driveClient.saveMinutesMarkdown({
+      token: 'test-token',
+      text: '# 本文',
+      fileName: '2026-08-18_定例_議事録.md',
+      fetchImpl,
+    });
+
+    /* URLSearchParams は空白を + に符号化するため、戻してから比較する。 */
+    const decodeQuery = (url) => decodeURIComponent(String(url).replace(/\+/g, ' '));
+
+    check('★呼び出しは 検索→検索→作成→アップロード の4回', calls.length === 4);
+    check('1回目は TSAM AI の検索', decodeQuery(calls[0].url).includes("name='TSAM AI'"));
+    check('2回目は 議事録データ の検索（親は TSAM AI）',
+      decodeQuery(calls[1].url).includes("name='議事録データ'")
+      && decodeQuery(calls[1].url).includes("'root-1' in parents"));
+    check('3回目はフォルダ作成（親は TSAM AI）',
+      calls[2].init.method === 'POST' && String(calls[2].init.body).includes('"parents":["root-1"]'));
+    check('4回目は multipart アップロード', calls[3].url.startsWith('https://www.googleapis.com/upload/drive/v3/files'));
+
+    const uploadBody = await calls[3].init.body.text();
+    check('★アップロード先は作成した 議事録データ フォルダ', uploadBody.includes('"parents":["minutes-1"]'));
+    check('MIME は text/markdown', uploadBody.includes('"mimeType":"text/markdown"'));
+    check('Authorization ヘッダーにトークンを渡す', calls[3].init.headers.Authorization === 'Bearer test-token');
+    check('戻り値にファイル名と閲覧URLが入る',
+      saved.id === 'file-1' && saved.name === '2026-08-18_定例_議事録.md' && saved.webViewLink.includes('file-1'));
+  }
+
+  {
+    /* 両フォルダが既にある2回目以降は、作成を挟まず 検索→検索→アップロード。 */
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url: String(url), init });
+      const json = (data) => ({ ok: true, json: async () => data });
+
+      if (calls.length === 1) return json({ files: [{ id: 'root-1' }] });
+      if (calls.length === 2) return json({ files: [{ id: 'minutes-1' }] });
+      return json({ id: 'file-2', name: 'b.md' });
+    };
+
+    await driveClient.saveMinutesMarkdown({ token: 't', text: 'x', fileName: 'b.md', fetchImpl });
+    check('既存フォルダなら3回で済む（余計な作成をしない）', calls.length === 3);
+  }
+
+  {
+    /* 401 は UNAUTHORIZED として分類され、呼び出し側で再認可を案内できる。 */
+    const fetchImpl = async () => ({ ok: false, status: 401, json: async () => ({}) });
+
+    let caught = null;
+    try {
+      await driveClient.saveMinutesMarkdown({ token: 'expired', text: 'x', fileName: 'c.md', fetchImpl });
+    } catch (error) {
+      caught = error;
+    }
+
+    check('★401 は DriveError(UNAUTHORIZED)',
+      caught instanceof driveClient.DriveError && caught.code === driveClient.DriveErrorCode.UNAUTHORIZED);
+    check('エラーにトークンが漏れない',
+      !JSON.stringify({ message: caught?.message, detail: caught?.detail }).includes('expired'));
+  }
+
+  {
+    /* 403 の理由別分類（audio-transcriber と同じ対応表であること）。 */
+    check('容量不足は QUOTA_EXCEEDED',
+      driveClient.mapHttpErrorToCode(403, { error: { errors: [{ reason: 'storageQuotaExceeded' }] } })
+        === driveClient.DriveErrorCode.QUOTA_EXCEEDED);
+    check('API無効は API_DISABLED',
+      driveClient.mapHttpErrorToCode(403, { error: { errors: [{ reason: 'accessNotConfigured' }] } })
+        === driveClient.DriveErrorCode.API_DISABLED);
+    check('レート制限は RATE_LIMITED',
+      driveClient.mapHttpErrorToCode(403, { error: { errors: [{ reason: 'userRateLimitExceeded' }] } })
+        === driveClient.DriveErrorCode.RATE_LIMITED);
+    check('5xx は SERVER_ERROR', driveClient.mapHttpErrorToCode(500, null) === driveClient.DriveErrorCode.SERVER_ERROR);
+  }
+
   finish();
 } catch (error) {
   fatal(error);

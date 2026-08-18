@@ -15,13 +15,14 @@
  *      外枠は .mm-main、ボタンは auth.css の .auth-button を使う。
  *
  * 本アプリだけの拡張点:
- *   - **prefers-color-scheme: dark 用のトークン上書きを持つ**
- *     （下の @media ブロック）。他の本番アプリに前例は無いが、
- *     要件書 §6-7「light / darkの両テーマでコントラストを確認する」
- *     に対応するため、本アプリ限定で導入する。共通ファイル
- *     （auth.css・css/style.css）には触れない。
  *   - 確認・編集画面（ステップ4）は1024px以上で原文と議事録を
  *     左右に並べる（要件書 §6-6）。
+ *
+ * ダークテーマは持たない（要件書 v1.3 §6-8）。v1.2 までは
+ * prefers-color-scheme: dark でトークンを反転させていたが、
+ * 「背景は常に純白（#FFFFFF）」という決定により撤去した。
+ * OSがダーク設定でも配色は変えない（index.html の
+ * <meta name="color-scheme" content="light"> と対で機能する）。
  * ==================================================================
  */
 
@@ -55,36 +56,6 @@
   --radius-button: 4px;
 
   --content-space: 28px;
-}
-
-/*
- * ダークテーマ（本アプリ限定）。
- *
- * --color-white / --color-off-white は「面の色」を指す名前として使われており
- * （auth.css・このファイルの各所が背景色にそのまま使う）、ライトモードでは
- * 文字どおり白系だが、ダークモードでは意図的に暗い面色へ置き換える。
- * 名前と実際の色が食い違って見えるのは承知のうえで、共通のトークン名を
- * 保つことで auth.css 側の記述を一切変えずに配色だけ反転させている。
- *
- * --c-main 等は `var(--color-navy)` のような参照であり、ここで --color-*
- * だけを上書きすれば、使用側（auth.css を含む）は自動的に新しい値を解決する
- * （CSSカスタムプロパティは使用時点で解決されるため、再定義は不要）。
- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-navy: #5fd68a;
-    --color-navy-dark: #46b873;
-    --color-navy-light: #8ee6ae;
-    --color-gold: #7cc9f0;
-    --color-gold-text: #bfe6fa;
-    --color-gold-light: #1d3b4d;
-    --color-white: #161b22;
-    --color-off-white: #1f2733;
-    --color-text: #e6edf3;
-    --color-text-muted: #9aa7b2;
-    --color-border: #2c3542;
-    --color-border-strong: #3d4a59;
-  }
 }
 
 /*
@@ -218,14 +189,6 @@ body {
   color: #8c1d18;
 }
 
-@media (prefers-color-scheme: dark) {
-  .mm-alert--error {
-    border-color: #7a3b36;
-    background-color: #3a2220;
-    color: #f3b3ac;
-  }
-}
-
 .mm-message {
   min-height: 1.4em;
   padding: 4px 0;
@@ -234,12 +197,6 @@ body {
 
 .mm-message--error {
   color: #b3261e;
-}
-
-@media (prefers-color-scheme: dark) {
-  .mm-message--error {
-    color: #f3b3ac;
-  }
 }
 
 /* ---------- ステップ表示 ---------- */
@@ -376,12 +333,6 @@ body {
 .mm-count-over {
   color: #b3261e;
   font-weight: 700;
-}
-
-@media (prefers-color-scheme: dark) {
-  .mm-count-over {
-    color: #f3b3ac;
-  }
 }
 
 .mm-fieldset {
