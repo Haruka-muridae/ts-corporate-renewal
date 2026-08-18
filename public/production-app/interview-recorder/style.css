@@ -1,0 +1,307 @@
+/*
+ * 移植元: スタンドアロン版 interview-recorder リポジトリ
+ * （/home/yuki9/projects/interview-recorder/public/styles.css）。
+ * 移植日 2026-08-18。見た目・レイアウトは変更していない。
+ *
+ * auth/auth.css は読み込まない。本アプリは自前の部品（.screen / .btn 等）
+ * だけで完結しており、auth.css を読み込むと CSS トークン（--c-main 等）の
+ * 再定義義務が発生するため（tests/unit/css-tokens.mjs を参照）。
+ * 認証確認中の表示（#auth-loading）も、このファイル内で完結させる。
+ */
+
+:root {
+  --color-bg: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-border: #dde1e6;
+  --color-text: #1f2937;
+  --color-text-muted: #5b6472;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-warning-bg: #fff7e6;
+  --color-warning-border: #f0c36d;
+  --color-warning-text: #92650a;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN",
+    "Hiragino Sans", Meiryo, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+/* ---------- 認証確認中の表示（guardPage が解決するまで） ---------- */
+
+.auth-loading-message {
+  padding: 32px 16px;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 1.25rem 1rem 0.5rem;
+  text-align: center;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.screen-root {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1.5rem 1rem 2rem;
+}
+
+.screen {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+}
+
+.screen h2 {
+  margin-top: 0;
+  font-size: 1.15rem;
+}
+
+.description {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+.btn {
+  display: inline-block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0.4rem auto 0;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.btn-secondary:hover {
+  background: var(--color-bg);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: var(--color-danger-hover);
+}
+
+.button-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.error-message {
+  margin-top: 1rem;
+  color: var(--color-danger);
+  font-size: 0.9rem;
+}
+
+.warning-message {
+  margin-top: 1rem;
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.warning-heading {
+  color: var(--color-warning-text);
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rec-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  animation: blink 1.2s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.rec-label {
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.rec-timer {
+  font-size: 2.2rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.consent-info {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+audio {
+  width: 100%;
+  margin: 0.75rem 0 1rem;
+}
+
+#screen-done .button-row {
+  margin-bottom: 0.75rem;
+}
+
+.secondary-link-row {
+  margin: 0 0 0.75rem;
+}
+
+.link-secondary {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.link-secondary:hover {
+  color: var(--color-text);
+}
+
+.app-footer {
+  padding: 1rem 1rem 1.5rem;
+}
+
+.notice {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* モーダル */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 10;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal-box {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 1.75rem 1.5rem;
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+}
+
+.modal-box h2 {
+  margin-top: 0;
+}
+
+.denied-message {
+  color: var(--color-danger);
+  font-size: 0.9rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+}
+
+.legal-screen {
+  max-width: 640px;
+  text-align: left;
+}
+
+.legal-screen h2 {
+  font-size: 1.05rem;
+  margin-top: 1.75rem;
+}
+
+.legal-screen h2:first-of-type {
+  margin-top: 1rem;
+}
+
+@media (max-width: 480px) {
+  .screen, .modal-box {
+    padding: 1.25rem 1rem;
+  }
+
+  .rec-timer {
+    font-size: 1.8rem;
+  }
+}

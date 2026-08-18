@@ -168,4 +168,10 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/meeting-minutes/',
     icon: '議',
   }),
+  Object.freeze({
+    id: 'interview-recorder',
+    name: '面談録音',
+    href: 'production-app/interview-recorder/',
+    icon: '面',
+  }),
 ]);
