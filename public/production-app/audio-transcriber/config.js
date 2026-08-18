@@ -234,18 +234,22 @@ export const GEMINI = Object.freeze({
   apiVersion: 'v1beta',
 
   /*
-   * モデルの候補。先頭から順に試し、404 / 400（未対応）なら次へ落とす。
+   * モデルの候補。配列順（自動選択時の優先順位・新しい順）で先頭から試し、
+   * 404 / 400（未対応）なら次へ落とす。
    *
    * 決め打ちにしないための仕組み:
    *   1. 利用者のキーで models.list を呼び、実際に使えるモデルを確認する
    *   2. 一覧が取れなければ、この配列の順に総当たりする
    *
-   * 2026-07 時点で音声入力に対応し無料枠のある Flash 系を、新しい順に並べる。
+   * costRank は画面のドロップダウン表示順（有料枠の音声文字起こし単価が
+   * 安い順、2026-08 時点。1 が最安）。配列順とは独立して持つ。
    */
   models: Object.freeze([
-    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash（推奨）' },
-    { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash（推奨）', costRank: 3 },
+    { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', costRank: 5 },
+    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', costRank: 2 },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', costRank: 4 },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite（最安）', costRank: 1 },
   ]),
 
   /* 画面の初期選択。'auto' なら models.list の結果から自動で選ぶ。 */
