@@ -47,3 +47,5 @@ tests/e2e/.artifacts/
 .dev.vars
 .dev.vars.*
 !.dev.vars.example
+# Claude Workerの実行ログと一時入力（タスク本文を追跡しない）
+.claude-worker/

@@ -15,9 +15,10 @@
 
 | 依存 | 配信元 | 対象範囲 | 用途 | 承認日 |
 | --- | --- | --- | --- | --- |
-| Google Identity Services（GIS） | `https://accounts.google.com/gsi/client`（Google本体） | `public/production-app/card-ocr/`（名刺OCRアプリ） | Drive / Sheets API を呼ぶための OAuth トークン取得（トークンモデル） | 2026-08-03 |
+| Google Identity Services（GIS） | `https://accounts.google.com/gsi/client`（Google本体） | `public/production-app/` の Google 連携アプリ 6 本（card-ocr / card-mail / receipt-ocr / voice-recorder / audio-transcriber / meeting-minutes）。初回承認は card-ocr（2026-08-03）で、以降のアプリは同じ方式（トークンモデル・複製実装）を踏襲 | Drive / Sheets / Gmail API を呼ぶための OAuth トークン取得（トークンモデル） | 2026-08-03（meeting-minutes への適用は 2026-08-18） |
 | `@playwright/test` | npm（devDependency） | `tests/e2e/` のみ | ブラウザ録音アプリの E2E（実マイク入力・OPFS・メモリ計測） | 2026-08-06 |
 | `@opennextjs/cloudflare` / `wrangler` | npm（devDependency） | ビルドとデプロイのみ | 本番配信（Cloudflare Workers）に必要。**既に本番で使われている構成を、設定ごとリポジトリへ入れたもの** | 2026-08-06 |
+| `@anthropic-ai/claude-code` | npm（グローバル開発ツール。リポジトリ依存には追加しない） | Codexからの非対話Worker実行のみ | ユーザー指定のCodex / Claude Code分業環境を構築する | 2026-08-09 |
 | ~~jsrsasign~~ | ~~公式配布の `jsrsasign-all-min.js`（MIT）~~ | **廃止（2026-08-10）** | 使用をやめた。§1-4 | 2026-08-09 承認 / 2026-08-10 廃止 |
 
 ### 1-4. jsrsasign（録音アプリのカレンダー通知）— **2026-08-10 に廃止**
