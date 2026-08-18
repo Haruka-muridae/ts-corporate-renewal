@@ -94,9 +94,10 @@ for (const id of [
   'co-previews', 'co-start-actions', 'co-start', 'co-reset',
   'co-ocr', 'co-ocr-state', 'co-ocr-sides', 'co-ocr-note',
   'co-fields', 'co-fields-state', 'co-fields-list', 'co-fields-notes',
-  'co-register', 'co-saved', 'co-saved-list', 'co-saved-sheet', 'co-next',
+  'co-register', 'co-saved', 'co-saved-title', 'co-saved-list', 'co-saved-sheet', 'co-next',
   'co-duplicate', 'co-duplicate-title', 'co-duplicate-text',
-  'co-register-anyway', 'co-duplicate-cancel',
+  'co-duplicate-diff-title', 'co-duplicate-diff', 'co-duplicate-note',
+  'co-update', 'co-register-anyway', 'co-duplicate-cancel',
 ]) {
   el[id] = document.getElementById(id);
 }
@@ -127,6 +128,13 @@ let ocrText = '';
 let merged = null;
 /* 登録の実行中。二重送信を防ぐ。 */
 let registering = false;
+/*
+ * 重複していた既存行（FR-17）。null は「重複していない」。
+ * **record_id しか持たない。** 行番号は書く直前に引き直す
+ * （register.js の locateRowByRecordId）。画面を見ている間に
+ * 利用者が行を消せば、番号のほうは当てにならない。
+ */
+let duplicateTarget = null;
 
 /* 画面に出す項目名。台帳の見出しとは別に、ここで日本語にする。 */
 const FIELD_LABELS = Object.freeze({
@@ -773,11 +781,34 @@ function renderSaved(result) {
   const target = el['co-saved-list'];
   target.replaceChildren();
 
+  el['co-saved-title'].textContent = result.updated ? '更新しました' : '登録しました';
+
   const rows = [
     ['管理ID', result.recordId],
     ['表面の画像', result.front ? '保存しました' : '保存していません'],
     ['裏面の画像', result.back ? '保存しました' : '（裏面なし）'],
   ];
+
+  if (result.updated) {
+    /*
+     * **変更履歴を残せたかどうかを必ず出す。** 台帳は書き換わって
+     * いるので、記録に失敗したことを黙っていると、変更前の値が
+     * どこにも無いまま「更新できた」ように見える（§11.3）。
+     */
+    /*
+     * **件数は「変更履歴に残した行の数」である。** 画像のファイルIDや
+     * ハッシュも含むため、画面で見た差分より多くなる。名前をそろえて
+     * おかないと「1項目直したのに8件？」と読めてしまう。
+     */
+    rows.push([
+      '変更履歴に記録した項目',
+      result.changes.length > 0 ? `${result.changes.length}件` : 'なし',
+    ]);
+    rows.push([
+      '変更履歴',
+      result.historyRecorded ? '記録しました' : '記録できませんでした',
+    ]);
+  }
 
   for (const [label, value] of rows) {
     const term = document.createElement('dt');
@@ -799,7 +830,8 @@ function renderSaved(result) {
 function describeDuplicate(duplicate) {
   if (duplicate.kind === 'attribute') {
     return '会社名と氏名が、すでに登録されている行と同じです。'
-      + '名刺を作り直された場合や、同姓同名の別の方の場合は、そのまま登録して構いません。';
+      + '転職・異動などで内容が変わった場合は「既存の行を更新する」、'
+      + '同姓同名の別の方の場合は「新規として登録する」を選んでください。';
   }
 
   return duplicate.side === 'back'
@@ -807,7 +839,57 @@ function describeDuplicate(duplicate) {
     : '表面の画像が、すでに登録されている画像と同じです。同じ写真をもう一度登録しようとしています。';
 }
 
-async function register({ skipDuplicateCheck = false } = {}) {
+/*
+ * 差分を出す（FR-17 の「差分確認必須・無確認自動上書き禁止」）。
+ *
+ * **中身の項目だけを出す**（register.js が CONTENT_COLUMNS で絞る）。
+ * 管理IDやハッシュを並べても、更新してよいかの判断材料にならない。
+ * 変更履歴のほうには全列を残す。
+ */
+function renderDuplicateDiff(result) {
+  const target = el['co-duplicate-diff'];
+  target.replaceChildren();
+
+  const changes = Array.isArray(result.changes) ? result.changes : [];
+
+  for (const change of changes) {
+    const term = document.createElement('dt');
+    term.className = 'co-status-label';
+    term.textContent = change.header;
+
+    const cell = document.createElement('dd');
+    cell.className = 'co-status-value';
+    cell.dataset.ok = 'pending';
+    /* 空欄は「（空欄）」と書く。見えない差は差として伝わらない。 */
+    const before = change.oldValue === '' ? '（空欄）' : change.oldValue;
+    const after = change.newValue === '' ? '（空欄）' : change.newValue;
+    cell.textContent = `${before} → ${after}`;
+
+    target.append(term, cell);
+  }
+
+  const updatable = result.duplicate.updatable === true;
+
+  el['co-duplicate-diff-title'].hidden = !updatable || changes.length === 0;
+  el['co-update'].hidden = !updatable;
+
+  const note = el['co-duplicate-note'];
+
+  if (!updatable) {
+    note.textContent = 'すでに登録されている行に管理ID（record_id）が無いため、'
+      + 'その行を更新できません。新規として登録するか、シートを直接編集してください。';
+    note.hidden = false;
+  } else if (changes.length === 0) {
+    note.textContent = '文字の項目に違いはありません。'
+      + '更新すると、画像と読み取りの記録だけが新しいものへ差し替わります。';
+    note.hidden = false;
+  } else {
+    note.textContent = '';
+    note.hidden = true;
+  }
+}
+
+async function register({ skipDuplicateCheck = false, updateRecordId = null } = {}) {
   if (registering || !merged || !storage?.writable) {
     return;
   }
@@ -815,8 +897,9 @@ async function register({ skipDuplicateCheck = false } = {}) {
   registering = true;
   el['co-register'].disabled = true;
   el['co-register-anyway'].disabled = true;
+  el['co-update'].disabled = true;
   el['co-duplicate'].hidden = true;
-  showMessage('登録しています…');
+  showMessage(updateRecordId ? '更新しています…' : '登録しています…');
 
   try {
     const result = await registerCard({
@@ -827,38 +910,69 @@ async function register({ skipDuplicateCheck = false } = {}) {
       storage,
       token: getCachedAccessToken(),
       skipDuplicateCheck,
+      updateRecordId,
     });
+
+    if (result.missingRow) {
+      /*
+       * 差分を見ている間に、対象の行が消えた（か管理IDが変わった）。
+       * **別の行を上書きしない**（register.js）。選び直してもらう。
+       */
+      duplicateTarget = null;
+      showMessage(
+        '更新しようとした行が見つかりませんでした。'
+        + 'シートが編集された可能性があります。新規として登録するか、やり直してください。',
+        'error',
+      );
+      el['co-duplicate'].hidden = false;
+      el['co-update'].hidden = true;
+      return;
+    }
 
     if (!result.registered) {
       /*
-       * 止めるのではなく、選ばせる（§FR-19。DUP-001 / DUP-002）。
+       * 止めるのではなく、選ばせる（§FR-17・FR-19。DUP-001 / DUP-002）。
        *
        * **理由を分けて出す。** 「同じ画像」と「同じ会社の同じ人」では、
        * 利用者が次に取る行動が違う。前者は撮り直しの取り違え、
        * 後者は名刺の作り直しや部署異動でありうる。
        */
+      duplicateTarget = result.duplicate.updatable ? result.duplicate.recordId : null;
+
       el['co-duplicate-title'].textContent = result.duplicate.kind === 'attribute'
         ? '同じ会社の同じ方が、すでに登録されています'
         : '同じ画像が、すでに登録されています';
 
       el['co-duplicate-text'].textContent = describeDuplicate(result.duplicate);
+      renderDuplicateDiff(result);
       el['co-duplicate'].hidden = false;
       showMessage('');
       return;
     }
 
+    duplicateTarget = null;
     renderSaved(result);
     el['co-fields'].hidden = true;
     el['co-capture'].hidden = true;
     el['co-ocr'].hidden = true;
     el['co-saved'].hidden = false;
-    showMessage('');
+
+    showMessage(
+      result.updated && !result.historyRecorded
+        ? '更新しましたが、変更履歴を記録できませんでした。変更前の値は残っていません。'
+        : '',
+      result.updated && !result.historyRecorded ? 'error' : 'info',
+    );
   } catch (error) {
-    showMessage(`登録できませんでした: ${formatDriveError(error)}`, 'error');
+    showMessage(
+      `${updateRecordId ? '更新' : '登録'}できませんでした: ${formatDriveError(error)}`,
+      'error',
+    );
   } finally {
     registering = false;
     el['co-register'].disabled = false;
     el['co-register-anyway'].disabled = false;
+    el['co-update'].disabled = false;
   }
 }
 
@@ -866,6 +980,8 @@ async function register({ skipDuplicateCheck = false } = {}) {
 function startNext() {
   capture = clearAll();
   discardOcr();
+  /* 前の名刺の更新先を持ち越さない。別の行を上書きしかねない。 */
+  duplicateTarget = null;
   el['co-saved'].hidden = true;
   el['co-duplicate'].hidden = true;
   el['co-capture'].hidden = false;
@@ -949,6 +1065,8 @@ async function rotateSide(side) {
 function discardOcr() {
   ocrText = '';
   merged = null;
+  /* 読み取り結果を捨てたら、更新先も捨てる（別の名刺の行になる）。 */
+  duplicateTarget = null;
   el['co-ocr'].hidden = true;
   el['co-ocr-sides'].replaceChildren();
   el['co-fields'].hidden = true;
@@ -1068,9 +1186,21 @@ el['co-reset'].addEventListener('click', () => {
 el['co-start'].addEventListener('click', () => { void readCard(); });
 el['co-register'].addEventListener('click', () => { void register(); });
 el['co-register-anyway'].addEventListener('click', () => { void register({ skipDuplicateCheck: true }); });
+
+/*
+ * 既存の行を更新する（FR-17）。**差分を見せたうえでの明示の操作**でしか
+ * ここへ来ない。押されるまで上書きはしない。
+ */
+el['co-update'].addEventListener('click', () => {
+  if (duplicateTarget) {
+    void register({ updateRecordId: duplicateTarget });
+  }
+});
+
 el['co-next'].addEventListener('click', startNext);
 
 el['co-duplicate-cancel'].addEventListener('click', () => {
+  duplicateTarget = null;
   el['co-duplicate'].hidden = true;
 });
 

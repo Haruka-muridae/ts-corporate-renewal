@@ -187,6 +187,30 @@
   color: #37414f;
 }
 
+/*
+ * 重複確認の差分（SC-05 / FR-17）。
+ *
+ * 状態の一覧（.co-status）と違い、**中身は長い文字列**である。
+ * 右寄せ・太字のままだと「株式会社◯◯ → 株式会社◯◯ホールディングス」が
+ * 読みにくいので、左寄せ・通常の太さにして折り返す。
+ */
+.co-diff-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.co-diff .co-status-value {
+  text-align: left;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.co-diff {
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  margin-bottom: 1rem;
+}
+
 .co-actions {
   display: flex;
   flex-wrap: wrap;

@@ -255,7 +255,7 @@
 
       <!-- 登録の結果（SC-06）。 -->
       <section id="co-saved" class="co-panel" aria-live="polite" hidden>
-        <h2 class="co-panel-title">登録しました</h2>
+        <h2 id="co-saved-title" class="co-panel-title">登録しました</h2>
         <dl id="co-saved-list" class="co-status"></dl>
 
         <div class="co-actions">
@@ -265,14 +265,24 @@
         </div>
       </section>
 
-      <!-- 同じ画像が既に登録されていたとき（DUP-001）。 -->
+      <!--
+        重複候補が見つかったとき（SC-05 / DUP-001・DUP-002）。
+        FR-17 の3つの選択肢（新規登録・既存更新・キャンセル）を並べる。
+        差分（co-duplicate-diff）は app.js が組み立てる（innerHTML 不使用）。
+      -->
       <section id="co-duplicate" class="co-panel co-panel--guidance" aria-live="polite" hidden>
         <h2 id="co-duplicate-title" class="co-panel-title"></h2>
         <p id="co-duplicate-text" class="co-guidance-text"></p>
 
+        <!-- 変更前と変更後。**確認なしに上書きさせない**（FR-17）。 -->
+        <h3 id="co-duplicate-diff-title" class="co-diff-title" hidden>更新すると、こう変わります</h3>
+        <dl id="co-duplicate-diff" class="co-status co-diff"></dl>
+        <p id="co-duplicate-note" class="co-guidance-text" hidden></p>
+
         <div class="co-actions">
-          <button id="co-register-anyway" type="button" class="auth-button auth-button--ghost">それでも登録する</button>
-          <button id="co-duplicate-cancel" type="button" class="auth-button">やめる</button>
+          <button id="co-update" type="button" class="auth-button" hidden>既存の行を更新する</button>
+          <button id="co-register-anyway" type="button" class="auth-button auth-button--ghost">新規として登録する</button>
+          <button id="co-duplicate-cancel" type="button" class="auth-button auth-button--ghost">やめる</button>
         </div>
       </section>
 

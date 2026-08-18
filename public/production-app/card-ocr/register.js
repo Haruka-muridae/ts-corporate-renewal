@@ -1,9 +1,10 @@
 /*
- * 確定保存（§FR-07・FR-19・§11.2、§8.1 ステージ5）。
+ * 確定保存（§FR-07・FR-17・FR-18・FR-19・§11.2・§11.3、§8.1 ステージ5）。
  *
  *   1. 重複を見る（同一画像のハッシュ → 会社名＋氏名）
  *   2. 表面・裏面の画像を images/YYYY/MM へ上げる
- *   3. 台帳へ1行追記する
+ *   3. 台帳へ1行追記する。**既存行の更新を選ばれた場合は、
+ *      record_id で行を特定して上書きし、変更前値を変更履歴へ残す**
  *
  * ==================================================================
  * 手本にした実装
@@ -37,13 +38,24 @@ import { APP_VERSION, JPEG_MIME, TABS } from './config.js';
 import { uploadFile } from './drive-api.js';
 import { resolveMonthFolder } from './drive-storage.js';
 import {
+  CONTENT_COLUMNS,
   DATA_COLUMNS,
   buildDataRow,
   buildDuplicateKey,
+  buildHistoryRow,
   buildNameKey,
+  diffValues,
   headersOf,
+  rowToValues,
 } from './schema.js';
-import { appendRow, readColumn, spreadsheetUrl } from './sheets.js';
+import {
+  appendRow,
+  appendRows,
+  readColumn,
+  readRow,
+  spreadsheetUrl,
+  updateRow,
+} from './sheets.js';
 import { buildImageFileName, yearMonthPath } from './capture.js';
 import { hashBothSides } from './hash.js';
 import { PROMPT_VERSION } from './prompt.js';
@@ -107,27 +119,112 @@ export function findAttributeDuplicate(candidate, existingPairs = []) {
     : { found: false, kind: null };
 }
 
-/* 台帳から、重複判定に使う列を読む。列の位置は定義から求める。 */
+/*
+ * 台帳から、重複判定に使う列を読む。列の位置は定義から求める。
+ *
+ * **record_id と行番号も一緒に持って帰る**（v3.5 で追加）。
+ * 重複が見つかったときに「どの行のことか」が分からないと、
+ * FR-17 の「既存行の更新」へ進めないためである。
+ */
 export async function readKnownKeys(spreadsheetId, options) {
   const headers = headersOf(DATA_COLUMNS);
   const at = (name) => readColumn(spreadsheetId, TABS.data, headers.indexOf(name), options);
 
-  const [frontHashes, backHashes, companies, names] = await Promise.all([
+  const [recordIds, frontHashes, backHashes, companies, names] = await Promise.all([
+    at('record_id'),
     at('front_image_hash'),
     at('back_image_hash'),
     at('会社名'),
     at('氏名'),
   ]);
 
-  /* 行の並びは同じなので、位置で組にできる。 */
-  const rowCount = Math.max(companies.length, names.length);
-  const pairs = [];
+  /*
+   * 行の並びは同じなので、位置で組にできる。
+   * **列ごとに長さが違いうる**（Sheets は右端・下端の空を返さない）ので、
+   * 一番長いものに合わせて空で埋める。
+   */
+  const rowCount = Math.max(
+    recordIds.length, frontHashes.length, backHashes.length,
+    companies.length, names.length,
+  );
+
+  const rows = [];
 
   for (let index = 0; index < rowCount; index += 1) {
-    pairs.push({ companyName: companies[index] ?? '', fullName: names[index] ?? '' });
+    rows.push({
+      /* 見出しが1行目なので、データの1件目は2行目。 */
+      rowNumber: index + 2,
+      recordId: recordIds[index] ?? '',
+      frontHash: frontHashes[index] ?? '',
+      backHash: backHashes[index] ?? '',
+      companyName: companies[index] ?? '',
+      fullName: names[index] ?? '',
+    });
   }
 
-  return { hashes: [...frontHashes, ...backHashes], pairs };
+  return {
+    rows,
+    /* 既存の呼び出し形（一致の有無だけを見る）も残す。 */
+    hashes: [...frontHashes, ...backHashes],
+    pairs: rows.map(({ companyName, fullName }) => ({ companyName, fullName })),
+  };
+}
+
+/*
+ * 重複している**行**を特定する（FR-17）。
+ *
+ * 上の2つの判定を、行ごとに順に当てるだけである。優先順位は
+ * 「画像の一致 → 会社名＋氏名」で、registerCard が持っていたものと同じ。
+ *
+ * **行を返すのが要点**である。更新（FR-18）は record_id で行を特定して
+ * 書くので、「重複している」だけでは足りない。
+ */
+export function findDuplicateRow(hashes, values, rows = []) {
+  for (const row of rows) {
+    const hit = findHashDuplicate(hashes, [row.frontHash, row.backHash]);
+
+    if (hit.found) {
+      return { found: true, kind: 'image', side: hit.side, row };
+    }
+  }
+
+  for (const row of rows) {
+    if (findAttributeDuplicate(values, [row]).found) {
+      return { found: true, kind: 'attribute', side: null, row };
+    }
+  }
+
+  return { found: false, kind: null, side: null, row: null };
+}
+
+/*
+ * record_id から行番号を求める（FR-18）。見つからなければ null。
+ *
+ * **書く直前にもう一度引く。** 重複を見つけた時点の行番号は、利用者が
+ * 別のタブで行を消したり並べ替えたりすれば、その瞬間にずれる。
+ * 位置ではなく record_id が正である以上、位置は毎回引き直す。
+ *
+ * 同じ record_id が2行ある場合（行のコピーで起こる）は**最初の行**を採る。
+ * どちらも同じ1件を指しているので、片方を選んでも別人を書き換えることには
+ * ならない。**曖昧だからと更新を止めるほうが、利用者の逃げ場が無くなる。**
+ */
+export async function locateRowByRecordId(spreadsheetId, recordId, options) {
+  if (typeof recordId !== 'string' || recordId === '') {
+    return null;
+  }
+
+  const headers = headersOf(DATA_COLUMNS);
+  const ids = await readColumn(spreadsheetId, TABS.data, headers.indexOf('record_id'), options);
+  const index = ids.indexOf(recordId);
+
+  return index < 0 ? null : index + 2;
+}
+
+/* いま台帳に入っている1件を読む（差分確認と変更履歴に使う）。 */
+async function readExistingRecord(spreadsheetId, rowNumber, options) {
+  const row = await readRow(spreadsheetId, TABS.data, rowNumber, DATA_COLUMNS.length, options);
+
+  return rowToValues(row);
 }
 
 /* ---------- 1件ぶんの値 ---------- */
@@ -191,6 +288,25 @@ export function buildRecord({
   };
 }
 
+/*
+ * 変更履歴の行を作る（§11.3）。変わった項目の数だけ行ができる。
+ *
+ * **変更前値を残すのが目的**である（FR-17）。上書きしてしまえば、
+ * 元の値はどこにも残らない。台帳は利用者の資産で、こちらには控えが無い。
+ */
+export function buildHistoryRows({ recordId, changes = [], at = new Date() }) {
+  const changedAt = formatRegisteredAt(at);
+
+  return changes.map((change) => buildHistoryRow({
+    historyId: buildRecordId(),
+    changedAt,
+    recordId,
+    fieldName: change.header,
+    oldValue: change.oldValue,
+    newValue: change.newValue,
+  }));
+}
+
 /* ---------- 保存 ---------- */
 
 async function uploadSide(blob, { side, parentId, values, recordId, at, token, fetchImpl, signal }) {
@@ -213,13 +329,145 @@ async function uploadSide(blob, { side, parentId, values, recordId, at, token, f
   );
 }
 
+/* 表と裏を上げる。互いに依存しないので同時でよい。 */
+async function uploadBothSides({ frontBlob, backBlob, storage, values, recordId, at, options }) {
+  const monthFolder = await resolveMonthFolder(
+    storage.imageFolderId,
+    yearMonthPath(at),
+    options,
+  );
+
+  const uploadOptions = {
+    parentId: monthFolder.id, values, recordId, at, ...options,
+  };
+
+  const [front, back] = await Promise.all([
+    uploadSide(frontBlob, { ...uploadOptions, side: 'front' }),
+    uploadSide(backBlob, { ...uploadOptions, side: 'back' }),
+  ]);
+
+  return { front, back };
+}
+
+/*
+ * 既にある1件を、いま読み取った内容で上書きする（FR-17・FR-18・§11.3）。
+ *
+ * ==================================================================
+ * 順序（台帳が先、変更履歴が後）
+ * ==================================================================
+ * 逆にすると、**書き換えに失敗したのに「こう変えた」という履歴だけが
+ * 残る。** 履歴のほうが先に書けてしまう状態は、あとから見て嘘になる。
+ *
+ * 台帳を先に書けば、履歴に失敗しても
+ * 「更新はできた／記録は残せなかった」と**利用者に伝えられる**
+ * （historyRecorded を返す）。register.js 冒頭の「分かるほうの失敗を
+ * 選ぶ」と同じ考え方である。
+ * ==================================================================
+ *
+ * ==================================================================
+ * record_id と登録日時は引き継ぐ
+ * ==================================================================
+ * record_id は行の同一性そのものなので、作り直さない。
+ * 登録日時も**最初に登録した日時のまま**残す。更新した日時は
+ * 変更履歴の changed_at が持っており、二重に持つ必要がない。
+ * ==================================================================
+ */
+async function updateCard({
+  recordId, values, merged, hashes, frontBlob, backBlob, storage, at, options,
+}) {
+  const rowNumber = await locateRowByRecordId(storage.spreadsheetId, recordId, options);
+
+  if (rowNumber === null) {
+    /*
+     * 差分を見ている間に、その行が消された（か record_id が書き換えられた）。
+     * **どこか別の行を上書きしない。** 呼び出し側で案内する。
+     */
+    return {
+      registered: false,
+      updated: false,
+      missingRow: true,
+      duplicate: { found: false, side: null },
+      recordId: null,
+    };
+  }
+
+  const existing = await readExistingRecord(storage.spreadsheetId, rowNumber, options);
+  const { front, back } = await uploadBothSides({
+    frontBlob, backBlob, storage, values, recordId, at, options,
+  });
+
+  /*
+   * **登録日時は読んだ値をそのまま書き戻す。**
+   *
+   * Sheets は `2026-01-05 09:00:00` を日時として取り込むため、
+   * FORMULA で読むと**シリアル値（数値）で返ることがある。**
+   * その場合はシリアル値をそのまま書き戻すことになるが、
+   * セルの表示形式は日時のまま残るので見え方は変わらない。
+   * **こちらで文字列へ組み立て直さない。** 変換を挟むほうが、
+   * 取り違えて別の日時を書く危険が大きい（値そのものは同じである）。
+   */
+  const record = {
+    ...buildRecord({ values, merged, hashes, front, back, at }),
+    record_id: recordId,
+    registeredAt: existing.registeredAt !== '' ? existing.registeredAt : formatRegisteredAt(at),
+  };
+
+  const row = buildDataRow(record);
+
+  /*
+   * 履歴は**全列**を見る（record_id を除く）。画面に出す差分は
+   * 名刺の中身だけだが（CONTENT_COLUMNS）、記録のほうを絞ると
+   * 「画像が差し替わった」「裏面が外れた」が追えなくなる。
+   */
+  const changes = diffValues(
+    existing,
+    rowToValues(row),
+    DATA_COLUMNS.filter((column) => column.key !== 'record_id'),
+  );
+
+  await updateRow(storage.spreadsheetId, TABS.data, rowNumber, row, options);
+
+  let historyRecorded = true;
+
+  if (changes.length > 0) {
+    try {
+      await appendRows(
+        storage.spreadsheetId,
+        TABS.history,
+        buildHistoryRows({ recordId, changes, at }),
+        options,
+      );
+    } catch {
+      /* 台帳は書けている。**更新そのものを失敗にしない。** */
+      historyRecorded = false;
+    }
+  }
+
+  return {
+    registered: true,
+    updated: true,
+    duplicate: { found: false, side: null },
+    recordId,
+    rowNumber,
+    changes,
+    historyRecorded,
+    sheetUrl: spreadsheetUrl(storage.spreadsheetId),
+    front,
+    back,
+  };
+}
+
 /*
  * 確定保存する。
  *
- * 戻り値: { recordId, duplicate, sheetUrl, front, back }
- *   duplicate … 同じ画像が既にあった場合の情報。**止めるかどうかは
- *               呼び出し側が決める**（利用者が「それでも登録する」を
- *               選べるようにするため）
+ * 戻り値: { registered, recordId, duplicate, sheetUrl, front, back }
+ *   duplicate … 同じ名刺が既にあった場合の情報。**止めるかどうかは
+ *               呼び出し側が決める**（利用者が「新規として登録する」
+ *               「既存の行を更新する」を選べるようにするため。FR-17）
+ *   existing / changes … 重複していた行の中身と、いまの内容との差分。
+ *               **差分確認なしに上書きさせない**ために返す
+ *
+ * updateRecordId を渡すと、追記ではなく**その record_id の行の更新**になる。
  */
 export async function registerCard({
   values,
@@ -232,46 +480,59 @@ export async function registerCard({
   signal,
   at = new Date(),
   skipDuplicateCheck = false,
+  updateRecordId = null,
 }) {
   const options = { token, fetchImpl, signal };
   const hashes = await hashBothSides({ front: frontBlob, back: backBlob });
+
+  if (typeof updateRecordId === 'string' && updateRecordId !== '') {
+    return updateCard({
+      recordId: updateRecordId,
+      values, merged, hashes, frontBlob, backBlob, storage, at, options,
+    });
+  }
 
   if (!skipDuplicateCheck) {
     const known = await readKnownKeys(storage.spreadsheetId, options);
 
     /*
      * **画像の一致を先に見る。** 同じファイルの再送は確実に重複であり、
-     * 会社名・氏名の一致より根拠が強い。案内の文言も変えられる。
+     * 会社名・氏名の一致より根拠が強い。案内の文言も変えられる
+     * （優先順位は findDuplicateRow の中にある）。
      */
-    const byHash = findHashDuplicate(hashes, known.hashes);
+    const hit = findDuplicateRow(hashes, values, known.rows);
 
-    if (byHash.found) {
-      return { registered: false, duplicate: { ...byHash, kind: 'image' }, recordId: null };
-    }
+    if (hit.found) {
+      /*
+       * **record_id が空の行は更新できない。** 利用者が消した場合で、
+       * 位置で当てにいくと別人の行を上書きしうる。新規登録だけを許す。
+       */
+      const updatable = hit.row.recordId !== '';
+      const existing = updatable
+        ? await readExistingRecord(storage.spreadsheetId, hit.row.rowNumber, options)
+        : null;
 
-    const byAttribute = findAttributeDuplicate(values, known.pairs);
-
-    if (byAttribute.found) {
-      return { registered: false, duplicate: byAttribute, recordId: null };
+      return {
+        registered: false,
+        duplicate: {
+          found: true,
+          kind: hit.kind,
+          side: hit.side,
+          recordId: hit.row.recordId,
+          rowNumber: hit.row.rowNumber,
+          updatable,
+        },
+        existing,
+        changes: existing ? diffValues(existing, values, CONTENT_COLUMNS) : [],
+        recordId: null,
+      };
     }
   }
 
-  const monthFolder = await resolveMonthFolder(
-    storage.imageFolderId,
-    yearMonthPath(at),
-    options,
-  );
-
   const recordId = buildRecordId();
-  const uploadOptions = {
-    parentId: monthFolder.id, values, recordId, at, ...options,
-  };
-
-  /* 表と裏は同時に上げてよい。互いに依存しない。 */
-  const [front, back] = await Promise.all([
-    uploadSide(frontBlob, { ...uploadOptions, side: 'front' }),
-    uploadSide(backBlob, { ...uploadOptions, side: 'back' }),
-  ]);
+  const { front, back } = await uploadBothSides({
+    frontBlob, backBlob, storage, values, recordId, at, options,
+  });
 
   const record = { ...buildRecord({ values, merged, hashes, front, back, at }), record_id: recordId };
 
@@ -279,6 +540,7 @@ export async function registerCard({
 
   return {
     registered: true,
+    updated: false,
     duplicate: { found: false, side: null },
     recordId,
     sheetUrl: spreadsheetUrl(storage.spreadsheetId),
