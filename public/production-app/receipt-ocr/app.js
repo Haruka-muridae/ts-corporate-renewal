@@ -31,7 +31,9 @@ import { NOTICE, PROVISION_STATUS, assertWritable, provision } from './provision
 import { ensureMonthFolder, uploadImage } from './drive.js';
 import { currentToken, forgetToken, hasValidToken, requestAccess } from './oauth.js';
 
-import { recognize } from './ocr.js';
+import { collectOrphans, recognize } from './ocr.js';
+import { isHeic, shrinkToJpeg } from './image.js';
+import { FALLBACK_SETTINGS, resolveSettings } from './settings.js';
 import { extractAll, toValues } from './extract.js';
 import { validateAll } from './validate.js';
 import { levelOf, scoreOf } from './confidence.js';
@@ -56,7 +58,7 @@ for (const id of [
   'ro-main', 'ro-first-run', 'ro-first-run-ack',
   'ro-state-auth', 'ro-state-oauth', 'ro-state-key', 'ro-state-storage',
   'ro-connect', 'ro-key-link', 'ro-capture-panel',
-  'ro-file', 'ro-preview', 'ro-preview-image',
+  'ro-file', 'ro-shrink', 'ro-preview', 'ro-preview-image',
   'ro-meta-name', 'ro-meta-hash', 'ro-meta-folder',
   'ro-start', 'ro-message', 'ro-progress',
   'ro-review-panel', 'ro-review-lead', 'ro-review-image', 'ro-review-confidence',
@@ -86,6 +88,28 @@ function showInfo(text) {
   el['ro-message'].textContent = text;
   el['ro-message'].dataset.kind = 'info';
   el['ro-message'].hidden = false;
+}
+
+/*
+ * すでに出ている案内へ書き足す。
+ *
+ * 起動時の掃除や設定の読み込みは、プロビジョニングの案内より後に終わる。
+ * showInfo で上書きすると、**先に出した案内（保存先が複数あった等）が
+ * 消える。** エラーが出ているときは何も足さない（エラーを潰さない）。
+ */
+function appendInfo(text) {
+  const node = el['ro-message'];
+
+  if (node.dataset.kind === 'error' && !node.hidden) {
+    return;
+  }
+
+  if (!node.hidden && node.dataset.kind === 'info' && node.textContent !== '') {
+    node.textContent = `${node.textContent} ${text}`;
+    return;
+  }
+
+  showInfo(text);
 }
 
 /*
@@ -144,6 +168,11 @@ let selected = null;
 let saving = false;
 /* 保存前確認で人の判断を待っている1件（§8）。 */
 let pending = null;
+/*
+ * 「設定」タブから読んだしきい値（v1.3 §16.6 / §9.1）。
+ * 読めるまで、読めなかったときは既定値で動く（安全側）。
+ */
+let settings = FALLBACK_SETTINGS;
 
 /* ---------- 第3層：Gemini キー（§4-3） ---------- */
 
@@ -226,11 +255,68 @@ async function runProvisioning() {
     showNotices(provisionResult.notices);
     el['ro-capture-panel'].hidden = false;
 
+    /*
+     * 設定タブの反映と、前回の消し残しの掃除。
+     * **どちらも失敗しても保存の邪魔をしない。** 既定値で動き、
+     * 掃除は次回に持ち越せばよい（このあとの await は結果表示のため）。
+     */
+    await applySheetSettings(gateway, provisionResult.locations.spreadsheetId);
+    await collectTempDocs();
+
     return true;
   } catch (error) {
     setState(el['ro-state-storage'], '確認できませんでした', 'error');
     showError(error);
     return false;
+  }
+}
+
+/* ---------- 設定タブの反映（v1.3 §16.6 / v2.0 §9.1） ---------- */
+
+/*
+ * シートの「設定」タブを読み、しきい値を差し替える。
+ *
+ * ------------------------------------------------------------------
+ * 読めなければ既定で動く。止めない
+ * ------------------------------------------------------------------
+ * 設定は補助であって、保存の前提ではない。ここで例外を上へ流すと、
+ * 設定タブを消しただけの利用者が保存できなくなる。
+ *
+ * 一方、**読めたのに使わなかった値は黙って捨てない。** 利用者は
+ * 「変えたつもり」で使い続けることになるため、名前だけを案内へ足す。
+ * ------------------------------------------------------------------
+ */
+async function applySheetSettings(gateway, spreadsheetId) {
+  try {
+    const raw = await gateway.readSettings(spreadsheetId);
+    settings = resolveSettings(raw);
+  } catch {
+    settings = FALLBACK_SETTINGS;
+    appendInfo('シートの「設定」タブを読めませんでした。既定のしきい値で動作します。');
+    return;
+  }
+
+  if (settings.ignored.length > 0) {
+    appendInfo(`「設定」タブの次の値は読み取れないため既定値を使います：${settings.ignored.join('、')}。`);
+  }
+}
+
+/*
+ * 前回消し損ねた OCR 一時ドキュメントを片づける（§9.5・findings #6）。
+ *
+ * 一時ドキュメントには OCR で読み取った領収書の文字がそのまま入る。
+ * 削除は通信断やタブを閉じた場面で失敗しうるので、
+ * **回収する経路を持たないと、中身がドライブに残り続ける。**
+ */
+async function collectTempDocs() {
+  try {
+    const result = await collectOrphans({ accessToken: currentToken() });
+
+    if (result.found > 0) {
+      appendInfo(`前回の処理で残っていた一時ファイルを ${result.deleted}/${result.found} 件片づけました。`);
+    }
+  } catch {
+    /* 掃除できなくても保存はできる。次回の起動に持ち越す。 */
   }
 }
 
@@ -253,6 +339,16 @@ async function onFileSelected() {
   el['ro-review-panel'].hidden = true;
 
   if (!file) {
+    return;
+  }
+
+  /*
+   * HEIC は「非対応です」で終わらせない（card-ocr の案内を複製、2026-08-18）。
+   * iPhone の既定形式であり、利用者は特別なことをした自覚がない。
+   * その場で直せる道まで書く。
+   */
+  if (isHeic(file)) {
+    showInfo('HEIC形式の写真は読み取れません。iPhone の「設定 › カメラ › フォーマット」を「互換性優先」にして撮り直すか、JPEG に変換してから選んでください。');
     return;
   }
 
@@ -281,6 +377,53 @@ async function onFileSelected() {
   el['ro-start'].disabled = false;
 }
 
+/* ---------- 縮小（§14 の最終項。既定は無効） ---------- */
+
+/*
+ * 実際に上げる画像を決める。
+ *
+ * ------------------------------------------------------------------
+ * 既定では原本をそのまま上げる
+ * ------------------------------------------------------------------
+ * §14 は縮小を「オプションを設ける」と書いており、常時実行ではない。
+ * 領収書の原本は後から見返す証跡であり、こちらの都合で既定の画質を
+ * 落とすものではない（§0.3 のとおり電帳法の要件は満たさないが、
+ * だからといって黙って劣化させてよいことにはならない）。
+ *
+ * 縮小できなかった場合も**保存は続ける。** 原本のままで困るのは
+ * 通信の速さだけで、保存できないほうが利用者の損失は大きい。
+ * ------------------------------------------------------------------
+ *
+ * 拡張子を .jpg へ付け替えるのは、縮小後が必ず JPEG になるため。
+ * PNG の中身に .png の名前が付いていると、あとで開くときに混乱する。
+ */
+async function prepareUploadBlob() {
+  const original = { blob: selected.file, name: selected.file.name, shrunk: false };
+
+  if (!el['ro-shrink']?.checked) {
+    return original;
+  }
+
+  showInfo('画像を縮小しています…');
+
+  const result = await shrinkToJpeg(selected.file);
+
+  if (!result.ok) {
+    /*
+     * この案内はすぐ次の状態表示で流れる。**それでよい。**
+     * 縮小の可否は保存の成否に関わらず、あとから困ることでもない。
+     */
+    showInfo('画像を縮小できなかったため、元の画像のまま保存します…');
+    return original;
+  }
+
+  return {
+    blob: result.blob,
+    name: selected.file.name.replace(/\.[A-Za-z0-9]+$/, '') + '.jpg',
+    shrunk: true,
+  };
+}
+
 /* ---------- ②〜⑦ 原本保存・OCR・抽出・検証・補完 ---------- */
 
 /*
@@ -304,6 +447,15 @@ async function runPipeline() {
 
     const accessToken = currentToken();
 
+    /*
+     * ③' 縮小（§14 の最終項）。**利用者が選んだときだけ。**
+     *
+     * 原本は証跡なので、既定では触らない。縮められなければ黙って原本を使う
+     * （縮小に失敗したことを理由に保存できなくしない）。
+     * 重複判定のハッシュは選ばれた元のファイルから取ってある（§10）。
+     */
+    const upload = await prepareUploadBlob();
+
     /* ④ 原本の保存。 */
     const monthFolder = await ensureMonthFolder({
       accessToken,
@@ -318,11 +470,11 @@ async function runPipeline() {
      * ハッシュ列との突き合わせも目視でできる。
      */
     const suffix = selected.hash ? `-${selected.hash.slice(0, 12)}` : '';
-    const name = `${timestamp().replace(/[: ]/g, '')}${suffix}-${selected.file.name}`;
+    const name = `${timestamp().replace(/[: ]/g, '')}${suffix}-${upload.name}`;
 
     const uploaded = await uploadImage({
       accessToken,
-      blob: selected.file,
+      blob: upload.blob,
       name,
       parentId: monthFolder.id,
     });
@@ -341,10 +493,10 @@ async function runPipeline() {
 
     const apiKey = KeyStore.get(PROVIDERS.gemini);
     const ocrResult = await recognize({
-      blob: selected.file,
+      blob: upload.blob,
       accessToken,
       apiKey,
-      displayName: selected.file.name,
+      displayName: upload.name,
     });
 
     /* ⑥ ルール抽出・検証・信頼度。 */
@@ -354,9 +506,14 @@ async function runPipeline() {
       originalUrl: uploaded?.webViewLink ?? '',
     };
 
+    /*
+     * しきい値は「設定」タブの値を使う（v1.3 §16.6）。
+     * 読めなかった項目は resolveSettings が既定へ落としてある。
+     */
     let validation = validateAll(values, {
       lines: extracted.lines,
       tax: extracted.tax,
+      limits: settings.limits,
     });
 
     /* ⑦ 必要なときだけ補完する（v1.3 §11）。 */
@@ -365,6 +522,9 @@ async function runPipeline() {
       validation,
       ocrText: ocrResult.text,
       hasApiKey: Boolean(apiKey),
+      /* 「Gemini使用」「OCR文字数の最低基準」も設定タブが持つ。 */
+      geminiEnabled: settings.geminiEnabled,
+      minOcrLength: settings.minOcrLength,
     });
 
     let reconciliation = null;
@@ -386,7 +546,11 @@ async function runPipeline() {
           }
         }
 
-        validation = validateAll(values, { lines: extracted.lines, tax: extracted.tax });
+        validation = validateAll(values, {
+          lines: extracted.lines,
+          tax: extracted.tax,
+          limits: settings.limits,
+        });
       }
     }
 
@@ -399,7 +563,8 @@ async function runPipeline() {
       agreements: agreementsOf(reconciliation),
     });
 
-    const level = levelOf(score.score);
+    /* 高・中の境目も設定タブが持つ（v1.3 §14）。 */
+    const level = levelOf(score.score, settings.thresholds);
     const duplicate = evaluateDuplicate({ ...values, imageHash: selected.hash }, toRows(columns));
 
     pending = {

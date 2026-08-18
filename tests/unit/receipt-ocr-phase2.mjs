@@ -29,7 +29,24 @@ let fetchLog = [];
 let fetchHandler = null;
 
 globalThis.fetch = async (url, options = {}) => {
-  fetchLog.push({ url: String(url), method: options.method ?? 'GET', headers: options.headers ?? {} });
+  /*
+   * 本文も控える（2026-08-18 追加）。multipart の boundary と
+   * 一時ドキュメントの名前を確かめるために要る。
+   */
+  let body = '';
+
+  if (typeof options.body === 'string') {
+    body = options.body;
+  } else if (options.body && typeof options.body.text === 'function') {
+    body = await options.body.text();
+  }
+
+  fetchLog.push({
+    url: String(url),
+    method: options.method ?? 'GET',
+    headers: options.headers ?? {},
+    body,
+  });
 
   const response = fetchHandler
     ? await fetchHandler(String(url), options)
@@ -161,12 +178,157 @@ try {
   }
 
   /* ---------------------------------------------------------------- */
+  section('§9.5 一時ドキュメントの名前と boundary（findings #6・#7）');
+
+  {
+    const uploads = [];
+
+    resetFetch(async (url, options) => {
+      if (options.method === 'POST' && url.includes('/upload/')) {
+        uploads.push(String(options.headers?.['Content-Type'] ?? ''));
+        return { status: 200, body: { id: `tmpdoc-${uploads.length}` } };
+      }
+
+      if (url.includes('/export')) {
+        return { status: 200, text: '合計 500円' };
+      }
+
+      return { status: 204, body: null };
+    });
+
+    const first = await ocrDrive.recognize({
+      blob: new Blob(['image'], { type: 'image/jpeg' }),
+      accessToken: 'token-for-test',
+      displayName: '領収書_2026-08.jpg',
+    });
+
+    const uploadCall = fetchLog.find((call) => call.method === 'POST' && call.url.includes('/upload/'));
+
+    check('一時ドキュメントは固定の接頭辞で名付ける',
+      uploadCall.body.includes(ocrDrive.TEMP_DOC_PREFIX));
+
+    check('**利用者のファイル名を一時ドキュメント名に入れない**',
+      !uploadCall.body.includes('領収書_2026-08'));
+
+    check('削除できたことを戻り値で伝える（握りつぶさない）', first.deleted === true);
+
+    /* boundary は内容から決めない（findings #7）。 */
+    const boundary = uploads[0].replace('multipart/related; boundary=', '');
+
+    check('boundary は乱数由来（内容から決めない）',
+      boundary.startsWith('tsam-') && boundary.length > 20);
+
+    /* 改訂前は `ocr-<サイズ>-<MIMEの長さ>` だった。この形に戻さない。 */
+    check('boundary を内容から組み立てた形にしない',
+      !/^ocr-\d+-\d+$/.test(boundary));
+
+    check('boundary が本文の区切りとして使われている',
+      uploadCall.body.includes(`--${boundary}`));
+
+    await ocrDrive.recognize({
+      blob: new Blob(['image'], { type: 'image/jpeg' }),
+      accessToken: 'token-for-test',
+    });
+
+    check('同じ画像でも boundary は毎回変わる', uploads[0] !== uploads[1]);
+
+    check('名前の判定は接頭辞（旧名も拾う）',
+      ocrDrive.isTempDocName('receipt-ocr-tmp-1-0') === true
+      && ocrDrive.isTempDocName('ocr-tmp-領収書.jpg') === true
+      && ocrDrive.isTempDocName('自分のメモ') === false);
+
+    check('名前は接頭辞＋時刻＋通し番号',
+      ocrDrive.buildTempDocName(1700000000000, 2) === 'receipt-ocr-tmp-1700000000000-2');
+  }
+
+  {
+    /* 削除に失敗しても例外にせず、残っていることを伝える。 */
+    resetFetch(async (url, options) => {
+      if (options.method === 'POST' && url.includes('/upload/')) {
+        return { status: 200, body: { id: 'tmpdoc-stuck' } };
+      }
+
+      if (url.includes('/export')) {
+        return { status: 200, text: '合計 500円' };
+      }
+
+      return { status: 500, body: {} };
+    });
+
+    const result = await ocrDrive.recognize({
+      blob: new Blob(['image'], { type: 'image/jpeg' }),
+      accessToken: 'token-for-test',
+    });
+
+    check('削除に失敗しても読み取り結果は返す', result.text.includes('500'));
+    check('**消せなかったことを伝える（deleted=false）**', result.deleted === false);
+  }
+
+  {
+    /* 起動時の孤児回収（findings #6）。 */
+    const now = Date.UTC(2026, 7, 18, 12, 0, 0);
+    const deleted = [];
+
+    resetFetch(async (url, options) => {
+      if (options.method === 'DELETE') {
+        deleted.push(url);
+        return { status: 204, body: null };
+      }
+
+      return {
+        status: 200,
+        body: {
+          files: [
+            { id: 'old1', name: 'receipt-ocr-tmp-1-0', createdTime: '2026-08-18T10:00:00Z' },
+            { id: 'old2', name: 'ocr-tmp-領収書.jpg', createdTime: '2026-08-01T00:00:00Z' },
+            { id: 'busy', name: 'receipt-ocr-tmp-2-0', createdTime: '2026-08-18T11:59:00Z' },
+            { id: 'mine', name: '自分のメモ ocr-tmp- 用', createdTime: '2026-01-01T00:00:00Z' },
+          ],
+        },
+      };
+    });
+
+    const outcome = await ocrDrive.collectOrphanTempDocs({ accessToken: 'token-for-test', now });
+
+    check('消し損ねた一時ドキュメントを回収する', outcome.deleted === 2 && outcome.found === 2);
+
+    check('旧名（ocr-tmp-）も回収する', deleted.some((url) => url.includes('old2')));
+
+    check('**処理中の可能性があるもの（作成直後）は消さない**',
+      outcome.skipped === 1 && !deleted.some((url) => url.includes('busy')));
+
+    check('接頭辞で始まらない利用者のファイルは消さない',
+      !deleted.some((url) => url.includes('mine')));
+
+    {
+      const query = new URL(fetchLog[0].url).searchParams.get('q') ?? '';
+
+      check('探すのは Google ドキュメントだけ（画像や台帳を巻き込まない）',
+        query.includes('vnd.google-apps.document'), query);
+
+      check('新旧どちらの接頭辞も探す',
+        query.includes(ocrDrive.TEMP_DOC_PREFIX)
+        && query.includes(ocrDrive.LEGACY_TEMP_DOC_PREFIX), query);
+
+      check('ゴミ箱の中は数えない', query.includes('trashed = false'), query);
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
   section('§6 / §12 Gemini：キーの送り方とエラー分類');
 
-  check('400 はキーの問題（KEY-002）', gemini.mapGeminiError(400) === 'KEY-002');
+  /*
+   * 2026-08-18 の修正（findings #3）。
+   * **400 をキーの問題にしない。** 400 はこちらの要求の形が不正という意味で、
+   * キーを疑わせると利用者はキーを作り直し、それでも直らないことになる。
+   */
+  check('**400 はキーの問題ではない（AI-003）**', gemini.mapGeminiError(400) === 'AI-003');
+  check('401 はキーの問題（KEY-002）', gemini.mapGeminiError(401) === 'KEY-002');
   check('403 もキーの問題（KEY-002）', gemini.mapGeminiError(403) === 'KEY-002');
   check('429 はクォータ超過（AI-002）', gemini.mapGeminiError(429) === 'AI-002');
   check('404 はモデル不明（フォールバック対象）', gemini.mapGeminiError(404) === 'MODEL-404');
+  check('503 は Google 側の一時障害（SRV-001）', gemini.mapGeminiError(503) === 'SRV-001');
+  check('500 も SRV-001', gemini.mapGeminiError(500) === 'SRV-001');
 
   {
     resetFetch(async () => ({
@@ -492,7 +654,13 @@ try {
       thrown = error;
     }
 
-    check('シート書き込み失敗は SHEET-001', thrown?.code === 'SHEET-001');
+    /*
+     * 2026-08-18 変更（findings #5）。500番台は「シートへの書き込みに
+     * 失敗しました」ではなく、待てば直ることが伝わる SRV-001 にする。
+     * 到達点（原本保存済み）は従来どおり添える。
+     */
+    check('Google 側の一時障害は SRV-001', thrown?.code === 'SRV-001');
+    check('到達点は「原本保存済み」のまま', thrown?.progress === 'original-saved');
     check('原本は保存済みだと伝える', thrown?.progress === 'original-saved');
   }
 
