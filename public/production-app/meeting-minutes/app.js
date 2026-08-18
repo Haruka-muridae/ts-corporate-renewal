@@ -30,6 +30,7 @@ import {
   DEFAULT_TEMPLATE_ID,
   REGENERATE_TARGETS,
   DRAFT_AUTOSAVE,
+  DRIVE_NAMES,
   isValidTemplateId,
 } from './config.js';
 
@@ -82,6 +83,19 @@ import {
   GeminiError,
   GeminiErrorCode,
 } from './gemini.js';
+
+import {
+  ensureAccessToken,
+  clearAccessToken,
+  DriveAuthError,
+  DriveAuthErrorCode,
+} from './oauth.js';
+
+import {
+  saveMinutesMarkdown,
+  DriveError,
+  DriveErrorCode,
+} from './drive-client.js';
 
 setScreenDepth(SCREEN_DEPTH);
 
@@ -213,6 +227,7 @@ const dom = {
   markdownPreview: document.getElementById('mm-markdown-preview'),
   copyMarkdown: document.getElementById('mm-copy-markdown'),
   downloadMarkdown: document.getElementById('mm-download-markdown'),
+  saveDrive: document.getElementById('mm-save-drive'),
   outputMessage: document.getElementById('mm-output-message'),
   backToReview: document.getElementById('mm-back-to-review'),
   restart5: document.getElementById('mm-restart-5'),
@@ -1276,6 +1291,93 @@ function handleDownloadMarkdown() {
   say(dom.outputMessage, `${fileName} として保存しました。`);
 }
 
+/* ================================================================
+ * Googleドライブへの保存（要件書 §4-15）
+ * ================================================================ */
+
+/* 画面に出す保存先の表記。実フォルダ名（config.js の DRIVE_NAMES）から組む。 */
+const MINUTES_DRIVE_PATH = `マイドライブ ＞ ${DRIVE_NAMES.root} ＞ ${DRIVE_NAMES.minutes}`;
+
+/* 文言は audio-transcriber の同種テーブルに合わせる（利用者が同じ体験をするため）。 */
+const DRIVE_AUTH_ERROR_MESSAGES = Object.freeze({
+  [DriveAuthErrorCode.CLIENT_ID_MISSING]:
+    'Googleドライブ連携が設定されていません。管理者へお問い合わせください。',
+  [DriveAuthErrorCode.GIS_LOAD_FAILED]:
+    'Googleの認証機能を読み込めませんでした。通信環境を確認して、もう一度お試しください。',
+  [DriveAuthErrorCode.POPUP_CLOSED]: 'Googleドライブへの接続が中断されました。',
+  [DriveAuthErrorCode.POPUP_BLOCKED]:
+    'ポップアップがブロックされました。ブラウザの設定でこのサイトのポップアップを許可してください。',
+  [DriveAuthErrorCode.ACCESS_DENIED]: 'Googleドライブへの接続が許可されませんでした。',
+  [DriveAuthErrorCode.SCOPE_NOT_GRANTED]:
+    'Googleドライブの権限が許可されませんでした。もう一度お試しいただき、権限の確認画面で許可してください。',
+  [DriveAuthErrorCode.UNKNOWN]: 'Googleドライブへの接続に失敗しました。',
+});
+
+const DRIVE_ERROR_MESSAGES = Object.freeze({
+  [DriveErrorCode.UNAUTHORIZED]:
+    'Googleドライブの利用許可の期限が切れました。もう一度「Googleドライブへ保存」を押して、許可し直してください。',
+  [DriveErrorCode.FORBIDDEN]:
+    'Googleドライブへのアクセスが拒否されました。権限が足りない可能性があります。',
+  [DriveErrorCode.API_DISABLED]:
+    'Google Drive APIが有効になっていません。管理者へお問い合わせください。',
+  [DriveErrorCode.QUOTA_EXCEEDED]: 'Googleドライブの空き容量が不足しています。',
+  [DriveErrorCode.RATE_LIMITED]: 'アクセスが集中しています。しばらく待ってからお試しください。',
+  [DriveErrorCode.NOT_FOUND]: '保存先が見つかりませんでした。もう一度お試しください。',
+  [DriveErrorCode.NETWORK]: '通信に失敗しました。ネットワークの状態を確認してください。',
+  [DriveErrorCode.SERVER_ERROR]: 'Google側で問題が発生しています。しばらく待ってからお試しください。',
+  [DriveErrorCode.CANCELLED]: '処理を中止しました。',
+  [DriveErrorCode.UNKNOWN]: 'Googleドライブへの保存に失敗しました。',
+});
+
+function describeDriveSaveError(error) {
+  if (error instanceof DriveAuthError) {
+    return DRIVE_AUTH_ERROR_MESSAGES[error.code] ?? DRIVE_AUTH_ERROR_MESSAGES[DriveAuthErrorCode.UNKNOWN];
+  }
+
+  if (error instanceof DriveError) {
+    return DRIVE_ERROR_MESSAGES[error.code] ?? DRIVE_ERROR_MESSAGES[DriveErrorCode.UNKNOWN];
+  }
+
+  return DRIVE_ERROR_MESSAGES[DriveErrorCode.UNKNOWN];
+}
+
+async function handleSaveToDrive() {
+  if (dom.saveDrive.disabled) {
+    return;
+  }
+
+  const fileName = buildMinutesFileName({
+    date: state.minutes.meeting.date,
+    title: state.minutes.meeting.title,
+  });
+  const text = dom.markdownPreview.value;
+
+  dom.saveDrive.disabled = true;
+  say(dom.outputMessage, 'Googleドライブへ保存しています…');
+
+  try {
+    /*
+     * ensureAccessToken はポップアップを開きうるため、押下直後のここでだけ呼ぶ。
+     * 保存中に期限切れ（401）になった場合は、自動でポップアップを開き直さず、
+     * トークンを破棄してもう一度ボタンを押してもらう（oauth.js の契約）。
+     */
+    const token = await ensureAccessToken();
+    const saved = await saveMinutesMarkdown({ token, text, fileName });
+
+    /* ドライブに実体が残ったので、ダウンロード済みと同じ扱いにする。 */
+    state.dirty = false;
+    say(dom.outputMessage, `Googleドライブの「${MINUTES_DRIVE_PATH}」へ ${saved.name} を保存しました。`);
+  } catch (error) {
+    if (error instanceof DriveError && error.code === DriveErrorCode.UNAUTHORIZED) {
+      clearAccessToken();
+    }
+
+    say(dom.outputMessage, describeDriveSaveError(error), true);
+  } finally {
+    dom.saveDrive.disabled = false;
+  }
+}
+
 async function handleRestart() {
   if (state.dirty && !confirm('編集内容が保存されていません。最初からやり直すと失われます。よろしいですか？')) {
     return;
@@ -1391,6 +1493,7 @@ async function init() {
   dom.includeEvidence.addEventListener('change', renderOutputScreen);
   dom.copyMarkdown.addEventListener('click', handleCopyMarkdown);
   dom.downloadMarkdown.addEventListener('click', handleDownloadMarkdown);
+  dom.saveDrive.addEventListener('click', handleSaveToDrive);
   dom.backToReview.addEventListener('click', () => showStep(4));
   dom.restart5.addEventListener('click', handleRestart);
 
