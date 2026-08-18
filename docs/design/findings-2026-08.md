@@ -36,3 +36,15 @@
 | 根拠 | `audio-transcriber-requirements-v1.md`（表 v1.1 / 本文 1.3）、`meeting-minutes-requirements-v1.md`（v1.0 / v1.1）、`note-post-requirements-v1.md`（v1.0 / v1.1）、`short-script-spec-v1.md`（v1.4 / 1.5） |
 | 影響 | 一覧を見て「最新を読んだ」と誤認する |
 | 提案 | 一覧表を本文に合わせる（本文が正）。設計書のコミットとは分けて行う |
+
+---
+
+## #3 `receipt-ocr` の既知の未反映7件が残っている
+
+| 項目 | 内容 |
+| --- | --- |
+| 重大度 | 中 |
+| 該当 | `public/production-app/receipt-ocr/`（とくに `oauth.js`） |
+| 根拠 | [../receipt-ocr-findings-20260804.md](../receipt-ocr-findings-20260804.md)。`card-ocr` のフェーズ0で直した内容が未反映と記録されている。`card-ocr/gis-loader.js` の冒頭コメントは「`receipt-ocr` の `oauth.js` は現にそうなっている（#1）。同じ形にしない」と名指ししている |
+| 影響 | #1（失敗した Promise をキャッシュし続ける）は、**一度連携に失敗すると再試行しても直らない**状態を作る。案内が「もう一度お試しください」でも、そのとおりにして直らない |
+| 提案 | 設計書の作成とは別作業として、7件の現状を確認し、直すか「直さない理由」を記録する。**この作業ではコードを変更していない** |
