@@ -41,6 +41,14 @@ export declare const STATUS_LABELS: Record<string, string>;
 
 export declare function formatDateTime(value: string | null | undefined): string;
 
+/**
+ * カレンダー同期の最終実行の表示。
+ * 一度も同期していない（last_synced_at が epoch、または結果が空）ときは「未実行」。
+ */
+export declare function describeCalendarSyncState(
+  state: { last_synced_at?: string; last_status?: string } | null | undefined,
+): string;
+
 export declare function paymentOf(
   application: ApplicationWithPayment,
 ): PaymentRow | null;

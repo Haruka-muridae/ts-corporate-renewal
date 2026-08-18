@@ -145,6 +145,35 @@
   line-height: 1.8;
 }
 
+/* 開催日の切り替え（?eventId=）。 */
+.admin-event-switch {
+  margin-bottom: 16px;
+}
+
+.admin-event-switch__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+}
+
+.admin-event-switch__link {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-button);
+  background-color: var(--color-white);
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  text-decoration: none;
+}
+
+.admin-event-switch__link.is-active {
+  border-color: var(--color-navy);
+  background-color: var(--color-navy);
+  color: var(--color-white);
+}
+
 .admin-notice {
   margin-bottom: 16px;
   padding: 12px 16px;

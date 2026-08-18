@@ -11,7 +11,12 @@
  * ==================================================================
  */
 
+import { readFileSync } from 'node:fs';
+
 import { check, section, finish, fatal } from '../../public/apps/tests/helpers/assert.mjs';
+
+import { describeCalendarSyncState } from '../../lib/event/admin-view.mjs';
+import { isUuid } from '../../lib/event/application-input.mjs';
 
 import {
   signInWithPassword,
@@ -293,6 +298,75 @@ try {
     csvFileName('nametags', new Date('2026-07-31T23:00:00Z')) === 'nametags_20260801.csv',
     csvFileName('nametags', new Date('2026-07-31T23:00:00Z')));
 
+  /* ---------------------------------------------------------------- */
+  section('CSVの ?eventId=（URLから来る値）');
+
+  /*
+   * eventId はURLのクエリで、認証済みでも中身は任意の文字列。
+   * events.id は UUID なので、形の合わない値は問い合わせに載せずに断る。
+   */
+  check('UUIDを受け入れる',
+    isUuid('0f8fad5b-d9cb-469f-a165-70867728950e') === true);
+  check('大文字のUUIDも受け入れる',
+    isUuid('0F8FAD5B-D9CB-469F-A165-70867728950E') === true);
+  check('空文字は受け入れない', isUuid('') === false);
+  check('数字だけの値は受け入れない', isUuid('1') === false);
+  check('PostgRESTの演算子を混ぜた値は受け入れない',
+    isUuid('eq.null&select=*') === false);
+  check('末尾に余分な文字が付いた値は受け入れない',
+    isUuid('0f8fad5b-d9cb-469f-a165-70867728950e ') === false);
+  check('文字列でなければ受け入れない', isUuid(null) === false);
+
+  /*
+   * ルート本体（app/event/admin/csv/*）は next/headers に依存するため、
+   * このランナーからは読み込めない。実装が上の判定を通しているかどうかは
+   * ファイルの中身で確かめる（テストが素通りしないようにするため）。
+   */
+  const csvRoutes = [
+    'app/event/admin/csv/applications/route.ts',
+    'app/event/admin/csv/nametags/route.ts',
+  ];
+
+  for (const path of csvRoutes) {
+    const source = readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
+
+    check(`${path}: 形式の検査を通す`, source.includes('isUuid(eventId)'), path);
+    check(`${path}: 不正なら400で断る`, source.includes('status: 400'), path);
+    check(`${path}: 認可のあとに検査する`,
+      source.indexOf('unauthorized') < source.indexOf('isUuid(eventId)'), path);
+    check(`${path}: 断ってから問い合わせる`,
+      source.indexOf('isUuid(eventId)') < source.indexOf('listApplications(config'), path);
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('カレンダー同期の最終実行の表示');
+
+  /*
+   * calendar_sync_state の初期値は epoch。そのまま整形すると
+   * 「1970/01/01 09:00（）」になり、未実行なのか壊れているのか分からない。
+   */
+  check('一度も同期していなければ未実行',
+    describeCalendarSyncState({ last_synced_at: '1970-01-01T00:00:00+00:00', last_status: '' })
+      === '未実行');
+  check('結果が空なら未実行',
+    describeCalendarSyncState({ last_synced_at: '2026-08-01T09:00:00+09:00', last_status: '' })
+      === '未実行');
+  check('空白だけの結果も未実行',
+    describeCalendarSyncState({ last_synced_at: '2026-08-01T09:00:00+09:00', last_status: '  ' })
+      === '未実行');
+  check('行が無ければ未実行', describeCalendarSyncState(null) === '未実行');
+  check('読めない日時も未実行',
+    describeCalendarSyncState({ last_synced_at: 'なし', last_status: '成功' }) === '未実行');
+
+  check('実行済みなら日時と結果を出す',
+    describeCalendarSyncState({
+      last_synced_at: '2026-08-01T09:00:00+09:00',
+      last_status: '成功: 追加1 更新0 終了0 見送り0 警告0',
+    }) === '2026/08/01 09:00（成功: 追加1 更新0 終了0 見送り0 警告0）',
+    describeCalendarSyncState({
+      last_synced_at: '2026-08-01T09:00:00+09:00',
+      last_status: '成功: 追加1 更新0 終了0 見送り0 警告0',
+    }));
 
   finish();
 } catch (error) {

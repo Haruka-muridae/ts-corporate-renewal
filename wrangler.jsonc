@@ -79,7 +79,10 @@
 		"MAIL_FROM": "TSアセットマネジメント合同会社 <architect@potenitas.com>",
 		"NEXT_PUBLIC_BASE_URL": "https://tsam-ai.com/event",
 		"NEXT_PUBLIC_DEPLOY_ENV": "production",
-		"NEXT_PUBLIC_SITE_URL": "https://tsam-ai.com"
+		"NEXT_PUBLIC_SITE_URL": "https://tsam-ai.com",
+		// 主催者アカウントのメインカレンダー。リフレッシュトークンの持ち主の primary を指す
+		// （カレンダーIDとしてメールアドレスは書かない）。
+		"GOOGLE_CALENDAR_ID": "primary"
 	},
 
 	/*

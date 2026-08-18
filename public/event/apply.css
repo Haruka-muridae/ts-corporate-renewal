@@ -160,6 +160,12 @@
   margin-top: 4px;
 }
 
+/* 満席の参加日はラジオを disabled にする。選べないことが見た目でも分かるようにする。 */
+.form-choice__item:has(input:disabled) {
+  color: var(--c-text-muted);
+  cursor: not-allowed;
+}
+
 .form-consent__item a {
   text-decoration: underline;
   text-underline-offset: 3px;

@@ -332,6 +332,8 @@ try {
   check('参加確定メールを送る', paidMailer.sent.length === 1, paidMailer.sent.length);
   check('メールの宛先は申込者', paidMailer.sent[0].to === 'taro@example.com');
   check('件名に受付番号が入る', paidMailer.sent[0].subject.includes('TSAM-0001'));
+  check('件名に開催日が入る（開催日が複数あるため）',
+    paidMailer.sent[0].subject.includes('2026年8月30日'), paidMailer.sent[0].subject);
   check('本文に名札の案内が入る', paidMailer.sent[0].text.includes('名札を着用いただきます'));
   check('メール送信を記録する',
     paidDb.state.emailLogs.length === 1 && paidDb.state.emailLogs[0].status === 'sent');
