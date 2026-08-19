@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { gmailConfig, supabaseConfig } from "@/lib/event/config.mjs";
+import { createAttendeeNoteWriter } from "@/lib/event/calendar-note.mjs";
+import {
+  calendarWriteConfigOrNull,
+  gmailConfig,
+  supabaseConfig,
+} from "@/lib/event/config.mjs";
 import * as db from "@/lib/event/db.mjs";
 import { sendMail } from "@/lib/event/mail/gmail.mjs";
 import { handleStripeEvent } from "@/lib/event/webhook-handler.mjs";
@@ -79,6 +84,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       config: supabaseConfig(),
       db,
       mailer: buildMailer(),
+      /*
+       * 書き込み用トークンが未設定なら null になり、書き戻しごと見送る。
+       * 主催者向けの補助表示にすぎないので、未設定で決済を止めない
+       * （buildMailer と同じ考え方）。見送ったことは webhook_events.result に残る。
+       */
+      calendarNote: createAttendeeNoteWriter(calendarWriteConfigOrNull()),
     });
 
     /* 何をしたかは追えるようにする。個人情報とキーは書かない。 */

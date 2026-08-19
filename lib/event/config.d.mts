@@ -42,3 +42,13 @@ export type CalendarConfig = {
 };
 
 export declare function calendarConfig(): CalendarConfig;
+
+/**
+ * 書き戻し用（calendar.events）の設定。
+ * 型は読み取り用と同じで、参照する環境変数
+ * （GOOGLE_CALENDAR_WRITE_REFRESH_TOKEN）だけが違う。
+ */
+export declare function calendarWriteConfig(): CalendarConfig;
+
+/** 未設定なら null（書き戻し機能ごと見送る）。 */
+export declare function calendarWriteConfigOrNull(): CalendarConfig | null;

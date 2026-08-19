@@ -37,7 +37,9 @@
 | `db.mjs` / `.d.mts` | Supabase PostgREST アクセス全般 |
 | `stripe.mjs` / `.d.mts` | Checkout Session パラメータ組み立て・作成 |
 | `webhook-signature.mjs` / `.d.mts` | Webhook署名検証・イベントパース |
-| `webhook-handler.mjs` / `.d.mts` | 検証済みイベントの処理（状態遷移・受付番号・メール） |
+| `webhook-handler.mjs` / `.d.mts` | 検証済みイベントの処理（状態遷移・受付番号・メール・カレンダーへの人数の書き戻し指示） |
+| `calendar-sync.mjs` / `.d.mts` | Googleカレンダーからの開催回の取り込み（読み取り専用） |
+| `calendar-note.mjs` / `.d.mts` | 支払済み人数と名簿をカレンダー予定の説明欄へ書き戻す（FR-27／説明文の組み立ては純粋関数、件数・名簿の取得と失敗の握りつぶしは `updateAttendeeNote()`） |
 | `payment-result.mjs` / `.d.mts` | 決済結果ページの表示状態判定 |
 | `admin-auth.mjs` / `.d.mts` | Supabase Auth 呼び出し（ログイン・更新・検証・ログアウト） |
 | `admin-session.ts` | 管理者セッションの Cookie 読み書き（TypeScript。Next.jsの `cookies()`/`redirect()` に依存するため `.mjs` ではなくここのみ `.ts`） |
@@ -120,6 +122,7 @@ sequenceDiagram
 
   Stripe->>App: checkout.session.async_payment_succeeded
   App->>DB: markPaid（受付番号発行・status=paid・メール送信）
+  App->>App: 支払済み件数と名簿をカレンダー予定の説明欄へ書き戻す（失敗しても200）
   App-->>Stripe: 200
 ```
 
@@ -335,6 +338,7 @@ Stripe の `session_id` で行う。改ざん耐性は「金額を含まない�
 | `webhook-signature.mjs` | 署名不一致・時刻許容範囲超過・ヘッダー欠落 | `Error` 送出 → Route Handlerが400を返す |
 | `webhook-handler.mjs` `handleStripeEvent()` | 処理中の例外（DB更新失敗等） | `markWebhookProcessed` に失敗理由を記録 → 例外を再送出 → Route Handlerが500を返す |
 | `webhook-handler.mjs` `sendConfirmationMail()` | メール送信失敗 | 例外を握りつぶし `email_logs` に `failed:<理由>` を記録。呼び出し元の支払確定処理は継続 |
+| `calendar-note.mjs` `updateAttendeeNote()` | カレンダー書き戻しの失敗・未設定・手動登録の回 | 例外を握りつぶし、理由を戻り値の文字列で返す。Webhook 経由は `webhook_events.result` へ、管理画面の編集経由はサーバーログへ記録。支払・受付番号・メール・編集内容は巻き戻さない（NFR-18） |
 | `stripe.mjs` `createCheckoutSession()` | Stripe APIエラー応答 | `Error`（Stripeのエラーメッセージのみ。キーは含めない） |
 | `mail/gmail.mjs` `getAccessToken()` / `sendMail()` | OAuth・送信の失敗 | `Error`（HTTPステータスのみ。応答本文は資格情報を含みうるため出さない） |
 | `admin-auth.mjs` `signInWithPassword()` | 資格情報不一致 | 「メールアドレスまたはパスワードが正しくありません」に統一（存在有無を教えない） |
@@ -355,10 +359,13 @@ BOM・空白除去処理を通らない**（詳細は本タスクの乖離報告
 | `STRIPE_SECRET_KEY` | Checkout Session作成用シークレットキー | `config.mjs`（`stripeSecretKey()`） |
 | `STRIPE_WEBHOOK_SECRET` | Webhook署名検証用シークレット（`whsec_...`） | `route.ts` が `process.env` を直接参照 |
 | `NEXT_PUBLIC_BASE_URL` | 決済後のリダイレクトURL組み立ての土台 | `config.mjs`（`baseUrl()`） |
-| `GOOGLE_CLIENT_ID` | Gmail送信用OAuthクライアントID | `config.mjs`（`gmailConfig()`） |
-| `GOOGLE_CLIENT_SECRET` | 同クライアントシークレット | `config.mjs`（`gmailConfig()`） |
-| `GMAIL_REFRESH_TOKEN` | 送信元アカウントのリフレッシュトークン | `config.mjs`（`gmailConfig()`） |
+| `GOOGLE_CLIENT_ID` | OAuthクライアントID（Gmail送信とカレンダー連携で共用） | `config.mjs`（`gmailConfig()` / `calendarConfig()` / `calendarWriteConfig()`） |
+| `GOOGLE_CLIENT_SECRET` | 同クライアントシークレット | 同上 |
+| `GMAIL_REFRESH_TOKEN` | 送信元アカウントのリフレッシュトークン（`gmail.send`） | `config.mjs`（`gmailConfig()`） |
 | `MAIL_FROM` | 送信元表示（`表示名 <アドレス>` 形式） | `config.mjs`（`gmailConfig()`） |
+| `GOOGLE_CALENDAR_ID` | 開催日の取り込み元カレンダー（主催者の `primary`） | `config.mjs`（`calendarConfig()` / `calendarWriteConfig()`） |
+| `GOOGLE_CALENDAR_REFRESH_TOKEN` | 開催日の取り込み用リフレッシュトークン（`calendar.readonly`） | `config.mjs`（`calendarConfig()`） |
+| `GOOGLE_CALENDAR_WRITE_REFRESH_TOKEN` | 支払人数の書き戻し用リフレッシュトークン（`calendar.events`、FR-27）。**未設定なら書き戻しだけを見送る**（決済・メールは動く） | `config.mjs`（`calendarWriteConfig()`） |
 | `NODE_ENV` | 管理者Cookieの `secure` 属性切替 | `admin-session.ts` が直接参照 |
 
 値そのものはローカル `.env.local` と本番の環境変数（配信基盤の環境変数設定）に置く。
@@ -373,7 +380,9 @@ BOM・空白除去処理を通らない**（詳細は本タスクの乖離報告
 | `event-pricing` | `tests/unit/event-pricing.mjs` | 参加費計算の全組み合わせ、出禁固定額、下限、割引の合算方式、未知キーの拒否（FR-03/FR-04） |
 | `event-application` | `tests/unit/event-application.mjs` | フォーム検証、Checkout Sessionパラメータ組み立て、金額をブラウザから受け取らないこと（FR-02/FR-06/FR-07、NFR-01） |
 | `event-capacity` | `tests/unit/event-capacity.mjs` | 定員判定の境界値、`awaiting`を数えないこと、定員なし時に問い合わせないこと（FR-14、NFR-11/NFR-12） |
-| `event-webhook` | `tests/unit/event-webhook.mjs` | 署名検証、冪等性、PayPay経由の確定、返金反映、メール失敗時の非巻き戻し（FR-08〜FR-11/FR-26、NFR-02/NFR-08/NFR-09） |
+| `event-webhook` | `tests/unit/event-webhook.mjs` | 署名検証、冪等性、PayPay経由の確定、返金反映、メール失敗時の非巻き戻し、カレンダー書き戻しの失敗・未設定時の非巻き戻し（FR-08〜FR-11/FR-26/FR-27、NFR-02/NFR-08/NFR-09/NFR-18） |
+| `event-calendar-sync` | `tests/unit/event-calendar-sync.mjs` | 開催回の取り込み、受付停止の判定と安全弁、例外へのトークン非混入 |
+| `event-calendar-note` | `tests/unit/event-calendar-note.mjs` | 説明欄の自動更新ブロックの生成・置換（手書きメモの保全）、名簿の項目と並び、氏名によるマーカー偽装の無害化、長すぎる名簿の省略、説明欄以外を送らないこと、書き戻し失敗を例外にしないこと、例外へのトークン非混入（FR-27〜FR-29、NFR-19〜NFR-21） |
 | `event-result` | `tests/unit/event-result.mjs` | 決済結果ページの状態判定（FR-13） |
 | `event-mail` | `tests/unit/event-mail.mjs` | 参加確定メールの記載項目、ヘッダーインジェクション対策、RFC2047エンコード（FR-12） |
 | `event-admin` | `tests/unit/event-admin.mjs` | ログイン失敗文言の統一、セッション有効性確認、CSVの数式無害化・列構成（FR-16〜FR-25、NFR-05/NFR-06） |
