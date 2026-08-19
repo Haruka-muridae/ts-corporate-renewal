@@ -3,15 +3,20 @@
  *
  * docs/gmail-setup.md 手順5の「取得用のスクリプト」に相当するもの。
  * 交流会アプリのカレンダー連動（lib/event/calendar-sync.mjs）が使う
- * GOOGLE_CALENDAR_REFRESH_TOKEN を発行するために、事業者が自分の
+ * GOOGLE_CALENDAR_REFRESH_TOKEN（--write 時は GOOGLE_CALENDAR_WRITE_REFRESH_TOKEN）を
+ * 発行するために、事業者が自分の
  * ターミナルで実行する。取得した値は画面に表示するだけで、
  * ファイルにもログにも書かない（保存先の判断は実行者に委ねる）。
  *
  * 使い方:
- *   node scripts/get-calendar-refresh-token.mjs
+ *   node scripts/get-calendar-refresh-token.mjs            … 読み取り用（calendar.readonly）
+ *   node scripts/get-calendar-refresh-token.mjs --write    … 書き込み用（calendar.events）
  *
- * - スコープは calendar.readonly の1つだけ。gmail.send は要求しない
+ * - 既定のスコープは calendar.readonly の1つだけ。gmail.send は要求しない
  *   （読み取り専用のトークンに送信権限を持たせない。要件定義書 §9-1）。
+ * - --write は、支払人数をカレンダー予定の説明欄へ書き戻す機能のためのトークン。
+ *   読み取り用とは別のトークンとして発行・登録する（同期の読み取りに書き込み権限を
+ *   持たせないため、既存の GOOGLE_CALENDAR_REFRESH_TOKEN は readonly のまま維持する）。
  * - OAuthクライアントは Gmail 用（デスクトップアプリ）を使い回す。
  *   デスクトップアプリ型は http://localhost の任意ポートへの
  *   リダイレクトが追加設定なしで許可されているため、この方式で完結する。
@@ -22,7 +27,13 @@ import http from "node:http";
 import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
-const SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const WRITE_MODE = process.argv.includes("--write");
+const SCOPE = WRITE_MODE
+  ? "https://www.googleapis.com/auth/calendar.events"
+  : "https://www.googleapis.com/auth/calendar.readonly";
+const ENV_NAME = WRITE_MODE
+  ? "GOOGLE_CALENDAR_WRITE_REFRESH_TOKEN"
+  : "GOOGLE_CALENDAR_REFRESH_TOKEN";
 const PORT = 53682;
 const REDIRECT_URI = `http://localhost:${PORT}/callback`;
 
@@ -114,9 +125,9 @@ if (token.scope !== SCOPE) {
 }
 
 console.log("\n==============================================================");
-console.log("GOOGLE_CALENDAR_REFRESH_TOKEN（下の1行が値。コピーして使う）");
+console.log(`${ENV_NAME}（下の1行が値。コピーして使う）`);
 console.log("==============================================================\n");
 console.log(token.refresh_token);
 console.log("\nこの値は再表示できません。登録:");
-console.log("  本番:   npx wrangler secret put GOOGLE_CALENDAR_REFRESH_TOKEN");
-console.log("  ローカル: .env.local に GOOGLE_CALENDAR_REFRESH_TOKEN=<値>（コミットしない）");
+console.log(`  本番:   npx wrangler secret put ${ENV_NAME}`);
+console.log(`  ローカル: .env.local に ${ENV_NAME}=<値>（コミットしない）`);

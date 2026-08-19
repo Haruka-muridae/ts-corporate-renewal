@@ -251,15 +251,6 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
   .outline-row{grid-template-columns:1fr;gap:2px;padding:14px 0}
 }
 
-/* 開催日一覧（script.js が /event/api/schedule/ の内容で描き直す。既定は静的フォールバック）。 */
-.schedule-list{list-style:none}
-.schedule-list__item{padding:.25em 0}
-.schedule-list__item+.schedule-list__item{margin-top:.2em}
-.schedule-list__badge{
-  display:inline-block;margin-left:.6em;padding:.15em .7em;border-radius:99px;
-  background:var(--green-tint);color:var(--green);font-size:.78rem;font-weight:700;letter-spacing:.06em;
-}
-
 /* テキストセクション共通 */
 .prose{max-width:760px;margin:0 auto}
 .prose p{margin-bottom:1.2em}
@@ -429,28 +420,17 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
         </header>
 
         <!--
-          開催日時は Google カレンダー（主催者の予定）が真実源。
-          script.js が /event/api/schedule/ を取得できたときは、下の
-          #event-schedule-list をその内容（開催日ごとのラベル・満席表記）で
-          描き直す。ここに書いてある <time> は、APIが取得できなかったときだけ
-          使われる静的フォールバックであり、通常の運用ではこの行を手で
-          更新しない（カレンダー側で予定を作れば自動的に反映される）。
-          他の箇所（申込期間、申込セクション、特商法ページ）でも
-          具体的な日付・時刻を繰り返さず、「開催当日の開始時刻」のように参照する。
+          開催日時は Google カレンダー（主催者の予定）が真実源で、
+          具体的な日時の表示は申込フォーム（/event/apply/、参加日の選択）に
+          一本化している。ここ（LP）では日時を出さず、他の箇所（申込期間、
+          申込セクション、特商法ページ）でも同様に具体的な日付・時刻を
+          繰り返さず「開催当日の開始時刻」のように参照する。
         -->
         <div class="outline-card reveal">
           <dl class="outline-list">
             <div class="outline-row">
               <dt>イベント名</dt>
               <dd>TSAMビジネス&amp;フレンド交流会</dd>
-            </div>
-            <div class="outline-row">
-              <dt>開催日時</dt>
-              <dd>
-                <ul class="schedule-list" id="event-schedule-list" data-source="fallback">
-                  <li class="schedule-list__item"><span class="nowrap"><time datetime="2026-08-30T14:30+09:00">2026年8月30日（日）14:30</time>〜<time datetime="2026-08-30T16:00+09:00">16:00</time></span></li>
-                </ul>
-              </dd>
             </div>
             <div class="outline-row">
               <dt>開催場所</dt>
