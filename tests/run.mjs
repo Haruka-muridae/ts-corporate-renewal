@@ -49,6 +49,7 @@ const SUITES = [
   { name: 'event-admin', file: 'unit/event-admin.mjs', kind: 'unit' },
   { name: 'event-config', file: 'unit/event-config.mjs', kind: 'unit' },
   { name: 'event-calendar-sync', file: 'unit/event-calendar-sync.mjs', kind: 'unit' },
+  { name: 'event-calendar-note', file: 'unit/event-calendar-note.mjs', kind: 'unit' },
   { name: 'event-schedule', file: 'unit/event-schedule.mjs', kind: 'unit' },
   { name: 'receipt-ocr', file: 'unit/receipt-ocr.mjs', kind: 'unit' },
   { name: 'receipt-ocr-phase2', file: 'unit/receipt-ocr-phase2.mjs', kind: 'unit' },

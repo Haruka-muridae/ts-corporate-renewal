@@ -10,14 +10,21 @@ import {
   saveSession,
 } from "@/lib/event/admin-session";
 import {
+  createAttendeeNoteWriter,
+  updateAttendeeNote,
+} from "@/lib/event/calendar-note.mjs";
+import {
+  calendarWriteConfigOrNull,
   gmailConfig,
   supabaseAuthConfig,
   supabaseConfig,
 } from "@/lib/event/config.mjs";
 import {
+  countPaidApplications,
   findApplicationById,
   findEventById,
   insertEmailLog,
+  listPaidAttendees,
   updateApplicationFields,
 } from "@/lib/event/db.mjs";
 import { buildConfirmationMail } from "@/lib/event/mail/confirmation.mjs";
@@ -143,6 +150,25 @@ export async function updateApplication(
   }
 
   await updateApplicationFields(config, applicationId, patch);
+
+  /*
+   * 氏名が変わると、カレンダーの説明欄に書いてある名簿も古くなる
+   * （譲渡は「当日その人が来る」ことを意味するので、名簿の氏名が実態と
+   * 食い違うと受付で照合できない）。編集の直後に書き戻しておく。
+   *
+   * 書き戻しは補助的な処理なので、失敗しても編集自体は成功として返す。
+   * updateAttendeeNote は例外を投げず、何が起きたかを文字列で返す
+   * （トークン未設定・カレンダー連動ではない回も同じ扱い）。理由は
+   * サーバーのログにだけ残す。画面に出すと、編集できたのに失敗したように読める。
+   */
+  const noteResult = await updateAttendeeNote({
+    config,
+    db: { countPaidApplications, findApplicationById, findEventById, listPaidAttendees },
+    writer: createAttendeeNoteWriter(calendarWriteConfigOrNull()),
+    applicationId,
+  });
+
+  console.log(`[admin-update] ${applicationId}: ${noteResult}`);
 
   return {
     error: "",

@@ -177,6 +177,33 @@ Webhook を二重に受け取っても再発行されないことは、`webhook_
 管理画面（`/event/admin/`）は選択中の回の `sync_warning` と、`calendar_sync_state` の
 最終同期時刻・結果を表示する。詳しくは [docs/event-admin.md](event-admin.md) を参照。
 
+### 4-2. 支払人数・名簿のカレンダー書き戻し（2026-08〜）
+
+支払が確定したとき・返金が反映されたとき・管理画面で申込者情報を更新したときに、その回の
+支払済み件数と予約者名簿（`applications.status='paid'`）を
+**カレンダー予定の説明欄（description）**へ書き戻す（`lib/event/calendar-note.mjs`）。
+主催者が管理画面を開かなくても、カレンダー上で各回の申込状況を確認できるようにするため。
+
+**DBの変更は無い。** 列も表も追加していない（読むのは既存の `applications`、
+書き込み先はGoogleカレンダー側）。関係するのは次の4点だけ。
+
+- 件数は `countPaidApplications()`（HEAD + `Content-Range` の正確な件数）、名簿は
+  `listPaidAttendees()`（`select=receipt_number,name`・`order=receipt_number.asc`）で取る。
+  **名簿のクエリは受付番号と氏名しか取得しない。** カレンダーはアプリの外へ出る保管先なので、
+  持ち出す個人情報を取得の段階で絞ってある（表示側で捨てる作りにしない。設計判断は
+  [docs/system-design/event-app/02_basic-design.md](system-design/event-app/02_basic-design.md) §9）。
+- 返金すると `status` が `refunded` になるため、件数からも名簿からも自動的に消える
+  （定員判定と同じ仕組み。名簿を消す専用の処理は無い）。
+- `events.google_calendar_event_id` が `null`（手動登録の回）なら書き戻さない。書き込む先が無いため。
+- 書き戻しの結果（成功・失敗・見送り）は `webhook_events.result` の文字列に、
+  メール送信の結果と並べて残る（管理画面からの更新時はサーバーログのみ）。
+  **専用の表は作っていない**（採らなかった理由は同 §9）。
+
+書き込みには読み取り用とは別のリフレッシュトークン（`GOOGLE_CALENDAR_WRITE_REFRESH_TOKEN`、
+スコープ `calendar.events`）を使う。未設定の環境では書き戻しだけを見送り、申込・決済・メールは
+従来どおり動く。発行手順は
+[docs/system-design/event-app/01_requirements.md](system-design/event-app/01_requirements.md) §9-1。
+
 ### capacity 列で定員を持つ
 
 `capacity` に人数を入れると、その人数に達した時点で申込フローが自動で止まる。

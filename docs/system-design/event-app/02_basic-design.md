@@ -13,6 +13,7 @@ graph TB
   Supabase["Supabase（プロジェクト tsam-event）\nPostgREST + Auth"]
   Stripe["Stripe\nCheckout / Webhook"]
   Gmail["Gmail API\n（gmail.send）"]
+  Calendar["Google カレンダー\n（主催者の会場予約）"]
 
   Browser -->|"閲覧"| Static
   Static -->|"申込リンク /event/apply/"| NextApp
@@ -24,6 +25,8 @@ graph TB
   NextApp -->|"Checkout Session 作成（fetch）"| Stripe
   Stripe -->|"Webhook POST /event/api/stripe/webhook/"| NextApp
   NextApp -->|"参加確定メール送信（fetch）"| Gmail
+  Calendar -->|"開催日の取り込み（calendar.readonly）"| NextApp
+  NextApp -->|"支払人数を説明欄へ書き戻し（calendar.events）"| Calendar
   Browser -->|"決済画面へリダイレクト"| Stripe
 ```
 
@@ -49,7 +52,9 @@ graph TB
 | Webhook署名検証 | `lib/event/webhook-signature.mjs` | HMAC-SHA256 署名検証、イベントのパース |
 | 管理者認証 | `lib/event/admin-auth.mjs` + `lib/event/admin-session.ts` | Supabase Auth 呼び出しと httpOnly Cookie セッション |
 | メール文面 | `lib/event/mail/confirmation.mjs` | 参加確定メールの件名・本文組み立て |
-| メール送信 | `lib/event/mail/gmail.mjs` | Gmail API 呼び出し（OAuthトークン取得＋送信） |
+| メール送信 | `lib/event/mail/gmail.mjs` | Gmail API 呼び出し（OAuthトークン取得＋送信）。トークン取得（`getAccessToken`）はカレンダー連携からも再利用する |
+| カレンダー同期 | `lib/event/calendar-sync.mjs` | 会場予約（タイトル完全一致）から開催回を `events` へ取り込む（読み取り専用） |
+| カレンダー書き戻し | `lib/event/calendar-note.mjs` | 支払済み人数と予約者名簿を予定の説明欄へ書き戻す（FR-27）。説明文の組み立ては純粋関数（`buildDescriptionWithNote`）に分け、件数と名簿の取得・失敗の握りつぶしは `updateAttendeeNote()` にまとめてある（Webhookと管理画面の両方から同じ処理を呼ぶため） |
 | 管理画面表示整形 | `lib/event/admin-view.mjs` | 一覧・詳細・CSVで共通の行整形 |
 | CSV組み立て | `lib/event/csv.mjs` | BOM付きCRLF・数式インジェクション対策 |
 | 決済結果判定 | `lib/event/payment-result.mjs` | 完了/確認中/失敗/期限切れ/返金済み/不明の判定 |
@@ -65,6 +70,8 @@ graph TB
 | Supabase PostgREST | `fetch`（`/rest/v1/...`） | 申込・支払・Webhookイベント・メールログのCRUD、件数取得（HEAD + `Content-Range`） | `lib/event/db.mjs` |
 | Supabase Auth REST | `fetch`（`/auth/v1/...`） | 管理者ログイン・トークン更新・有効性確認・ログアウト | `lib/event/admin-auth.mjs` |
 | Gmail API | `fetch`（OAuth token endpoint + `messages.send`） | 参加確定メール送信 | `lib/event/mail/gmail.mjs` |
+| Google Calendar API v3（読み取り） | `fetch`（`events.list`、`calendar.readonly`） | 開催回の取り込み（sync-on-read、TTL 10分） | `lib/event/calendar-sync.mjs` |
+| Google Calendar API v3（書き込み） | `fetch`（`events.get` → `events.patch`、`calendar.events`、`sendUpdates=none`） | 支払済み人数と名簿を説明欄へ書き戻す（FR-27） | `lib/event/calendar-note.mjs` |
 
 いずれも外部SDKを追加せず `fetch` で直接呼び出す（[01_requirements.md](./01_requirements.md) NFR-13）。
 
@@ -145,6 +152,7 @@ flowchart LR
 | Webhook 処理失敗（DB等の一時的エラー） | 500を返し、Stripeの自動再送に委ねる。`webhook_events` には処理済みの印を付けない |
 | Webhook 二重受信 | `stripe_event_id` の一意制約違反を検知し、何もせず処理済み扱いで終える |
 | 参加確定メール送信失敗 | 例外を握りつぶし、`email_logs` に失敗理由を記録する。支払・受付番号の確定処理は巻き戻さない。管理画面から再送できる |
+| カレンダーへの人数・名簿の書き戻し失敗（FR-27） | 例外を握りつぶし、`webhook_events.result`（Webhook経由の場合）またはサーバーログ（管理画面の編集経由の場合）に理由を残す。支払・受付番号・メール送信・申込者情報の更新は巻き戻さない。トークン未設定・手動登録の回（`google_calendar_event_id` が null）も同じ扱いで、見送った旨だけを残す |
 | 決済結果ページの不確定状態 | 「支払済みと言い切れない」場合は常に「確認中」を出し、確定表示は `status='paid'` かつ受付番号発行済みのときのみ行う |
 | 管理者ログイン失敗 | 資格情報エラーと設定不備エラーを区別し、資格情報エラーのみ「メールアドレスまたはパスワードが正しくありません」を返す。設定不備は詳細をログにのみ残す |
 
@@ -186,3 +194,46 @@ flowchart LR
 - **管理画面からの返金機能を持たない。**
   返金はStripeダッシュボードでの手動操作とし、アプリは `charge.refunded` Webhookを受けて状態を
   追随させるだけにとどめた（フェーズ2で検討、[docs/event-admin.md](../../event-admin.md) §3）。
+- **申込人数をカレンダー予定の「タイトル」へ追記しない（FR-27・FR-28）。**
+  一覧性だけを見れば「【SV顧客用】渋谷CAFEご予約（5名）」のようにタイトルへ出すのが分かりやすい。
+  しかし開催回の取り込み（`calendar-sync.mjs`）は**タイトルの完全一致**を唯一のキーにしており、
+  1文字でも足すとその予定は対象外の予定として扱われる。結果として該当の回が
+  `is_published=false` になり、公開中の受付が黙って止まる（支払済みがあれば `sync_warning` 付き）。
+  書き戻し自体が受付を壊すことになるため、**書き込み先は説明欄（description）に限定**した。
+  同じ理由で、`events.patch` に送るのは `description` だけにしている（日時・参加者も送らない）。
+- **説明欄を丸ごと置き換えず、マーカーで囲んだブロックだけを差し替える。**
+  説明欄は主催者が会場への連絡事項を手書きする場所でもある。全文を生成物にすると手書きが消える。
+  開始・終了マーカーの区間だけを置換し、マーカーが無ければ末尾に追記する。終了マーカーが手で
+  消されていた場合は**範囲を確定できないので置換しない**（追記に倒す）。ブロックが1つ増える不便より、
+  手書きを巻き込んで消す事故のほうが取り返しがつかないため。
+- **書き込み用のリフレッシュトークンを読み取り用と分ける（`GOOGLE_CALENDAR_WRITE_REFRESH_TOKEN`）。**
+  1つのトークンに `calendar.events` を与えて共用すると、10分ごとに走る読み取り同期にも
+  カレンダーを書き換える権限が付く。用途ごとに分け、書き込み用が未設定なら書き戻しだけを
+  見送る（[01_requirements.md](./01_requirements.md) §9-1、NFR-18）。
+- **名簿に載せるのは受付番号と氏名だけにする（FR-29・NFR-19）。**
+  当日の受付でやることは「名乗った人を名簿と照合して席へ通す」であり、それに要るのは
+  受付番号と氏名の2つだけ。会社名や属性を並べたほうが主催者には便利だが、カレンダーは
+  **アプリの外**（Google側に保管され、共有設定や通知でアプリの管理外へ広がりうる場所）で、
+  RLS もアクセスログも及ばない。持ち出す個人情報は用途に必要な最小限に絞る。
+  「取得はするが表示しない」ではなく **`listPaidAttendees()` が2列しか取得しない**形にしたのは、
+  後から表示項目を足すときに必ずクエリを直すことになり、判断を素通りできないようにするため。
+  会社名・属性まで見たい場合は管理画面（認証あり）やCSVを使う。
+- **名簿の氏名は、書き出す前に制御文字とマーカーの罫線（U+2015）を落とす（NFR-20）。**
+  氏名は申込者が入力し、管理画面の譲渡処理でも書き換えられる値。公開フォームは制御文字を
+  弾くが、管理画面の編集は弾いていない。氏名の中に終了マーカーと同じ並びを作られると、
+  次回の書き戻しが「そこがブロックの終わり」と誤認し、本物の終端との間に文字列が
+  取り残される（更新のたびに説明欄が壊れていく）。表示の都合ではなく、
+  **ブロックの構造を利用者入力から守るための処理**なので、整形側ではなく生成の直前に置いた。
+- **名簿が長くなりすぎる場合は、名簿を捨てて人数だけを書く（NFR-21）。**
+  説明欄は8,192文字までで、超えると更新そのものが弾かれる。定員30名なら遠く及ばないが、
+  「名簿のせいで人数すら書き戻せない」状態は避ける。捨てたことは説明欄に明記する
+  （黙って消すと「申込が無い」と読まれるため）。
+- **書き戻しの入口を `updateAttendeeNote()` 1か所にまとめ、Webhookと管理画面の両方から呼ぶ。**
+  譲渡で氏名が変われば名簿も古くなるため、支払確定・返金だけでなく管理画面の編集後にも
+  書き戻す必要がある。「回の特定 → 手動登録の回の除外 → 件数と名簿の取得 → 書き込み →
+  失敗の握りつぶし」を2か所に書くと、片方だけ挙動が変わる。
+- **書き戻しの失敗を `email_logs` に記録せず、`webhook_events.result` に残す。**
+  メール送信の失敗は `email_logs`（申込ごと・再送のための記録）に残しているが、書き戻しは
+  申込ではなく開催回に対する処理で、再送の対象でもない。メールの記録表に別種の事象を混ぜると、
+  「送信履歴」としての意味が崩れる。書き戻しの結果は Webhook 1件の処理結果そのものなので、
+  メールの結果と同じ文字列に連結して `webhook_events.result` に残す。

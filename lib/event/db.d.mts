@@ -125,6 +125,22 @@ export declare function countPaidApplicationsByEventIds(
   eventIds: string[],
 ): Promise<Record<string, number>>;
 
+/**
+ * カレンダーへ書き戻す名簿の材料。
+ *
+ * 取るのは受付番号と氏名だけ（アプリ外へ出す情報を最小限にするため）。
+ * 並びは受付番号の昇順＝支払確定の順。
+ */
+export type PaidAttendeeRow = {
+  receipt_number: string | null;
+  name: string;
+};
+
+export declare function listPaidAttendees(
+  config: SupabaseConfig,
+  eventId: string,
+): Promise<PaidAttendeeRow[]>;
+
 export declare function findEventById(
   config: SupabaseConfig,
   eventId: string,
