@@ -56,12 +56,14 @@ graph LR
   WebhookSig --> StripeExt
   Mail --> GmailExt(("Gmail API"))
 
-  Static["public/event/index.html\n（静的告知ページ）"] -.->|"開催日時を別管理\n（結合ではない）"| Db
+  Static["public/event/index.html\n（静的告知ページ）"] -.->|"受付状態バッジのみ取得\n（開催日時は載せない）"| Db
 ```
 
-`public/event/index.html` はアプリと**データを共有していない**（開催日時等を静的HTMLに直書き）。
-移植時にこのページも持ち出す場合、開催日時の二重管理をそのまま持ち込むか、Next化して
-`events` テーブルの値を読ませるかを判断すること（§5参照）。
+`public/event/index.html` はアプリと**データを共有していない**（`/event/api/schedule/` を叩いて
+受付状態バッジ・申込ボタンの有効/無効だけを決める）。開催日時そのものの表示は
+申込フォーム（`/event/apply/`）に一本化しており、告知ページには持たせていない。
+移植時にこのページも持ち出す場合、この一本化をそのまま持ち込むか、Next化して
+告知ページ側にも `events` テーブルの値を読ませるかを判断すること（§5参照）。
 
 ## 3. 切り離しポイント
 
@@ -120,9 +122,9 @@ graph LR
 **複製元の既知の課題を、直さずに持ち込まないこと（§4-3）。** 本アプリで確認できている
 既知の課題は次のとおり（詳細・裏付けは本タスクの実施報告の「乖離」節を参照）。
 
-1. **開催日時が静的HTML（`public/event/index.html`）とDB（`events.event_date`）の2箇所にある。**
-   移植先で告知ページも持ち込む場合、Next化してDBを正にする、または二重管理を許容したうえで
-   更新手順をドキュメント化する、のいずれかを最初に決めること。
+1. ~~開催日時が静的HTML（`public/event/index.html`）とDB（`events.event_date`）の2箇所にある。~~
+   2026-08、告知ページから開催日時の表示自体を無くし、申込フォームの参加日選択（DB由来）に
+   一本化して解消済み。告知ページが読むのは `/event/api/schedule/` の受付状態のみ。
 2. **`STRIPE_WEBHOOK_SECRET` だけが `lib/event/config.mjs` を経由せず、Route Handlerが
    `process.env` を直接参照している。** 他の環境変数はBOM・前後空白を除去して読むが、この変数だけ
    除去されない。移植時に環境変数登録経路でBOMが混入する基盤（例: 一部のCI/CD経由の登録）を

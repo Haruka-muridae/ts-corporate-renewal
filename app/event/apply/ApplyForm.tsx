@@ -110,28 +110,29 @@ export function ApplyForm({ events }: { events: ScheduleItem[] }) {
       <fieldset className="form-group">
         <legend className="form-group__legend">参加日</legend>
 
-        <fieldset className="form-field form-choice">
-          <legend className="form-field__label">
+        <div className="form-field">
+          <label className="form-field__label" htmlFor={fieldId("eventId")}>
             参加日<span className="form-field__required">必須</span>
-          </legend>
-          {events.map((item) => (
-            <label className="form-choice__item" key={item.id}>
-              <input
-                type="radio"
-                name="eventId"
-                value={item.id}
-                defaultChecked={values.eventId === item.id}
-                disabled={item.soldOut}
-                required
-              />
-              <span>
+          </label>
+          <select
+            className="form-field__select"
+            id={fieldId("eventId")}
+            name="eventId"
+            defaultValue={values.eventId ?? ""}
+            aria-invalid={errors.eventId ? true : undefined}
+            aria-describedby={describedBy("eventId")}
+            required
+          >
+            <option value="">開催日を選択してください</option>
+            {events.map((item) => (
+              <option key={item.id} value={item.id} disabled={item.soldOut}>
                 {item.label}
                 {item.soldOut ? "（満席）" : null}
-              </span>
-            </label>
-          ))}
+              </option>
+            ))}
+          </select>
           <FieldError id={errorId("eventId")} message={errors.eventId} />
-        </fieldset>
+        </div>
       </fieldset>
 
       <fieldset className="form-group">

@@ -6,24 +6,26 @@
  */
 
 /* =========================
-   受付状態・開催日一覧の決め方（2026-08 改訂）
+   受付状態の決め方（2026-08 改訂／開催日一覧のLP表示廃止に伴い更新）
    =========================
 
    開催日はGoogleカレンダー（主催者の予定）が真実源で、サーバー側
    （lib/event/calendar-sync.mjs）が定期的にDBへ取り込んでいる。
-   このページは /event/api/schedule/ を叩いて、その結果をそのまま表示する。
+   このページは /event/api/schedule/ を叩いて、受付状態（バッジ・文言・
+   申込ボタンの有効/無効）だけをその結果から決める。開催日一覧そのものの
+   表示は申込フォーム（/event/apply/、参加日の選択）に一本化したため、
+   このページでは行わない。
 
    1. 取得できたとき（正）
-      - 開催日一覧（#event-schedule-list）を応答の events で描き直す。
-      - 受付状態は自動で決める。
+      - 受付状態は応答の events から自動で決める。
         accepting な回が1件以上     … "open"（受付中）
         1件以上あるが全回 soldOut   … "full"（満席で受付終了）
         1件以上あるがそれ以外       … "closed"（受付期間の外）
         events が0件                … "preparing"（準備中）
-      - index.html の data-event-status・静的な <time> は使わない。
+      - index.html の data-event-status は使わない。
    2. 取得できなかったとき（フォールバック）
-      - index.html に直接書いてある data-event-status の値と、
-        「開催日時」の静的な <time> 表記をそのまま使う（このJSは書き換えない）。
+      - index.html に直接書いてある data-event-status の値をそのまま使う
+       （このJSは書き換えない）。
       - API側の障害時にもページの体裁が崩れないようにするための保険であり、
         日常の更新はカレンダー側で行う（このファイル・index.htmlを編集しない）。
    3. 申込フォームを実装したら、下の APPLY_URL に相対パスを入れる。
@@ -72,7 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusText = document.getElementById('event-status-text');
   const applyButton = document.getElementById('apply-button');
   const applyNote = document.getElementById('apply-note');
-  const scheduleList = document.getElementById('event-schedule-list');
 
   /* ボタンの有効・無効は applyStatus() が都度切り替える。押下時の遷移だけ先に決めておく。 */
   if (applyButton && typeof APPLY_URL === 'string' && APPLY_URL !== '') {
@@ -139,45 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return 'closed';
   }
 
-  function renderScheduleList(items) {
-    if (!scheduleList) {
-      return;
-    }
-
-    scheduleList.innerHTML = '';
-
-    if (items.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'schedule-list__item';
-      li.textContent = '現在、開催予定はありません。';
-      scheduleList.appendChild(li);
-      return;
-    }
-
-    items.forEach((item) => {
-      const li = document.createElement('li');
-      li.className = 'schedule-list__item';
-
-      const label = document.createElement('span');
-      label.className = 'nowrap';
-      label.textContent = item.label;
-      li.appendChild(label);
-
-      if (item.soldOut) {
-        const badge = document.createElement('span');
-        badge.className = 'schedule-list__badge';
-        badge.textContent = '満席';
-        li.appendChild(badge);
-      }
-
-      scheduleList.appendChild(li);
-    });
-
-    /* API側のデータで描き直したことを示す（フォールバックの静的表記と区別するため）。 */
-    scheduleList.dataset.source = 'api';
-  }
-
-  /* フォールバック: index.html の data-event-status と静的な <time> をそのまま使う。 */
+  /* フォールバック: index.html の data-event-status をそのまま使う。 */
   function applyFallbackStatus() {
     applyStatus(statusElement?.dataset.eventStatus ?? 'preparing');
   }
@@ -193,7 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const payload = await response.json();
       const items = Array.isArray(payload?.events) ? payload.events : [];
 
-      renderScheduleList(items);
       applyStatus(resolveStatusFromSchedule(items));
     } catch {
       /* 取得できない間はフォールバックのままにする（静的HTML・data-event-status）。 */

@@ -27,14 +27,16 @@ graph TB
   Browser -->|"決済画面へリダイレクト"| Stripe
 ```
 
-静的告知ページ（`public/event/index.html`）とNext.jsアプリは別々の配信経路であり、開催日時のような
-表示内容は独立して持つ（[01_requirements.md](./01_requirements.md) §7）。
+静的告知ページ（`public/event/index.html`）とNext.jsアプリは別々の配信経路。開催日時の具体的な
+表示は申込フォーム（`/event/apply/`）に一本化しており、告知ページには載せない
+（[01_requirements.md](./01_requirements.md) §7）。告知ページが `/event/api/schedule/` を叩くのは
+受付状態バッジ・申込ボタンの有効/無効を決めるためだけ。
 
 ## 2. コンポーネント一覧と責務
 
 | コンポーネント | パス | 責務 |
 | --- | --- | --- |
-| 告知ページ | `public/event/index.html` + `public/event/script.js` | 開催概要の表示、`data-event-status` による受付中/満席/準備中/終了の切替、申込ページへの導線 |
+| 告知ページ | `public/event/index.html` + `public/event/script.js` | 開催概要の表示（開催日時は掲載しない）、`/event/api/schedule/` の取得結果（取得不可時は `data-event-status`）による受付中/満席/準備中/終了の切替、申込ページへの導線 |
 | 申込フロー | `app/event/apply/*` | フォーム表示・確認画面・Checkout Session作成・決済結果表示 |
 | Webhook受け口 | `app/event/api/stripe/webhook/route.ts` | 署名検証、`handleStripeEvent()` の呼び出し |
 | 管理画面 | `app/event/admin/*` | ログイン、一覧・詳細表示、申込者情報編集（譲渡）、メール再送、CSV出力 |
@@ -164,9 +166,11 @@ flowchart LR
   申込ごとの内訳は `payments` の列にスナップショットとして保存し、後から定数を変えても
   過去の記録が変わらないようにしている（[docs/event-app-database.md](../../event-app-database.md) §3）。
 - **告知ページ（`public/event/index.html`）をNext.js化せず静的HTMLのまま残す。**
-  結果として開催日時が静的HTMLとDBの2箇所に持たれる（[01_requirements.md](./01_requirements.md) §7）。
-  トレードオフとして、管理画面からの受付状態切替機能は要件から外し、`data-event-status` の
-  手動書き換えを正式な運用とした（[docs/event-admin.md](../../event-admin.md) §3、2026-08-01 事業者判断）。
+  開催日時の具体的な表示は申込フォームに一本化し、告知ページ側には持たせないことで
+  二重管理を避けている（[01_requirements.md](./01_requirements.md) §7）。受付状態（バッジ・
+  申込ボタンの有効/無効）は `/event/api/schedule/` の取得結果から自動で決め、`data-event-status`
+  は取得できなかったときだけ使うフォールバックにとどめている
+  （[docs/event-admin.md](../../event-admin.md) §3）。
 - **受付番号の発行をDB関数（`assign_receipt_number`）に閉じ込め、イベント行のロックで直列化する。**
   アプリ側で「現在の最大値+1」を計算してから書き込む方式だと、Webhookが同時に複数届いた場合に
   同じ番号を2件へ振ってしまうため。
