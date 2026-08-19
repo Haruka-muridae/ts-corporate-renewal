@@ -69,10 +69,18 @@
     <!-- 1. 開始画面 -->
     <section id="screen-idle" class="screen" data-screen="idle">
       <h2>オンライン面談をブラウザだけで録音</h2>
+      <!--
+        説明文は1段落へ詰めず、「何ができるか」と「データがどこへ行くか」の
+        2段落に分け、文単位で改行する（1段落だと折り返しが密で読みづらい、
+        という利用者からの指摘による。文言自体は変えていない）。
+      -->
       <p class="description">
-        ブラウザのタブ音声共有とマイクを使って、Web 会議の音声をその場で録音できます。
-        インストールは不要です。録音の処理はこの端末内で行い、録音後はご自身の
-        Google ドライブ（マイドライブ ＞ TSAM AI ＞ Voice Recorder）へ保存します。
+        ブラウザのタブ音声共有とマイクを使って、Web 会議の音声をその場で録音できます。<br>
+        インストールは不要です。
+      </p>
+      <p class="description">
+        録音の処理はこの端末内で行い、<br>
+        録音後はご自身の Google ドライブ（マイドライブ ＞ TSAM AI ＞ Voice Recorder）へ保存します。<br>
         当社のサーバーへ録音データを送信することはありません。
       </p>
       <button id="btn-start" class="btn btn-primary" type="button">録音を開始</button>
