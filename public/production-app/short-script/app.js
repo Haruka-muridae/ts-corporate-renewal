@@ -62,6 +62,7 @@ const dom = {
   download: el('ss-download'),
   regenerate: el('ss-regenerate'),
   video: el('ss-video'),
+  videoUnavailable: el('ss-video-unavailable'),
   companionGuidance: el('ss-companion-guidance'),
   companionText: el('ss-companion-text'),
   companionRetry: el('ss-companion-retry'),
@@ -90,6 +91,12 @@ let renderController = null;
  *   offline        … ai-video-app 自体に到達できない
  *   engine-offline … ai-video-app は応答するが VOICEVOX が使えない（mock 含む）
  * 「アプリの失敗」と「エンジンの失敗」を1本の真偽値に潰さないための3状態。
+ *
+ * offline のときは動画パネルごと隠し、一行案内（#ss-video-unavailable）に
+ * 置き換える。動画生成はPCに補助サービスを入れた利用者だけの機能であり、
+ * 入れていない大多数にとっては、操作できないパネルと接続エラーが毎回
+ * 出るだけだった。engine-offline（＝サービスは応答している）は当事者なので
+ * 従来どおりパネルの中で案内し、「エンジンを起動」で復帰させる。
  */
 let companionState = 'checking';
 /* 補助サービスが使えるか。companionState === 'online' の導出値（既存参照箇所を壊さない）。 */
@@ -170,6 +177,7 @@ function applyMode() {
   /* 前の結果・メッセージは、方法を切り替えたら引きずらない。 */
   hide(dom.result);
   hide(dom.video);
+  hide(dom.videoUnavailable);
   setMessage('', 'info');
   refreshKeyState();
 
@@ -212,9 +220,10 @@ function refreshKeyState() {
   }
 
   if (!hasKey) {
-    dom.guidanceTitle.textContent = 'Gemini APIキーの設定が必要です';
+    /* 見出しと導線の文言は本番アプリ間で統一（note / X / Threads と同じ）。 */
+    dom.guidanceTitle.textContent = 'Gemini APIキーが未設定です。';
     dom.guidanceText.textContent =
-      '台本の生成には、あなた自身の Gemini APIキーを使います。ポータルの「API設定」で一度だけ設定してください。キーはこの端末にのみ保存され、当社サーバーには送信されません。';
+      '台本の生成には、あなた自身の Gemini APIキーを使います。キーはこの端末にのみ保存され、当社のサーバーへは送信されません。';
     show(dom.portalLink);
     show(dom.guidance);
     dom.generate.disabled = true;
@@ -268,6 +277,7 @@ async function handleGenerate(event) {
   /* 生成のたびに前の結果を隠す。古い台本が残って混乱させないため。 */
   hide(dom.result);
   hide(dom.video);
+  hide(dom.videoUnavailable);
   currentScript = null;
 
   const controller = new AbortController();
@@ -345,7 +355,7 @@ function renumberSegments() {
   rows.forEach((li, i) => {
     const head = li.querySelector('.ss-seg-num');
     if (head) {
-      head.textContent = `セグメント${i + 1}`;
+      head.textContent = `シーン${i + 1}`;
     }
   });
 }
@@ -353,7 +363,7 @@ function renumberSegments() {
 /* セグメント行を1つ作って一覧へ足す（innerHTML を使わない）。 */
 function addSegmentRow() {
   if (dom.segList.querySelectorAll('.ss-seg').length >= MAX_SEGMENTS) {
-    setMessage(`セグメントは最大${MAX_SEGMENTS}個までです。`, 'error');
+    setMessage(`シーンは最大${MAX_SEGMENTS}個までです。`, 'error');
     return;
   }
 
@@ -390,7 +400,7 @@ function addSegmentRow() {
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'auth-button auth-button--ghost';
-  remove.textContent = 'このセグメントを削除';
+  remove.textContent = 'このシーンを削除';
   remove.addEventListener('click', () => {
     li.remove();
     renumberSegments();
@@ -428,7 +438,7 @@ async function handleUseSegments(event) {
   }
 
   if (picked.length === 0) {
-    setMessage('少なくとも1つのセグメントにナレーション文を入力してください。', 'error');
+    setMessage('少なくとも1つのシーンにナレーション文を入力してください。', 'error');
     return;
   }
 
@@ -444,7 +454,7 @@ async function handleUseSegments(event) {
   }
 
   currentScript = {
-    title: dom.segTitle.value.trim() || 'セグメント台本',
+    title: dom.segTitle.value.trim() || 'シーンごとの台本',
     scenes: picked.map((s) => ({ seconds: estimateSeconds(s.text), text: s.text })),
     segmentImages: images,
     source: 'segments',
@@ -478,7 +488,7 @@ function renderScript(script) {
     appendMetaRow(dom.resultMeta, '尺（目安）', `${script.durationSec}秒`);
   } else {
     /* 貼り付け・セグメントにはテーマ・尺の指定がない。由来だけ示す。 */
-    appendMetaRow(dom.resultMeta, '入力', script.source === 'segments' ? 'セグメント編集' : '貼り付け');
+    appendMetaRow(dom.resultMeta, '入力', script.source === 'segments' ? 'シーンごとに作る' : '貼り付け');
   }
   appendMetaRow(dom.resultMeta, 'シーン数', `${script.scenes.length}個`);
   appendMetaRow(dom.resultMeta, '合計（目安）', `${totalSeconds}秒`);
@@ -615,22 +625,48 @@ function handleDownload() {
 async function refreshCompanion() {
   setCompanionState('checking');
   dom.render.disabled = true;
-  dom.renderDetail.textContent = '生成サービスを確認しています…';
-  show(dom.renderDetail);
+
+  /*
+   * 確認中の出し方は、いまパネルが出ているかで変える。
+   *   出ていない … まだ応答を確認できていない。パネルは出さずに一行案内へ出す
+   *                （先に出すと、到達不可のとき大きなパネルが一瞬見えて消える）
+   *   出ている   … 「再確認する」からの呼び出し。畳むと押した先が消えるので、
+   *                パネルの中の進捗行に出す
+   */
+  const panelWasVisible = !dom.video.hidden;
+
+  if (panelWasVisible) {
+    dom.renderDetail.textContent = '生成サービスを確認しています…';
+    show(dom.renderDetail);
+  } else {
+    dom.videoUnavailable.textContent = '動画の自動生成が使えるか確認しています…';
+    show(dom.videoUnavailable);
+  }
 
   const { ok, speakers, engineStatus } = await fetchSpeakers();
-  hide(dom.renderDetail);
 
   if (!ok) {
-    /* ai-video-app 自体に到達できない。起動ボタンは出さない（押しても届かない）。 */
+    /*
+     * ai-video-app 自体に到達できない。パネルは出さず一行だけ残す。
+     * 「再確認する」も出ないが、サービスを起動してこのタブへ戻れば
+     * visibilitychange / focus の再確認で自動的にパネルが現れる（init 参照）。
+     */
+    hide(dom.video);
+    hide(dom.renderDetail);
+    show(dom.videoUnavailable);
     setCompanionState('offline');
-    dom.companionText.textContent =
-      'お使いのPCの動画生成サービス（ai-video-app）に接続できません。ai-video-app を起動してから「再確認する」を押してください。';
+    dom.videoUnavailable.textContent =
+      '動画の自動生成は、お使いのPCで生成サービスが起動している場合に利用できます。';
     hide(dom.engineStart);
-    show(dom.companionGuidance);
+    hide(dom.companionGuidance);
     dom.render.disabled = true;
     return;
   }
+
+  /* ここから先はサービスが応答している。パネルを出して詳細を案内する。 */
+  hide(dom.videoUnavailable);
+  hide(dom.renderDetail);
+  show(dom.video);
 
   if (engineStatus === 'offline' || engineStatus === 'mock') {
     /*
@@ -723,7 +759,10 @@ async function handleEngineStart() {
     const { status, downloadUrl } = await startEngine();
 
     if (status === 0) {
-      /* 通信断＝ai-video-app 自体が落ちた。判定は refreshCompanion に任せて offline へ。 */
+      /*
+       * 通信断＝ai-video-app 自体が落ちた。判定は refreshCompanion に任せる
+       * （offline ならパネルを畳んで一行案内へ切り替わる）。
+       */
       await refreshCompanion();
       return;
     }
@@ -759,8 +798,9 @@ async function handleEngineStart() {
        */
       await refreshCompanion();
       if (companionState === 'offline') {
-        dom.companionText.textContent =
-          'ai-video-app への接続が失われました。ai-video-app を起動し直してから「再確認する」を押してください。';
+        /* offline ではパネルごと畳まれている。案内は一行側へ書く。 */
+        dom.videoUnavailable.textContent =
+          'ai-video-app への接続が失われました。ai-video-app を起動し直してこの画面に戻ると、自動でやり直します。';
       }
       return;
     }
@@ -779,18 +819,34 @@ async function handleEngineStart() {
   }
 }
 
-/* 台本ができたら動画パネルを出し、補助サービスを確認する。 */
+/*
+ * 台本ができたら補助サービスを確認する。
+ * **パネルを出すかどうかは refreshCompanion が決める**（応答したときだけ出す）。
+ * ここで先に show すると、サービスを持たない利用者にも一度パネルが見える。
+ */
 function showVideoPanel() {
   hide(dom.videoOut);
   hide(dom.renderDetail);
-  /* セグメント編集は画像を各セグメントで指定済み。全体アップロード欄は隠す。 */
+  /* シーンごとに作る場合は画像を各シーンで指定済み。全体アップロード欄は隠す。 */
   if (currentScript?.source === 'segments') {
     hide(dom.bgField);
   } else {
     show(dom.bgField);
   }
-  show(dom.video);
   refreshCompanion();
+}
+
+/*
+ * 別タブから戻ってきたときの再確認。
+ * 生成サービスへの問い合わせは、台本があって、かつ前回 offline だったときだけ
+ * やり直す（無関係なタブ切り替えのたびに 127.0.0.1 を叩かない）。
+ */
+function handleReturnToPage() {
+  refreshKeyState();
+
+  if (currentScript && companionState === 'offline') {
+    refreshCompanion();
+  }
 }
 
 function setRendering(busy) {
@@ -934,13 +990,19 @@ async function init() {
     dom.speedVal.textContent = Number(dom.speed.value).toFixed(2);
   });
 
-  /* ポータルでキーを設定して戻ってきたら、案内を消す。 */
+  /*
+   * 画面へ戻ってきたときの再確認。
+   *   - ポータルでキーを設定して戻ってきたら、案内を消す。
+   *   - 生成サービスを起動して戻ってきたら、動画パネルを出し直す。
+   * 後者は、offline のとき「再確認する」ボタンごとパネルを畳んでいるため、
+   * これが無いと台本を作り直すまで復帰できなくなる。
+   */
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
-      refreshKeyState();
+      handleReturnToPage();
     }
   });
-  globalThis.addEventListener('focus', refreshKeyState);
+  globalThis.addEventListener('focus', handleReturnToPage);
 
   /* セグメント編集は最初の1行を用意しておく。 */
   addSegmentRow();

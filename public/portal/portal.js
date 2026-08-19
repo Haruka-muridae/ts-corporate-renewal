@@ -41,16 +41,19 @@ setScreenDepth(1);
 const loadingElement = document.getElementById('portal-loading');
 const contentElement = document.getElementById('portal-content');
 const badgeElement = document.getElementById('portal-user-badge');
+const appsSectionElement = document.getElementById('portal-apps-section');
 const appsElement = document.getElementById('portal-apps');
 const appsDotsElement = document.getElementById('portal-apps-dots');
 const appsPrevButton = document.getElementById('portal-apps-prev');
 const appsNextButton = document.getElementById('portal-apps-next');
 const appsLiveElement = document.getElementById('portal-apps-live');
 const appsMessageElement = document.getElementById('portal-apps-message');
+const appsResetBlock = document.getElementById('portal-apps-reset-block');
 const appsResetButton = document.getElementById('portal-apps-reset');
 const appsResetConfirm = document.getElementById('portal-apps-reset-confirm');
 const appsResetYes = document.getElementById('portal-apps-reset-confirm-yes');
 const appsResetNo = document.getElementById('portal-apps-reset-confirm-no');
+const catalogTitleElement = document.getElementById('portal-catalog-title');
 const catalogElement = document.getElementById('portal-catalog');
 const catalogEmptyElement = document.getElementById('portal-catalog-empty');
 const catalogPagerElement = document.getElementById('portal-catalog-pager');
@@ -163,9 +166,10 @@ function isExternalHref(value) {
  * アイコンの中身を作る。
  *
  * 画像URLなら img で読み込み、**失敗したら名前の1文字目へ落とす**。
- * 仮データのアイコンは localhost を指しており、本番の利用者の画面では
- * 必ず失敗する。つまり当面はこのフォールバックのほうが実際の表示になる
- * （docs/specs/apps-grid-spec-v1.md §13）。
+ * 組み込みの定義（app-registry.js）はすべて文字アイコンなので、
+ * ここを通るのはスプレッドシートのアイコンURL列だけである。
+ * シートの値は画面の外で編集され、消えたり打ち間違えたりするため、
+ * 失敗を例外扱いにしない（docs/specs/apps-grid-spec-v1.md §14-2）。
  *
  * 代替は「色付きの角丸＋1文字」。読み込み中に枠が空で残らないよう、
  * 先に文字を置いてから画像を重ねる。
@@ -483,6 +487,36 @@ function buildDots() {
 }
 
 /*
+ * お気に入りが0件のあいだは、お気に入りの節ごと隠す。
+ *
+ * 0件でも「準備中」の枠を16個とページ送りを出していたが、
+ * まだ何も置いていない棚を2ページぶん見せても、押せない枠を数えるだけで、
+ * 次にする操作は分からない。0件のときに見せるべきは「全アプリ一覧」のほうで、
+ * 追加すれば棚が出てくる。
+ *
+ * 枠とドットは描いたまま隠す。描き分けを増やすより、
+ * 出す・出さないの1点だけで決まるほうが、状態を追いやすい。
+ *
+ * 「お気に入りを初期状態に戻す」も同じ条件で隠す（節の中なので二重ではある）。
+ * こちらは「空のものを空へ戻すボタンを出さない」という別の決めごとで、
+ * 節の見せ方を変えたときに一緒に消えてよいものではない。
+ * どちらも判断はこの1か所だけで行う。
+ *
+ * 詳細は docs/specs/apps-grid-spec-v1.md §2-3。
+ */
+function applyFavoritesVisibility() {
+  const hasFavorites = favoriteApps.length > 0;
+
+  appsSectionElement.hidden = !hasFavorites;
+  appsResetBlock.hidden = !hasFavorites;
+
+  if (!hasFavorites) {
+    /* 開いたままの確認を隠した先に残さない。次に出すときは最初から。 */
+    appsResetConfirm.hidden = true;
+  }
+}
+
+/*
  * いまの favoriteApps でグリッドを描き直す。
  *
  * 表示中のページは保つ。並べ替えのたびに1ページ目へ飛ぶと、
@@ -502,6 +536,7 @@ function paintGrid() {
   appsElement.replaceChildren(fragment);
   buildDots();
   showPage(page);
+  applyFavoritesVisibility();
 
   /* ドラッグ中は、掴んでいるカードの位置に穴を開けたままにする。 */
   if (dragState) {
@@ -1107,7 +1142,18 @@ appsResetYes.addEventListener('click', () => {
   renderAppsGrid(activeRegistry, { stored: null });
   appsResetConfirm.hidden = true;
   announce('初期配置に戻しました。');
-  appsResetButton.focus();
+
+  /*
+   * 戻した先はお気に入り0件なので、押したボタンごと画面から消える。
+   * 消えた要素へ focus() しても焦点は body へ落ち、
+   * キーボードだけで操作している人は画面のどこにいるか分からなくなる。
+   * 残っている「全アプリ一覧」の見出しへ移し、次に読むところを示す。
+   */
+  if (appsResetBlock.hidden) {
+    catalogTitleElement.focus();
+  } else {
+    appsResetButton.focus();
+  }
 });
 
 /*

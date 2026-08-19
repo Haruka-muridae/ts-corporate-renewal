@@ -81,7 +81,7 @@
       <p class="description">
         録音の処理はこの端末内で行い、<br>
         録音後はご自身の Google ドライブ（マイドライブ ＞ TSAM AI ＞ Voice Recorder）へ保存します。<br>
-        当社のサーバーへ録音データを送信することはありません。
+        データは当社のサーバーを経由せず、当社が内容を受け取ることはありません。
       </p>
       <button id="btn-start" class="btn btn-primary" type="button">録音を開始</button>
       <p id="idle-error" class="error-message" hidden></p>
@@ -141,8 +141,12 @@
           <input type="text" id="input-partner" class="field__input" autocomplete="off"
                  spellcheck="false" aria-describedby="input-partner-help">
         </label>
+        <!--
+          「当社サーバーへ送らない」は開始画面で一度言っている。
+          ここで繰り返さず、この欄に固有の事実（入力そのものは残さない）だけ書く。
+        -->
         <p class="field-note" id="input-partner-help">
-          入力すると、下のファイル名欄の初期値（日時のあと）に使います。端末や当社サーバーには保存しません。
+          入力すると、下のファイル名欄の初期値（日時のあと）に使います。入力した内容そのものは保存しません。
         </p>
 
         <label class="field">
@@ -150,10 +154,14 @@
           <input type="text" id="input-filename" class="field__input" autocomplete="off"
                  spellcheck="false" aria-describedby="input-filename-help">
         </label>
+        <!--
+          注記は「利用者が入力の前に知っておくこと」だけに絞る。
+          拡張子の補完・同名時の連番・JSON/WebM の命名は、いずれも
+          **こちらが黙って正しくやること**で、読んでも操作は変わらない
+          （挙動は §4-2 のまま変えていない。説明だけ落とした）。
+        -->
         <p class="field-note" id="input-filename-help">
-          保存前に編集できます。未入力のときは初期値を使います。拡張子が無ければ <code>.mp3</code> を付けます。
-          同じ名前が保存先にある場合は <code>_2</code>、<code>_3</code>… を付けます。
-          記録情報（JSON）と元データ（WebM）も、同じ名前に拡張子だけ替えて保存します。
+          保存前に編集できます。未入力のときは初期値を使います。
         </p>
       </div>
 
@@ -166,7 +174,8 @@
       -->
       <div id="drive-panel" class="drive-panel">
         <p id="drive-folder" class="drive-folder"></p>
-        <button id="btn-save-drive" class="btn btn-primary" type="button">Googleドライブに保存</button>
+        <!-- 保存ボタンの文言は本番アプリ間で統一（ブラウザ録音アプリと同じ）。 -->
+        <button id="btn-save-drive" class="btn btn-primary" type="button">Googleドライブへ保存</button>
         <p id="drive-hint" class="drive-hint" role="status" hidden></p>
 
         <div id="drive-progress-panel" hidden>
@@ -213,11 +222,27 @@
       </p>
       <div class="button-row">
         <button id="btn-download-audio" class="btn btn-secondary" type="button">音声をダウンロード</button>
-        <button id="btn-download-json" class="btn btn-secondary" type="button">記録情報をダウンロード</button>
       </div>
-      <p class="secondary-link-row">
-        <button id="btn-download-webm-original" class="link-secondary" type="button" hidden>元データ（WebM）をダウンロード</button>
-      </p>
+
+      <!--
+        保存後に並ぶ操作を「音声をダウンロード」「新しい録音を開始」の2つに絞り、
+        残りは畳む。記録情報（JSON）と元データ（WebM）は、必要になる人には
+        必要だが、面談直後の大半の場面では選択肢を増やしているだけだった。
+        **どちらも消していない**（挙動は §4-3 のまま。表示の深さだけ変えた）。
+        元データ（WebM）は MP3 を作れたときだけ出る「念のための控え」であり、
+        MP3 を作れなかったときは上の「音声をダウンロード」自体が WebM を
+        渡す（app.js の updateDoneScreenForFormat）。畳んでも退避経路は塞がらない。
+      -->
+      <details class="download-more">
+        <summary>その他のダウンロード</summary>
+        <div class="button-row">
+          <button id="btn-download-json" class="btn btn-secondary" type="button">記録情報をダウンロード</button>
+        </div>
+        <p class="secondary-link-row">
+          <button id="btn-download-webm-original" class="link-secondary" type="button" hidden>元データ（WebM）をダウンロード</button>
+        </p>
+      </details>
+
       <button id="btn-restart" class="btn btn-secondary" type="button">新しい録音を開始</button>
     </section>
 

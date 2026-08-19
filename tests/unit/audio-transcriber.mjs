@@ -384,29 +384,25 @@ try {
     && settingsStore.loadSettings().withTimestamps === false);
 
   /*
-   * 音声ファイルの入力元（fileSource）の永続化。
-   * script.js の applySavedSettings が行うのと同じフォールバック式
-   * （saved.fileSource === 'drive' ? 'drive' : 'local'）で検証する。
+   * ★後方互換: 「よく使う入力元」（fileSource）の設定は廃止したが、
+   * 既存の利用者の localStorage には値が残っている。読み込んだ設定に
+   * 使われないキーが混ざっていても、例外にならず他の設定値が普通に
+   * 復元できること（script.js の applySavedSettings は fileSource を見ない）。
    */
-  check('入力元（drive）を保存できる',
-    settingsStore.saveSettings({ fileSource: 'drive' }) === true
-    && settingsStore.loadSettings().fileSource === 'drive');
-
-  check('入力元（local）を保存できる',
-    settingsStore.saveSettings({ fileSource: 'local' }) === true
-    && settingsStore.loadSettings().fileSource === 'local');
-
-  /*
-   * ★後方互換: 前バージョン（fileSource キーが無い）の保存値を読み込んでも
-   * 例外にならず、既定値（'local'）へフォールバックできること。
-   */
-  settingsMap.set(settingsStore.SETTINGS_STORAGE_KEY, JSON.stringify({ mode: 'local', language: 'ja' }));
+  settingsMap.set(
+    settingsStore.SETTINGS_STORAGE_KEY,
+    JSON.stringify({ mode: 'gemini', language: 'ja', fileSource: 'drive' }),
+  );
   {
     const loaded = settingsStore.loadSettings();
-    check('★fileSourceキーが無い旧形式でも例外を投げない', Object.hasOwn(loaded, 'fileSource') === false);
+    check('★廃止済みキー（fileSource）が残っていても例外を投げない',
+      loaded.mode === 'gemini' && loaded.language === 'ja');
 
-    const fallbackSource = loaded.fileSource === 'drive' ? 'drive' : 'local';
-    check('★fileSource未保存時は既定値localへフォールバック', fallbackSource === 'local');
+    /* 読み捨てるだけで、保存し直しても他の値を壊さない。 */
+    check('廃止済みキーが残ったまま部分更新できる',
+      settingsStore.saveSettings({ withTimestamps: true }) === true
+      && settingsStore.loadSettings().mode === 'gemini'
+      && settingsStore.loadSettings().withTimestamps === true);
   }
 
   /* 手で書き換えられた値でも壊れない（KeyStore §3-3 と同じ判断）。 */

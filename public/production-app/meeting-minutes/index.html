@@ -65,8 +65,13 @@
 
     <header class="mm-header">
       <h1>AI議事録</h1>
+      <!--
+        AI出力の確認責任（要件書 §4-7）は、ここ1か所だけで言う。
+        ヘッダーはステップ1〜5のどこにいても表示されたままなので、
+        送信確認画面（.mm-notice）へ同じ文を重ねて置く必要がない。
+      -->
       <p class="mm-lede">
-        文字起こしをGeminiで整理し、確認・編集できる議事録を作成します。
+        文字起こしをGeminiで整理し、確認・編集できる議事録を作成します。<br>
         AIの出力は誤りや抜けがあり得るため、原文と照合してから確定してください。
       </p>
     </header>
@@ -123,12 +128,26 @@
         <!-- input は視覚的に隠し、操作はボタンから行う（audio-transcriber と同じ方式）。 -->
         <input id="mm-file-input" class="mm-visually-hidden" type="file" accept=".txt,.md" tabindex="-1" aria-hidden="true">
         <button id="mm-file-button" type="button" class="auth-button auth-button--ghost">.txt / .md ファイルを選択</button>
-        <p class="mm-note">端末上のファイルをブラウザ内で読み込みます。当社サーバーへは送信しません。</p>
+        <!--
+          「当社サーバーへ送信しない」の保証は、送信の可否を判断する場所
+          （ステップ2の .mm-notice）へ1回だけ置く。ここは読み込みが
+          ブラウザ内で完結することだけを言う。
+        -->
+        <p class="mm-note">端末上のファイルをブラウザ内で読み込みます。</p>
         <p id="mm-file-error" class="mm-alert mm-alert--error" hidden></p>
       </div>
 
-      <fieldset class="mm-fieldset">
-        <legend>会議情報（任意）</legend>
+      <!--
+        会議情報は全項目が任意（要件書 §4-4）。必須の「文字起こし」と同じ高さで
+        7項目が常時開いていると、埋めないと進めないと読めてしまい、
+        ステップ1が縦に長くなる。<details> で畳み、必要な人だけ開く。
+        閉じても DOM は保持されるため、入力値は破棄されない
+        （audio-transcriber のアコーディオンと同じ理由）。
+        開閉の制御は details/summary のネイティブ機能に任せ、
+        button + aria-expanded の自前実装はしない。
+      -->
+      <details id="mm-meeting-details" class="mm-details">
+        <summary>会議情報（任意）</summary>
         <p class="mm-note">未入力の項目はAIに推測させず「記載なし」として扱います。</p>
 
         <div class="mm-grid-2">
@@ -164,7 +183,7 @@
           <label for="mm-meeting-notes">補足事項（固有名詞・専門用語・出力上の注意）</label>
           <textarea id="mm-meeting-notes" rows="2"></textarea>
         </div>
-      </fieldset>
+      </details>
 
       <fieldset class="mm-fieldset">
         <legend>議事録テンプレート</legend>
@@ -201,10 +220,11 @@
         </div>
       </fieldset>
 
-      <p class="mm-actions">
-        <button id="mm-clear-storage" type="button" class="auth-button auth-button--ghost">端末内の作業データを削除</button>
-      </p>
-
+      <!--
+        「端末内の作業データを削除」はここにあったが、画面末尾の
+        「データの管理」区画へ移した。入力途中の画面で、次へ進む
+        「確認へ進む」の直前に破壊的操作が並んでいたため。
+      -->
       <p id="mm-step1-message" class="mm-message" role="status" aria-live="polite"></p>
 
       <p class="mm-actions">
@@ -227,11 +247,18 @@
         <dd id="mm-confirm-template">標準</dd>
       </dl>
 
+      <!--
+        送信前に伝えるのは「どこへ行くか」と「持ち出してよいか」の2点に絞る。
+        4段落あったうち、AI出力の確認責任はヘッダーの説明文（常時表示）と
+        完全に重複していたため落とした。当社サーバーを経由しない保証は
+        送信先の説明と一体なので、同じ段落へまとめて1回だけ言う。
+      -->
       <div class="mm-notice">
-        <p>「議事録を生成」を押すと、文字起こしと入力した会議情報がGoogle AI APIへ直接送信されます。</p>
-        <p>当社サーバーを経由せず、当社が入力内容・生成結果を保存することはありません。</p>
+        <p>
+          「議事録を生成」を押すと、文字起こしと入力した会議情報がGoogle AI APIへ直接送信されます。<br>
+          データは当社のサーバーを経由せず、当社が内容を受け取ることはありません。
+        </p>
         <p>機密情報・個人情報を含む場合は、ご自身の組織のルールをあらかじめご確認ください。</p>
-        <p>AIの出力には誤りや抜けがあり得ます。原文と照合してご確認ください。</p>
       </div>
 
       <p id="mm-step2-message" class="mm-message" role="status" aria-live="polite"></p>
@@ -366,14 +393,42 @@
         <button id="mm-download-markdown" type="button" class="auth-button auth-button--ghost">Markdownを保存（.md）</button>
         <button id="mm-save-drive" type="button" class="auth-button auth-button--ghost">Googleドライブへ保存</button>
       </p>
+      <!--
+        保存先はあくまで利用者自身のドライブなので、ここで改めて
+        「当社が受け取らない」とは言わない（送信先の説明は
+        ステップ2の .mm-notice に1回だけ置く）。
+      -->
       <p class="mm-note">
         Googleドライブへの保存は、あなた自身のドライブの「マイドライブ ＞ TSAM AI ＞ 議事録データ」に
-        新しいファイルとして保存します（フォルダがない場合は作成します）。当社が内容を受け取ることはありません。
+        新しいファイルとして保存します（フォルダがない場合は作成します）。
       </p>
+      <!--
+        後退の導線はここでは「編集に戻る」1つだけにする。
+        「最初からやり直す」も並べていたが、直前のステップ4に同じボタンが
+        あり、出力画面で戻り先が2つ並ぶと取り違えやすい。作業を捨てる操作は
+        ステップ4（編集画面）と、下の「データの管理」に残っている。
+      -->
       <p class="mm-actions">
         <button id="mm-back-to-review" type="button" class="auth-button auth-button--ghost">編集に戻る</button>
-        <button id="mm-restart-5" type="button" class="auth-button auth-button--ghost">最初からやり直す</button>
       </p>
+    </section>
+
+    <!-- ============================================================
+         データの管理（ステップ外）
+
+         破壊的操作は入力・出力の動線から外し、画面末尾へまとめる。
+         ステップ表示の対象ではないため #mm-step-n の id を持たせない
+         （showStep はこの区画を触らず、常に表示されたままになる）。
+         ============================================================ -->
+    <section class="mm-maintenance" aria-labelledby="mm-maintenance-title">
+      <h2 id="mm-maintenance-title">データの管理</h2>
+      <p class="mm-note">この端末に保存した下書き（原文・会議情報・生成結果）を消します。APIキーとログイン状態は消えません。</p>
+
+      <p class="mm-actions">
+        <button id="mm-clear-storage" type="button" class="auth-button auth-button--ghost">端末内の作業データを削除</button>
+      </p>
+
+      <p id="mm-maintenance-message" class="mm-message" role="status" aria-live="polite"></p>
     </section>
 
     <footer class="mm-footer">

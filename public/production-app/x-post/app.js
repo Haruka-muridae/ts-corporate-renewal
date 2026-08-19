@@ -42,14 +42,13 @@ const dom = {
   style: document.getElementById('xp-style'),
   text: document.getElementById('xp-text'),
   count: document.getElementById('xp-count'),
-  limit: document.getElementById('xp-limit'),
   save: document.getElementById('xp-save'),
   post: document.getElementById('xp-post'),
   message: document.getElementById('xp-message'),
   drafts: document.getElementById('xp-drafts'),
-  draftsEmpty: document.getElementById('xp-drafts-empty'),
+  draftsSection: document.getElementById('xp-drafts-section'),
   history: document.getElementById('xp-history'),
-  historyEmpty: document.getElementById('xp-history-empty'),
+  historySection: document.getElementById('xp-history-section'),
 };
 
 const storageOk = isStorageAvailable();
@@ -65,10 +64,24 @@ function formatTime(ms) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/*
+ * 残りの目安を出す。
+ *
+ * 数えているのは従来どおり X の「ウェイト」（全角=2。post.js の countWeight）で、
+ * 上限判定も WEIGHT_LIMIT のまま。画面に出す数字だけを、利用者が使える単位
+ * ＝日本語の文字数へ直している（ウェイト ÷ 2）。
+ * 半角中心の文なら実際にはもっと書けるため、必ず「約」を付ける。
+ * 超過分は切り上げる（1ウェイト超えを「約0字オーバー」と出さないため）。
+ */
 function updateCount() {
-  const length = countWeight(dom.text.value);
-  dom.count.textContent = String(length);
-  dom.count.className = length > WEIGHT_LIMIT ? 'xp-count-over' : '';
+  const weight = countWeight(dom.text.value);
+  const over = weight > WEIGHT_LIMIT;
+  const remainingWeight = WEIGHT_LIMIT - weight;
+
+  dom.count.textContent = over
+    ? `約${Math.ceil(-remainingWeight / 2)}字オーバー`
+    : `残り約${Math.floor(remainingWeight / 2)}字`;
+  dom.count.className = over ? 'xp-count-over' : '';
 }
 
 function refreshKeyState() {
@@ -82,7 +95,13 @@ function renderDrafts() {
   const drafts = storageOk ? listDrafts() : [];
 
   dom.drafts.textContent = '';
-  dom.draftsEmpty.hidden = drafts.length > 0;
+
+  /*
+   * 0件のあいだはセクションごと出さない。空の一覧と「まだありません」は
+   * 場所を取るだけで、利用者の次の操作を助けない（下書きは「下書き保存」で
+   * 増え、そのときこの関数が呼び直されて現れる）。
+   */
+  dom.draftsSection.hidden = drafts.length === 0;
 
   for (const draft of drafts) {
     const li = document.createElement('li');
@@ -134,7 +153,9 @@ function renderHistory() {
   const items = storageOk ? listHistory() : [];
 
   dom.history.textContent = '';
-  dom.historyEmpty.hidden = items.length > 0;
+
+  /* 記録の範囲の注記もセクションの中にある。1件も無いうちは出す意味がない。 */
+  dom.historySection.hidden = items.length === 0;
 
   for (const item of items) {
     const li = document.createElement('li');
@@ -249,7 +270,6 @@ async function init() {
   dom.loading.hidden = true;
   dom.content.hidden = false;
 
-  dom.limit.textContent = String(WEIGHT_LIMIT);
   dom.storageNote.hidden = storageOk;
 
   dom.text.addEventListener('input', updateCount);

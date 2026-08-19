@@ -61,10 +61,13 @@
 
       <header class="cun-header">
         <h1>カレンダーURL通知</h1>
+        <!--
+          書き方（OPEN_URL: / OPEN_BEFORE:）はここに書かない（2026-08-19）。
+          最初の1文は「このアプリが何をするか」だけを伝える。記法は
+          設定を触る段になって初めて要るので、「通知の設定」へ集めた。
+        -->
         <p class="cun-lede">
           予定の開始前に通知を出し、通知を押した端末でその予定の URL を開きます。
-          予定の説明欄に <code>OPEN_URL:</code> を書くとそのページへ、
-          何も書かない予定はカレンダーの予定画面へ移動します。
         </p>
       </header>
 
@@ -77,12 +80,26 @@
         </p>
 
         <div id="cun-setup" hidden>
+          <!--
+            「当社のサーバーへは送られません」と言い切らない（2026-08-19）。
+            予定名・説明・URL は届かないが、通知の判定には匿名化した予定IDと
+            開始時刻・出欠が当社の中継を通る（docs/notifier-design-notes.md §3）。
+            他アプリと同じ一文へ揃えるより、実際の流れに合わせるほうを採る。
+          -->
           <p>
             この機能は、ご自身の Google アカウントにコピーした通知シートが動かします。
-            予定の内容も URL も、当社のサーバーへは送られません。
+            予定の名前・説明・URL は当社のサーバーへ送られません（通知の判定に渡るのは、
+            匿名化した予定IDと開始時刻・出欠だけです）。
           </p>
+          <!--
+            手順1でシートの入手先を示す（2026-08-19）。
+            以前は「通知シートをコピーし」とだけ書いており、どこから
+            コピーするのかが画面から辿れなかった。**配布リンクは
+            利用者ごとに運営が渡すもの**で、この画面に置ける固定のURLが無い。
+            リンクを作れない以上、次の一手が分かる案内にする。
+          -->
           <ol class="cun-steps">
-            <li>通知シートをコピーし、シートのメニューからセットアップを実行します。</li>
+            <li>通知シートをご自身の Google ドライブへコピーし、シートのメニューからセットアップを実行します。<strong>通知シートの入手方法は管理者にお問い合わせください。</strong></li>
             <li>ウィザードの最後に出る<strong>引き継ぎリンク</strong>を、この端末で開きます。</li>
             <li>この画面に戻ると「接続済み」になります。</li>
           </ol>
@@ -110,17 +127,47 @@
               <option value="15">15分前</option>
             </select>
           </p>
-          <p class="cun-note">
-            予定の説明欄に <code>OPEN_BEFORE: 30</code> と書くと、その予定だけ別の時刻になります。
-          </p>
+          <!--
+            予定ごとの書き方は、この1か所に集めてある（2026-08-19）。
+            以前はリード文に OPEN_URL:、ここに OPEN_BEFORE: と離れて置いており、
+            2種類の記法を別々の場所で覚える形になっていた。
+          -->
+          <details class="cun-details">
+            <summary>予定ごとに指定する（説明欄の書き方）</summary>
+            <p class="cun-note">
+              <code>OPEN_URL: https://…</code> と書くと、その予定はそのページを開きます。
+              書かない予定は、カレンダーの予定画面を開きます。
+            </p>
+            <p class="cun-note">
+              <code>OPEN_BEFORE: 30</code> と書くと、その予定だけ上で選んだタイミングより
+              優先し、30分前に通知します。
+            </p>
+          </details>
 
-          <fieldset class="cun-field">
-            <legend>通知する予定（出欠の回答）</legend>
-            <label><input type="checkbox" id="cun-accepted"> 参加</label>
-            <label><input type="checkbox" id="cun-tentative"> 未定</label>
-            <label><input type="checkbox" id="cun-needsAction"> 未回答</label>
-            <label><input type="checkbox" id="cun-declined"> 欠席</label>
-          </fieldset>
+          <!--
+            出欠の絞り込みは畳んでおく（2026-08-19）。
+            **初期値は変えていない。** 値は通知シート（GAS）が正で、
+            この画面はその写しである（app.js の renderSettings）。
+            畳むのは表示だけで、保存される内容は以前と同じ。
+            日常的に触るのは通知の可否と時刻の2つで、出欠の内訳を
+            変える人は多くない。
+          -->
+          <details class="cun-details">
+            <summary>詳細設定</summary>
+
+            <fieldset class="cun-field">
+              <legend>通知する予定（出欠の回答）</legend>
+              <label><input type="checkbox" id="cun-accepted"> 参加</label>
+              <label><input type="checkbox" id="cun-tentative"> 未定</label>
+              <label><input type="checkbox" id="cun-needsAction"> 未回答</label>
+              <label><input type="checkbox" id="cun-declined"> 欠席</label>
+            </fieldset>
+          </details>
+
+          <!--
+            設定ではなく仕様（FR-01）。畳んだ中に入れると、
+            「なぜ終日の予定だけ通知が来ないのか」を探せなくなる。
+          -->
           <p class="cun-note">終日の予定は通知しません。</p>
 
           <p class="cun-actions">
@@ -151,11 +198,17 @@
 
       </div>
 
-      <p class="cun-back">
-        <a href="../../portal/">ポータルへ戻る</a>
-      </p>
-
     </div>
+
+    <!--
+      ポータルへの戻り道（本番アプリ共通の形）。
+      guardPage() を待つ #cun-content の外に置き、読み込みが失敗しても
+      戻れるようにする。
+    -->
+    <footer class="cun-footer">
+      <p><a href="../../portal/">ポータルへ戻る</a></p>
+    </footer>
+
   </div>
 </main>
 

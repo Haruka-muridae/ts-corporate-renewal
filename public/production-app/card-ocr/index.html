@@ -85,15 +85,41 @@
         書かない（開閉の記憶もしない）。要件定義書 §5.3 の注記のとおり、
         **常時表示・既定は閉・任意で開**という解釈で実装している。
 
-        見出しは閉じていても常に見えるので、いつでも開ける。
         ==================================================================
+        「準備」の中に入れない（2026-08-19 に外へ出した）
+        ==================================================================
+        以前はこれを「準備」の <details> の中へ入れていたが、
+        **開いた状態で始まる「準備」の中に、閉じた状態で始まる子**が
+        並ぶ形になり、開く操作が2回要った。加えて「準備」は起動直後は
+        開いているので、§5.3 が求める「既定は閉」も守れなくなる。
+
+        明示事項は準備作業ではないので、兄弟として外に出してある。
+        **画面上の <details> はこの1枚と「準備」の2枚だけで、
+        入れ子にしない。**
+        ==================================================================
+
+        項目は §5.3 の6つと1対1で対応する。**数を減らさない。**
+        §5.3 が「初回利用時の案内画面に明記する」と定めた開示であり、
+        読みやすさのために落としてよいものではない（短くはしてある）。
       -->
+      <details id="co-notice" class="co-panel co-panel--notice">
+        <summary id="co-notice-title" class="co-notice-summary">ご利用の前に</summary>
+        <ul class="co-notice-list">
+          <li>名刺データと画像は<strong>あなたのGoogleドライブにのみ</strong>保存されます。データは当社のサーバーを経由せず、当社が内容を受け取ることはありません。</li>
+          <li>バックアップ・整理・削除・共有設定・容量の管理はあなた自身で行ってください。当社は復旧の義務を負いません。</li>
+          <li>Gemini APIの利用費（有料キーの場合）はあなたに課金されます。</li>
+          <li><strong>無料枠のキーでは、送信したテキストがGoogleのプロダクト改善に使われる場合があります。</strong>業務でお使いの場合は有料区分のキーをおすすめします。</li>
+          <li>名刺情報（第三者の個人情報）の取り扱いに関する法令の遵守は、あなたの責任で行ってください。</li>
+          <li>保存フォルダやスプレッドシートを削除・移動された場合、次回起動時に新しい保存先を作ります（過去データは引き継がれません）。</li>
+        </ul>
+      </details>
+
       <!--
         ==================================================================
-        親アコーディオン「準備」
+        「準備」（1枚。中で <details> を入れ子にしない）
         ==================================================================
-        ご利用の前に／準備の状況／保存先 をまとめる。
-        **すべて正常なら親ごと畳む。** 準備が済んだ利用者が開いたとき、
+        前提の一覧（SC-00）と保存先（§8.1 ステージ0）を1枚にまとめる。
+        **すべて正常なら畳む。** 準備が済んだ利用者が開いたとき、
         最初に見えるのが撮影の欄になるようにするため。
 
         **`open` を最初から付けてある。** JavaScript が動く前は開いており、
@@ -101,55 +127,38 @@
         JS が失敗したときに準備の状態が見えないまま残る。
 
         **誘導（co-guidance）はこの中に入れない。** 畳まれて気づかない、
-        を作らないため、親の外に置いて常に見えるようにしてある。
+        を作らないため、外に置いて常に見えるようにしてある。
         ==================================================================
       -->
       <details id="co-prep" class="co-panel co-prep" open>
         <summary id="co-prep-summary" class="co-panel-title co-prep-summary">準備</summary>
 
-      <details id="co-notice" class="co-panel co-sub co-panel--notice">
-        <summary id="co-notice-title" class="co-notice-summary">ご利用の前に</summary>
-        <ul class="co-notice-list">
-          <li>名刺データと画像は<strong>あなたのGoogleドライブにのみ</strong>保存されます。当社は受信も保管も閲覧もしません。</li>
-          <li>バックアップ・整理・削除・共有設定・容量の管理は、あなた自身で行ってください。当社は復旧の義務を負いません。</li>
-          <li>Gemini APIの利用費（有料キーの場合）は、あなたに課金されます。</li>
-          <li><strong>無料枠のキーでは、送信したテキストがGoogleのプロダクト改善に使われる場合があります。</strong>名刺は第三者の個人情報のため、業務でお使いの場合は有料区分のキーをおすすめします。</li>
-          <li>名刺情報（第三者の個人情報）の取り扱いに関する法令の遵守は、データを保有するあなたの責任で行ってください。</li>
-          <li>保存フォルダやスプレッドシートを削除・移動された場合、次回起動時に新しい保存先を作ります。過去データとの連続性は保証しません。</li>
-        </ul>
-      </details>
-
-      <!-- 前提の一覧（SC-00）。誘導とは別に、3つとも状態を見せる。 -->
-      <details id="co-status-panel" class="co-panel co-sub" open>
-        <summary id="co-status-summary" class="co-sub-summary">準備の状況</summary>
+        <!-- 前提の一覧（SC-00）。誘導とは別に、3つとも状態を見せる。 -->
         <dl id="co-status" class="co-status"></dl>
-      </details>
 
-      <!-- 保存先の用意（§8.1 ステージ0）。連携後にだけ出す。 -->
-      <details id="co-storage" class="co-panel co-sub" aria-live="polite" open hidden>
-        <summary id="co-storage-summary" class="co-sub-summary">保存先</summary>
+        <!-- 保存先の用意（§8.1 ステージ0）。連携後にだけ出す。 -->
+        <div id="co-storage" class="co-prep-block" aria-live="polite" hidden>
+          <dl class="co-status">
+            <dt class="co-status-label">マイドライブ／TSAM AI／名刺データ</dt>
+            <dd id="co-storage-state" class="co-status-value" data-ok="pending">確認しています…</dd>
+          </dl>
 
-        <dl class="co-status">
-          <dt class="co-status-label">マイドライブ／TSAM AI／名刺データ</dt>
-          <dd id="co-storage-state" class="co-status-value" data-ok="pending">確認しています…</dd>
-        </dl>
+          <ul id="co-storage-notices" class="co-notice-list" hidden></ul>
 
-        <ul id="co-storage-notices" class="co-notice-list" hidden></ul>
-
-        <div class="co-actions">
-          <a id="co-sheet-link" class="auth-button auth-button--ghost"
-             href="#" target="_blank" rel="noopener noreferrer" hidden>名刺管理シートを開く</a>
+          <div class="co-actions">
+            <a id="co-sheet-link" class="auth-button auth-button--ghost"
+               href="#" target="_blank" rel="noopener noreferrer" hidden>名刺管理シートを開く</a>
+          </div>
         </div>
-      </details>
 
-      <!-- 準備が整ったときだけ出す。 -->
-      <div id="co-ready" class="co-panel co-sub" hidden>
-        <p class="co-guidance-text">Googleドライブと連携しています。</p>
-        <button id="co-disconnect" type="button" class="auth-button auth-button--ghost">連携を解除する</button>
-      </div>
+        <!-- 準備が整ったときだけ出す。 -->
+        <div id="co-ready" class="co-prep-block" hidden>
+          <p class="co-guidance-text">Googleドライブと連携しています。</p>
+          <button id="co-disconnect" type="button" class="auth-button auth-button--ghost">連携を解除する</button>
+        </div>
 
       </details>
-      <!-- ／親アコーディオン「準備」ここまで -->
+      <!-- ／「準備」ここまで -->
 
       <!--
         誘導。**該当するものだけを1つ出す**（要件定義書 §10.1）。
@@ -161,7 +170,8 @@
 
         <div class="co-actions">
           <a id="co-login-link" class="auth-button" href="../../login/" hidden>ログインする</a>
-          <a id="co-portal-link" class="auth-button" href="../../portal/" hidden>ポータルでキーを設定する</a>
+          <!-- 文言は他アプリと揃える（領収書スキャナの導線と同じ）。 -->
+          <a id="co-portal-link" class="auth-button" href="../../portal/" hidden>ポータルで設定する</a>
           <button id="co-connect" type="button" class="auth-button" hidden>Googleと連携する</button>
         </div>
       </section>
@@ -218,10 +228,6 @@
         </dl>
 
         <dl id="co-ocr-sides" class="co-status"></dl>
-
-        <p id="co-ocr-note" class="co-guidance-text">
-          読み取った本文は画面に出しません。項目へ振り分けたものを下に表示します。
-        </p>
       </section>
 
       <!-- 項目への振り分け（§8.1 ステージ3・4）。 -->
@@ -242,15 +248,14 @@
         <!-- 値の由来。どこから来たかを追えるようにする（§FR-15 の5）。 -->
         <ul id="co-fields-notes" class="co-notice-list" hidden></ul>
 
+        <!--
+          保存先の説明はここに置かない（2026-08-19）。
+          「準備」の中の保存先パネルが同じことを書いており、
+          画面に2か所あると、どちらが本当か確かめる手間だけが増える。
+        -->
         <div class="co-actions">
           <button id="co-register" type="button" class="auth-button">この内容で登録する</button>
         </div>
-
-        <p class="co-guidance-text">
-          登録すると、画像はあなたのドライブの
-          <code>TSAM AI／名刺データ／images</code> に、内容は
-          <code>名刺管理</code> シートに1行として保存されます。
-        </p>
       </section>
 
       <!-- 登録の結果（SC-06）。 -->
@@ -289,6 +294,20 @@
       <p id="co-message" class="auth-message" role="status" aria-live="polite" tabindex="-1" hidden></p>
 
     </div>
+
+    <!--
+      ポータルへの戻り道。**素のテキストリンクにする**（本番アプリ共通、
+      audio-transcriber の footer に揃えた形）。ボタンにすると、
+      同じ見た目の「連携を解除する」のような取り消せない操作と並んだとき、
+      移動なのか実行なのかが押す前に分からない。
+
+      guardPage() を待つ #co-content の外に置く。読み込みが長引いたり
+      失敗したりしても、戻る道だけは残る。
+    -->
+    <footer class="co-footer">
+      <p class="co-note"><a href="../../portal/">ポータルへ戻る</a></p>
+    </footer>
+
   </div>
 </main>
 

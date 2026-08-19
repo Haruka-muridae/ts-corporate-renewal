@@ -71,13 +71,19 @@
       -->
       <details class="cm-panel cm-panel--notice">
         <summary class="cm-notice-summary">ご利用の前に</summary>
+        <!--
+          「送信したメールは取り消せません」は**ここに書かない**（2026-08-19）。
+          同じ注意は「送信する」を押した直後の確認ダイアログが件数・通数と
+          一緒に出しており（app.js）、**押す直前に出るほうが効く**。
+          畳まれた一覧に同じ文を重ねても、読む量が増えるだけで
+          止める力は増えない。
+        -->
         <ul class="cm-notice-list">
-          <li>宛先は<strong>あなたのGoogleドライブの「名刺管理」シート</strong>から読み込みます。当社サーバーへは宛先も本文も送信されません。</li>
+          <li>宛先は<strong>あなたのGoogleドライブの「名刺管理」シート</strong>から読み込みます。データは当社のサーバーを経由せず、当社が内容を受け取ることはありません。</li>
           <li>メールは<strong>あなたのGmailアカウントから、あなたの名義で</strong>送信されます。送信済みメールはGmailの「送信済み」に残ります。</li>
           <li>広告・宣伝を含むメールには、特定電子メール法により<strong>送信者の氏名・名称と、受信拒否の連絡先の表示が義務付けられています</strong>。本文に必ず記載してください。</li>
           <li>受信拒否の申出があった相手には、以後送信しないでください（名刺管理シート側での管理をおすすめします）。</li>
           <li>Gmailには1日あたりの送信上限があります。上限を超えるとGoogleにより一時的に送信が止められることがあります。</li>
-          <li>送信したメールは取り消せません。送信前に宛先件数と本文をご確認ください。</li>
         </ul>
       </details>
 
@@ -94,11 +100,21 @@
         <h2 class="cm-panel-title">宛先</h2>
         <p id="cm-recipients-state" class="cm-guidance-text"></p>
 
+        <!--
+          「送信通数」は**画面に出さない**（2026-08-19）。
+          100件ずつに割るのは無償Gmailの1通あたりの宛先上限に収めるための
+          こちらの都合（§FR-06）で、利用者が何かを決めるための数ではない。
+          通数が意味を持つのは「どこまで送れたか」を示す場面だけなので、
+          送信中の進捗と失敗時の報告にだけ残す。
+
+          **要素は残して hidden にしてある。** 値そのものは算出しており、
+          出す場所を画面へ戻すときにここだけを直せるようにするため。
+        -->
         <dl class="cm-status">
           <dt class="cm-status-label">送信できる宛先</dt>
           <dd id="cm-count-valid" class="cm-status-value">–</dd>
-          <dt class="cm-status-label">送信通数</dt>
-          <dd id="cm-count-batches" class="cm-status-value">–</dd>
+          <dt class="cm-status-label" hidden>送信通数</dt>
+          <dd id="cm-count-batches" class="cm-status-value" hidden>–</dd>
           <dt class="cm-status-label">重複（1件にまとめ済み）</dt>
           <dd id="cm-count-duplicates" class="cm-status-value">–</dd>
           <dt class="cm-status-label">形式が正しくない宛先（送信されません）</dt>
@@ -155,12 +171,26 @@
       <p id="cm-progress" class="cm-guidance-text" aria-live="polite" hidden></p>
       <p id="cm-message" class="cm-message" aria-live="polite" hidden></p>
 
+      <!--
+        「連携を解除する」だけを置く（2026-08-19）。
+        以前はここに「ポータルへ戻る」を**同じ ghost ボタン**で並べていたが、
+        取り消せる移動と、押すと連携が切れる操作が見分けられなかった。
+        戻り道は下の <footer> の素のテキストリンクへ移した。
+      -->
       <div class="cm-actions cm-actions--footer">
         <button id="cm-disconnect" type="button" class="auth-button auth-button--ghost" hidden>連携を解除する</button>
-        <a class="auth-button auth-button--ghost" href="../../portal/">ポータルへ戻る</a>
       </div>
 
     </div>
+
+    <!--
+      ポータルへの戻り道（本番アプリ共通の形）。guardPage() を待つ
+      #cm-content の外に置き、読み込みが失敗しても戻れるようにする。
+    -->
+    <footer class="cm-footer">
+      <p class="cm-note"><a href="../../portal/">ポータルへ戻る</a></p>
+    </footer>
+
   </div>
 </main>
 

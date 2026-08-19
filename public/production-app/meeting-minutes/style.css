@@ -262,6 +262,23 @@ body {
   font-size: 0.9375rem;
 }
 
+/*
+ * ステップ外の「データの管理」。破壊的操作（端末内の作業データ削除）を
+ * 入力・出力の動線から外して置く区画。仕切り方はステップと同じにするが、
+ * showStep の対象ではないため .mm-step とはクラスを分ける。
+ * 見出しは他より一段控えめにし、本流の操作と読み違えないようにする。
+ */
+.mm-maintenance {
+  padding-top: var(--content-space);
+  border-top: 1px solid var(--c-border);
+}
+
+.mm-maintenance h2 {
+  margin: 0 0 8px;
+  color: var(--c-text-muted);
+  font-size: 1rem;
+}
+
 /* ---------- フォーム部品 ---------- */
 
 .mm-field {
@@ -347,6 +364,39 @@ body {
   color: var(--c-main);
   font-size: 0.9375rem;
   font-weight: 700;
+}
+
+/*
+ * 任意入力のかたまりを畳んでおくための箱（会議情報）。
+ * 見た目は .mm-fieldset に揃え、summary を legend と同じ字面にする。
+ * 開閉の三角（::marker）はブラウザ既定のまま使う。自前のアイコンに
+ * 差し替えると、キーボード操作・読み上げの状態表現まで自作することになる。
+ */
+.mm-details {
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+}
+
+.mm-details > summary {
+  /* タップ目標を44px確保する（他のボタンと同じ基準）。 */
+  display: list-item;
+  padding: 10px 0;
+  color: var(--c-main);
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.mm-details > summary:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+/* 閉じているときは箱の下側の余白が浮くため、開いたときだけ間隔を足す。 */
+.mm-details[open] > summary {
+  margin-bottom: 8px;
 }
 
 .mm-grid-2 {

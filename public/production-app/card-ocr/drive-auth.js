@@ -74,8 +74,9 @@ export function describeDriveAuthError(error) {
     case DriveAuthErrorCode.GIS_LOAD_FAILED:
       return { text: 'Googleの読み込みに失敗しました。', errorCode: 'OAUTH-001' };
     case DriveAuthErrorCode.POPUP_BLOCKED:
+      /* 文言は本番アプリ共通（voice-recorder / interview-recorder と同じ文）。 */
       return {
-        text: 'ポップアップがブロックされました。許可してからやり直してください。',
+        text: 'Googleの認証画面を開けませんでした。ブラウザのポップアップブロックを解除して、もう一度お試しください。',
         errorCode: 'OAUTH-001',
       };
     case DriveAuthErrorCode.POPUP_CLOSED:

@@ -37,7 +37,7 @@
   background: #f6f9fd;
 }
 
-/* ---------- 「準備」の親アコーディオン ---------- */
+/* ---------- 「準備」の折りたたみ ---------- */
 
 .co-prep-summary {
   min-height: 44px;
@@ -51,30 +51,17 @@
   margin-bottom: 1rem;
 }
 
-/* 中の小見出しは、親より一段控えめにする。 */
-.co-sub {
-  margin-bottom: 0.75rem;
-  background: #fbfcfd;
+/*
+ * 中の区切り。**入れ子の <details> をやめた代わり**（2026-08-19）。
+ * 開く操作を増やさずに、前提の一覧と保存先の境目だけを示す。
+ */
+.co-prep-block {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e9ef;
 }
 
-.co-prep > .co-sub:last-of-type {
-  margin-bottom: 0;
-}
-
-.co-sub-summary {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.co-sub[open] > .co-sub-summary {
-  margin-bottom: 0.75rem;
-}
-
-.co-prep-summary:focus-visible,
-.co-sub-summary:focus-visible {
+.co-prep-summary:focus-visible {
   outline: 2px solid #2b6cb0;
   outline-offset: 2px;
 }
@@ -343,6 +330,21 @@ textarea.co-field-input {
   min-height: 5rem;
   font-family: inherit;
   line-height: 1.6;
+}
+
+/* ---------- フッター（ポータルへ戻る） ---------- */
+
+.co-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #d9dee5;
+}
+
+.co-note {
+  margin: 0;
+  color: #4a5568;
+  font-size: 0.875rem;
+  line-height: 1.8;
 }
 
 /* ---------- ヘルプ画面 ---------- */

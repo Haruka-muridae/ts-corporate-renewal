@@ -161,6 +161,7 @@ const dom = {
   fileButton: document.getElementById('mm-file-button'),
   fileError: document.getElementById('mm-file-error'),
 
+  meetingDetails: document.getElementById('mm-meeting-details'),
   meetingTitle: document.getElementById('mm-meeting-title'),
   meetingDate: document.getElementById('mm-meeting-date'),
   meetingStart: document.getElementById('mm-meeting-start'),
@@ -171,7 +172,6 @@ const dom = {
 
   templateRadios: document.querySelectorAll('input[name="mm-template"]'),
 
-  clearStorage: document.getElementById('mm-clear-storage'),
   step1Message: document.getElementById('mm-step1-message'),
   toConfirm: document.getElementById('mm-to-confirm'),
 
@@ -230,7 +230,10 @@ const dom = {
   saveDrive: document.getElementById('mm-save-drive'),
   outputMessage: document.getElementById('mm-output-message'),
   backToReview: document.getElementById('mm-back-to-review'),
-  restart5: document.getElementById('mm-restart-5'),
+
+  /* ---- ステップ外: データの管理（画面末尾） ---- */
+  clearStorage: document.getElementById('mm-clear-storage'),
+  maintenanceMessage: document.getElementById('mm-maintenance-message'),
 };
 
 /* ================================================================
@@ -318,6 +321,16 @@ function applyMeetingInfoToForm() {
   dom.meetingParticipants.value = info.participants ?? '';
   dom.meetingPurpose.value = info.purpose ?? '';
   dom.meetingNotes.value = info.notes ?? '';
+
+  /*
+   * 会議情報は既定で畳んである（要件書 §4-4）。この関数はドラフト復元と
+   * 全体リセットのときだけ呼ばれるので、開閉も中身の有無へ合わせる。
+   * 値があるのに畳んだままだと、復元したはずの参加者・目的・補足が
+   * 画面から見えず入力し直される。逆にリセット後は空なので畳み直す。
+   */
+  dom.meetingDetails.open = Object.values(info).some(
+    (value) => typeof value === 'string' && value.trim() !== '',
+  );
 }
 
 function applyTemplateSelectionToForm() {
@@ -435,6 +448,8 @@ function handleHandoffAccept() {
       const title = stripFileExtension(handoff.metadata.title);
       state.meetingInfo.title = title;
       dom.meetingTitle.value = title;
+      /* 会議名を採用したことが見えるよう、畳んである会議情報を開く。 */
+      dom.meetingDetails.open = true;
     }
 
     clearHandoff();
@@ -588,18 +603,25 @@ async function handleClearStorage() {
     return;
   }
 
+  /*
+   * 結果の通知先は、ボタンと同じ「データの管理」区画に置く。
+   * この区画はステップ表示の外にあり常に見えているため、
+   * 失敗して resetAllState() が走らなかった場合でも案内が読める
+   * （ステップ1のメッセージ欄だと、ステップ5から押したときに
+   * 隠れたままになる）。
+   */
   if (draftAvailable()) {
     try {
       await clearDraft();
     } catch {
-      say(dom.step1Message, '端末内の作業データを削除できませんでした。もう一度お試しください。', true);
+      say(dom.maintenanceMessage, '端末内の作業データを削除できませんでした。もう一度お試しください。', true);
       return;
     }
   }
 
   clearHandoff();
   resetAllState();
-  say(dom.step1Message, '端末内の作業データを削除しました。');
+  say(dom.maintenanceMessage, '端末内の作業データを削除しました。');
 }
 
 function resetAllState() {
@@ -1453,7 +1475,6 @@ async function init() {
     });
   });
 
-  dom.clearStorage.addEventListener('click', handleClearStorage);
   dom.toConfirm.addEventListener('click', handleToConfirm);
 
   dom.handoffAccept.addEventListener('click', handleHandoffAccept);
@@ -1495,7 +1516,9 @@ async function init() {
   dom.downloadMarkdown.addEventListener('click', handleDownloadMarkdown);
   dom.saveDrive.addEventListener('click', handleSaveToDrive);
   dom.backToReview.addEventListener('click', () => showStep(4));
-  dom.restart5.addEventListener('click', handleRestart);
+
+  /* ---- ステップ外: データの管理 ---- */
+  dom.clearStorage.addEventListener('click', handleClearStorage);
 
   /* KeyStore の状態はポータルで設定して戻ってきたときに更新する。 */
   document.addEventListener('visibilitychange', () => {

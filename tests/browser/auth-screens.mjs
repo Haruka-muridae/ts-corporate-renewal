@@ -689,6 +689,30 @@ try {
   await page.evaluate('localStorage.setItem("tsam-auth-session", "stub-session-token")');
   await page.goto(`${origin}/portal/`, 1500);
 
+  /*
+   * お気に入りを指定の並びにしてから測る、ための道具。
+   *
+   * お気に入りが0件のあいだ #portal-apps-section は hidden なので
+   * （apps-grid-spec-v1.md §2-3）、中の要素は getBoundingClientRect() が
+   * すべて0になり、focus() も入らない。**位置関係とキーボード操作を見る検査は、
+   * 1件以上入れた状態で行う。**
+   *
+   * localStorage は触らない。renderAppsGrid へ stored を渡せば保存を経ずに描けるので、
+   * 「配置データを書き込んでいない」検査をそのまま残せる。
+   * 定義は組み込みのレジストリ（既定引数）をそのまま使い、実在する id を並べる。
+   * 定義に無い id は解決規則 c で落ちるため、ここで作り話の id は使えない。
+   *
+   * 再読み込みすると0件へ戻る（保存していないので当然）。
+   * goto をまたぐたびに入れ直すこと。
+   */
+  const setFavorites = async (order) => {
+    await page.evaluate(`
+      import('./portal.js').then((m) => m.renderAppsGrid(undefined,
+        { stored: { version: 2, order: ${JSON.stringify(order)} } }))
+    `);
+    await page.sleep(250);
+  };
+
   check(
     'セッションが有効なら内容が表示される',
     await page.evaluate('document.getElementById("portal-content").hidden === false'),
@@ -817,13 +841,26 @@ try {
     })()`),
   );
 
+  /*
+   * 位置関係はお気に入りを1件入れてから測る。
+   * 0件だと一覧の節ごと隠れ、座標が全て0になって比較にならない。
+   * 測り終えたら0件へ戻す。続く「0件でも2ページぶんの枠が並ぶ」以下は0件が前提。
+   */
+  await setFavorites([REGISTRY_IDS[0]]);
+
   check(
     'アプリ一覧より上に出る',
     await page.evaluate(`
       document.getElementById("portal-api-key-banner").getBoundingClientRect().bottom
       <= document.getElementById("portal-apps").getBoundingClientRect().top + 1
     `),
+    await page.evaluate(`JSON.stringify({
+      banner: document.getElementById("portal-api-key-banner").getBoundingClientRect().bottom,
+      apps: document.getElementById("portal-apps").getBoundingClientRect().top,
+    })`),
   );
+
+  await setFavorites([]);
 
   /*
    * 導線はページ移動ではない。button であり、href を持たない。
@@ -874,10 +911,11 @@ try {
   await page.clearViewport();
   await page.sleep(120);
 
-  /* ---- アプリグリッド（アプリ0件・2ページ＝16枠） ---- */
+  /* ---- アプリグリッド（お気に入り0件＝節ごと隠れる。枠は描いたまま） ---- */
 
   /*
-   * 空状態の案内文は廃止した。準備中の枠そのものが状態を語る。
+   * 空状態の案内文は置かない。節ごと消えるので、
+   * 「まだ何も入っていない」ことは画面の形が示す。
    * 文言が復活していないことも見ておく。
    */
   check(
@@ -888,6 +926,30 @@ try {
     `),
   );
 
+  /*
+   * お気に入りが0件なら、節ごと画面から出さない（apps-grid-spec-v1.md §2-3）。
+   * 「準備中」の枠もページ送りも「初期状態に戻す」も、押せる状態で残さない。
+   */
+  check(
+    'お気に入り0件では節ごと出さない（準備中もページ送りも画面に出ない）',
+    await page.evaluate(`(() => {
+      const section = document.getElementById("portal-apps-section");
+      return section.hidden === true
+        && section.getBoundingClientRect().height === 0
+        && document.getElementById("portal-apps").getBoundingClientRect().height === 0
+        && document.getElementById("portal-apps-pager").getBoundingClientRect().height === 0
+        && document.getElementById("portal-apps-reset-block").hidden === true;
+    })()`),
+    await page.evaluate(`JSON.stringify({
+      section: document.getElementById("portal-apps-section").hidden,
+      height: document.getElementById("portal-apps-section").getBoundingClientRect().height,
+    })`),
+  );
+
+  /*
+   * 隠すのは節だけで、中身（枠・ドット）は描いたままにしてある。
+   * 1件目が入った時点でそのまま出せばよく、描き分けを増やさないため。
+   */
   check(
     'アプリ0件でも2ページぶんの枠が並ぶ',
     await page.evaluate(`
@@ -933,7 +995,25 @@ try {
     await page.evaluate('getComputedStyle(document.querySelector("#portal-apps .auth-app-card__placeholder")).borderTopStyle'),
   );
 
-  /* ---- ページ送り ---- */
+  /* ---- ページ送り（お気に入りを1件入れた状態で見る） ---- */
+
+  /*
+   * ここからは節が出ている状態で確かめる。
+   * 0件では hidden の中の要素に focus() が入らず、Enter / Space を送っても
+   * 何も起きない（＝キー操作を確かめたことにならない）。
+   * 1件でもページ数は max(2, ceil(1/8)) = 2 なので、端の無効化まで見られる。
+   */
+  await setFavorites([REGISTRY_IDS[0]]);
+
+  check(
+    'お気に入りを1件入れると節が出る',
+    await page.evaluate(`
+      document.getElementById("portal-apps-section").hidden === false
+      && document.getElementById("portal-apps").getBoundingClientRect().height > 0
+      && document.getElementById("portal-apps-reset-block").hidden === false
+    `),
+    await page.evaluate('document.getElementById("portal-apps-section").hidden'),
+  );
 
   check(
     '初期表示は1ページ目',
@@ -1067,7 +1147,13 @@ try {
     await page.evaluate('localStorage.getItem("tsam-app-layout")'),
   );
 
-  /* バナーとの位置関係は従来どおり（バナーがグリッドより上）。 */
+  /*
+   * バナーとの位置関係は従来どおり（バナーがグリッドより上）。
+   * 再読み込みでお気に入りは0件へ戻っている（保存していないため）ので、
+   * 測る前に入れ直す。以降のパネルの位置検査も、この状態のまま行う。
+   */
+  await setFavorites([REGISTRY_IDS[0]]);
+
   check(
     'APIキーバナーはグリッドより上のまま',
     await page.evaluate(`
@@ -1527,41 +1613,38 @@ try {
   );
 
   /*
-   * リンクだけでなく、URL そのものも文字として読めること。
-   * リンクを踏まずに行き先を確かめてから移動できるようにするため。
+   * URL の再掲（.auth-api-panel__url）と「新しいタブで開きます」は v1.5 で落とした。
+   * 同じ39文字を2度読ませ、開き方の断りまで並べると、この1段だけで3行になり、
+   * キーを入れに来た人の入力欄がそのぶん下がるため（portal-spec-v1.md §7-5）。
    *
-   * 表示は完全一致で見る。/apikey が落ちても
-   * 「aistudio.google.com を含む」だけの検査では通ってしまう。
+   * 「URL が文字としても見えている」検査は、その決定ごと反転させて残す。
+   * 一度捨てた案が、親切のつもりで戻ってくるのを止めるため。
+   * 行き先が正しいことは、下の href の検査が固定する。
    */
   check(
-    'AI Studio の URL が文字としても見えている',
+    'URL の再掲と「新しいタブで開きます」を出していない',
     await page.evaluate(`(() => {
       const panel = document.getElementById("portal-api-panel");
-      const url = [...panel.querySelectorAll(".auth-api-panel__url")]
-        .map((el) => el.textContent.trim());
-      return url.includes("https://aistudio.google.com/apikey")
-        && panel.innerText.includes("https://aistudio.google.com/apikey");
+      return panel.querySelectorAll(".auth-api-panel__url").length === 0
+        && !panel.innerText.includes("https://aistudio.google.com/apikey")
+        && !panel.innerText.includes("新しいタブで開きます");
     })()`),
-    await page.evaluate(`
-      JSON.stringify([...document.querySelectorAll("#portal-api-panel .auth-api-panel__url")]
-        .map((el) => el.textContent.trim()))
-    `),
+    await page.evaluate('document.getElementById("portal-api-panel").innerText'),
   );
 
   /*
    * トップURLへの逆戻り検知。
    * Playground に着地してしまい、キー取得までメニューを探す必要が出る。
+   *
+   * 見るのは href だけになった。every() は空配列でも真になるため、
+   * リンクが消えたときに素通りしないよう本数も確かめる。
    */
   check(
     'トップURL（/）へ戻っていない',
     await page.evaluate(`(() => {
-      const panel = document.getElementById("portal-api-panel");
-      const hrefs = [...panel.querySelectorAll('a[href*="aistudio.google.com"]')]
-        .map((a) => a.getAttribute("href"));
-      const shown = [...panel.querySelectorAll(".auth-api-panel__url")]
-        .map((el) => el.textContent.trim());
-      return hrefs.every((h) => h.endsWith("/apikey"))
-        && shown.every((s) => !/^https:\\/\\/aistudio\\.google\\.com\\/?$/.test(s));
+      const hrefs = [...document.querySelectorAll(
+        '#portal-api-panel a[href*="aistudio.google.com"]')].map((a) => a.getAttribute("href"));
+      return hrefs.length >= 1 && hrefs.every((h) => h.endsWith("/apikey"));
     })()`),
     await page.evaluate(`
       JSON.stringify([...document.querySelectorAll('#portal-api-panel a[href*="aistudio.google.com"]')]
@@ -1605,6 +1688,41 @@ try {
   );
 
   /*
+   * 本文は details で畳んである（§7-6）。
+   * 畳んでいるあいだ中身は innerText にも読み上げにも出ない。
+   * だから「紹介である」旨は details の外の見出しへ出してある。
+   *
+   * 「畳まれている」ことは innerText で見る。**座標では見ない。**
+   * 畳んだ details の中身は `content-visibility: hidden` で描画だけを飛ばす作りで、
+   * 中の要素の getBoundingClientRect() は 0 にならない（Chrome 実測で高さ15px）。
+   */
+  check(
+    '既定では本文が畳まれ、見出しに「紹介リンク」が見えている',
+    await page.evaluate(`(() => {
+      const promo = document.querySelector("#portal-api-panel .auth-api-panel__promo");
+      const details = promo.querySelector("details");
+      return details !== null
+        && details.open === false
+        && promo.innerText.includes("紹介リンク")
+        && !promo.innerText.includes("Gemini APIキーの取得に Google Workspace は必要ありません");
+    })()`),
+    await page.evaluate(`JSON.stringify({
+      open: document.querySelector("#portal-api-panel .auth-api-panel__promo details").open,
+      text: document.querySelector("#portal-api-panel .auth-api-panel__promo").innerText,
+    })`),
+  );
+
+  /*
+   * 以下の3点は「開いたときに読める」ことを見る。
+   * リンクを押すには開くほかないので、この3点は必ずリンクと同時に目に入る。
+   * 畳んだままの innerText では空になるため、開いてから測る。
+   */
+  await page.evaluate(
+    'document.querySelector("#portal-api-panel .auth-api-panel__promo details").open = true',
+  );
+  await page.sleep(150);
+
+  /*
    * 「紹介である」ことは表示から落ちてはならない。
    * リンクと同じ段落の中に出ていることまで見る。
    */
@@ -1639,6 +1757,12 @@ try {
     `),
   );
 
+  /* 配信時の姿（畳んだ状態）へ戻す。以降の検査を開いた前提にしないため。 */
+  await page.evaluate(
+    'document.querySelector("#portal-api-panel .auth-api-panel__promo details").open = false',
+  );
+  await page.sleep(120);
+
   check(
     '紹介ブロックは手順文と区切られている（区切り線を持つ別ブロック）',
     await page.evaluate(`(() => {
@@ -1661,13 +1785,37 @@ try {
     `),
   );
 
-  /* 見出しの階層を飛ばさない（パネルの h2 の下に h3）。 */
+  /*
+   * 見出しの階層を飛ばさない（パネルの h2 の下に h3）。
+   * h3 は summary の外に置く。summary は list-item なので、
+   * block の h3 を入れると三角だけが1行を占め、見出しが次の行へ落ちる（§7-6）。
+   */
   check(
-    '紹介ブロックの見出しは h3',
+    '紹介ブロックの見出しは h3（summary の外にある）',
     await page.evaluate(`
       document.getElementById("portal-api-promo-title").tagName === "H3"
       && document.getElementById("portal-api-title").tagName === "H2"
+      && document.getElementById("portal-api-promo-title").closest("summary") === null
     `),
+  );
+
+  /*
+   * 「くわしく見る」も他の操作子と同じ 44px 基準を満たすこと。
+   * UA 既定のままだと約30pxで、指で押す先としては細い。
+   * 開閉の三角（::marker）を残したいので display は list-item のままにしてあり、
+   * 高さは余白で作っている（auth.css）。両方まとめてここで固定する。
+   */
+  check(
+    '紹介の「くわしく見る」の押下領域は44px以上（三角も残っている）',
+    await page.evaluate(`(() => {
+      const summary = document.querySelector("#portal-api-panel .auth-api-panel__promo summary");
+      return summary.getBoundingClientRect().height >= 44
+        && getComputedStyle(summary).display === "list-item";
+    })()`),
+    await page.evaluate(`JSON.stringify({
+      height: document.querySelector("#portal-api-panel .auth-api-panel__promo summary").getBoundingClientRect().height,
+      display: getComputedStyle(document.querySelector("#portal-api-panel .auth-api-panel__promo summary")).display,
+    })`),
   );
 
   check(
@@ -1935,23 +2083,33 @@ try {
     check(`${width}px: API設定パネルを開いても横スクロールしない`, apiOverflow <= 0, apiOverflow);
 
     /*
-     * 案内文の中身が枠から出ないこと。
-     * 生のURLは1語が長く、折り返さないと 320px で溢れる。
+     * 案内文と紹介ブロックの中身が枠から出ないこと。
+     *
+     * v1.4 までは生のURL（.auth-api-panel__url）が対象の主役だった。
+     * 1語が長く、折り返さないと 320px で溢れるためである。
+     * その再掲は v1.5 で消えたので、残る案内文3段と紹介ブロックを測る。
+     *
+     * 紹介は畳んだままだと summary の1行しか出ない。
+     * 溢れるとしたら本文なので、開いた状態で測る（portal-spec-v1.md §11）。
      */
+    await page.evaluate(
+      'document.querySelector("#portal-api-panel .auth-api-panel__promo details").open = true',
+    );
+    await page.sleep(120);
+
     check(
       `${width}px: 案内文と紹介ブロックがパネルの枠に収まる`,
       await page.evaluate(`(() => {
         const panel = document.getElementById("portal-api-panel").getBoundingClientRect();
         const parts = [...document.querySelectorAll(
-          "#portal-api-panel .auth-api-panel__url, #portal-api-panel .auth-api-panel__promo")];
-        return parts.length >= 2 && parts.every((el) => {
+          "#portal-api-panel .auth-api-panel__note, #portal-api-panel .auth-api-panel__promo")];
+        return parts.length >= 1 && parts.every((el) => {
           const r = el.getBoundingClientRect();
           return r.left >= panel.left - 1 && r.right <= panel.right + 1;
         });
       })()`),
       await page.evaluate(`JSON.stringify({
         panel: document.getElementById("portal-api-panel").getBoundingClientRect().right,
-        url: document.querySelector("#portal-api-panel .auth-api-panel__url").getBoundingClientRect().right,
         promo: document.querySelector("#portal-api-panel .auth-api-panel__promo").getBoundingClientRect().right,
       })`),
     );
@@ -2637,8 +2795,22 @@ try {
   );
 
   check(
-    'お気に入りが空でも16枠の「準備中」は並ぶ',
-    (await page.evaluate('document.querySelectorAll("#portal-apps .auth-app-card--empty").length')) === 16,
+    'お気に入りが空でも16枠の「準備中」は並ぶ（描いたうえで節ごと隠す）',
+    (await page.evaluate('document.querySelectorAll("#portal-apps .auth-app-card--empty").length')) === 16
+    && await page.evaluate('document.getElementById("portal-apps-section").hidden === true'),
+  );
+
+  /*
+   * 読み上げ（#portal-apps-live）と通知（#portal-apps-message）は節の外へ出してある。
+   * 0件のときこそ要るもので、隠れた節の中では伝わらないため。
+   */
+  check(
+    '0件でもカタログと通知は節の外に残る',
+    await page.evaluate(`
+      document.getElementById("portal-catalog").hidden === false
+      && document.getElementById("portal-apps-message").closest("#portal-apps-section") === null
+      && document.getElementById("portal-apps-live").closest("#portal-apps-section") === null
+    `),
   );
 
   check(
@@ -2698,6 +2870,16 @@ try {
     '追加するとお気に入りの末尾へ入る',
     JSON.stringify(await favoriteIds()) === JSON.stringify(['c1']),
     JSON.stringify(await favoriteIds()),
+  );
+
+  check(
+    '1件目を追加するとお気に入りの節が出る',
+    await page.evaluate(`
+      document.getElementById("portal-apps-section").hidden === false
+      && document.getElementById("portal-apps").getBoundingClientRect().height > 0
+      && document.getElementById("portal-apps-reset-block").hidden === false
+    `),
+    await page.evaluate('document.getElementById("portal-apps-section").hidden'),
   );
 
   check(
@@ -2832,6 +3014,22 @@ try {
     '外したものはカタログの定義順の位置へ戻る',
     JSON.stringify(await catalogIds()) === JSON.stringify(['c0']),
     JSON.stringify(await catalogIds()),
+  );
+
+  /* ---- 最後の1件を外すと節ごと消える ---- */
+
+  for (const id of ['c1', 'c2']) {
+    await page.evaluate(`document.querySelector('#portal-apps .auth-app-card__remove[data-app-id="${id}"]').click()`);
+    await page.sleep(200);
+  }
+
+  check(
+    '最後の1件を外すとお気に入りの節ごと消える',
+    await page.evaluate(`
+      document.getElementById("portal-apps-section").hidden === true
+      && document.getElementById("portal-apps-section").getBoundingClientRect().height === 0
+    `),
+    JSON.stringify(await favoriteIds()),
   );
 
   /* ---- v1 データのフォールバック ---- */

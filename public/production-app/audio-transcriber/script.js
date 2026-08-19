@@ -15,22 +15,19 @@
  *      詳しい文言は「設定」アコーディオンの先頭区画、短いバッジは
  *      「設定」の summary（閉じた状態でも見える）の2か所に出す
  *      （利用者フィードバックにより、当初の画面最上部固定表示から移した）
- *   6. 「設定」（Gemini APIの状態・音声ファイルの入力元・文字起こしの方法・
- *      言語・タイムスタンプ・AIモデル）と「音声ファイルを選ぶ」を
- *      details/summary のアコーディオンにし、初期状態を閉にする。
- *      「設定」を先頭に置く（状態確認・入力元/方法の選択 → ファイル選択 →
- *      実行、の順にするため。利用者フィードバックにより、構成・順序を
- *      複数回変更した）
- *   7. 音声ファイル本体・APIキーを除く選択・設定値（入力元を含む）を
- *      settings-store.js で次回起動時に復元する
- *   8. 「音声ファイルを選ぶ」には端末・Googleドライブ両方の取得操作を常に出し、
- *      「設定」の『よく使う入力元』で選んだ側だけを主要ボタン（強調）にする
- *      （実機フィードバックにより、片方を隠す方式から強調の差をつけて
- *      両方出す方式へ変更した。applyFileSourceEmphasis 参照）。
- *      「設定」側の選択変更自体はOAuth認可を起動しない
- *      （認可は「Google Driveから選択」ボタン押下でのみ開始する）。
- *      実際に取得できた入力元は、次回以降の手数を減らすため『よく使う
- *      入力元』として保存し直す（rememberFileSourceDefault 参照）
+ *   6. 「設定」（Gemini APIの状態・文字起こしの方法・言語・タイムスタンプ・
+ *      AIモデル）と「音声ファイルを選ぶ」を details/summary のアコーディオンに
+ *      し、初期状態を閉にする。「設定」を先頭に置く（状態確認・方法の選択 →
+ *      ファイル選択 → 実行、の順にするため。利用者フィードバックにより、
+ *      構成・順序を複数回変更した）
+ *   7. 音声ファイル本体・APIキーを除く選択・設定値を settings-store.js で
+ *      次回起動時に復元する
+ *   8. 「音声ファイルを選ぶ」には端末・Googleドライブ両方の取得操作を常に出す。
+ *      強調（端末＝塗りつぶし／ドライブ＝ゴースト）は固定で、切り替える設定は
+ *      持たない。以前は「設定」の『よく使う入力元』で強調を入れ替えていたが、
+ *      切り替えても使える手段は変わらず見た目だけが動くため、認知負荷の
+ *      見直しで設定ごと削除した。OAuth認可の開始点は変わらず
+ *      「Googleドライブから選択」ボタンの押下だけ
  *
  * 担当するのは「DOMの更新」「利用者の操作の受け取り」「文言」の3つだけ。
  * 音声処理・API呼び出し・認可のロジックは各モジュールへ置く。
@@ -150,7 +147,7 @@ const MODE_LABELS = Object.freeze({
 /* 取得元の表示。Drive は「どのフォルダから来たか」まで見せる。 */
 const SOURCE_LABELS = Object.freeze({
   local: 'この端末',
-  drive: `Google Drive：${DRIVE_NAMES.root} ＞ ${DRIVE_NAMES.voiceRecorder}`,
+  drive: `Googleドライブ：${DRIVE_NAMES.root} ＞ ${DRIVE_NAMES.voiceRecorder}`,
 });
 
 /* 「マイドライブ ＞ TSAM AI ＞ Voice Recorder」 */
@@ -195,10 +192,10 @@ const DRIVE_ERROR_MESSAGES = Object.freeze({
 
   /* 固定フォルダの解決に固有のもの。 */
   [DriveErrorCode.ROOT_FOLDER_MISSING]:
-    `Google Driveに「${VOICE_RECORDER_PATH}」フォルダが見つかりませんでした。`
+    `Googleドライブに「${VOICE_RECORDER_PATH}」フォルダが見つかりませんでした。`
     + '先にブラウザ録音アプリで録音を保存してください。',
   [DriveErrorCode.APP_FOLDER_MISSING]:
-    `Google Driveに「${VOICE_RECORDER_PATH}」フォルダが見つかりませんでした。`
+    `Googleドライブに「${VOICE_RECORDER_PATH}」フォルダが見つかりませんでした。`
     + '先にブラウザ録音アプリで録音を保存してください。',
   [DriveErrorCode.ROOT_FOLDER_AMBIGUOUS]:
     `同じ場所に「${DRIVE_NAMES.root}」フォルダが複数見つかりました。`
@@ -314,7 +311,6 @@ function cacheElements() {
     'at-app', 'at-file-input', 'at-local-button', 'at-drive-button', 'at-drive-note',
     'at-drive-dialog', 'at-dialog-status', 'at-dialog-error', 'at-drive-list',
     'at-drive-reload', 'at-drive-cancel',
-    'at-source-local', 'at-source-drive',
     'at-file-current', 'at-file-info', 'at-file-name', 'at-file-type', 'at-file-size', 'at-file-duration',
     'at-file-source', 'at-player', 'at-clear-file',
     'at-settings-current', 'at-settings-connection-badge', 'at-mode-local', 'at-mode-gemini',
@@ -471,12 +467,12 @@ function populateSelects(saved = {}) {
 }
 
 /*
- * 文字起こしの方法（モード）・入力元・タイムスタンプの有無を、保存済み設定から復元する。
+ * 文字起こしの方法（モード）・タイムスタンプの有無を、保存済み設定から復元する。
  * 音声ファイル本体・APIキーはここでは扱わない（対象外。settings-store.js 冒頭参照）。
  *
- * 前バージョンの保存値（fileSource キーが無い状態）を読み込んでもエラーにならず、
- * 既定値（'local'）へ静かにフォールバックする（他の項目と同じ「壊れた値・
- * 存在しないキーでも画面を止めない」考え方。KeyStore §3-3 参照）。
+ * 保存値に知らないキー（旧版の fileSource など）が混ざっていても、読まずに
+ * 素通りするだけで画面は止めない（他の項目と同じ「壊れた値・存在しない
+ * キーでも画面を止めない」考え方。KeyStore §3-3 参照）。
  */
 function applySavedSettings(saved) {
   const mode = saved.mode === 'gemini' ? 'gemini' : 'local';
@@ -485,33 +481,6 @@ function applySavedSettings(saved) {
   update({ mode });
 
   el.timestamps.checked = typeof saved.withTimestamps === 'boolean' ? saved.withTimestamps : true;
-
-  const fileSource = saved.fileSource === 'drive' ? 'drive' : 'local';
-  el.sourceLocal.checked = fileSource === 'local';
-  el.sourceDrive.checked = fileSource === 'drive';
-  applyFileSourceEmphasis(fileSource);
-}
-
-/*
- * 「音声ファイルを選ぶ」アコーディオン内の、端末／Googleドライブ両ボタンの強調度の切替。
- *
- * 実機フィードバックにより、「設定」で選ばれていない側を hidden にする方式は
- * やめた。設定を開いて切り替えないとドライブが使えない、という状態を
- * 作らないため、**常に両方のボタンを表示**し、既定（よく使う入力元）の
- * 側だけを主要ボタン（.auth-button のプレーンな塗りつぶし）にし、
- * もう一方は補助的な見た目（.auth-button--ghost）にする。
- * どちらのボタンを押しても、押した側の取得操作が普通に動く
- * （Driveボタン押下時にのみ onDriveButtonClick が OAuth 認可を始める）。
- *
- * ここを呼んでもOAuth認可は一切起動しない（ensureAccessToken を呼ばない）。
- * 認可は利用者が「Google Driveから選択」ボタンを押した時点でのみ始まる。
- * 設定の変更それ自体を認可のトリガーにしないための境界を、
- * 関数を分けることで明示している。
- */
-function applyFileSourceEmphasis(defaultSource) {
-  const isDriveDefault = defaultSource === 'drive';
-  el.localButton.classList.toggle('auth-button--ghost', isDriveDefault);
-  el.driveButton.classList.toggle('auth-button--ghost', !isDriveDefault);
 }
 
 function updateWhisperModelNote() {
@@ -539,7 +508,7 @@ function updateDeviceNote() {
 function updateDriveNote() {
   setText(
     el.driveNote,
-    `Google Driveは「${VOICE_RECORDER_PATH}」の中だけを対象にします。`
+    `Googleドライブは「${VOICE_RECORDER_PATH}」の中だけを対象にします。`
     + 'ドライブ全体は検索しません。',
   );
 }
@@ -856,8 +825,6 @@ function render(snapshot) {
   el.localButton.disabled = busy;
   el.driveButton.disabled = busy;
   el.clearFile.disabled = busy;
-  el.sourceLocal.disabled = busy;
-  el.sourceDrive.disabled = busy;
   el.modeLocal.disabled = busy;
   el.modeGemini.disabled = busy;
   el.whisperModel.disabled = busy;
@@ -995,30 +962,7 @@ async function acceptFile({ blob, name, source }) {
     },
   });
 
-  /*
-   * 実際に使えた入力元を「よく使う入力元」として覚え直す。
-   * 補助側のボタン（設定の既定と異なる側）から取得できた場合、
-   * 次回以降は毎回強調を切り替える手間を減らすため、その入力元を
-   * 新しい既定にする（次回起動時にも settings-store.js 経由で復元される）。
-   */
-  rememberFileSourceDefault(source);
-
   return true;
-}
-
-/*
- * 実際にファイルを取得できた入力元を「よく使う入力元」として保存し直す。
- * 「設定」のラジオ・強調表示・保存済み設定のすべてを、この入力元へ揃える。
- */
-function rememberFileSourceDefault(source) {
-  if (source !== 'local' && source !== 'drive') {
-    return;
-  }
-
-  el.sourceLocal.checked = source === 'local';
-  el.sourceDrive.checked = source === 'drive';
-  applyFileSourceEmphasis(source);
-  saveSettings({ fileSource: source });
 }
 
 /* 処理中に新しいファイルを選ばせない。 */
@@ -1185,7 +1129,7 @@ async function loadDriveList({ forceConsent = false } = {}) {
   const { signal } = driveListController;
 
   setDialogError(null);
-  setDialogStatus('Google Driveに接続しています…');
+  setDialogStatus('Googleドライブに接続しています…');
   renderListMessage('読み込んでいます…');
   el.driveReload.disabled = true;
 
@@ -1832,20 +1776,6 @@ function bindEvents() {
   /* Escape で閉じた場合もここを通る。 */
   el.driveDialog.addEventListener('close', onDialogClose);
   el.clearFile.addEventListener('click', clearFile);
-
-  /*
-   * よく使う入力元（端末／Googleドライブ）の選択。
-   * ここでは主要/補助の強調度の切替と設定の保存だけを行い、OAuth認可は
-   * 起動しない（認可は「Google Driveから選択」ボタン押下 = onDriveButtonClick でのみ）。
-   */
-  el.sourceLocal.addEventListener('change', () => {
-    applyFileSourceEmphasis('local');
-    saveSettings({ fileSource: 'local' });
-  });
-  el.sourceDrive.addEventListener('change', () => {
-    applyFileSourceEmphasis('drive');
-    saveSettings({ fileSource: 'drive' });
-  });
 
   el.modeLocal.addEventListener('change', () => {
     update({ mode: 'local', errorMessage: null });

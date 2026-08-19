@@ -102,6 +102,26 @@
   background: #fdecec;
 }
 
-.cun-back {
-  margin: 1.5rem 0 0;
+/* 折りたたみ（記法の説明・詳細設定）。入れ子にはしない。 */
+.cun-details {
+  margin: 0.9rem 0;
+}
+
+.cun-details > summary {
+  /* 指で押せる高さを確保する。 */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cun-footer {
+  margin: 2.5rem 0 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid #dde;
+}
+
+.cun-footer p {
+  margin: 0;
 }

@@ -49,6 +49,12 @@
   line-height: 1.7;
 }
 
+/* 動画パネルの代わりに出る一行案内。パネルと同じ位置に収まるよう余白を持たせる。 */
+#ss-video-unavailable {
+  margin: 1.5rem 0;
+  font-size: 0.9375rem;
+}
+
 /* ---------- 入力フォーム ---------- */
 
 .ss-field {
@@ -322,6 +328,19 @@
 
 .ss-help-list li:last-child {
   margin-bottom: 0;
+}
+
+/* ---------- フッター（ポータルへの戻り道） ---------- */
+
+.ss-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e3e7ed;
+  font-size: 0.875rem;
+}
+
+.ss-footer p {
+  margin: 0;
 }
 
 /* ---------- レスポンシブ（320 / 375 / 768 / 1024 / 1440 で確認） ---------- */

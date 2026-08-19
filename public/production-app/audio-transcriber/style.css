@@ -88,6 +88,11 @@ body {
   line-height: 1.8;
 }
 
+/* 説明文を趣旨ごとに段落分けしたため、段落間だけ間隔を空ける。 */
+.at-lead + .at-lead {
+  margin-top: 0.75rem;
+}
+
 .at-footer {
   margin-top: 2.5rem;
   padding-top: 1.25rem;
@@ -304,11 +309,11 @@ body {
   display: none;
 }
 
-.at-link {
-  color: var(--c-main);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
+/*
+ * .at-link は複製元（テスト版）から持ち込んだだけで、本番の index.html には
+ * 一度も使われていなかったため削除した。リンクの見た目が要るときは、
+ * フッターと同じく auth.css の既定に任せる。
+ */
 
 /* Actions */
 .at-actions {
@@ -405,9 +410,10 @@ body {
   margin-top: 16px;
 }
 
-/* ---------- 取得元の選択 ----------
-   選択そのものは「設定」アコーディオン（.at-checkbox の radio）で行う。
-   ここは、選ばれた入力元に対応する取得操作（ボタン）の見た目だけを持つ。
+/* ---------- 取得元 ----------
+   端末・Googleドライブの取得操作を、常に両方並べて見せるための枠。
+   どちらを強調するかは固定（端末＝塗りつぶし／ドライブ＝ゴースト）で、
+   「設定」側に切替項目は持たない。
 */
 
 .at-source {
@@ -423,15 +429,11 @@ body {
   min-height: 44px;
 }
 
-/* 対象フォルダ。ここが固定であることが伝わるよう本文より強く見せる */
-.at-source__path {
-  margin-top: 10px;
-  color: var(--c-main);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
+/*
+ * .at-source__path（ボタン直下の対象フォルダ表記）は削除した。
+ * 同じパスを #at-drive-note（「ドライブ全体は検索しません」を含む注記）と
+ * ダイアログ見出しでも出しており、同一画面に3回並んでいたため。
+ */
 
 .at-source__hint {
   margin-top: 6px;

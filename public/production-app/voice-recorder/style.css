@@ -28,6 +28,11 @@
   line-height: 1.7;
 }
 
+/* リードを趣旨ごとに段落分けしたため、段落の間だけ間隔を空ける。 */
+.vr-lead + .vr-lead {
+  margin-top: 0.5rem;
+}
+
 .vr-panel {
   border: 1px solid #d9dee5;
   border-radius: 0.5rem;
@@ -229,6 +234,11 @@
   margin-bottom: 1rem;
 }
 
+/* 注意の直後に置く補足（一時保存の説明）。枠の外に出して、警告と区別する。 */
+.vr-warn + .vr-note {
+  margin: 0.75rem 0 0;
+}
+
 .vr-warn {
   margin: 0;
   padding: 0.875rem 1rem;
@@ -333,40 +343,6 @@
 }
 
 /* ---------- 通知から開いたときの対象表示（要件書 5.3） ---------- */
-
-
-/* ---------- Googleカレンダー連携 ---------- */
-
-
-
-
-
-.vr-fieldset {
-  border: 1px solid #e3e7ed;
-  border-radius: 0.375rem;
-  padding: 0.75rem 0.875rem 0.875rem;
-  margin: 0 0 1rem;
-}
-
-.vr-fieldset__legend {
-  padding: 0 0.35rem;
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-
-.vr-check {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.9375rem;
-  line-height: 1.6;
-}
-
-.vr-check:last-child {
-  margin-bottom: 0;
-}
-
 
 
 
