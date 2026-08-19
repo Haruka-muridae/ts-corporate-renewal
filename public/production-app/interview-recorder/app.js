@@ -20,6 +20,22 @@
  *   guard 通過後の init() 内へ移した。それ以外のイベントリスナー登録・
  *   状態機械・録音／MP3エンコード処理・ダウンロード処理は変更していない。
  * ------------------------------------------------------------------
+ *
+ * ------------------------------------------------------------------
+ * v1.1（2026-08-19）で足したもの
+ * ------------------------------------------------------------------
+ * 結果画面からの Google ドライブ保存（仕様書 §4）。保存先はブラウザ録音
+ * アプリ（voice-recorder）と同じ「マイドライブ ＞ TSAM AI ＞ Voice Recorder」で、
+ * oauth.js / drive.js / filename.js は voice-recorder からの複製である。
+ *
+ * **録音同意モーダル・状態機械・ミックス処理・AudioWorklet は触っていない。**
+ * 変えたのは保存の経路（Drive を追加）と保存名・ビットレートだけである。
+ *
+ * ローカルダウンロードは残してある。Drive 保存の失敗・未連携でも録音を
+ * 手元へ退避できるようにするためで、記録情報 JSON と WebM 安全網は
+ * ローカル専用のままにする（同じフォルダを文字起こしアプリが読みに来るため、
+ * あの場所に音声（MP3）以外を置かない）。
+ * ------------------------------------------------------------------
  */
 
 import { guardPage } from '../../auth/session.js';
@@ -30,7 +46,16 @@ import {
   MP3_WORKLET_URL,
   PCM_FLUSH_SAMPLES,
   MIX_SOURCE_GAIN,
+  DRIVE_NAMES,
+  JSON_EXTENSION,
+  WEBM_EXTENSION,
+  formatFolderPath,
+  isOauthConfigured,
 } from './config.js';
+import { AppError, ErrorCode, PROGRESS, describeError } from './errors.js';
+import { buildDefaultFileName, resolveFileName, withExtension } from './filename.js';
+import { currentToken, forgetToken, hasValidToken, requestAccess } from './oauth.js';
+import { fetchAccountEmail, pickAvailableName, resolveTargetFolder, uploadResumable } from './drive.js';
 
 setScreenDepth(SCREEN_DEPTH);
 
@@ -68,6 +93,27 @@ var el = {
   btnDownloadJson: document.getElementById('btn-download-json'),
   btnDownloadWebmOriginal: document.getElementById('btn-download-webm-original'),
   btnRestart: document.getElementById('btn-restart'),
+
+  // 保存名の編集（v1.2）
+  inputPartner: document.getElementById('input-partner'),
+  inputFileName: document.getElementById('input-filename'),
+
+  // Google ドライブ保存（v1.1）
+  btnSaveDrive: document.getElementById('btn-save-drive'),
+  driveFolder: document.getElementById('drive-folder'),
+  driveHint: document.getElementById('drive-hint'),
+  driveProgressPanel: document.getElementById('drive-progress-panel'),
+  driveProgress: document.getElementById('drive-progress'),
+  driveProgressTitle: document.getElementById('drive-progress-title'),
+  driveProgressBar: document.getElementById('drive-progress-bar'),
+  driveProgressText: document.getElementById('drive-progress-text'),
+  driveResultPanel: document.getElementById('drive-result-panel'),
+  driveResultName: document.getElementById('drive-result-name'),
+  driveResultFolder: document.getElementById('drive-result-folder'),
+  driveResultAccount: document.getElementById('drive-result-account'),
+  driveResultLink: document.getElementById('drive-result-link'),
+  driveError: document.getElementById('drive-error'),
+  driveRetryActions: document.getElementById('drive-retry-actions'),
 
   modalConsent: document.getElementById('modal-consent'),
   modalConsentDenied: document.getElementById('modal-consent-denied'),
@@ -113,10 +159,16 @@ function createInitialState() {
     mp3Blob: null,
     mp3Url: null,
     finalFormat: 'webm', // 結果画面で確定した保存形式（'mp3' | 'webm'）
+    // 保存名の初期値（v1.1、v1.2 で相手名を反映するようにした）。
+    // 利用者が「ファイル名」欄を空にしたときの戻り先になる。
+    defaultFileName: '',
+    // Google ドライブ保存（v1.1）
+    driveSaving: false, // 保存処理の実行中（連打の再入防止）
+    driveSaved: false, // Drive への保存が完了したか
     // 連打・二重実行対策
     capturing: false, // 音声キャプチャ開始～録音セッション確立までの再入防止フラグ
     finalized: false, // finalizeRecording() の冪等ガード
-    downloaded: false, // 音声（MP3/WebM）を1回以上ダウンロードしたか
+    preserved: false, // 録音をどこか（この端末 or Drive）へ保存済みか
     recordingError: null // MediaRecorder の onerror で発生したエラーメッセージ
   };
 }
@@ -694,11 +746,21 @@ function finalizeRecording() {
     state.finalFormat = 'webm';
   }
 
+  // 保存名の基準は録音開始時刻（§4-2）。停止時刻ではない。
+  // 以降の3か所（Drive・音声ダウンロード・記録情報）が同じ時刻を見るように、
+  // ここで state.startedAt を確定させてから初期値を作る
+  // （startRecordingSession を通らずにここへ来る経路は無いはずだが、
+  //   null のままだと保存のたびに違う名前になってしまうため保険を置く）。
+  if (!state.startedAt) {
+    state.startedAt = state.endedAt;
+  }
+  refreshDefaultFileName();
+
   el.playback.src = state.finalFormat === 'mp3' ? state.mp3Url : state.audioUrl;
   el.consentInfo.textContent = '同意確認: ' + formatTimestampForDisplay(state.consentConfirmedAt);
   updateDoneScreenForFormat();
 
-  // beforeunload の警告は、音声（MP3/WebM）が1回以上ダウンロードされる、
+  // beforeunload の警告は、録音が Drive かこの端末のどちらかへ保存される、
   // または新しい録音を開始するまで維持する。
   showScreen(Screen.DONE);
 }
@@ -713,6 +775,7 @@ function updateDoneScreenForFormat() {
     el.btnDownloadAudio.textContent = '音声をダウンロード';
     el.btnDownloadWebmOriginal.hidden = true;
   }
+  prepareDrivePanel();
 }
 
 function stopStream(stream) {
@@ -724,40 +787,351 @@ function stopStream(stream) {
   });
 }
 
-// ---- 結果画面 ----
+// ---- Google ドライブ保存（v1.1。仕様書 §4） ----
 
-// 音声（MP3 または WebM）のダウンロードが1回以上行われるまでは、
-// 離脱確認（beforeunload）を維持する。
-function markAudioDownloaded() {
-  if (state.downloaded) {
+// 画面へ入れる文字はすべて textContent、要素は createElement で作る。
+// ファイル名・フォルダ名・URL・アカウント名は Google の応答であり、
+// 外から来た値として扱う（voice-recorder/app.js 冒頭の約束と同じ）。
+
+/* 保存名の2つの入力欄をまとめて開け閉めする（v1.2）。 */
+function setNameFieldsDisabled(disabled) {
+  el.inputPartner.disabled = disabled;
+  el.inputFileName.disabled = disabled;
+}
+
+function showDriveHint(text) {
+  el.driveHint.textContent = text;
+  el.driveHint.hidden = text === '';
+}
+
+function showDriveError(text) {
+  el.driveError.textContent = text;
+  el.driveError.hidden = text === '';
+}
+
+function clearDriveError() {
+  showDriveError('');
+  el.driveRetryActions.replaceChildren();
+  el.driveRetryActions.hidden = true;
+}
+
+/*
+ * 生の例外はコンソールへ残す（voice-recorder/app.js の reportError と同じ判断）。
+ * describeError は知らないコードを既定文言へ丸めるため、実装のバグまで
+ * 「保存に失敗しました」に化けて原因が見えなくなる。
+ * トークンは例外に入れていないので、ここから漏れることはない。
+ */
+function reportDriveError(error) {
+  console.error('[interview-recorder]', error);
+  showDriveError(describeError(error));
+}
+
+/* 失敗時の再試行導線。録音は画面に残っているので、押せば同じ手順をやり直せる。 */
+function showDriveRetry(label, handler) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn btn-secondary';
+  button.textContent = label;
+  button.addEventListener('click', handler);
+
+  el.driveRetryActions.replaceChildren(button);
+  el.driveRetryActions.hidden = false;
+}
+
+function setDriveProgress(stage, ratio) {
+  el.driveProgressPanel.hidden = false;
+  el.driveProgressTitle.textContent = stage;
+
+  const percent = typeof ratio === 'number' ? Math.round(ratio * 100) : 0;
+  el.driveProgress.setAttribute('aria-valuenow', String(percent));
+  el.driveProgressBar.style.width = percent + '%';
+  el.driveProgressText.textContent = percent + '%';
+}
+
+/*
+ * 結果画面を開いた時点の Drive パネルの状態を決める。
+ *
+ * ここで押せないようにするのは次の2つ。
+ *   - MP3 が作れなかった場合（WebM 安全網）。**WebM は Drive へ上げない。**
+ *     同じフォルダを文字起こしアプリが読みに来るため、あの場所には
+ *     voice-recorder と同じ MP3 だけを置く（§4 / §5）。
+ *   - クライアントIDが未設定の場合。連携しようがないため、
+ *     押せる状態のまま失敗させず、ここで理由を出す。
+ */
+function prepareDrivePanel() {
+  clearDriveError();
+  el.driveProgressPanel.hidden = true;
+  el.driveResultPanel.hidden = true;
+  el.driveFolder.textContent =
+    '保存先: ' + formatFolderPath(DRIVE_NAMES.root, DRIVE_NAMES.app);
+
+  if (state.finalFormat !== 'mp3') {
+    el.btnSaveDrive.disabled = true;
+    showDriveHint('MP3 を作成できなかったため、Googleドライブへは保存できません。'
+      + '下の「音声をダウンロード」でこの端末へ保存してください。');
     return;
   }
-  state.downloaded = true;
+
+  if (!isOauthConfigured()) {
+    el.btnSaveDrive.disabled = true;
+    showDriveHint(describeError(new AppError(ErrorCode.OAUTH_NOT_CONFIGURED)));
+    return;
+  }
+
+  el.btnSaveDrive.disabled = false;
+  showDriveHint('保存を押すと、Googleアカウントとの連携画面が開きます'
+    + '（連携済みの場合は開きません）。');
+}
+
+function showDriveResult(result, account) {
+  el.driveResultName.textContent = result.name;
+  el.driveResultFolder.textContent = formatFolderPath(DRIVE_NAMES.root, DRIVE_NAMES.app);
+  el.driveResultAccount.textContent = account;
+
+  el.driveResultLink.replaceChildren();
+
+  if (result.url) {
+    const link = document.createElement('a');
+    link.href = result.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Driveで開く';
+    el.driveResultLink.append(link);
+  } else {
+    el.driveResultLink.textContent = '（リンクを取得できませんでした）';
+  }
+
+  el.driveResultPanel.hidden = false;
+}
+
+/*
+ * Drive へ保存する。
+ *
+ * ------------------------------------------------------------------
+ * 連携は「保存を押した時点」で行う（voice-recorder と作法を変えた点）
+ * ------------------------------------------------------------------
+ * voice-recorder は録音前の「利用の準備」で連携を済ませる作りだが、
+ * こちらは結果画面のこのボタンからまとめて行う。
+ *
+ * アクセストークンの寿命は約1時間で、**面談の長さより短いことが普通**である。
+ * 先に連携させても停止した頃には切れており、voice-recorder 自身が
+ * 「連携済みと出ているのに保存だけ押せない」問題を踏んでいる
+ * （voice-recorder/app.js の refreshOauthState のコメント）。
+ * 録音前に増える操作の分だけ損をして、期限切れは避けられない。
+ *
+ * ポップアップはこの押下（利用者の操作）から開くためブロックされない。
+ * 「アプリを開いただけでは認可を要求しない」も満たす。
+ * ------------------------------------------------------------------
+ *
+ * ------------------------------------------------------------------
+ * 送信中に state が差し替わりうる
+ * ------------------------------------------------------------------
+ * resetToIdle() は `state = createInitialState()` で状態そのものを作り直す。
+ * 90分ぶんのアップロード中に「新しい録音を開始」が押されると、この関数の
+ * 続きが**次の録音の状態**へ結果を書き込み、次の保存が「保存済み」と
+ * みなされて押せなくなる。
+ *
+ * 対策は2つ重ねてある。
+ *   1. 送信中は「新しい録音を開始」を押せなくする（voice-recorder が
+ *      保存中に「破棄」を無効化しているのと同じ考え）
+ *   2. 開始時の state を控え、差し替わっていたら結果を捨てる
+ * 1だけでは、将来ほかの場所から resetToIdle が呼ばれたときに同じ穴が開く。
+ * ------------------------------------------------------------------
+ */
+async function saveToDrive() {
+  // 連打と、保存済みの再送信を防ぐ。
+  if (state.driveSaving || state.driveSaved) {
+    return;
+  }
+
+  // WebM 安全網のときはここへ来ない（ボタンが無効）。念のための二重防御。
+  if (state.finalFormat !== 'mp3' || !state.mp3Blob) {
+    return;
+  }
+
+  // この保存が「どの録音のものか」を控える（上の注記）。
+  var session = state;
+
+  state.driveSaving = true;
+  el.btnSaveDrive.disabled = true;
+  el.btnRestart.disabled = true;
+  /*
+   * 送信中は名前を動かせないようにする（§4-2）。
+   * 送信の途中で欄を書き換えられると、Drive に入った名前と画面に見えている
+   * 名前が食い違う。失敗して再試行できるよう、finally で戻す。
+   */
+  setNameFieldsDisabled(true);
+  clearDriveError();
+  showDriveHint('');
+
+  try {
+    setDriveProgress(PROGRESS.PREPARING, 0);
+
+    /*
+     * 未連携・期限切れならここで認可を取り直す。
+     * 有効なトークンがあるときは何も表示せずに通る。
+     */
+    if (!hasValidToken()) {
+      setDriveProgress(PROGRESS.CONNECTING, 0);
+      await requestAccess();
+    }
+
+    /* トークンは呼び出しの直前に取り出し、変数へ写さない。 */
+    const auth = { accessToken: currentToken() };
+
+    setDriveProgress(PROGRESS.RESOLVING_FOLDER, 0);
+    const folderId = await resolveTargetFolder(auth);
+
+    /*
+     * 保存名は「音声をダウンロード」と同じもの（§4-2）。
+     * 利用者が「ファイル名」欄を編集していればその値、空なら初期値。
+     * 同名が保存先にあれば pickAvailableName が _2, _3… を付ける
+     * （編集した名前でも同じように効く）。
+     */
+    const desired = currentFileName();
+    const finalName = await pickAvailableName(desired, folderId, auth);
+
+    setDriveProgress(PROGRESS.UPLOADING, 0);
+    const result = await uploadResumable({
+      file: state.mp3Blob,
+      name: finalName,
+      folderId: folderId,
+      onProgress: function (sent, total) {
+        setDriveProgress(PROGRESS.UPLOADING, sent / total);
+      }
+    }, auth);
+
+    setDriveProgress(PROGRESS.FINISHING, 1);
+
+    /* 表示のためだけの情報。取れなくても保存は成立している（drive.js の注記）。 */
+    const email = await fetchAccountEmail(auth);
+
+    /*
+     * ここまでの間に「新しい録音を開始」が通っていたら、この結果を
+     * 画面にも次の録音の状態にも反映しない（Drive への保存自体は済んでいる）。
+     */
+    if (state !== session) {
+      return;
+    }
+
+    state.driveSaved = true;
+    markRecordingSaved();
+
+    el.driveProgressPanel.hidden = true;
+    showDriveHint('');
+    showDriveResult(result, email || '連携済みのアカウント');
+  } catch (error) {
+    if (state !== session) {
+      /* 次の録音の画面へエラーを出さない。原因はコンソールにだけ残す。 */
+      console.error('[interview-recorder]', error);
+      return;
+    }
+
+    el.driveProgressPanel.hidden = true;
+    reportDriveError(error);
+
+    /*
+     * 期限切れは連携からやり直す必要がある。トークンを捨てておくと、
+     * 次の saveToDrive() が requestAccess() から始まる。
+     * それ以外は同じ手順の再試行でよい。
+     */
+    if (error instanceof AppError && error.code === ErrorCode.OAUTH_EXPIRED) {
+      forgetToken();
+      showDriveRetry('連携しなおして保存', saveToDrive);
+    } else {
+      showDriveRetry('保存をやり直す', saveToDrive);
+    }
+  } finally {
+    /* 差し替わっている場合は、古い保存の後始末で新しい状態を触らない。 */
+    session.driveSaving = false;
+
+    if (state === session) {
+      el.btnRestart.disabled = false;
+      /* 保存できたらボタンは押せないままにする（同じ録音を二重に上げない）。 */
+      el.btnSaveDrive.disabled = state.driveSaved;
+      /*
+       * 保存が済んだら名前も確定させる。Drive にある名前と、このあとの
+       * ローカルダウンロードの名前を食い違わせないため（§4-2）。
+       * 失敗したときは編集できる状態へ戻し、名前を変えて再試行できるようにする。
+       */
+      setNameFieldsDisabled(state.driveSaved);
+    }
+  }
+}
+
+// ---- 結果画面 ----
+
+// 録音が Drive かこの端末のどちらかへ保存されるまでは、
+// 離脱確認（beforeunload）を維持する。
+// v1.0 では「ダウンロードしたか」だけを見ていたが、Drive 保存も
+// 「録音を失わない状態になった」ことに変わりないため、こちらへ寄せた。
+function markRecordingSaved() {
+  if (state.preserved) {
+    return;
+  }
+  state.preserved = true;
   window.removeEventListener('beforeunload', onBeforeUnload);
 }
 
+/*
+ * 保存名の初期値を作り直し、「ファイル名」欄へ反映する（§4-2。v1.2）。
+ *
+ * 停止直後（finalizeRecording）と、「面談相手名」欄を打つたびに呼ぶ。
+ * voice-recorder と同じく、**欄を編集済みかどうかは判定せず**に上書きする。
+ * 判定しようとすると「利用者が消した」と「こちらが書いた」の区別が要り、
+ * 仕組みが増えるわりに間違いやすい。相手名は名前を組み立てるための欄で、
+ * 打った結果がその場で見えるほうが分かりやすい。
+ */
+function refreshDefaultFileName() {
+  state.defaultFileName = buildDefaultFileName(
+    state.startedAt || new Date(),
+    el.inputPartner.value,
+  );
+  el.inputFileName.value = state.defaultFileName;
+  el.inputFileName.placeholder = state.defaultFileName;
+}
+
+/*
+ * いま保存すべき MP3 の名前（§4-2）。
+ * 入力欄が空・空白だけ・使えない文字だけ、のときは初期値へ戻す。
+ * 拡張子が無ければ .mp3 を付ける（resolveFileName の中の ensureExtension）。
+ */
+function currentFileName() {
+  return resolveFileName(el.inputFileName.value, state.defaultFileName);
+}
+
+/*
+ * ローカル保存のファイル名も Drive と同じ名前にそろえる（§4-2）。
+ * **編集後の名前**から拡張子だけを差し替えるので、利用者が名前を変えれば
+ * WebM も JSON も一緒に変わる。同じ録音の3ファイルが名前で並ぶ。
+ */
+function localFileName(extension) {
+  return withExtension(currentFileName(), extension);
+}
+
+el.inputPartner.addEventListener('input', function () {
+  refreshDefaultFileName();
+});
+
 el.btnDownloadAudio.addEventListener('click', function () {
   if (state.finalFormat === 'mp3' && state.mp3Url) {
-    var mp3Filename = '面談録音_' + formatTimestampForFilename(state.startedAt) + '.mp3';
-    triggerDownload(state.mp3Url, mp3Filename);
-    markAudioDownloaded();
+    triggerDownload(state.mp3Url, currentFileName());
+    markRecordingSaved();
     return;
   }
   if (!state.audioUrl) {
     return;
   }
-  var webmFilename = '面談録音_' + formatTimestampForFilename(state.startedAt) + '.webm';
-  triggerDownload(state.audioUrl, webmFilename);
-  markAudioDownloaded();
+  triggerDownload(state.audioUrl, localFileName(WEBM_EXTENSION));
+  markRecordingSaved();
 });
 
 el.btnDownloadWebmOriginal.addEventListener('click', function () {
   if (!state.audioUrl) {
     return;
   }
-  var filename = '面談録音_' + formatTimestampForFilename(state.startedAt) + '.webm';
-  triggerDownload(state.audioUrl, filename);
-  markAudioDownloaded();
+  triggerDownload(state.audioUrl, localFileName(WEBM_EXTENSION));
+  markRecordingSaved();
 });
 
 el.btnDownloadJson.addEventListener('click', function () {
@@ -771,7 +1145,14 @@ el.btnDownloadJson.addEventListener('click', function () {
     consentConfirmedAt: state.consentConfirmedAt,
     consentStatement: '使用者は録音開始前に、面談相手へ録音を通告し同意を得たことを確認した。',
     audioFormat: state.finalFormat,
-    sampleRate: state.mp3SampleRate || null
+    sampleRate: state.mp3SampleRate || null,
+    // どの音声ファイルの記録かを示す（v1.1）。音声が Drive 側に、
+    // この JSON が端末側に分かれて残るため、名前で対応を追えるようにする。
+    audioFileName: state.finalFormat === 'mp3'
+      ? currentFileName()
+      : localFileName(WEBM_EXTENSION),
+    // Drive へ保存した場合の保存先。ローカルのみの場合は null。
+    driveFolder: state.driveSaved ? formatFolderPath(DRIVE_NAMES.root, DRIVE_NAMES.app) : null
   };
   if (state.finalFormat === 'mp3') {
     record.bitrateKbps = MP3_BITRATE_KBPS;
@@ -779,8 +1160,7 @@ el.btnDownloadJson.addEventListener('click', function () {
   var json = JSON.stringify(record, null, 2);
   var blob = new Blob([json], { type: 'application/json' });
   var url = URL.createObjectURL(blob);
-  var filename = '面談録音_' + formatTimestampForFilename(state.startedAt) + '.json';
-  triggerDownload(url, filename);
+  triggerDownload(url, localFileName(JSON_EXTENSION));
   // ダウンロード用に生成した一時 URL は用が済んだら解放する。
   window.setTimeout(function () {
     URL.revokeObjectURL(url);
@@ -798,6 +1178,11 @@ function triggerDownload(url, filename) {
 
 el.btnRestart.addEventListener('click', function () {
   resetToIdle();
+});
+
+// Drive 保存。ポップアップ（認可画面）を開くため、必ずこの押下から呼ぶ。
+el.btnSaveDrive.addEventListener('click', function () {
+  saveToDrive();
 });
 
 function resetToIdle() {
@@ -829,6 +1214,26 @@ function resetToIdle() {
   el.btnDownloadWebmOriginal.hidden = true;
   el.btnDownloadAudio.textContent = '音声をダウンロード';
 
+  // 保存名の欄は次の録音へ持ち越さない（v1.2）。
+  // 相手名は面談ごとに変わるうえ、前の相手の名前が残っていると
+  // 気づかないまま別の面談のファイル名に混ざる。
+  setNameFieldsDisabled(false);
+  el.inputPartner.value = '';
+  el.inputFileName.value = '';
+  el.inputFileName.placeholder = '';
+
+  // Drive パネルも前回の結果を残さない。**トークンは捨てない。**
+  // 続けてもう1件録る場合に、連携をやり直させないためである
+  // （トークンはメモリ上にしかなく、ページを離れれば消える）。
+  clearDriveError();
+  el.driveProgressPanel.hidden = true;
+  el.driveResultPanel.hidden = true;
+  el.driveResultLink.replaceChildren();
+  showDriveHint('');
+  el.btnSaveDrive.disabled = false;
+  // 保存中に（別経路で）ここへ来た場合に、押せないまま残さない。
+  el.btnRestart.disabled = false;
+
   state = createInitialState();
   showIdleError('');
   showScreen(Screen.IDLE);
@@ -840,18 +1245,11 @@ function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
-function formatTimestampForFilename(date) {
-  var d = date || new Date();
-  return (
-    d.getFullYear() +
-    pad2(d.getMonth() + 1) +
-    pad2(d.getDate()) +
-    '_' +
-    pad2(d.getHours()) +
-    pad2(d.getMinutes()) +
-    pad2(d.getSeconds())
-  );
-}
+/*
+ * v1.0 にあった formatTimestampForFilename は削除した。
+ * ファイル名の組み立ては filename.js（voice-recorder からの複製）へ移し、
+ * 日時部分の書式を voice-recorder と1か所で揃えるためである（§4）。
+ */
 
 function formatTimestampForDisplay(isoString) {
   if (!isoString) {

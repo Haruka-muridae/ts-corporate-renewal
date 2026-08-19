@@ -9,7 +9,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="ブラウザだけで完結するオンライン面談の録音ツールです。録音データは外部へ送信されず、この端末内でのみ処理されます。">
+<meta name="description" content="ブラウザだけで完結するオンライン面談の録音ツールです。録音は端末内で処理し、保存先は利用者ご自身の Google ドライブです。">
 <title>面談録音ツール</title>
 
 <!-- ログインが要る画面。索引させる意味がない。 -->
@@ -19,22 +19,32 @@
   ==================================================================
   Content-Security-Policy
   ==================================================================
+  script-src / frame-src の accounts.google.com は Google Identity Services
+  （暗黙フローの認可）のためで、これは認可そのものの提供元である。
+  **ここへ他のホストを足さないこと。** 第三者CDNは読まない。
+
   connect-src の内訳:
     - 'self'                              … 自分の JS / CSS
+    - www.googleapis.com                  … Drive API（保存先フォルダの解決と
+                                            MP3 の resumable upload。§4）
     - auth-verify.potenitas-lp.workers.dev … セッション検証（verifySession）の
                                             キャッシュ付き代理。guardPage の
                                             宛先はここになる（public/auth/
                                             config.js の verifyApiUrl）。
                                             *.workers.dev に広げないこと
 
-  本アプリは録音データ・記録情報のいずれも外部へ送信しない
-  （タブ音声＋マイクのミックス、MP3化、ダウンロードはすべて端末内で完結する）。
-  そのため script.google.com / generativelanguage.googleapis.com 等は
-  一切許可しない。worker-src は AudioWorklet（pcm-capture-worklet.js）の
-  読み込みに必要。media-src blob: は録音結果の <audio> 再生に必要。
+  script.google.com / script.googleusercontent.com は許可しない。
+  ブラウザ録音アプリ（voice-recorder）の CSP には入っているが、あちらは
+  Apps Script を直接叩く経路が残っているためで、本アプリにその経路は無い。
+  必要が無い許可は置かない。
+
+  録音データを当社サーバーへ送る経路は依然として無い（§5）。
+  Drive へ送るのは利用者自身のドライブであり、宛先は Google のみである。
+  worker-src は AudioWorklet（pcm-capture-worklet.js）の読み込みに必要。
+  media-src blob: は録音結果の <audio> 再生に必要。
   ==================================================================
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://auth-verify.potenitas-lp.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://www.googleapis.com https://auth-verify.potenitas-lp.workers.dev; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="./style.css">
@@ -61,7 +71,9 @@
       <h2>オンライン面談をブラウザだけで録音</h2>
       <p class="description">
         ブラウザのタブ音声共有とマイクを使って、Web 会議の音声をその場で録音できます。
-        インストールやアップロードは不要です。録音データはこの端末内でのみ処理されます。
+        インストールは不要です。録音の処理はこの端末内で行い、録音後はご自身の
+        Google ドライブ（マイドライブ ＞ TSAM AI ＞ Voice Recorder）へ保存します。
+        当社のサーバーへ録音データを送信することはありません。
       </p>
       <button id="btn-start" class="btn btn-primary" type="button">録音を開始</button>
       <p id="idle-error" class="error-message" hidden></p>
@@ -106,9 +118,93 @@
       <p id="consent-info" class="consent-info"></p>
       <p id="mp3-fallback-note" class="warning-message" hidden>
         MP3 への変換ができなかったため、元データ（WebM）で保存します。
+        この形式は Google ドライブへ保存できません。下のボタンでこの端末へダウンロードしてください。
+      </p>
+
+      <!--
+        保存名の編集（§4-2）。v1.2 で追加。
+        voice-recorder の保存パネル（#vr-customer / #vr-name）と同じ並びにしてある。
+        「面談相手名」は**ファイル名の初期値を組み立てるためだけ**に使い、
+        録音データにも端末にも当社サーバーにも残さない（注記も同じ趣旨で出す）。
+      -->
+      <div class="save-name">
+        <label class="field">
+          <span class="field__label">面談相手名（任意）</span>
+          <input type="text" id="input-partner" class="field__input" autocomplete="off"
+                 spellcheck="false" aria-describedby="input-partner-help">
+        </label>
+        <p class="field-note" id="input-partner-help">
+          入力すると、下のファイル名欄の初期値（日時のあと）に使います。端末や当社サーバーには保存しません。
+        </p>
+
+        <label class="field">
+          <span class="field__label">ファイル名</span>
+          <input type="text" id="input-filename" class="field__input" autocomplete="off"
+                 spellcheck="false" aria-describedby="input-filename-help">
+        </label>
+        <p class="field-note" id="input-filename-help">
+          保存前に編集できます。未入力のときは初期値を使います。拡張子が無ければ <code>.mp3</code> を付けます。
+          同じ名前が保存先にある場合は <code>_2</code>、<code>_3</code>… を付けます。
+          記録情報（JSON）と元データ（WebM）も、同じ名前に拡張子だけ替えて保存します。
+        </p>
+      </div>
+
+      <!--
+        Google ドライブ保存（§4）。v1.1 で追加した主たる保存経路。
+        ブラウザ録音アプリ（voice-recorder）の保存パネルと同じ順序
+        （保存先 → 保存ボタン → 進捗 → 結果 → エラー → 再試行）で並べてある。
+        Drive のファイルURL・アカウント名は Google の応答なので、
+        文字は textContent、要素は createElement で入れる（app.js）。
+      -->
+      <div id="drive-panel" class="drive-panel">
+        <p id="drive-folder" class="drive-folder"></p>
+        <button id="btn-save-drive" class="btn btn-primary" type="button">Googleドライブに保存</button>
+        <p id="drive-hint" class="drive-hint" role="status" hidden></p>
+
+        <div id="drive-progress-panel" hidden>
+          <p id="drive-progress-title" class="drive-progress-title">保存しています</p>
+          <div id="drive-progress" class="drive-progress" role="progressbar"
+               aria-labelledby="drive-progress-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="drive-progress-bar" class="drive-progress__bar" aria-hidden="true"></span>
+          </div>
+          <p id="drive-progress-text" class="drive-progress-text" aria-hidden="true">0%</p>
+        </div>
+
+        <div id="drive-result-panel" class="drive-result" hidden>
+          <p class="drive-result__title">Googleドライブに保存しました</p>
+          <dl class="drive-meta">
+            <div class="drive-meta__row">
+              <dt class="drive-meta__key">ファイル名</dt>
+              <dd class="drive-meta__value" id="drive-result-name"></dd>
+            </div>
+            <div class="drive-meta__row">
+              <dt class="drive-meta__key">保存先</dt>
+              <dd class="drive-meta__value" id="drive-result-folder"></dd>
+            </div>
+            <div class="drive-meta__row">
+              <dt class="drive-meta__key">アカウント</dt>
+              <dd class="drive-meta__value" id="drive-result-account"></dd>
+            </div>
+            <div class="drive-meta__row">
+              <dt class="drive-meta__key">Drive のファイル</dt>
+              <dd class="drive-meta__value" id="drive-result-link"></dd>
+            </div>
+          </dl>
+        </div>
+
+        <p id="drive-error" class="error-message" role="alert" hidden></p>
+        <div id="drive-retry-actions" class="button-row" hidden></div>
+      </div>
+
+      <!--
+        ローカル保存（フォールバック）。Drive へ保存できないとき、および
+        記録情報（JSON）と WebM 安全網はこちらだけで扱う（§4 / §5）。
+      -->
+      <p class="description download-lead">
+        Googleドライブへ保存できない場合や、控えが必要な場合は、この端末へダウンロードできます。
       </p>
       <div class="button-row">
-        <button id="btn-download-audio" class="btn btn-primary" type="button">音声をダウンロード</button>
+        <button id="btn-download-audio" class="btn btn-secondary" type="button">音声をダウンロード</button>
         <button id="btn-download-json" class="btn btn-secondary" type="button">記録情報をダウンロード</button>
       </div>
       <p class="secondary-link-row">

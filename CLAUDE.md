@@ -92,7 +92,7 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 - **正式な要件は [docs/requirements/mvp-requirements.md](docs/requirements/mvp-requirements.md)。** 実装・修正時は必ず同文書の §5〜§10 に準拠する。要件と矛盾する実装判断が必要になったときは、**勝手に進めず必ず確認を取る**（判断した内容は §14 の変更履歴へ残す）。
 - **バックエンドを持たない。** 要件書 v1.1 はサーバー側 MP3 変換とAPI 8本を前提にしていたが、Vercel の関数では 90分・約86MB の受信と FFmpeg 実行が成立しないため、v1.2 でブラウザ完結へ改めた。**「APIを足せば解決する」と考える前に §14 を読むこと。**
 - **`public/apps/voice-recorder/`（テスト環境）から import しない。** 長時間録音の実装はそこから**複製**してある（[docs/repository-structure.md](docs/repository-structure.md) §1）。テスト環境側を直しても本番には反映されないし、その逆もない。
-- **保存先フォルダ名は「マイドライブ ＞ TSAM AI ＞ Voice Recorder」。** 音声文字起こしアプリが同じ場所を読みに来るため、名前を変えると両方を同時に変える必要がある。フォルダは**IDで固定登録せず、名前から解決して無ければ作成する**（`drive.file` スコープでは、アプリが作成していないフォルダへ書き込めないため）。
+- **保存先フォルダ名は「マイドライブ ＞ TSAM AI ＞ Voice Recorder」。** 音声文字起こしアプリが同じ場所を読みに来て、**面談録音アプリ（`public/production-app/interview-recorder/`）が同じ場所へ書きに来る**（2026-08-19 / 同アプリ要件 v1.1）。名前を変えるなら3アプリを同時に変える必要がある。フォルダは**IDで固定登録せず、名前から解決して無ければ作成する**（`drive.file` スコープでは、アプリが作成していないフォルダへ書き込めないため）。面談録音アプリが**クライアントIDまで同一にしている**のもこのためで（`drive.file` の可視範囲はクライアントIDごとに分かれる）、IDがずれると同じ名前のフォルダを見つけられず新規作成してしまう。この一致は `tests/unit/interview-recorder.mjs` が両方の `config.js` を読み比べて固定している。
 - **OAuth スコープは `drive.file` のみ。増やさない。** アクセストークンはメモリ上だけで保持し、localStorage / sessionStorage / Cookie / URL / ログのいずれにも書かない（`receipt-ocr` と同じ方針）。クライアントIDは公開値で、実質的な防御は Google Cloud 側の「承認済みの JavaScript 生成元」。
 - **アクセス制御はクライアント側ガード（`guardPage()`）が主。** 静的配信のため HTML と JS の取得自体は防げない（[SECURITY_NOTES.md](SECURITY_NOTES.md)）。Drive のデータを守っているのは OAuth であって、このガードではない。
 

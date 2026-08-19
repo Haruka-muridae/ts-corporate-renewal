@@ -282,6 +282,136 @@ audio {
   padding: 0.6rem 0.8rem;
 }
 
+/* ---------- 保存名の編集（v1.2 で追加。仕様書 §4-2） ---------- */
+
+/*
+ * 結果画面は中央寄せ（.screen { text-align: center }）だが、入力欄まで
+ * 中央寄せにするとラベルと入力の左端が揃わず読みにくい。ここだけ左寄せにする。
+ */
+.save-name {
+  margin: 0 0 1rem;
+  text-align: left;
+}
+
+.field {
+  display: block;
+  margin-top: 0.6rem;
+}
+
+.field__label {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+}
+
+.field__input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.field__input:disabled {
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+
+.field-note {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.field-note code {
+  font-size: 0.95em;
+}
+
+/* ---------- Google ドライブ保存（v1.1 で追加。仕様書 §4） ---------- */
+
+/*
+ * 結果画面の中で「主たる保存経路（Drive）」と「フォールバック（ダウンロード）」を
+ * 見分けられるようにするための囲み。Drive 側だけ枠と背景を持たせて前に出す。
+ * 色は既存のトークン（--color-*）だけで作る。新しい色を増やさない。
+ */
+.drive-panel {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem 0.9rem;
+  margin: 0 0 1rem;
+  text-align: center;
+}
+
+.drive-folder,
+.drive-hint,
+.drive-progress-text {
+  margin: 0.5rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.drive-progress-title {
+  margin: 0.75rem 0 0.4rem;
+  font-size: 0.9rem;
+}
+
+/* 進捗バー。幅は app.js が style.width へ % を書き込む。 */
+.drive-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.drive-progress__bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--color-primary);
+}
+
+.drive-result {
+  margin-top: 0.75rem;
+  text-align: left;
+}
+
+.drive-result__title {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.drive-meta {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.drive-meta__row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.drive-meta__key {
+  flex: 0 0 6.5em;
+  color: var(--color-text-muted);
+}
+
+.drive-meta__value {
+  margin: 0;
+  /* Drive のファイル名は長くなりうる。折り返して枠から出さない。 */
+  overflow-wrap: anywhere;
+}
+
+.download-lead {
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
 .legal-screen {
   max-width: 640px;
   text-align: left;
