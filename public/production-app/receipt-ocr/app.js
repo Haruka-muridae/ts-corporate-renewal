@@ -59,7 +59,7 @@ for (const id of [
   'ro-state-auth', 'ro-state-oauth', 'ro-state-key', 'ro-state-storage',
   'ro-connect', 'ro-key-link', 'ro-capture-panel',
   'ro-file', 'ro-shrink', 'ro-preview', 'ro-preview-image',
-  'ro-meta-name', 'ro-meta-hash', 'ro-meta-folder',
+  'ro-meta-name', 'ro-meta-folder',
   'ro-start', 'ro-message', 'ro-progress',
   'ro-review-panel', 'ro-review-lead', 'ro-review-image', 'ro-review-confidence',
   'ro-review-warnings', 'ro-review-fields', 'ro-duplicate',
@@ -371,7 +371,11 @@ async function onFileSelected() {
 
   el['ro-preview-image'].src = previewUrl;
   el['ro-meta-name'].textContent = file.name;
-  el['ro-meta-hash'].textContent = hash ?? '（計算できません）';
+  /*
+   * ハッシュは画面に出さない（2026-08-19）。重複判定（§10）と保存する
+   * 行の値には引き続き使うが、64桁の16進数は利用者が読む値でも直せる値でも
+   * ない。計算できなかったことは上の showInfo が伝えている。
+   */
   el['ro-meta-folder'].textContent = `原本 / ${year} / ${month}`;
   el['ro-preview'].hidden = false;
   el['ro-start'].disabled = false;

@@ -52,7 +52,12 @@ import {
 
 import { classifyCardText, describeGeminiError } from './gemini.js';
 import { registerCard } from './register.js';
-import { extractByPattern, prepareForGemini } from './extract.js';
+import {
+  MAX_GEMINI_INPUT_LENGTH,
+  extractByPattern,
+  normalizeText,
+  prepareForGemini,
+} from './extract.js';
 import {
   MULTILINE_FIELDS,
   VALUE_FIELDS,
@@ -81,8 +86,7 @@ const el = {};
 
 for (const id of [
   'co-loading', 'co-content', 'co-status',
-  'co-prep', 'co-prep-summary', 'co-status-panel', 'co-status-summary',
-  'co-storage-summary',
+  'co-prep', 'co-prep-summary',
   'co-guidance', 'co-guidance-title', 'co-guidance-text',
   'co-login-link', 'co-portal-link', 'co-connect',
   'co-ready', 'co-disconnect', 'co-message',
@@ -92,7 +96,7 @@ for (const id of [
   'co-front-field', 'co-front-input', 'co-back-field', 'co-back-input',
   'co-ask-back', 'co-skip-back', 'co-want-back',
   'co-previews', 'co-start-actions', 'co-start', 'co-reset',
-  'co-ocr', 'co-ocr-state', 'co-ocr-sides', 'co-ocr-note',
+  'co-ocr', 'co-ocr-state', 'co-ocr-sides',
   'co-fields', 'co-fields-state', 'co-fields-list', 'co-fields-notes',
   'co-register', 'co-saved', 'co-saved-title', 'co-saved-list', 'co-saved-sheet', 'co-next',
   'co-duplicate', 'co-duplicate-title', 'co-duplicate-text',
@@ -157,6 +161,18 @@ const FIELD_LABELS = Object.freeze({
 
 /*
  * ==================================================================
+ * 折りたたみは1枚だけにする（2026-08-19 に平坦化）
+ * ==================================================================
+ * 以前は「準備」の <details> の中に「ご利用の前に」「準備の状況」
+ * 「保存先」の3枚を入れ子にしていた。**開く操作が2回必要**で、
+ * どの中身がどこにあるのかを覚えていないと辿り着けなかった。
+ *
+ * いまは「準備」1枚に中身を並べ、開閉の判断もここ1か所に集約する。
+ * 「ご利用の前に」は準備作業ではないので、この外に兄弟として置いた
+ * （§5.3 の「既定は閉」を守るためでもある。index.html のコメント）。
+ * ==================================================================
+ *
+ * ==================================================================
  * 畳むのは「すべて正常」と分かったときだけ
  * ==================================================================
  * 準備の状況・保存先は、**問題があるときにこそ見えていないと困る**。
@@ -166,7 +182,7 @@ const FIELD_LABELS = Object.freeze({
  * 落ちた場合でも、**畳まれたまま残ることがない。**
  * 「畳まれていて気づかない」を作らないための取り決めである。
  *
- * 誘導（co-guidance）は親の外に置いてあるので、ここでは触らない。
+ * 誘導（co-guidance）は「準備」の外に置いてあるので、ここでは触らない。
  * ==================================================================
  */
 function setPanelOpen(id, open) {
@@ -179,38 +195,50 @@ function setSummary(id, base, detail) {
 }
 
 /*
- * 3つの前提の見た目を決める。
+ * 開閉の判断材料。
+ *
+ * **DOM の open を読んで決めない。** 入れ子をやめた結果、中の状態を
+ * 保持する要素が無くなった。ここに写しを持ち、applyPrepPanel() が
+ * これだけを見て決める（判断が1か所に閉じる）。
+ *
+ * storage が null なのは「まだ確認していない」。判断材料にしない。
+ */
+const prepFacts = { allReady: false, storage: null };
+
+/*
+ * 3つの前提の状態を控える。
  *
  * すべて完了なら畳み、1つでも欠けていれば開く（SC-00 の動作は変えない。
- * 誘導そのものは render() が親の外へ出す）。
+ * 誘導そのものは render() が「準備」の外へ出す）。
  */
 function applyStatusPanel(allReady) {
-  setSummary('co-status-summary', '準備の状況', allReady ? 'すべて完了' : '未完了があります');
-  setPanelOpen('co-status-panel', !allReady);
+  prepFacts.allReady = allReady;
 }
 
 /*
- * 保存先の見た目を決める。
+ * 保存先の状態を控える。
  *
  * **異常のときは必ず開く。** 作成直後も開く（初めて作られたことは
  * 知らせる価値がある。§5.3 の最後の項）。
+ * 見えている文言そのものは、呼び出し側が co-storage-state へ入れている。
  */
-function applyStoragePanel({ label, ok, hasNotices }) {
-  setSummary('co-storage-summary', '保存先', label);
-  setPanelOpen('co-storage', !ok || hasNotices);
+function applyStoragePanel({ ok, hasNotices }) {
+  prepFacts.storage = { ok, hasNotices };
 }
 
 /*
- * 親をどうするか。
+ * 「準備」をどうするか。
  *
- * **中のどれかが開いていれば、親も開く。** 中で警告を出しているのに
- * 親が畳まれていては意味がない。
+ * **中に1つでも気にすべきことがあれば開く。** 中で警告を出しているのに
+ * 畳まれていては意味がない。
  */
 function applyPrepPanel() {
-  const anyOpen = el['co-status-panel'].open || (!el['co-storage'].hidden && el['co-storage'].open);
+  const storageNeedsCare = prepFacts.storage !== null
+    && (!prepFacts.storage.ok || prepFacts.storage.hasNotices);
+  const needsCare = !prepFacts.allReady || storageNeedsCare;
 
-  setSummary('co-prep-summary', '準備', anyOpen ? '確認が必要です' : 'すべて完了');
-  setPanelOpen('co-prep', anyOpen);
+  setSummary('co-prep-summary', '準備', needsCare ? '確認が必要です' : 'すべて完了');
+  setPanelOpen('co-prep', needsCare);
 }
 
 /* ---------- 表示の道具（innerHTML を使わない） ---------- */
@@ -312,10 +340,12 @@ function render() {
   storage = null;
   el['co-storage'].hidden = true;
   el['co-ready'].hidden = true;
+  /* 隠した以上、開閉の判断材料からも外す（消えた表示で開いたままにしない）。 */
+  prepFacts.storage = null;
 
   /*
-   * **前提が欠けたら親を開く。** トークンが切れた場面がここに当たる。
-   * 誘導は親の外に出るが、状況の一覧も一緒に見せる。
+   * **前提が欠けたら「準備」を開く。** トークンが切れた場面がここに当たる。
+   * 誘導は外に出るが、状況の一覧も一緒に見せる。
    */
   applyPrepPanel();
   el['co-guidance'].hidden = false;
@@ -394,7 +424,7 @@ async function prepareStorage() {
   renderNotices([]);
 
   /* 確認中は開いておく。終わってから畳むか決める。 */
-  applyStoragePanel({ label: '確認しています…', ok: false, hasNotices: false });
+  applyStoragePanel({ ok: false, hasNotices: false });
   applyPrepPanel();
 
   try {
@@ -408,7 +438,7 @@ async function prepareStorage() {
       el['co-capture'].hidden = true;
 
       /* **異常。開いたままにする。** */
-      applyStoragePanel({ label: '書き込みを停止しています', ok: false, hasNotices: true });
+      applyStoragePanel({ ok: false, hasNotices: true });
       applyPrepPanel();
       return;
     }
@@ -422,7 +452,7 @@ async function prepareStorage() {
      * 作成・作り直し・タブの補修などが起きた回は開く（§5.3 の最後の項）。
      * **何も起きていない回だけ畳む。**
      */
-    applyStoragePanel({ label, ok: true, hasNotices: storage.notices.length > 0 });
+    applyStoragePanel({ ok: true, hasNotices: storage.notices.length > 0 });
 
     el['co-sheet-link'].href = spreadsheetUrl(storage.spreadsheetId);
     el['co-sheet-link'].hidden = false;
@@ -439,7 +469,7 @@ async function prepareStorage() {
     el['co-storage-state'].dataset.ok = 'no';
 
     /* **失敗。開いたままにする。** */
-    applyStoragePanel({ label: '確認できませんでした', ok: false, hasNotices: true });
+    applyStoragePanel({ ok: false, hasNotices: true });
 
     showMessage(formatDriveError(error), 'error');
   } finally {
@@ -531,7 +561,27 @@ function renderCapture() {
  *
  * **読み取った本文を画面に出さない。** 名刺は第三者の個人情報で、
  * 画面に出す必要が無い。出すのは「何文字読めたか」だけにする。
- * 項目に振り分けたものは PR6 の確認画面で見せる。
+ * 項目に振り分けたものは確認画面（SC-04）で見せる。
+ *
+ * ==================================================================
+ * 内部の事情は画面に書かない（2026-08-19）
+ * ==================================================================
+ * 以前はここに「表面の再試行 2回目で成功」「Geminiへ渡すテキスト
+ * N文字」「一時ファイル 消し切れませんでした」の3行も出していた。
+ * **いずれも利用者が何かを判断するための情報ではない。**
+ * 再試行と一時ファイル（次回起動時に collectOrphans が回収する）は
+ * こちらの後始末の話であり、Gemini へ渡す文字数は §FR-11 の入力上限
+ * （2,000文字）の目視確認という開発中の都合だった
+ * （要件定義書 v3.6 で画面から外すと決めた）。
+ *
+ * **console へも落とさない。** このアプリは「読み取った本文や鍵が
+ * ログへ出る道を1本も作らない」ことをテストで固定してあり
+ * （tests/unit/card-ocr.mjs の「console へ出していない」）、
+ * 診断のためにその約束を緩めない。
+ *
+ * 残すのは**上限を超えたときの1行だけ**。切り捨てで項目が欠けうる、
+ * つまり利用者が結果を確かめる理由がある場合である。
+ * ==================================================================
  */
 function renderOcr(result) {
   const target = el['co-ocr-sides'];
@@ -548,19 +598,23 @@ function renderOcr(result) {
     rows.push({ label: '裏面', value: `読み取れませんでした（${described.errorCode}）`, ok: false });
   }
 
-  if (result.front.attempts > 1) {
-    rows.push({ label: '表面の再試行', value: `${result.front.attempts}回目で成功`, ok: true });
-  }
-
   /*
-   * 結合後の長さ。**この文字列がそのまま Gemini へ渡る**（PR6）。
-   * §FR-11 の入力上限（2,000文字）に収まっているかを、ここで見られる
-   * ようにしておく。
+   * §FR-11 の入力上限。**超えた回だけ**知らせる。
+   * 切り捨てが起きると、拾えない項目が出うるためである。
    */
-  rows.push({ label: 'Geminiへ渡すテキスト', value: `${ocrText.length}文字`, ok: true });
+  /*
+   * 判定は**正規化したあとの長さ**で行う。normalizeText() が重複行と
+   * 空白を落とすため、生の長さで比べると「超えていないのに警告が出る」。
+   * 切り捨てるのは truncateForGemini で、その入力もこの正規化後の文字列。
+   */
+  const normalizedLength = normalizeText(ocrText).length;
 
-  if (!result.deleted) {
-    rows.push({ label: '一時ファイル', value: '消し切れませんでした（次回の起動で回収します）', ok: false });
+  if (normalizedLength > MAX_GEMINI_INPUT_LENGTH) {
+    rows.push({
+      label: '読み取った文字数',
+      value: `${normalizedLength}文字（${MAX_GEMINI_INPUT_LENGTH}文字を超えた分は項目の振り分けに使われません）`,
+      ok: false,
+    });
   }
 
   for (const row of rows) {

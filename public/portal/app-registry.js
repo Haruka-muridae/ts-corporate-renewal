@@ -77,17 +77,24 @@
 
 /*
  * ==================================================================
- * 仮データが2件残っている（2026-08-02 時点で3件。うち1件は実物へ差し替え済み）
+ * 仮データは残っていない（2026-08-19 に最後の2件を削除）
  * ==================================================================
- * 遷移先もアイコンも暫定で、`localhost` を指すものが含まれる。
- * **本番の利用者の画面では、これらのアイコンは必ず読み込みに失敗する。**
- * 失敗したときは名前の1文字目を色付きの角丸で出す（app-card のフォールバック）。
- * つまり、当面はフォールバックのほうが実際の表示になる。
+ * 202607No02「領収書・収支管理システム」と 202607No03「電子契約書作成アプリ」は、
+ * 遷移先が GitHub のソースファイルと個人の GitHub Pages、アイコンが
+ * `http://localhost:8000/...` という仮のままだった。
+ * 本番の利用者から見ると、押した先が当社のアプリではない場所であり、
+ * アイコンは必ず読み込みに失敗して頭文字へ落ちる。
+ * 「動くアプリだけを載せる」という約束のほうを採り、両方とも消した。
  *
- * この配列は、いずれデータベース（またはスプレッドシート）から
- * 取ってくる形へ移す。発動条件は docs/specs/apps-grid-spec-v1.md §7-4。
+ * **`id` は再利用しない。** 利用者の端末に残っている `tsam-app-layout` の
+ * `order` にこの2つが載っていることがあるが、定義に無い ID は
+ * 未知 ID として無視される（apps-grid-spec-v1.md §4-c）ので、
+ * お気に入りから静かに外れるだけで済む。同じ番号を別のアプリへ振り直すと、
+ * 外れたはずの位置に別のアプリが現れる。
  *
- * それまでは、ここを直して push するのが唯一の追加手段である。
+ * この配列は、スプレッドシート（app-source.js）が取れなかったときの
+ * 最後の受け皿でもある（apps-grid-spec-v1.md §15-4）。
+ * 取得できないあいだは、ここに書いたものがそのまま画面に出る。
  * ==================================================================
  */
 export const APP_REGISTRY = Object.freeze([
@@ -103,21 +110,9 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/voice-recorder/',
     icon: '録',
   }),
-  Object.freeze({
-    id: '202607No02',
-    name: '領収書・収支管理システム',
-    href: 'https://github.com/Haruka-muridae/ts-corporate-renewal/blob/main/apps/script.js',
-    icon: 'http://localhost:8000/apps/assets/icons/receipt-manager.svg',
-  }),
-  Object.freeze({
-    id: '202607No03',
-    name: '電子契約書作成アプリ',
-    href: 'https://haruka-muridae.github.io/ai-personal-lp/',
-    icon: 'http://localhost:8000/apps/assets/icons/contract-creator.svg',
-  }),
 
   /*
-   * ここから下は実物。上の3件（仮データ）と違い、実際に動くアプリを指す。
+   * ここから下も実物。すべて `production-app/` 配下の当社アプリを指す。
    *
    * id は配置データ（tsam-app-layout の order）が指す先なので、
    * **あとから変えないこと**（apps-grid-spec-v1.md §4-c）。

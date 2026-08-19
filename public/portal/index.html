@@ -125,15 +125,18 @@
             Gemini APIキーはお使いの端末（ブラウザ）にのみ保存され、当社サーバーには送信されません。
           </p>
           <!--
-            キーの取得手順。
-            リンクだけでなくURL自体も読める形で出す。
-            リンクを踏まずに、行き先を目で確かめてから移動できるようにするため。
+            キーの取得先。
+            以前はリンクの隣に同じURLを文字でも置き、「新しいタブで開きます」も
+            添えていたが、どちらも落とした（2026-08-19）。
+            同じ39文字のURLを2度読ませ、別タブで開くことまで書くと、
+            この1段だけで3行になり、キーを入れに来た人の入力欄が下がる。
+            行き先の確認手段が1つ減る点は承知のうえで、短さを採った。
+            詳細は docs/specs/portal-spec-v1.md §7-5。
           -->
           <p class="auth-api-panel__note">
             キーは
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
-            （<span class="auth-api-panel__url">https://aistudio.google.com/apikey</span>）で取得できます。
-            新しいタブで開きます。
+            で取得できます。
           </p>
           <p class="auth-api-panel__note">
             <strong>Googleアカウントがあれば無料で発行できます。</strong>
@@ -190,20 +193,38 @@
             紹介リンクである旨・有料である旨・キー取得には不要である旨は、
             表示から落ちてはならない。文言をここへ直接書いているのは、
             /apps/ 側の実装（テスト環境）へ本番から依存させないため。
+
+            本文は details で畳んである（2026-08-19）。
+            ここはAPIキーを設定しに来た人にとっては本題ではないのに、
+            開いた状態では本文5行ぶんを占め、パネルの末尾を長くしていた。
+
+            **見出しは details の外に置く。** summary の中へ h3 を入れると、
+            h3 が block のため開閉の三角だけが1行を占め、見出しが次の行へ落ちる
+            （Chrome 実機で確認）。直すには CSS が要り、/portal/ には
+            インラインCSSを置かない（portal-spec-v1.md §9）ため、この形にした。
+
+            見出しに「（紹介リンク）」を添える。畳んだ中身は innerText にも
+            読み上げにも出ないので、畳んだままだと紹介である旨が消える。
+            有料である旨とキー取得に不要である旨は、開けば必ず目に入る
+            （リンクを押すには開くほかない）。加えて「有料契約は必要ありません」は
+            上の案内文（§7-5 の3段目）に畳まずに残してある。
           -->
           <aside class="auth-api-panel__promo" aria-labelledby="portal-api-promo-title">
-            <h3 class="auth-api-panel__promo-title" id="portal-api-promo-title">Google Workspace のご案内</h3>
-            <p class="auth-api-panel__promo-body">
-              独自ドメインのメールなど、ビジネス用途でGoogleのサービスをお使いになるなら
-              <a id="portal-workspace-link" href="https://referworkspace.app.goo.gl/2KTq"
-                 target="_blank" rel="noopener noreferrer">Google Workspace</a>
-              がおすすめです。<span class="auth-api-panel__promo-tag">【紹介リンク】</span>
-            </p>
-            <p class="auth-api-panel__promo-note">
-              Google Workspace 紹介プログラムのリンクです。Google Workspace は有料サービスで、
-              Google LLC が提供する外部サイトへ新しいタブで移動します。
-              <strong>Gemini APIキーの取得に Google Workspace は必要ありません。</strong>
-            </p>
+            <h3 class="auth-api-panel__promo-title" id="portal-api-promo-title">Google Workspace のご案内（紹介リンク）</h3>
+            <details>
+              <summary>くわしく見る</summary>
+              <p class="auth-api-panel__promo-body">
+                独自ドメインのメールなど、ビジネス用途でGoogleのサービスをお使いになるなら
+                <a id="portal-workspace-link" href="https://referworkspace.app.goo.gl/2KTq"
+                   target="_blank" rel="noopener noreferrer">Google Workspace</a>
+                がおすすめです。<span class="auth-api-panel__promo-tag">【紹介リンク】</span>
+              </p>
+              <p class="auth-api-panel__promo-note">
+                Google Workspace 紹介プログラムのリンクです。Google Workspace は有料サービスで、
+                Google LLC が提供する外部サイトへ新しいタブで移動します。
+                <strong>Gemini APIキーの取得に Google Workspace は必要ありません。</strong>
+              </p>
+            </details>
           </aside>
         </section>
 
@@ -230,15 +251,23 @@
         </div>
 
         <!--
-          アプリのページ式グリッド。
+          お気に入り（アプリのページ式グリッド）。
           2列×4行＝8枠で1ページ。ページ数は max(2, ceil(件数/8))。
           中身は portal.js が描く（空枠は「準備中」）。
 
-          空状態の案内文は置かない。準備中の枠そのものが
-          「まだ何も入っていない」ことを示す。
-          詳細は docs/specs/apps-grid-spec-v1.md。
+          **お気に入りが0件のあいだは、この節ごと隠す**（2026-08-19）。
+          以前は0件でも「準備中」の枠を16個とページ送りを出していたが、
+          まだ何も置いていない棚を2ページぶん見せても、利用者は
+          押せない枠を数えるだけで、次にする操作は分からない。
+          0件のときに見せるべきは下の「全アプリ一覧」のほうである。
+          隠すのは節だけで、中身（枠・ドット）は描いたままにしてある。
+          1件目を追加した時点でそのまま出せばよく、描き分けを増やさない。
+
+          空状態の案内文は置かない。節ごと消えるので、
+          「まだ何も入っていない」ことは画面の形が示す。
+          詳細は docs/specs/apps-grid-spec-v1.md §2-2。
         -->
-        <section class="auth-apps" aria-labelledby="portal-apps-title">
+        <section class="auth-apps" id="portal-apps-section" aria-labelledby="portal-apps-title" hidden>
           <h2 class="auth-apps__heading" id="portal-apps-title">お気に入り</h2>
 
           <div class="auth-apps__pages" id="portal-apps"></div>
@@ -264,18 +293,13 @@
           </nav>
 
           <!--
-            並べ替えの結果を読み上げへ伝える。
-            画面では位置が見えるが、キーボード操作では見えないため。
-          -->
-          <p class="auth-visually-hidden" id="portal-apps-live" role="status" aria-live="polite"></p>
-
-          <p class="auth-message auth-apps__message" id="portal-apps-message" tabindex="-1" hidden></p>
-
-          <!--
             お気に入りを初期状態に戻す。保存キーを消して、お気に入りを空にする。
             取り消せないので確認を1枚挟む。
+
+            お気に入りが0件のときは隠す（2026-08-19）。
+            空のものを空へ戻すボタンに、押して意味のある状態が無い。
           -->
-          <div class="auth-apps__reset">
+          <div class="auth-apps__reset" id="portal-apps-reset-block" hidden>
             <button class="auth-apps__reset-button" id="portal-apps-reset" type="button">お気に入りを初期状態に戻す</button>
 
             <div class="auth-apps__confirm" id="portal-apps-reset-confirm" role="group"
@@ -301,7 +325,26 @@
           詳細は docs/specs/apps-grid-spec-v1.md §12。
         -->
         <section class="auth-catalog" aria-labelledby="portal-catalog-title">
-          <h2 class="auth-catalog__heading" id="portal-catalog-title">全アプリ一覧</h2>
+          <!--
+            見出しに焦点を当てられるようにしてある（tabindex="-1"）。
+            「お気に入りを初期状態に戻す」を押すとお気に入りの節ごと消え、
+            押したボタン自体が無くなる。行き先を用意しないと焦点が body へ落ち、
+            キーボードだけで操作している人が画面のどこにいるか分からなくなる。
+          -->
+          <h2 class="auth-catalog__heading" id="portal-catalog-title" tabindex="-1">全アプリ一覧</h2>
+
+          <!--
+            お気に入りの状態（並び順の保存失敗・一覧の取得失敗）と、
+            並べ替えの読み上げ。**お気に入りの節の外に置く。**
+            節はお気に入りが0件だと隠れるが、この2つは0件のときこそ要る
+            （「アプリ一覧を取得できませんでした」も、最後の1件を外した
+            読み上げも、隠れた中では伝わらない）。
+            id は portal-apps-* のまま据え置く。指しているのは
+            置き場所ではなく、お気に入りグリッドの状態である。
+          -->
+          <p class="auth-visually-hidden" id="portal-apps-live" role="status" aria-live="polite"></p>
+
+          <p class="auth-message auth-apps__message" id="portal-apps-message" tabindex="-1" hidden></p>
 
           <div class="auth-catalog__pages" id="portal-catalog"></div>
 

@@ -93,7 +93,7 @@ const GUIDE = Object.freeze({
    * 見分けられない以上、両方を案内して利用者が次を選べるようにする。
    */
   [ErrorCode.OAUTH_POPUP_CLOSED]:
-    'Googleとの連携が完了しませんでした。認証画面を閉じた場合は、もう一度「Googleドライブに保存」をお試しください。'
+    'Googleとの連携が完了しませんでした。認証画面を閉じた場合は、もう一度「Googleドライブへ保存」をお試しください。'
     + `認証画面にエラーが出ていた場合は、Google Cloud Console の「承認済みの JavaScript 生成元」に ${ORIGIN} を追加してください`
     + '（追加した直後は反映まで時間がかかることがあります）。',
 

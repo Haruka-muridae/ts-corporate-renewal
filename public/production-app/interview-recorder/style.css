@@ -217,6 +217,27 @@ audio {
   margin: 0 0 0.75rem;
 }
 
+/* 保存後の「その他のダウンロード」。既定は畳んだ状態で、主導線を邪魔しない。 */
+.download-more {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.download-more > summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.download-more > summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.download-more .button-row {
+  margin-top: 0.6rem;
+}
+
 .link-secondary {
   background: none;
   border: none;

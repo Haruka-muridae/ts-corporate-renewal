@@ -47,9 +47,9 @@ const dom = {
   post: document.getElementById('tp-post'),
   message: document.getElementById('tp-message'),
   drafts: document.getElementById('tp-drafts'),
-  draftsEmpty: document.getElementById('tp-drafts-empty'),
+  draftsSection: document.getElementById('tp-drafts-section'),
   history: document.getElementById('tp-history'),
-  historyEmpty: document.getElementById('tp-history-empty'),
+  historySection: document.getElementById('tp-history-section'),
 };
 
 const storageOk = isStorageAvailable();
@@ -82,7 +82,13 @@ function renderDrafts() {
   const drafts = storageOk ? listDrafts() : [];
 
   dom.drafts.textContent = '';
-  dom.draftsEmpty.hidden = drafts.length > 0;
+
+  /*
+   * 0件のあいだはセクションごと出さない。空の一覧と「まだありません」は
+   * 場所を取るだけで、利用者の次の操作を助けない（下書きは「下書き保存」で
+   * 増え、そのときこの関数が呼び直されて現れる）。
+   */
+  dom.draftsSection.hidden = drafts.length === 0;
 
   for (const draft of drafts) {
     const li = document.createElement('li');
@@ -134,7 +140,9 @@ function renderHistory() {
   const items = storageOk ? listHistory() : [];
 
   dom.history.textContent = '';
-  dom.historyEmpty.hidden = items.length > 0;
+
+  /* 記録の範囲の注記もセクションの中にある。1件も無いうちは出す意味がない。 */
+  dom.historySection.hidden = items.length === 0;
 
   for (const item of items) {
     const li = document.createElement('li');

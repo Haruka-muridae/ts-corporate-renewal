@@ -158,9 +158,13 @@
   word-break: break-all;
 }
 
-.ro-meta__value--mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.8125rem;
+/* 等幅の値（ro-meta__value--mono）は、画像ハッシュの表示をやめて使い手が
+   いなくなったため 2026-08-19 に削除した。 */
+
+/* 縮小の選択はプレビューの中にある。段組みをまたいで1行使う。 */
+.ro-check--shrink {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 /* ---------- 状態・エラー ---------- */
@@ -323,4 +327,16 @@
 
 .ro-adopt:hover {
   background: #fff8e6;
+}
+
+/* ---------- フッター（ポータルへ戻る） ---------- */
+
+.ro-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #d9dee5;
+}
+
+.ro-footer .ro-note {
+  margin: 0;
 }
