@@ -141,9 +141,14 @@ export const SAFE_MIN_BYTES = 100 * 1024 * 1024;
  * IDは毎回「名前と親の関係」から解決する。
  *
  * この名前は音声文字起こしアプリも読みに来る（public/apps/drive-folders.js の
- * 同名定義がテスト環境側の正）。**片方だけ変えないこと。**
+ * 同名定義がテスト環境側の正）。加えて、面談録音アプリ
+ * （production-app/interview-recorder/config.js の DRIVE_NAMES）が
+ * **このフォルダへ書きに来る**（同アプリ要件 v1.1・§4。2026-08-19 から）。
+ * つまり同じ場所を、書き手2つ・読み手1つで共有している。
+ * **どれか1つだけ変えないこと。**
  * 複製であって import ではないのは、本番アプリからテスト環境を参照しない
- * という境界（docs/repository-structure.md §1）による。
+ * という境界（docs/repository-structure.md §1）と、本番アプリ同士を
+ * 相互参照しないという流儀による。
  * ------------------------------------------------------------------
  */
 export const DRIVE_NAMES = Object.freeze({
