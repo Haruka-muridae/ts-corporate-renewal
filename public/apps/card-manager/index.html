@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>名刺管理 | TSアセットマネジメント合同会社</title>
+  <meta name="description" content="名刺スキャナが蓄積したGoogleスプレッドシートの名刺台帳を検索・閲覧・編集するアプリです。">
+
+  <!-- TODO: 公開URLの確定後に canonical を追加 -->
+  <!-- TODO: 公開URLの確定後に og:url を追加 -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="名刺管理 | TSアセットマネジメント合同会社">
+  <meta property="og:description" content="名刺スキャナが蓄積したGoogleスプレッドシートの名刺台帳を検索・閲覧・編集するアプリです。">
+  <meta property="og:locale" content="ja_JP">
+  <!-- TODO: OGP画像の確定後に og:image を追加 -->
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- 公開前の準備中ページのため、検索エンジンには登録しない -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <!--
+    このページが通信してよい相手を明示する。
+    許可しているのは Google の認証・Sheets だけ。
+
+      accounts.google.com … Google Identity Services（Drive認可）
+      sheets.googleapis.com … Sheets API（台帳の読み込み・更新）
+
+    画像そのものは扱わない（表面/裏面画像はDriveへのリンクを新規タブで
+    開くだけで、埋め込み表示はしない）ため、img-src に外部ドメインは要らない。
+    CSP違反が出た場合も、ワイルドカードを足さず必要な接続先だけ追加すること。
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' https://accounts.google.com;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' https://*.googleusercontent.com https://ssl.gstatic.com https://www.gstatic.com;
+    connect-src 'self' https://sheets.googleapis.com https://accounts.google.com;
+    frame-src https://accounts.google.com;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+  ">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Sans+JP:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+
+  <header id="header" class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-logo" href="../../index.html" aria-label="TSアセットマネジメント合同会社 トップページ">
+        <span class="site-logo__mark" aria-hidden="true">TS</span>
+        <span class="site-logo__text">
+          <span class="site-logo__name">TSアセットマネジメント合同会社</span>
+          <span class="site-logo__name-en" lang="en">TS ASSET MANAGEMENT LLC</span>
+        </span>
+      </a>
+
+      <nav class="cm-nav" aria-label="ページ内ナビ">
+        <a class="cm-nav__link" href="../index.html">AIアプリ一覧へ戻る</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="section cm-hero" aria-labelledby="cm-title">
+      <div class="container">
+        <nav class="cm-breadcrumb" aria-label="パンくずリスト">
+          <ol class="cm-breadcrumb__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li aria-current="page">名刺管理</li>
+          </ol>
+        </nav>
+
+        <div class="cm-hero__inner">
+          <p class="cm-hero__label" lang="en">Card Manager</p>
+          <h1 id="cm-title" class="cm-hero__title">名刺管理</h1>
+          <p class="cm-hero__lead">名刺スキャナが蓄積したGoogleスプレッドシート「名刺台帳（表裏対応 v3）」を検索・閲覧・編集します。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         このアプリについて
+         ============================================================ -->
+    <section class="section cm-main" aria-labelledby="cm-about-title">
+      <div class="container cm-container">
+
+        <h2 id="cm-about-title" class="cm-section-title">このアプリについて</h2>
+
+        <div class="cm-panel cm-panel--about">
+          <p>名刺スキャナが「TSAM AI」＞「名刺スキャナ」に保存した台帳を読み込み、検索・閲覧・編集します。当社のサーバーへ送信されることはありません。</p>
+          <p class="cm-panel__note">このアプリは台帳を新規作成しません。台帳がまだ無い場合は、先に名刺スキャナで1件登録してください。</p>
+          <p class="cm-panel__note">生成AIは使用していません。編集できるのは氏名・会社名・連絡先などの入力項目とメールアドレスのみで、カードIDや画像・OCR結果などの自動項目は読み取り専用です。</p>
+        </div>
+
+        <!-- ============================================================
+             1. 接続
+             ============================================================ -->
+        <section class="cm-block" aria-labelledby="cm-connect-title">
+          <h2 id="cm-connect-title" class="cm-section-title">1. 台帳を読み込む</h2>
+
+          <div class="cm-panel">
+            <p id="cm-status" class="cm-status" role="status" aria-live="polite">Googleドライブに接続していません</p>
+
+            <p id="cm-message" class="cm-message" hidden></p>
+
+            <div class="cm-actions">
+              <button id="cm-connect-button" class="btn btn--primary" type="button">Googleドライブへ接続する</button>
+              <button id="cm-reload-button" class="btn cm-btn-quiet" type="button" hidden>台帳を再読み込みする</button>
+            </div>
+
+            <p class="cm-note">「Googleドライブへ接続する」を押すと、Googleドライブへの接続許可を求める画面が表示されます。</p>
+            <p id="cm-spreadsheet-link" class="cm-note" hidden></p>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             台帳が見つからない場合の案内（通常は隠す）
+             ============================================================ -->
+        <section id="cm-not-found" class="cm-block cm-is-hidden" aria-labelledby="cm-not-found-title">
+          <h2 id="cm-not-found-title" class="cm-section-title">台帳が見つかりません</h2>
+
+          <div class="cm-panel">
+            <p class="cm-alert cm-alert--caution">名刺スキャナで1件登録すると台帳が作成されます。登録後に、このページで「台帳を再読み込みする」をお試しください。</p>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             2. 検索・一覧
+             ============================================================ -->
+        <section id="cm-search-section" class="cm-block cm-is-hidden" aria-labelledby="cm-search-title">
+          <h2 id="cm-search-title" class="cm-section-title">2. 検索する</h2>
+
+          <div class="cm-panel">
+            <form id="cm-search-form" class="cm-search" role="search">
+              <div class="cm-search__row">
+                <label class="cm-search__label" for="cm-search-input">キーワード</label>
+                <input id="cm-search-input" class="cm-field__input" type="search" placeholder="氏名・会社名・メールアドレスなど" autocomplete="off">
+              </div>
+
+              <div class="cm-search__row">
+                <label class="cm-search__label" for="cm-tag-filter">タグ</label>
+                <select id="cm-tag-filter" class="cm-field__input">
+                  <option value="">すべて</option>
+                </select>
+              </div>
+
+              <div class="cm-search__row">
+                <label class="cm-search__label" for="cm-company-filter">会社</label>
+                <select id="cm-company-filter" class="cm-field__input">
+                  <option value="">すべて</option>
+                </select>
+              </div>
+            </form>
+
+            <p id="cm-result-count" class="cm-note" role="status" aria-live="polite"></p>
+
+            <div class="cm-table-wrap">
+              <table class="cm-table">
+                <caption class="cm-visually-hidden">登録済みの名刺一覧</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">氏名</th>
+                    <th scope="col">会社</th>
+                    <th scope="col">役職</th>
+                    <th scope="col">タグ</th>
+                    <th scope="col">登録日時</th>
+                  </tr>
+                </thead>
+                <tbody id="cm-list-body"></tbody>
+              </table>
+            </div>
+
+            <p id="cm-list-empty" class="cm-note" hidden></p>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             3. 詳細・編集
+             ============================================================ -->
+        <section id="cm-detail" class="cm-block cm-is-hidden" aria-labelledby="cm-detail-title">
+          <h2 id="cm-detail-title" class="cm-section-title">3. 詳細</h2>
+
+          <div class="cm-panel">
+            <div class="cm-actions cm-detail__top-actions">
+              <button id="cm-edit-button" class="btn btn--secondary" type="button">編集する</button>
+              <button id="cm-save-button" class="btn btn--primary" type="button" hidden>保存する</button>
+              <button id="cm-cancel-button" class="btn cm-btn-quiet" type="button" hidden>編集をやめる</button>
+              <button id="cm-close-button" class="btn cm-btn-quiet" type="button">一覧に戻る</button>
+            </div>
+
+            <!--
+              自動項目。利用者は編集しない。
+              表面/裏面画像URLはDriveリンクとして新規タブで開く。埋め込み表示はしない。
+            -->
+            <dl class="cm-meta">
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">カードID</dt>
+                <dd id="cm-meta-card-id" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">会社ID</dt>
+                <dd id="cm-meta-company-id" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">登録日時</dt>
+                <dd id="cm-meta-created" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">更新日時</dt>
+                <dd id="cm-meta-updated" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">OCR実行日時</dt>
+                <dd id="cm-meta-ocr-at" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">OCRエンジン</dt>
+                <dd id="cm-meta-engine" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">
+                  OCR信頼度
+                  <span class="cm-meta__note">アプリ独自の目安</span>
+                </dt>
+                <dd id="cm-meta-confidence" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">名刺の向き</dt>
+                <dd id="cm-meta-orientation" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">言語</dt>
+                <dd id="cm-meta-language" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">表面画像</dt>
+                <dd id="cm-meta-front-image" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">裏面画像</dt>
+                <dd id="cm-meta-back-image" class="cm-meta__value">—</dd>
+              </div>
+              <div class="cm-meta__item">
+                <dt class="cm-meta__label">重複判定キー</dt>
+                <dd id="cm-meta-duplicate-key" class="cm-meta__value">—</dd>
+              </div>
+            </dl>
+
+            <details class="cm-raw">
+              <summary>読み取ったテキストを表示する</summary>
+
+              <div class="cm-raw__group">
+                <h4 class="cm-raw__label">表面</h4>
+                <pre id="cm-raw-front" class="cm-raw__text"></pre>
+              </div>
+
+              <div class="cm-raw__group">
+                <h4 class="cm-raw__label">裏面</h4>
+                <pre id="cm-raw-back" class="cm-raw__text"></pre>
+              </div>
+
+              <div class="cm-raw__group">
+                <h4 class="cm-raw__label">統合OCR</h4>
+                <pre id="cm-raw-merged" class="cm-raw__text"></pre>
+              </div>
+            </details>
+
+            <!-- 入力欄は fields.js の定義から script.js が生成する -->
+            <div id="cm-form" class="cm-form"></div>
+          </div>
+        </section>
+
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer" class="site-footer">
+    <div class="container">
+      <div class="site-footer__main">
+        <div class="site-footer__info">
+          <p class="site-footer__name">TSアセットマネジメント合同会社</p>
+          <p class="site-footer__name-en" lang="en">TS ASSET MANAGEMENT LLC</p>
+          <address class="site-footer__address">
+            <p>〒249-0002 神奈川県逗子市久木8-8-26</p>
+            <p><a href="mailto:architect@potenitas.com">architect@potenitas.com</a></p>
+          </address>
+        </div>
+
+        <nav class="footer-nav" aria-label="フッターナビ">
+          <ul class="footer-nav__list">
+            <li><a href="../../index.html">ホーム</a></li>
+            <li><a href="../index.html">AIアプリ</a></li>
+            <li><a href="../../index.html#business">事業領域</a></li>
+            <li><a href="../../index.html#company">会社概要</a></li>
+            <li><a href="../../index.html#contact">お問い合わせ</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <div class="site-footer__bottom">
+        <small>Copyright &copy; TS Asset Management LLC. All Rights Reserved.</small>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>

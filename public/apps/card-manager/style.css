@@ -1,0 +1,636 @@
+/*
+ * 名刺管理 専用スタイル。
+ * ../../css/style.css を読み込んだうえで追加する差分のみを定義する。
+ * 既存クラスは上書きせず、cm- の接頭辞のみを使う。
+ *
+ * 色は既存のカスタムプロパティ（--color-navy / --color-gold / --c-border など）
+ * を使い、新しい色を定義しない。card-scanner/style.css（cs-）と同じトーンに合わせる。
+ *
+ * ブレークポイントは既存サイトに合わせて 600px / 1024px を使う。
+ */
+
+/* ヘッダー内の戻りリンク（このページはグローバルナビを持たない） */
+.cm-nav__link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Breadcrumb */
+.cm-breadcrumb {
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.cm-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-text-muted);
+}
+
+.cm-breadcrumb__list li + li::before {
+  margin-right: 8px;
+  color: var(--color-border-strong);
+  content: "/";
+}
+
+.cm-breadcrumb__list a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.cm-breadcrumb__list [aria-current="page"] {
+  color: var(--c-main);
+  font-weight: 700;
+}
+
+/* Page hero */
+.cm-hero {
+  padding-top: calc(var(--section-space) + var(--header-height));
+  padding-bottom: calc(var(--section-space) - 24px);
+  border-bottom: 1px solid var(--c-border);
+  background-color: var(--color-off-white);
+}
+
+.cm-hero__inner {
+  margin-top: 32px;
+  max-width: 720px;
+}
+
+.cm-hero__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-gold-text);
+  font-family: var(--font-en), var(--font-ja);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.cm-hero__label::before {
+  width: 32px;
+  height: 1px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+.cm-hero__title {
+  margin-top: 16px;
+  font-size: clamp(1.625rem, 1.2rem + 2.2vw, 2.5rem);
+  line-height: 1.35;
+}
+
+.cm-hero__lead {
+  margin-top: 24px;
+  color: var(--c-text-muted);
+}
+
+/* 本体。読みやすいよう幅を抑える（一覧テーブルは card-scanner より少し広め） */
+.cm-container {
+  max-width: calc(880px + (var(--container-padding) * 2));
+}
+
+.cm-section-title {
+  position: relative;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  font-size: clamp(1.1875rem, 1.05rem + 0.5vw, 1.375rem);
+}
+
+.cm-section-title::after {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 40px;
+  height: 2px;
+  background-color: var(--color-gold);
+  content: "";
+}
+
+.cm-block {
+  margin-top: 48px;
+}
+
+/* パネル */
+.cm-panel {
+  padding: 28px 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  background-color: var(--c-bg);
+}
+
+.cm-panel > p + p {
+  margin-top: 16px;
+}
+
+.cm-panel--about {
+  background-color: var(--c-bg-sub);
+}
+
+.cm-panel__note {
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+}
+
+.cm-note {
+  margin-top: 16px;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+/* 表示・非表示の切り替え、読み上げ専用のキャプション */
+.cm-is-hidden {
+  display: none !important;
+}
+
+.cm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   状態表示・メッセージ
+   ============================================================ */
+
+.cm-status {
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-navy-light);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.cm-message {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-border-strong);
+  background-color: var(--c-bg-sub);
+  font-size: 0.875rem;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.cm-message[data-tone="error"] {
+  border-left-color: #b3261e;
+  color: #7a1c16;
+  background-color: #fdf3f2;
+}
+
+.cm-message[data-tone="success"] {
+  border-left-color: var(--color-gold);
+  color: var(--c-text);
+}
+
+.cm-alert {
+  margin-bottom: 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-gold);
+  background-color: var(--c-bg-sub);
+  font-size: 0.875rem;
+  line-height: 1.9;
+}
+
+.cm-alert--caution {
+  border-left-color: var(--color-gold);
+  color: var(--c-text);
+}
+
+.cm-alert--warning {
+  border-left-color: #b3261e;
+  color: #7a1c16;
+  background-color: #fdf3f2;
+}
+
+/* ============================================================
+   検索・絞り込み
+   ============================================================ */
+
+.cm-search {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .cm-search {
+    grid-template-columns: 2fr 1fr 1fr;
+    align-items: end;
+  }
+}
+
+.cm-search__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cm-search__label {
+  color: var(--c-main);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   一覧テーブル
+   ============================================================ */
+
+.cm-table-wrap {
+  margin-top: 20px;
+  overflow-x: auto;
+}
+
+.cm-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.cm-table th,
+.cm-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--c-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.cm-table th {
+  color: var(--c-text-muted);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.cm-table td {
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+
+.cm-table tbody tr:hover {
+  background-color: var(--c-bg-sub);
+}
+
+/* 氏名セルのボタン。行全体をリンク化する代わりに、キーボードで押せるボタンにする */
+.cm-table__open {
+  padding: 6px 4px;
+  border: 0;
+  background-color: transparent;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.cm-table__open:hover {
+  color: var(--color-gold-text);
+}
+
+/* ============================================================
+   自動で決まる項目（読み取り専用）
+   ============================================================ */
+
+.cm-meta {
+  display: grid;
+  gap: 12px 24px;
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg-sub);
+}
+
+@media (min-width: 640px) {
+  .cm-meta {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+.cm-meta__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cm-meta__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cm-meta__note {
+  color: var(--c-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+
+.cm-meta__value {
+  margin: 0;
+  color: var(--c-text);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.cm-meta__value a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* ============================================================
+   読み取ったテキストの確認
+   ============================================================ */
+
+.cm-raw {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.cm-raw summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cm-raw__text {
+  margin-top: 12px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: var(--radius-tag);
+  background-color: var(--c-bg-sub);
+  color: var(--c-text);
+  font-family: var(--font-num);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cm-raw__group + .cm-raw__group {
+  margin-top: 16px;
+}
+
+.cm-raw__label {
+  margin-top: 16px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   編集フォーム
+   ============================================================ */
+
+.cm-form {
+  display: grid;
+  gap: 20px;
+}
+
+.cm-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.cm-field__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cm-field__label {
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cm-field__input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button);
+  color: var(--c-text);
+  background-color: var(--c-bg);
+  /* 16px未満だとスマホで画面が拡大されるため、16pxを下限にする */
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+textarea.cm-field__input {
+  line-height: 1.8;
+  resize: vertical;
+}
+
+/* 閲覧モードでは読み取り専用の見た目にする（色だけに頼らない） */
+.cm-field__input:read-only,
+.cm-field__input:disabled {
+  border-style: dashed;
+  background-color: var(--c-bg-sub);
+  color: var(--c-text-muted);
+}
+
+/* 値を開くリンク（メール・電話・Web・SNS）。閲覧モードのときだけ表示する */
+.cm-field__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.cm-field__links:empty {
+  display: none;
+}
+
+.cm-field__links a {
+  font-size: 0.75rem;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* ============================================================
+   メールアドレス（複数件）
+   ============================================================ */
+
+.cm-email-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cm-email-list:empty {
+  display: none;
+}
+
+.cm-email {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.cm-email__main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cm-email__main input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-gold);
+}
+
+.cm-email__main:has(input:checked) {
+  color: var(--color-gold-text);
+  font-weight: 700;
+}
+
+.cm-email__input {
+  flex: 1 1 220px;
+  width: auto;
+}
+
+.cm-email__open {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.cm-email__remove {
+  padding: 8px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-button);
+  color: var(--c-text-muted);
+  background-color: transparent;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.cm-email__remove:hover {
+  color: var(--c-text);
+  border-color: var(--color-border-strong);
+}
+
+.cm-email-add {
+  justify-self: start;
+  margin-top: 12px;
+  font-size: 0.8125rem;
+}
+
+/* ============================================================
+   ボタン配置
+   ============================================================ */
+
+.cm-actions {
+  display: flex;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cm-actions .btn {
+  flex: 1 1 auto;
+  min-width: 140px;
+  padding-inline: 16px;
+}
+
+.cm-detail__top-actions {
+  margin-top: 0;
+  margin-bottom: 24px;
+}
+
+.cm-btn-quiet {
+  color: var(--c-text-muted);
+  border-color: transparent;
+  background-color: transparent;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.cm-panel .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .cm-btn-quiet:hover {
+    color: var(--c-main);
+    background-color: var(--c-bg-sub);
+  }
+}
+
+@media (min-width: 600px) {
+  .cm-panel {
+    padding: 32px;
+  }
+
+  .cm-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 24px;
+  }
+
+  .cm-field[data-span="full"] {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .cm-block {
+    margin-top: 56px;
+  }
+}
+
+/*
+ * 動きを減らす設定への対応。
+ * 共通のリセットは ../../css/style.css にもあるが、
+ * このアプリで追加した状態変化を明示的に止める。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .cm-table__open {
+    transition: none;
+  }
+}
