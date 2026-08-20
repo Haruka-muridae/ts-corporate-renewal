@@ -91,6 +91,11 @@ POST /exec?path=stripe-webhook&k=＜合言葉＞
 
 本文は Stripe の JSON。詳細は [../STRIPE_SETUP.md](../STRIPE_SETUP.md)。
 
+本番では Stripe から直接ではなく、[`../workers/stripe-relay/`](../workers/stripe-relay/README.md)
+を経由して届く（Apps Script の 302 を Stripe が失敗と数えるため）。中継は署名を
+クエリ `sig` に載せて転送する。設定 `STRIPE_WEBHOOK_REQUIRE_SIGNATURE=TRUE` で
+`sig` の無い要求を拒否できる。
+
 ---
 
 ## 手動実行する関数

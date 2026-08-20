@@ -574,6 +574,106 @@ try {
   check('空のセッションIDを拒否する', gas.getCheckoutStatus_('').errorPair[0] === 'INVALID_REQUEST');
 
   /* ---------------------------------------------------------------- */
+  section('同居する一回払い（交流会アプリ）の決済を会員登録しない');
+
+  /*
+   * 同じ Stripe アカウントに mode=payment の Checkout（交流会の参加費）が
+   * 同居している。届いても会員を作らず、メールも送らないこと。
+   */
+  const usersBeforeOneTime = gas.readRows_('users').length;
+  const mailsBeforeOneTime = env.sentMails.length;
+
+  const oneTimeResult = post(makeEvent('evt_checkout_one_time', 'checkout.session.completed', {
+    id: 'cs_event_1',
+    mode: 'payment',
+    customer: null,
+    subscription: null,
+    payment_intent: 'pi_event_1',
+    customer_details: { email: 'attendee@example.com' },
+  }));
+
+  check('一回払いの決済完了は受理する（Stripe に再送させない）', oneTimeResult.success === true);
+  check('一回払いは ignored として記録する', oneTimeResult.data.status === 'ignored');
+  check('一回払いでは会員を作らない', gas.findUserByEmail_('attendee@example.com') === null);
+  check('一回払いでは users の行数が変わらない', gas.readRows_('users').length === usersBeforeOneTime);
+  check('一回払いではメールを送らない', env.sentMails.length === mailsBeforeOneTime);
+  check(
+    '無視した理由が stripe_events に残る',
+    gas.findRows_('stripe_events', (values) => (
+      String(values[gas.EVENT_COL.EVENT_ID - 1]).trim() === 'evt_checkout_one_time'
+      && String(values[gas.EVENT_COL.PROCESSING_STATUS - 1]) === 'ignored'
+      && String(values[gas.EVENT_COL.ERROR_MESSAGE - 1]).includes('mode=payment')
+    )).length === 1,
+  );
+
+  const noSubResult = post(makeEvent('evt_checkout_no_sub', 'checkout.session.completed', {
+    id: 'cs_no_sub',
+    customer: 'cus_no_sub',
+    customer_details: { email: 'nosub@example.com' },
+  }));
+
+  check('契約IDの無い Session は無視する', noSubResult.success === true && noSubResult.data.status === 'ignored');
+  check('契約IDの無い Session では会員を作らない', gas.findUserByEmail_('nosub@example.com') === null);
+
+  const subscriptionResult = post(makeEvent('evt_checkout_mode_sub', 'checkout.session.completed', {
+    id: 'cs_mode_sub',
+    mode: 'subscription',
+    customer: 'cus_mode_sub',
+    subscription: 'sub_mode_sub',
+    customer_details: { email: 'member@example.com' },
+  }));
+
+  check('mode=subscription は従来どおり処理する', subscriptionResult.success === true && subscriptionResult.data.status === 'processed');
+  check('mode=subscription では会員が作られる', gas.findUserByEmail_('member@example.com') !== null);
+
+  /* ---------------------------------------------------------------- */
+  section('署名必須モード（中継経由のみにした場合）');
+
+  setSetting(env, 'STRIPE_WEBHOOK_REQUIRE_SIGNATURE', 'TRUE');
+
+  const unsignedWhileRequired = post(makeEvent('evt_unsigned_required', 'invoice.paid', {
+    customer: 'cus_test_1',
+    subscription: 'sub_test_1',
+  }));
+
+  check('署名必須なら、合言葉が合っていても署名の無い要求は拒否する', unsignedWhileRequired.success === false);
+  check(
+    '拒否した要求は Stripe へ照会しない',
+    !env.fetchCalls.some((call) => String(call.url).includes('evt_unsigned_required')),
+  );
+  check(
+    '拒否した要求は stripe_events に記録されない',
+    gas.findRows_('stripe_events', (values) => (
+      String(values[gas.EVENT_COL.EVENT_ID - 1]).trim() === 'evt_unsigned_required'
+    )).length === 0,
+  );
+
+  const signedWhileRequired = makeEvent('evt_signed_required', 'invoice.paid', {
+    customer: 'cus_test_1',
+    subscription: 'sub_test_1',
+  });
+  const requiredBody = JSON.stringify(signedWhileRequired);
+  const requiredTs = Math.floor(env.getTime() / 1000);
+  const requiredSig = createHmac('sha256', WEBHOOK_SECRET)
+    .update(`${requiredTs}.${requiredBody}`)
+    .digest('hex');
+
+  check(
+    '署名必須でも、正しい署名付きなら受け付ける',
+    post(signedWhileRequired, { sig: `t=${requiredTs},v1=${requiredSig}` }).success === true,
+  );
+
+  setSetting(env, 'STRIPE_WEBHOOK_REQUIRE_SIGNATURE', 'FALSE');
+
+  check(
+    '設定を戻せば署名無しを再び受け付ける',
+    post(makeEvent('evt_unsigned_again', 'invoice.paid', {
+      customer: 'cus_test_1',
+      subscription: 'sub_test_1',
+    })).success === true,
+  );
+
+  /* ---------------------------------------------------------------- */
   section('秘密情報の漏れがないこと');
 
   const allSheets = ['users', 'sessions', 'password_tokens', 'stripe_events',

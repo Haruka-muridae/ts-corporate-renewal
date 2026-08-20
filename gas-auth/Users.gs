@@ -90,6 +90,45 @@ function findUserByStripeSubscriptionId_(subscriptionId) {
 }
 
 /**
+ * メール・Stripe 顧客ID・契約IDのいずれかで探す（1回の全件読みで済ませる）。
+ *
+ * Webhook は応答を急ぐ必要があるため、3つの find を順に呼んで
+ * シートを3回読むのを避ける。優先順位は email → customerId → subscriptionId
+ * （従来の `findUserByEmail_ || findUserByStripeCustomerId_ || …` と同じ）。
+ */
+function findUserByAnyIdentity_(email, customerId, subscriptionId) {
+  var normalized = normalizeEmail_(email);
+  var cid = trimStr_(customerId);
+  var sid = trimStr_(subscriptionId);
+
+  if (normalized === '' && cid === '' && sid === '') {
+    return null;
+  }
+
+  var rows = readRows_(SHEETS.USERS);
+  var byCustomer = null;
+  var bySubscription = null;
+
+  for (var i = 0; i < rows.length; i++) {
+    var values = rows[i];
+
+    if (normalized !== '' && normalizeEmail_(values[USER_COL.EMAIL - 1]) === normalized) {
+      return rowToUser_(i + 2, values);
+    }
+
+    if (!byCustomer && cid !== '' && trimStr_(values[USER_COL.STRIPE_CUSTOMER_ID - 1]) === cid) {
+      byCustomer = rowToUser_(i + 2, values);
+    }
+
+    if (!bySubscription && sid !== '' && trimStr_(values[USER_COL.STRIPE_SUBSCRIPTION_ID - 1]) === sid) {
+      bySubscription = rowToUser_(i + 2, values);
+    }
+  }
+
+  return byCustomer || bySubscription || null;
+}
+
+/**
  * 利用者を作る。呼び出し側は必ず withLock_ の中で呼ぶこと。
  * すでに同じメールアドレスがある場合は、既存を返す（重複行を作らない）。
  *

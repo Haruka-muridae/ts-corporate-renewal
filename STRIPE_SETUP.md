@@ -92,9 +92,15 @@ Stripe が付ける `Stripe-Signature` ヘッダーを Apps Script 単体では�
 
 以下、構成A（中継なし）と構成B（中継あり）のどちらかを選びます。
 
+> **2026-08-20 以降は構成B を使ってください。** 構成A は Apps Script の 302 を
+> Stripe が失敗と数えるため、本番では配信が全件失敗扱いになり、9 日連続で
+> エンドポイントが無効化されます（2026-08-17 に実際に発生。
+> [docs/instructions/2026-08-20-stripe-webhook-relay.md](docs/instructions/2026-08-20-stripe-webhook-relay.md)）。
+> 中継の実体はこのリポジトリの [`workers/stripe-relay/`](workers/stripe-relay/README.md) にあります。
+
 ---
 
-### 構成A: Apps Script へ直接送る（手軽・推奨）
+### 構成A: Apps Script へ直接送る（テストモードの一時確認のみ・**本番非推奨**）
 
 1. Apps Script の「プロジェクトの設定」→「スクリプト プロパティ」で
    `STRIPE_WEBHOOK_URL_KEY` の値をコピーする
@@ -126,9 +132,11 @@ Stripe が付ける `Stripe-Signature` ヘッダーを Apps Script 単体では�
 #### 既知の制約：配信が「失敗」と表示されることがある
 
 Apps Script の Web アプリは、POST に対して
-`script.googleusercontent.com` への **302 リダイレクトを返す場合があります**。
-Stripe はリダイレクトを追わないため、
-**処理は成功しているのに Stripe のダッシュボードでは失敗と表示される**ことがあります。
+`script.googleusercontent.com` への **302 リダイレクトを返します**。
+Stripe はリダイレクトを追わず 3xx を失敗と数えるため
+（公式: 「Webhook リクエストへのリダイレクト応答は失敗と見なされます」）、
+**処理は成功しているのに Stripe のダッシュボードでは失敗と表示されます**。
+本番モードでは連続失敗の警告メールが届き、**9 日で無効化**されます。
 
 その場合の挙動:
 
@@ -137,19 +145,32 @@ Stripe はリダイレクトを追わないため、
   **再送されても二重処理は起きません**（冪等性を自動テストで確認済み）。
 - 結果として、利用者の登録は正しく1回だけ行われます。
 
-ダッシュボード上の失敗表示が運用上許容できない場合は、構成Bを選んでください。
+本番では構成B を選んでください。構成A はテストモードで一時的に動作を見るときだけに使います。
 
 ---
 
-### 構成B: 中継を置く（署名検証を厳密に行う）
+### 構成B: 中継を置く（**本番はこちら**）
 
-Cloudflare Workers など、ヘッダーを読める場所に薄い中継を置きます。
-中継が署名を検証し、その署名をクエリとして Apps Script へ転送します。
+Cloudflare Workers に薄い中継を置きます。中継が署名を検証し、
+**Stripe へ即座に 200 を返してから**、署名をクエリに載せて Apps Script へ転送します
+（302 は中継が追います）。
 
-1. `STRIPE_WEBHOOK_SECRET`（`whsec_...`）を Apps Script の
-   スクリプト プロパティへ登録する。
-   値は Stripe の Webhook エンドポイント画面「署名シークレット」から取得します。
-2. 中継を用意する（Cloudflare Workers の例）:
+実装はリポジトリの [`workers/stripe-relay/`](workers/stripe-relay/README.md) にあり、
+デプロイ手順・Stripe 側の登録・secrets の入れ方はその README §3 にまとめてあります。
+要点だけ書くと:
+
+1. `npm run deploy:stripe-relay` で Worker を出す。
+2. Stripe（本番モード）に Worker の URL をエンドポイントとして登録し、
+   イベントは上の 5 種だけを購読する。署名シークレット（`whsec_...`）を控える。
+3. Worker の secrets に `STRIPE_WEBHOOK_SECRET`（2 の値）と
+   `GAS_URL_KEY`（Script Properties の `STRIPE_WEBHOOK_URL_KEY` と同じ値）を入れる。
+4. Apps Script の Script Properties にも `STRIPE_WEBHOOK_SECRET` を入れる
+   （GAS 側でも同じ署名を検証するため。値は 2 と同じ）。
+5. 旧エンドポイント（GAS の URL を直接登録したもの）を無効化する。
+6. 中継だけが GAS を呼ぶ状態になったら、認証設定シートの
+   `STRIPE_WEBHOOK_REQUIRE_SIGNATURE` を `TRUE` にする。
+
+以下は中継の最小形（参考。実際のコードは `workers/stripe-relay/src/index.mjs`）:
 
 ```js
 /*
@@ -183,8 +204,6 @@ export default {
   },
 };
 ```
-
-3. Stripe のエンドポイントURLを、中継のURLに設定する。
 
 この構成では、署名が付いているため Apps Script 側が
 HMAC-SHA256 で検証します（`Crypto.gs` の `verifyStripeSignature_`）。
@@ -298,6 +317,10 @@ curl -X POST "https://script.google.com/macros/s/＜デプロイID＞/exec?path=
 | `invoice.payment_failed` | `subscription_status` を `past_due` に |
 
 これ以外のイベントは、受信を記録して無視します（`processing_status = ignored`）。
+
+`checkout.session.completed` でも、`mode` が `subscription` でない、または契約IDの無い
+Session は無視します（`ignored`、理由を `error_message` に記録）。同じ Stripe アカウントに
+同居する交流会アプリ（一回払い）の決済完了が届いても、参加者を会員として登録しないためです。
 
 ### 重複登録の防止
 
