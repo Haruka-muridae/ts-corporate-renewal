@@ -58,6 +58,7 @@ const SUITES = [
   { name: 'receipt-ocr-review', file: 'unit/receipt-ocr-review.mjs', kind: 'unit' },
   { name: 'card-ocr', file: 'unit/card-ocr.mjs', kind: 'unit' },
   { name: 'card-mail', file: 'unit/card-mail.mjs', kind: 'unit' },
+  { name: 'card-manager', file: 'unit/card-manager.mjs', kind: 'unit' },
   { name: 'voice-recorder', file: 'unit/voice-recorder.mjs', kind: 'unit' },
   { name: 'voice-recorder-notifier', file: 'unit/voice-recorder-notifier.mjs', kind: 'unit' },
   { name: 'notifier-gate', file: 'unit/notifier-gate.mjs', kind: 'unit' },

@@ -169,4 +169,22 @@ export const APP_REGISTRY = Object.freeze([
     href: 'production-app/interview-recorder/',
     icon: '面',
   }),
+  Object.freeze({
+    id: 'card-manager',
+    name: '名刺管理',
+    href: 'production-app/card-manager/',
+    icon: '管',
+  }),
+
+  /*
+   * サイト外（別ドメイン）のアプリ。`href` が `https://` で始まるため、
+   * portal.js が別タブで開き、rel="noopener noreferrer" を自動で付ける
+   * （ファイル冒頭のコメント「href の2通り」参照）。
+   */
+  Object.freeze({
+    id: 'pdf-narration',
+    name: '教材ナレーション作成',
+    href: 'https://pdf-narration-app.potenitas-lp.workers.dev/',
+    icon: '教',
+  }),
 ]);

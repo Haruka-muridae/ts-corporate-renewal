@@ -1,0 +1,364 @@
+/*
+ * 名刺管理アプリの見た目。
+ *
+ * 共通の色と部品は css/style.css と auth/auth.css を読み込んだうえで、
+ * 足りない分だけをここに書く（card-mail / card-ocr の style.css と
+ * 同じ方針）。新しい色は定義しない。
+ *
+ * ==================================================================
+ * テスト環境からの変更点
+ * ==================================================================
+ * テスト環境 `/apps/card-manager/style.css` はサイト本体のヘッダー・
+ * フッター（site-header / site-footer）付きの構成だったが、本番アプリは
+ * どれもログイン後の単体ツール画面（auth-shell）であり、サイト本体の
+ * ナビゲーションを持たない（card-mail / card-ocr と同じ）。そのため
+ * .cm-hero・.cm-breadcrumb・.cm-nav__link は持たない。複数メール欄
+ * （.cm-email-*）・読み取りテキスト表示（.cm-raw-*）も、対象の台帳に
+ * 該当する列が無いため持たない。
+ *
+ * スマートフォン優先。操作要素は 44px 以上を確保する。
+ * ==================================================================
+ */
+
+.cm-header {
+  margin-bottom: 1.75rem;
+}
+
+.cm-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.cm-lead {
+  margin: 0;
+  color: var(--c-text-muted);
+  line-height: 1.7;
+}
+
+.cm-panel {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  background: var(--c-bg);
+}
+
+.cm-panel--notice {
+  border-color: var(--color-border-strong);
+  background-color: var(--c-bg-sub);
+}
+
+.cm-notice-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.cm-panel--notice:not([open]) {
+  padding-bottom: 0.5rem;
+}
+
+.cm-panel--notice[open] .cm-notice-summary {
+  margin-bottom: 0.75rem;
+}
+
+.cm-notice-summary:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 2px;
+}
+
+.cm-notice-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.7;
+}
+
+.cm-notice-list li + li {
+  margin-top: 0.5rem;
+}
+
+/* 誘導・状態表示 */
+.cm-panel--guidance {
+  border-color: var(--color-gold);
+  background-color: var(--c-bg-sub);
+}
+
+.cm-guidance-text {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.cm-note {
+  margin-top: 0.75rem;
+  color: var(--c-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.cm-message {
+  margin-top: 0.75rem;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-border-strong);
+  background-color: var(--c-bg-sub);
+  font-size: 0.875rem;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.cm-message--error {
+  border-left-color: #b3261e;
+  color: #7a1c16;
+  background-color: #fdf3f2;
+}
+
+.cm-message--success {
+  border-left-color: var(--color-gold);
+  color: var(--c-text);
+}
+
+/* ---------- 操作 ---------- */
+
+.cm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+/* ============================================================
+   検索・絞り込み
+   ============================================================ */
+
+.cm-search {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .cm-search {
+    grid-template-columns: 2fr 1fr;
+    align-items: end;
+  }
+}
+
+.cm-search__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cm-search__label {
+  color: var(--c-main);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   一覧テーブル
+   ============================================================ */
+
+.cm-table-wrap {
+  margin-top: 20px;
+  overflow-x: auto;
+}
+
+.cm-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.cm-table th,
+.cm-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--c-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.cm-table th {
+  color: var(--c-text-muted);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.cm-table td {
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+
+.cm-table tbody tr:hover {
+  background-color: var(--c-bg-sub);
+}
+
+/* 氏名セルのボタン。行全体をリンク化する代わりに、キーボードで押せるボタンにする */
+.cm-table__open {
+  padding: 6px 4px;
+  border: 0;
+  background-color: transparent;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.cm-table__open:hover {
+  color: var(--color-gold-text);
+}
+
+.cm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   詳細（自動項目・編集フォーム）
+   ============================================================ */
+
+.cm-detail__top-actions {
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+}
+
+.cm-meta {
+  display: grid;
+  gap: 12px 24px;
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-button);
+  background-color: var(--c-bg-sub);
+}
+
+@media (min-width: 640px) {
+  .cm-meta {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+.cm-meta__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.cm-meta__label {
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cm-meta__value {
+  margin: 0;
+  color: var(--c-text);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.cm-meta__value a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.cm-form {
+  display: grid;
+  gap: 20px;
+}
+
+.cm-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.cm-field__label {
+  margin-bottom: 8px;
+  color: var(--c-main);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cm-field__input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button);
+  color: var(--c-text);
+  background-color: var(--c-bg);
+  /* 16px未満だとスマホで画面が拡大されるため、16pxを下限にする */
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+textarea.cm-field__input {
+  line-height: 1.8;
+  resize: vertical;
+}
+
+/* 閲覧モードでは読み取り専用の見た目にする（色だけに頼らない） */
+.cm-field__input:read-only,
+.cm-field__input:disabled {
+  border-style: dashed;
+  background-color: var(--c-bg-sub);
+  color: var(--c-text-muted);
+}
+
+/* 値を開くリンク（電話・メール・Web）。閲覧モードのときだけ表示する */
+.cm-field__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.cm-field__links:empty {
+  display: none;
+}
+
+.cm-field__links a {
+  font-size: 0.75rem;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (min-width: 600px) {
+  .cm-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 24px;
+  }
+
+  .cm-field[data-span="full"] {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ============================================================
+   フッター（ポータルへの戻り道）
+   ============================================================ */
+
+.cm-footer {
+  margin-top: 1.5rem;
+  text-align: center;
+}
