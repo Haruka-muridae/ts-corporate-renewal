@@ -34,6 +34,7 @@
     "deploy": "node scripts/predeploy-check.mjs && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "deploy:notifier-gate": "node scripts/predeploy-check.mjs && wrangler deploy --config workers/notifier-gate/wrangler.jsonc",
     "deploy:auth-verify": "node scripts/predeploy-check.mjs && wrangler deploy --config workers/auth-verify/wrangler.jsonc",
+    "deploy:stripe-relay": "node scripts/predeploy-check.mjs && wrangler deploy --config workers/stripe-relay/wrangler.jsonc",
     "cf:whoami": "wrangler whoami",
     "cf:versions": "wrangler versions list",
     "check:vendor": "node public/apps/vendor/check-updates.mjs"

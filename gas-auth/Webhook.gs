@@ -79,6 +79,15 @@ function handleStripeWebhook_(e) {
   /* ---- (3) 署名（中継経由で届いた場合のみ） ---- */
   var signatureHeader = trimStr_(params.sig || params.stripe_signature);
 
+  /*
+   * 中継（workers/stripe-relay）だけが呼ぶ構成にしたら、署名の無い要求は
+   * 合言葉が合っていても拒否する（設定 STRIPE_WEBHOOK_REQUIRE_SIGNATURE）。
+   */
+  if (signatureHeader === '' && getSettingBool_('STRIPE_WEBHOOK_REQUIRE_SIGNATURE', false)) {
+    logSystemError_('webhook', '署名の無い要求を拒否しました（STRIPE_WEBHOOK_REQUIRE_SIGNATURE=TRUE）。');
+    return failFrom_(ERRORS.INVALID_REQUEST);
+  }
+
   if (signatureHeader !== '') {
     var secret = getProperty_(PROP.STRIPE_WEBHOOK_SECRET);
     var verdict = verifyStripeSignature_(rawBody, signatureHeader, secret);
@@ -170,7 +179,12 @@ function processStripeEvent_(event) {
   var object = (event.data && event.data.object) ? event.data.object : {};
 
   if (eventType === 'checkout.session.completed') {
-    handleCheckoutCompleted_(object);
+    var handled = handleCheckoutCompleted_(object);
+
+    if (handled && handled.ignored) {
+      finishEvent_(eventId, EVENT_STATUS.IGNORED, handled.reason);
+      return { status: EVENT_STATUS.IGNORED };
+    }
   } else if (eventType === 'customer.subscription.updated'
     || eventType === 'customer.subscription.deleted') {
     handleSubscriptionChanged_(eventType, object);
@@ -214,8 +228,34 @@ function markEventFailed_(eventId, message) {
  * 決済完了。利用者を作り、パスワード初期設定の案内を送る。
  *
  * 同じメールアドレス・同じ顧客ID・同じ契約IDでの重複登録を防ぐ。
+ *
+ * ------------------------------------------------------------------
+ * 継続課金の Checkout 以外は処理しない（重要）
+ * ------------------------------------------------------------------
+ * 同じ Stripe アカウントには交流会アプリ（一回払い、mode=payment）が
+ * 同居している。Stripe はアカウント内の全エンドポイントへイベントを
+ * 配るため、設定次第で交流会の決済完了がここへ届く。その本文には
+ * customer_details.email があるので、無条件に処理すると
+ * **参加者を認証システムの会員として作成し、初期設定メールを送ってしまう**。
+ * mode が subscription でない、または契約IDが無い Session は無視する。
+ * ------------------------------------------------------------------
+ *
+ * @return {{ignored: boolean, reason: string}}
  */
 function handleCheckoutCompleted_(session) {
+  var mode = trimStr_(session.mode).toLowerCase();
+  var subscriptionIdEarly = trimStr_(typeof session.subscription === 'string' ? session.subscription : '');
+
+  if (mode !== '' && mode !== 'subscription') {
+    logSystemError_('webhook', 'checkout.session.completed: mode=' + clip_(mode, 32) + ' のため無視しました。');
+    return { ignored: true, reason: 'mode=' + clip_(mode, 32) };
+  }
+
+  if (subscriptionIdEarly === '') {
+    logSystemError_('webhook', 'checkout.session.completed: 契約IDが無いため無視しました。');
+    return { ignored: true, reason: 'no subscription id' };
+  }
+
   var email = normalizeEmail_(
     (session.customer_details && session.customer_details.email)
       ? session.customer_details.email
@@ -224,17 +264,15 @@ function handleCheckoutCompleted_(session) {
 
   if (!isValidEmail_(email)) {
     logSystemError_('webhook', 'checkout.session.completed にメールアドレスがありません。');
-    return;
+    return { ignored: true, reason: 'no email' };
   }
 
   var customerId = trimStr_(typeof session.customer === 'string' ? session.customer : '');
-  var subscriptionId = trimStr_(typeof session.subscription === 'string' ? session.subscription : '');
+  var subscriptionId = subscriptionIdEarly;
 
   var outcome = withLock_(function () {
-    /* メール・顧客ID・契約IDのいずれかで既存を見つける。 */
-    var user = findUserByEmail_(email)
-      || findUserByStripeCustomerId_(customerId)
-      || findUserByStripeSubscriptionId_(subscriptionId);
+    /* メール・顧客ID・契約IDのいずれかで既存を見つける（シートは1回だけ読む）。 */
+    var user = findUserByAnyIdentity_(email, customerId, subscriptionId);
 
     if (user) {
       applySubscriptionToUser_(user, {
@@ -277,6 +315,8 @@ function handleCheckoutCompleted_(session) {
   if (outcome.issued) {
     sendInitialSetupMail_(email, outcome.issued.token, outcome.issued.expiresAtMs);
   }
+
+  return { ignored: false, reason: '' };
 }
 
 /** 契約の更新・解約を反映する。 */

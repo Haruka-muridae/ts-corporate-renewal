@@ -370,6 +370,14 @@ var DEFAULT_SETTINGS = {
   CHECKOUT_HOURLY_LIMIT: '60',
 
   /*
+   * Webhook に署名クエリ（sig）が無い要求を拒否するか。
+   * 中継（workers/stripe-relay）だけが GAS を呼ぶ構成にしたら TRUE にする。
+   * GAS の URL を Stripe に直接登録している間（構成A）は FALSE のままにする。
+   * TRUE にしても、真正性の本命である Stripe API への照会は変わらず行う。
+   */
+  STRIPE_WEBHOOK_REQUIRE_SIGNATURE: 'FALSE',
+
+  /*
    * 同意を取得した利用規約の版。
    * 規約を改訂したらここを上げる。値が変わると、
    * 古い版で同意した申込みは受け付けなくなる。

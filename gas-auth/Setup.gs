@@ -121,6 +121,7 @@ function ensureDefaultSettings_(sheet) {
     MAIL_SENDER_NAME: 'メールの送信者名',
     MAIL_ENABLED: 'メール送信を行うか（TRUE/FALSE）',
     CHECKOUT_HOURLY_LIMIT: 'Checkout Session の1時間あたり作成上限',
+    STRIPE_WEBHOOK_REQUIRE_SIGNATURE: 'Webhook に署名クエリが無い要求を拒否するか（中継経由のみにしたら TRUE）',
     TOS_VERSION: '同意を取得した利用規約の版。改訂したら上げる（古い版の同意は無効になる）',
     CONSENT_WARNING_TEXT: '申込み前に赤枠で表示する警告文',
     GITHUB_REPO: '法務ページの公開先リポジトリ（owner/repo）',

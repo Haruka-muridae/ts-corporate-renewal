@@ -52,6 +52,42 @@ Apps Script プロジェクトはリポジトリの外にある。
 
 ---
 
+## 未反映の予定: Stripe Webhook 中継対応（2026-08-20 時点・**未実施**）
+
+ブランチ `feat/stripe-webhook-relay` にあるもの。Stripe の配信失敗（2026-08-17〜、
+**8/26 06:25 UTC に無効化予告**）への対応。経緯と全体手順は
+[instructions/2026-08-20-stripe-webhook-relay.md](instructions/2026-08-20-stripe-webhook-relay.md)。
+
+### 変更ファイル
+
+| ファイル | 種別 | 変更内容 |
+| --- | --- | --- |
+| `Webhook.gs` | 上書き | `checkout.session.completed` で `mode` が `subscription` でない／契約IDが無い Session を `ignored` にする（交流会アプリの決済を会員登録しない）。設定 `STRIPE_WEBHOOK_REQUIRE_SIGNATURE` で署名無しを拒否 |
+| `Users.gs` | 上書き | `findUserByAnyIdentity_()` を追加（Webhook の利用者検索を 1 回の読みに） |
+| `Store.gs` | 上書き | `updateCells_()` を 1 レンジ書き込みに（応答時間の短縮） |
+| `Config.gs` | 上書き | `DEFAULT_SETTINGS` に `STRIPE_WEBHOOK_REQUIRE_SIGNATURE`（既定 FALSE）を追加 |
+| `Setup.gs` | 上書き | 上記設定の説明文 |
+
+**貼り替えるのは上の 5 ファイルだけ。** 新規ファイルは無い。
+
+### 手順
+
+1. 5 ファイルを貼り替える
+2. `setupAuthSystem()` を実行する（設定シートに `STRIPE_WEBHOOK_REQUIRE_SIGNATURE` の行を足すため。既存データは上書きされない）
+3. Script Properties に `STRIPE_WEBHOOK_SECRET` を入れる（中継用エンドポイントの `whsec_…`。Worker 側と同じ値）
+4. **「デプロイを管理」からバージョンを更新する**（新規デプロイを作らない。URL が変わると Worker の `GAS_URL` と `auth-verify` の `AUTH_GAS_URL` が食い違う）
+5. Worker（`workers/stripe-relay/`）のデプロイと Stripe 側の切替は README §3 のとおり
+6. 切替後、`stripe_events` に `processed` が増え、Stripe ダッシュボードの配信が 200 になることを確認
+7. 中継だけが呼ぶ状態になったら設定シートの `STRIPE_WEBHOOK_REQUIRE_SIGNATURE` を `TRUE` に
+8. 結果を Claude へ報告する（上の反映履歴へ追記する）
+
+### 戻すとき
+
+`STRIPE_WEBHOOK_REQUIRE_SIGNATURE` を `FALSE` に戻せば、旧来どおり署名無しを受け付ける。
+ファイルを前の版へ戻してもシートの追加行は害にならない。
+
+---
+
 ## 未反映の予定: カレンダー通知 V2（2026-08-10 時点・**未実施**）
 
 ブランチ `feat/notifier-v2-license-gate` にあるもの。
