@@ -45,6 +45,7 @@
 | --- | --- | --- |
 | [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.6 |
 | [card-mail-requirements-v1.md](./card-mail-requirements-v1.md) | 名刺メール配信アプリ（`public/production-app/card-mail/`。アプリID `card-mail`）。名刺OCRの台帳から宛先を読み、利用者自身のGmailからBCCで一斉送信する | v1.2 |
+| [card-manager-requirements-v1.md](./card-manager-requirements-v1.md) | 名刺管理アプリ（`public/production-app/card-manager/`。アプリID `card-manager`）。名刺OCRの台帳「名刺管理」を検索・閲覧・編集する。台帳の新規作成・列構成の変更は行わず、編集内容は台帳の変更履歴タブへ記録する | v1.0 |
 | [auth-registration-production-v1.md](./auth-registration-production-v1.md) | 本番認証系の初回登録フロー（料金→Stripe決済→利用者作成→初期設定）を Stripe テストモードからライブモードへ切り替える要件。コード変更なしの設定作業 | v1.0 |
 | [audio-transcriber-requirements-v1.md](./audio-transcriber-requirements-v1.md) | 音声文字起こしアプリ（`public/production-app/audio-transcriber/`。アプリID `audio-transcriber`）。端末内Whisper または利用者自身の Gemini APIキー（KeyStore 経由）で文字起こしし、ブラウザ録音アプリの録音を drive.file のまま読む | v1.4 |
 | [threads-mvp-requirements-v1.md](./threads-mvp-requirements-v1.md) | Threads 投稿アプリ（`public/production-app/threads-post/`。アプリID `threads-post`）＋ Portal への掲載。下書き（端末内保存）・AI生成（KeyStore 経由の Gemini）・intent リンクでの投稿・履歴のみの単機能アプリ。Threads 側の API・トークン不使用。旧 GAS 版は `gas-threads/`（保管） | v3.2 |
