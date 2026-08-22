@@ -187,4 +187,10 @@ export const APP_REGISTRY = Object.freeze([
     href: 'https://pdf-narration-app.potenitas-lp.workers.dev/',
     icon: '教',
   }),
+  Object.freeze({
+    id: 'movecal',
+    name: 'MoveCal（移動時間スケジューラ）',
+    href: 'https://movecal.potenitas-lp.workers.dev/',
+    icon: '移',
+  }),
 ]);
