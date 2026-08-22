@@ -187,10 +187,17 @@ export const APP_REGISTRY = Object.freeze([
     href: 'https://pdf-narration-app.potenitas-lp.workers.dev/',
     icon: '教',
   }),
+  /*
+   * MoveCal は別 Worker だが、Cloudflare の route
+   * （`tsam-ai.com/production-app/movecal*`）で同じホストの配下に載せてある。
+   * 同一ホストでは Route が Custom Domain より優先されるため、このパスだけが
+   * MoveCal の Worker へ届く。よって href は**サイト内**の書き方
+   * （先頭に '/' を付けない相対パス）にする。ファイル冒頭「href の2通り」参照。
+   */
   Object.freeze({
     id: 'movecal',
     name: 'MoveCal（移動時間スケジューラ）',
-    href: 'https://movecal.potenitas-lp.workers.dev/',
+    href: 'production-app/movecal/',
     icon: '移',
   }),
 ]);
