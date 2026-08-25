@@ -428,7 +428,7 @@ async function callOnce({
       throw new GeminiError(GeminiErrorCode.ABORTED, 0, 'aborted');
     }
 
-    throw new GeminiError(GeminiErrorCode.NETWORK, 0, 'fetch_failed');
+    throw new GeminiError(GeminiErrorCode.NETWORK, 0, 'minutes-generate');
   }
 
   if (!response?.ok) {

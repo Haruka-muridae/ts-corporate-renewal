@@ -1083,3 +1083,39 @@ body.ma-no-remote .ma-circle--drive {
     --circle-size: clamp(96px, 22vh, 150px);
   }
 }
+
+/* 失敗時の折りたたみ診断（stage / code / HTTP status / detail のみ）。 */
+.ma-diagnostic {
+  margin: -0.5rem 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d9dee6;
+  border-radius: 0.375rem;
+  background: #f6f8fa;
+  font-size: 0.8125rem;
+  color: #3a4250;
+}
+
+.ma-diagnostic__summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: revert;
+}
+
+.ma-diagnostic__list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0.5rem 0 0;
+}
+
+.ma-diagnostic__list dt {
+  margin: 0;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.ma-diagnostic__list dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-word;
+}
