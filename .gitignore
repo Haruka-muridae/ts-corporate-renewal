@@ -49,3 +49,6 @@ tests/e2e/.artifacts/
 !.dev.vars.example
 # Claude Workerの実行ログと一時入力（タスク本文を追跡しない）
 .claude-worker/
+
+# Meeting Assistant ネイティブ版（開発停止中・保持）のビルド成果物。ソースは追跡し、APK は追跡しない。
+mobile/meeting-assistant/dist/

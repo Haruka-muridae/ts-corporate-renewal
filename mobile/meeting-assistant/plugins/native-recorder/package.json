@@ -1,0 +1,24 @@
+{
+  "name": "@potenitas/native-recorder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "On-site native recorder for Meeting Assistant (AAC/M4A).",
+  "main": "src/index.js",
+  "types": "src/index.js",
+  "files": [
+    "src",
+    "ios",
+    "android"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^7.0.0"
+  }
+}

@@ -1,0 +1,1085 @@
+/*
+ * ブラウザ録音アプリの見た目。
+ * Meeting Assistant 専用。portal / auth.css には依存しない。
+ *
+ * 状態を色だけで示さない。録音中かどうかは必ず文言でも出す
+ * （.vr-indicator の中に「録音中」「待機中」のテキストがある）。
+ */
+
+html {
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+:root {
+  --ma-pad-x: 1.25rem;
+  --ma-pad-top: 1.25rem;
+  --ma-pad-bottom: 2.5rem;
+}
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  min-height: 100dvh;
+  background: #ffffff;
+  color: #1a1a1a;
+  font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  /* 横向き切替時の文字拡大を止める（iOS）。 */
+  -webkit-text-size-adjust: 100%;
+}
+
+/*
+ * スマートフォン向けの操作感。
+ * touch-action: manipulation でダブルタップ拡大の待ち時間を無くす。
+ * タップ時の青いハイライトは自前の :active / focus-visible で代替する。
+ */
+button, a, summary, label {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.ma-button {
+  display: inline-block;
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid #222222;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #222222;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ma-button:hover:not(:disabled) {
+  background: #fafafa;
+}
+
+.ma-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ma-button--ghost {
+  border-color: #d8d8d8;
+  background: #ffffff;
+  color: #222222;
+}
+
+.ma-button--ghost:hover:not(:disabled) {
+  border-color: #bdbdbd;
+  background: #ffffff;
+}
+
+.vr-main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--ma-pad-top));
+  padding-right: calc(env(safe-area-inset-right, 0px) + var(--ma-pad-x));
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ma-pad-bottom));
+  padding-left: calc(env(safe-area-inset-left, 0px) + var(--ma-pad-x));
+  box-sizing: border-box;
+}
+
+.ma-home {
+  position: relative;
+  padding-top: 0.25rem;
+  text-align: center;
+}
+
+.ma-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 0 0 0.6rem;
+  text-align: left;
+}
+
+.ma-settings-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.3rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.25rem;
+  border: 0;
+  background: #ffffff;
+  color: #222222;
+  font: inherit;
+  font-size: 0.9375rem;
+  text-align: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ma-settings-link::-webkit-details-marker {
+  display: none;
+}
+
+.ma-settings-link:hover {
+  text-decoration: underline;
+}
+
+.ma-settings-link:focus-visible {
+  outline: 2px solid #222222;
+  outline-offset: 2px;
+}
+
+.ma-settings-caret--open {
+  display: none;
+}
+
+.ma-settings[open] .ma-settings-caret--closed {
+  display: none;
+}
+
+.ma-settings[open] .ma-settings-caret--open {
+  display: inline;
+}
+
+.ma-settings-panel {
+  width: 100%;
+  max-width: 100%;
+  margin: 0.6rem 0 0.75rem;
+  text-align: left;
+}
+
+.vr-header {
+  margin: 0 0 0.7rem;
+  text-align: center;
+}
+
+.vr-title {
+  font-size: clamp(1.5rem, 6vw, 2.15rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.ma-home-title {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ma-home-title:hover,
+.ma-home-title:focus {
+  text-decoration: none;
+}
+
+.ma-home-title:focus-visible {
+  outline: 2px solid #222222;
+  outline-offset: 3px;
+}
+
+.ma-screen-title {
+  margin: 0 0 0.85rem;
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.ma-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  margin: 0 0 1.35rem;
+  padding: 0.5rem 0;
+  border: 0;
+  background: #ffffff;
+  color: #222222;
+  font: inherit;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.ma-back:hover {
+  text-decoration: underline;
+}
+
+.ma-back:focus-visible {
+  outline: 2px solid #222222;
+  outline-offset: 2px;
+}
+
+.ma-circles {
+  /*
+   * 設計指示書: 上段に On-site（左）と Remote（右）、その下に Drive を中央へ置き、
+   * 上の2つに少しかぶせる。円は同じ大きさ。
+   *
+   * --circle-size に % を入れない。% は参照元がプロパティごとに違い、
+   * width 用と height 用で実寸が分かれて楕円になる。
+   * 重なり量は --overlap（円の 12%）。3つ並べた全体幅は 2 - 0.12 = 1.88 円分。
+   */
+  --circle-size: clamp(120px, 30vw, 190px);
+  --overlap: calc(var(--circle-size) * 0.12);
+  --drive-top: calc(var(--circle-size) * 0.72);
+  position: relative;
+  width: calc(var(--circle-size) * 2 - var(--overlap));
+  max-width: 100%;
+  height: calc(var(--drive-top) + var(--circle-size));
+  margin: 0.75rem auto 1rem;
+}
+
+.ma-circle {
+  position: absolute;
+  top: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--circle-size);
+  height: var(--circle-size);
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  border-radius: 50%;
+  background: #ffffff;
+  color: #222222;
+  font: inherit;
+  font-size: clamp(16px, calc(var(--circle-size) * 0.15), 28px);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.ma-circle:hover,
+.ma-circle:focus-visible,
+.ma-circle:active {
+  /* 重なりの下側にある円を押すときも、押した円が前面に来る。 */
+  z-index: 3;
+}
+
+.ma-circle:focus-visible {
+  outline: 2px solid #222222;
+  outline-offset: 3px;
+}
+
+.ma-circle__label {
+  display: block;
+}
+
+.ma-circle--onsite {
+  left: 0;
+  z-index: 1;
+  background: #e8a8a8;
+}
+
+.ma-circle--remote {
+  right: 0;
+  z-index: 1;
+  background: #cfe8c8;
+}
+
+.ma-circle--drive {
+  top: var(--drive-top);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  background: #f3e6b0;
+}
+
+/*
+ * Remote を出さない環境（ネイティブ・スマートフォンブラウザ）。
+ * On-site と Drive を横に並べ、少し重ねる。高さは 1 円分。
+ */
+body.ma-native .ma-circle--remote,
+body.ma-no-remote .ma-circle--remote {
+  display: none !important;
+}
+
+body.ma-native .ma-circles,
+body.ma-no-remote .ma-circles {
+  height: var(--circle-size);
+}
+
+body.ma-native .ma-circle--drive,
+body.ma-no-remote .ma-circle--drive {
+  top: 0;
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.ma-pending {
+  margin: 1rem auto 1.25rem;
+  max-width: 22rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e8e8e8;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  text-align: left;
+}
+
+.ma-pending__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.ma-pending__note {
+  margin-bottom: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.ma-pending .ma-list {
+  margin-bottom: 0;
+}
+
+.ma-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.ma-item--stack {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.ma-item__sub {
+  font-size: 0.8125rem;
+  color: #4a5568;
+}
+
+.ma-remote-tips {
+  margin: 0.35rem 0 0.75rem;
+  color: #c62828;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.ma-records-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: min(22rem, 100%);
+  min-height: 3rem;
+  margin: 0 auto;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid #d8d8d8;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #222222;
+  font: inherit;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.ma-records-btn:hover {
+  border-color: #bdbdbd;
+}
+
+.ma-records-btn:focus-visible {
+  outline: 2px solid #222222;
+  outline-offset: 2px;
+}
+
+.ma-home-copy {
+  margin: 1.35rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid #ececec;
+  color: #6a6a6a;
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.ma-form {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1rem 0.25rem;
+  border: 1px solid #e8e8e8;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.ma-record {
+  margin: 0 0 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ececec;
+}
+
+.ma-page--offline .ma-screen-title {
+  color: #7a3d3d;
+}
+
+.ma-page--online .ma-screen-title {
+  color: #3d6a3d;
+}
+
+.ma-page--pick .ma-screen-title {
+  color: #6a6418;
+}
+
+.ma-page--offline .ma-button:not(.ma-button--ghost):not(.ma-back) {
+  border-color: #e8a8a8;
+  background: #e8a8a8;
+  color: #222222;
+}
+
+.ma-page--online .ma-button:not(.ma-button--ghost):not(.ma-back) {
+  border-color: #cfe8c8;
+  background: #cfe8c8;
+  color: #222222;
+}
+
+.ma-page--pick .ma-button:not(.ma-button--ghost):not(.ma-back) {
+  border-color: #f3e6b0;
+  background: #f3e6b0;
+  color: #222222;
+}
+
+.ma-acc {
+  margin: 0 0 0.75rem;
+  border: 1px solid #e8e8e8;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.ma-acc__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3.5rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ma-acc__summary::-webkit-details-marker {
+  display: none;
+}
+
+.ma-acc__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.ma-acc__title {
+  font-weight: 700;
+}
+
+.ma-acc__meta {
+  color: #667269;
+  font-size: 0.8125rem;
+}
+
+.ma-acc__meta[data-state='ok'] {
+  color: #166534;
+  font-weight: 700;
+}
+
+.ma-acc__chev {
+  color: #8a938c;
+  font-size: 1.125rem;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.ma-acc[open] .ma-acc__chev {
+  transform: rotate(90deg);
+}
+
+.ma-acc__body {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid #eef1ee;
+}
+
+@media (min-width: 40rem) {
+  :root {
+    --ma-pad-top: 1.75rem;
+  }
+}
+
+.vr-panel {
+  border: 1px solid #d9dee5;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  background: #fff;
+}
+
+.vr-panel--done {
+  border-color: #9fc6a4;
+  background: #f4faf5;
+}
+
+.vr-panel__title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.875rem;
+}
+
+/* 「利用の準備」の折りたたみ（card-ocr の #co-prep と同じ見た目の考え方）。 */
+.vr-prep-summary {
+  cursor: pointer;
+}
+
+.vr-prep-summary:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
+.vr-note {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: #333333;
+  line-height: 1.7;
+}
+
+/* 操作できない理由の案内。色だけでなく位置でも「保存ボタンの説明」と分かるようにする。 */
+.vr-note--hint {
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid #b9c6d8;
+  background: #f6f9fd;
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+.vr-note code {
+  font-size: 0.9em;
+  background: #eef1f5;
+  border-radius: 0.2rem;
+  padding: 0.05em 0.3em;
+}
+
+/* ---------- 準備の状態 ---------- */
+
+.vr-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vr-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.vr-step:last-child {
+  border-bottom: 0;
+}
+
+.vr-step__label {
+  flex: 1 1 10rem;
+  font-size: 0.9375rem;
+}
+
+.vr-step__state {
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.vr-step__state[data-kind='ok'] {
+  color: #1f7a3d;
+  font-weight: 700;
+}
+
+.vr-step__state[data-kind='error'] {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+.vr-button--small {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8125rem;
+}
+
+/* ---------- 録音 ---------- */
+
+.vr-timer {
+  margin: 0 0 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.vr-timer__value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.vr-timer__limit {
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.vr-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid #ececec;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  background: #ffffff;
+  color: #222222;
+}
+
+.vr-indicator__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.vr-indicator[data-state='recording'] {
+  background: #fdecea;
+  color: #b3261e;
+}
+
+.vr-indicator[data-state='recording'] .vr-indicator__dot {
+  animation: vr-blink 1.4s ease-in-out infinite;
+}
+
+.vr-indicator[data-state='stopped'] {
+  background: #eaf3ff;
+  color: #1a4f8a;
+}
+
+@keyframes vr-blink {
+  50% { opacity: 0.25; }
+}
+
+/* 動きを減らす設定では点滅させない。文言と色で状態は伝わる。 */
+@media (prefers-reduced-motion: reduce) {
+  .vr-indicator[data-state='recording'] .vr-indicator__dot {
+    animation: none;
+  }
+}
+
+.vr-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.vr-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.vr-fact__label {
+  font-size: 0.8125rem;
+  color: #4a5568;
+}
+
+.vr-fact__value {
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.vr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.vr-warn {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-radius: 0.375rem;
+  background: #fff9e6;
+  border: 1px solid #e8d9a0;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: #5c4a10;
+}
+
+/* ---------- 保存 ---------- */
+
+.vr-player {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.vr-field {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.vr-field__label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+
+.vr-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #c5cdc6;
+  border-radius: 0.5rem;
+  background: #fff;
+  font: inherit;
+  font-size: max(1rem, 16px);
+}
+
+.vr-progress {
+  height: 0.6rem;
+  border-radius: 999px;
+  background: #eef1f5;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.vr-progress__bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #1a4f8a;
+  transition: width 0.2s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vr-progress__bar {
+    transition: none;
+  }
+}
+
+.vr-meta {
+  margin: 0 0 1rem;
+}
+
+.vr-meta__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  padding: 0.4rem 0;
+}
+
+.vr-meta__key {
+  flex: 0 0 8rem;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.vr-meta__value {
+  margin: 0;
+  flex: 1 1 12rem;
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 状態とエラー ---------- */
+
+.vr-message {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  background: #eef1f5;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.vr-message--error {
+  background: #fdecea;
+  border: 1px solid #f2b8b5;
+  color: #7d1a15;
+}
+
+/* ---------- 通知から開いたときの対象表示（要件書 5.3） ---------- */
+
+
+/* ---------- Googleカレンダー連携 ---------- */
+
+
+
+
+
+.vr-fieldset {
+  border: 1px solid #e3e7ed;
+  border-radius: 0.375rem;
+  padding: 0.75rem 0.875rem 0.875rem;
+  margin: 0 0 1rem;
+}
+
+.vr-fieldset__legend {
+  padding: 0 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.vr-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.vr-check:last-child {
+  margin-bottom: 0;
+}
+
+
+
+
+/* ---------- 同梱ライブラリの表示 ---------- */
+
+.vr-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e3e7ed;
+}
+
+.vr-footer .vr-note {
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+/* ---------- 狭い画面 ---------- */
+
+@media (max-width: 30rem) {
+  :root {
+    --ma-pad-x: 0.875rem;
+    --ma-pad-bottom: 3rem;
+  }
+
+  .ma-circles {
+    /* 横幅 320px でも 2 円分（1.88 円）が収まる大きさにする。 */
+    --circle-size: clamp(118px, 42vw, 170px);
+  }
+
+  .ma-pending {
+    max-width: 100%;
+  }
+
+  .vr-timer__value {
+    font-size: 2rem;
+  }
+
+  .vr-actions .ma-button {
+    flex: 1 1 100%;
+  }
+
+  .vr-meta__key {
+    flex: 0 0 100%;
+  }
+}
+
+.ma-nav {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ma-nav__button {
+  width: 100%;
+}
+
+/* Document Picture-in-Picture 録音コントローラー */
+.ma-pip-page {
+  margin: 0;
+  min-height: 100%;
+  background: #ffffff;
+  color: #1a1a1a;
+  font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
+}
+
+.ma-pip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-height: 100%;
+  padding: 0.85rem 1rem 1rem;
+  background: #ffffff;
+}
+
+.ma-pip__brand,
+.ma-pip__mode {
+  margin: 0;
+  font-weight: 700;
+}
+
+.ma-pip__brand {
+  font-size: 0.8125rem;
+}
+
+.ma-pip__mode {
+  font-size: 0.9375rem;
+}
+
+.ma-pip__indicator {
+  margin: 0;
+  align-self: flex-start;
+}
+
+.ma-pip__timer {
+  margin: 0.15rem 0 0.2rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.ma-pip__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ma-pip-stop,
+.ma-pip-close {
+  margin: 0;
+}
+
+.ma-pip-stop {
+  flex: 1 1 auto;
+}
+
+.ma-pip[data-recording='true'] .ma-pip-stop:not(:disabled) {
+  border-color: #b3261e;
+  color: #b3261e;
+}
+
+.ma-pip__status {
+  min-height: 1.2em;
+  margin: 0;
+}
+
+.ma-list {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  border: 1px solid #e8e8e8;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.ma-list:empty {
+  display: none;
+}
+
+.ma-item {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.ma-item:last-child {
+  border-bottom: 0;
+}
+
+.ma-item[data-selected='true'] {
+  background: #f4faf5;
+}
+
+.ma-item--split {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ma-button--small {
+  width: auto;
+  margin-top: 0;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8125rem;
+}
+
+.ma-item__name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.ma-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  color: #4a5568;
+}
+
+.ma-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 700;
+  background: #eef1f5;
+}
+
+.ma-badge[data-kind='done'] {
+  background: #e7f6ea;
+  color: #1f7a3d;
+}
+
+.ma-badge[data-kind='todo'] {
+  background: #fff4e5;
+  color: #8a5a00;
+}
+
+.ma-item-button {
+  appearance: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ma-item-button:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: -2px;
+}
+
+.ma-open-link {
+  font-size: 0.875rem;
+}
+
+/* 横向きのスマートフォン。縦が足りないので円を小さくして 1 画面に収める。 */
+@media (max-height: 30rem) and (orientation: landscape) {
+  .ma-circles {
+    --circle-size: clamp(96px, 22vh, 150px);
+  }
+}

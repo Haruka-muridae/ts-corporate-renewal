@@ -1,0 +1,21 @@
+{
+  "name": "meeting-assistant-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Meeting Assistant Capacitor shell. Web UI is public/meeting-assistant.",
+  "scripts": {
+    "sync": "npx cap sync",
+    "ios": "npx cap open ios",
+    "android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "@potenitas/native-recorder": "file:./plugins/native-recorder"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "typescript": "^7.0.2"
+  }
+}

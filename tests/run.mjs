@@ -69,6 +69,7 @@ const SUITES = [
   { name: 'x-post', file: 'unit/x-post.mjs', kind: 'unit' },
   { name: 'note-post', file: 'unit/note-post.mjs', kind: 'unit' },
   { name: 'meeting-minutes', file: 'unit/meeting-minutes.mjs', kind: 'unit' },
+  { name: 'meeting-assistant', file: 'unit/meeting-assistant.mjs', kind: 'unit' },
   { name: 'interview-recorder', file: 'unit/interview-recorder.mjs', kind: 'unit' },
   { name: 'contact-message', file: 'unit/contact-message.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },

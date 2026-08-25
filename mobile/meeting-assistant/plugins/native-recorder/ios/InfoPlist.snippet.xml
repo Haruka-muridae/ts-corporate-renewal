@@ -1,0 +1,10 @@
+<!--
+  Host iOS app Info.plist へ追加する（Xcode / npx cap add ios の後）。
+  プラグイン単体では Background Audio は有効にならない。
+-->
+<key>NSMicrophoneUsageDescription</key>
+<string>対面の打ち合わせを録音し、議事録を作成するためにマイクを使います。</string>
+<key>UIBackgroundModes</key>
+<array>
+  <string>audio</string>
+</array>
