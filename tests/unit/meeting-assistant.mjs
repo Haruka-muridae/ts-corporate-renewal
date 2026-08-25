@@ -1620,6 +1620,36 @@ try {
     check('app.js は毎回名前で全検索せず resolver を通す', appSource.includes("folders.resolve('voice', auth)") && appSource.includes("folders.resolve('record', auth)") && !appSource.includes('resolveVoiceFolder(') && !appSource.includes('resolveRecordFolder('));
   }
 
+
+  section('Drive 画面: 更新中表示と、音声選択の確認 UI（既存ロジックは不変）');
+
+  {
+    const appSource = readFileSync(resolve(appRoot, 'app.js'), 'utf8');
+    const htmlSource = readFileSync(resolve(appRoot, 'index.html'), 'utf8');
+    const cssSource = readFileSync(resolve(appRoot, 'app.css'), 'utf8');
+
+    check('更新は withRefreshing でボタンを「更新中…」にして無効化', appSource.includes("button.textContent = '更新中…'") && appSource.includes('button.disabled = true'));
+    check('連打防止（処理中は無視）', /async function withRefreshing[\s\S]{0,120}if \(button\.disabled\) \{\s*return;/.test(appSource));
+    check('完了・失敗のどちらでも元のラベルへ戻す（finally）', /withRefreshing[\s\S]{0,400}finally \{[\s\S]{0,200}button\.disabled = false;[\s\S]{0,160}button\.textContent = label;/.test(appSource));
+    check('pick / records 双方の更新ボタンに適用', (appSource.match(/withRefreshing\(event\.currentTarget/g) || []).length === 2);
+    check('小さなスピナーは CSS（ma-button--busy）。派手なアニメーションではない', cssSource.includes('.ma-button--busy::after') && cssSource.includes('ma-spin'));
+
+    check('上部固定の pick-run ボタンを廃止', !htmlSource.includes('id="pick-run"') && !appSource.includes("getElementById('pick-run')") && !appSource.includes('el.pickRun'));
+
+    check('音声タップのハンドラは selectedAudio をセットするだけ（Gemini を直接呼ばない）', /button\.addEventListener\('click', \(\) => \{[\s\S]{0,240}state\.selectedAudio = file;[\s\S]{0,80}renderAudioList\(\);/.test(appSource) && !/button\.addEventListener\('click', \(\) => \{[\s\S]{0,240}processExistingAudio/.test(appSource));
+    check('確認エリアの文言「この音声を議事録にしますか？」', appSource.includes('この音声を議事録にしますか？'));
+    check('確認エリアは選択中の音声の直上に差し込む（1 件だけ）', appSource.includes('if (selected) {') && appSource.includes('buildConfirmArea(file)') && appSource.includes("box.id = 'pick-confirm'"));
+    check('「議事録を作成」は startSelectedAudio 経由で processExistingAudio を呼ぶ', appSource.includes("run.textContent = '議事録を作成'") && appSource.includes('startSelectedAudio(file)') && /function startSelectedAudio[\s\S]{0,300}processExistingAudio\(file\)/.test(appSource));
+    check('キャンセルは選択解除して再描画（処理は始めない）', /cancel\.addEventListener\('click', \(\) => \{[\s\S]{0,140}state\.selectedAudio = null;[\s\S]{0,80}renderAudioList\(\);/.test(appSource));
+
+    check('議事録作成の二度押しを防ぐ（processingFromDrive）', appSource.includes('state.processingFromDrive = true;') && /function startSelectedAudio[\s\S]{0,80}if \(state\.processingFromDrive\) \{\s*return;/.test(appSource) && appSource.includes('run.disabled = state.processingFromDrive'));
+    check('処理中は別音声への切替も止める（1 件だけを保つ）', /if \(state\.processingFromDrive\) \{\s*return;\s*\}\s*state\.selectedAudio = file;/.test(appSource));
+    check('finally で processingFromDrive を戻す', /startSelectedAudio[\s\S]{0,400}\.finally\(\(\) => \{\s*state\.processingFromDrive = false;/.test(appSource));
+
+    check('未処理/処理済みバッジは維持', appSource.includes("badge.textContent = processed ? '処理済み' : '未処理'"));
+    check('Gemini 処理本体・診断・PROCESS_FAILED は不変（確認は表示だけ）', appSource.includes('runGeminiPipeline(') && appSource.includes('diagnostics.recordFailure(error)') && appSource.includes('SaveOutcome.PROCESS_FAILED'));
+  }
+
   section('エラー文言: Gemini の失敗を「処理に失敗しました」に潰さない');
 
   {

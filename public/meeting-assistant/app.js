@@ -127,7 +127,6 @@ const el = {
   message: document.getElementById('ma-message'),
   pickList: document.getElementById('pick-list'),
   pickEmpty: document.getElementById('pick-empty'),
-  pickRun: document.getElementById('pick-run'),
   recList: document.getElementById('rec-list'),
   recEmpty: document.getElementById('rec-empty'),
   setKeyState: document.getElementById('set-key-state'),
@@ -189,6 +188,8 @@ const state = {
   nativeRecording: null,
   /* Drive へ送信中の recordingId。二重押しで同名ファイルを 2 つ作らない。 */
   uploading: new Set(),
+  /* Drive 画面から議事録処理を実行中か。確認の「議事録を作成」二度押しを防ぐ。 */
+  processingFromDrive: false,
 };
 
 const recorderView = {
@@ -659,15 +660,67 @@ function fillPaths() {
 
 /* ---------- Drive 一覧 ---------- */
 
+/*
+ * 選択した音声のすぐ上に確認エリアを出す。タップは「選択」だけで、
+ * Gemini 処理は確認エリアの「議事録を作成」を押したときにだけ始まる。
+ * 常に 1 件だけを選択状態とし、確認エリアも 1 つだけ表示する。
+ */
+function buildConfirmArea(file) {
+  const box = document.createElement('li');
+  box.className = 'ma-confirm';
+  box.id = 'pick-confirm';
+
+  const title = document.createElement('p');
+  title.className = 'ma-confirm__title';
+  title.textContent = 'この音声を議事録にしますか？';
+  box.append(title);
+
+  const name = document.createElement('p');
+  name.className = 'ma-confirm__name';
+  name.textContent = file.name;
+  box.append(name);
+
+  const actions = document.createElement('div');
+  actions.className = 'ma-confirm__actions';
+
+  const run = document.createElement('button');
+  run.type = 'button';
+  run.className = 'ma-button ma-button--small';
+  run.id = 'pick-confirm-run';
+  run.textContent = '議事録を作成';
+  run.disabled = state.processingFromDrive;
+  run.addEventListener('click', () => startSelectedAudio(file));
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ma-button ma-button--ghost ma-button--small';
+  cancel.textContent = 'キャンセル';
+  cancel.disabled = state.processingFromDrive;
+  cancel.addEventListener('click', () => {
+    state.selectedAudio = null;
+    renderAudioList();
+  });
+
+  actions.append(run, cancel);
+  box.append(actions);
+  return box;
+}
+
 function renderAudioList() {
   el.pickList.replaceChildren();
   el.pickEmpty.hidden = state.voiceFiles.length > 0;
-  el.pickRun.disabled = state.selectedAudio === null;
 
   for (const file of state.voiceFiles) {
+    const selected = state.selectedAudio?.id === file.id;
+
+    /* 選択中の音声の直上に確認エリアを差し込む（1 件だけ）。 */
+    if (selected) {
+      el.pickList.append(buildConfirmArea(file));
+    }
+
     const item = document.createElement('li');
     item.className = 'ma-item';
-    item.dataset.selected = state.selectedAudio?.id === file.id ? 'true' : 'false';
+    item.dataset.selected = selected ? 'true' : 'false';
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -692,6 +745,10 @@ function renderAudioList() {
     meta.append(when, badge);
     button.append(name, meta);
     button.addEventListener('click', () => {
+      /* 別の音声を選ぶと対象を切り替える（確認エリアは常に 1 つ）。 */
+      if (state.processingFromDrive) {
+        return;
+      }
       state.selectedAudio = file;
       renderAudioList();
     });
@@ -699,6 +756,25 @@ function renderAudioList() {
     item.append(button);
     el.pickList.append(item);
   }
+}
+
+/* 確認の「議事録を作成」を押したときだけ Gemini 処理へ進む。二度押しは無視する。 */
+function startSelectedAudio(file) {
+  if (state.processingFromDrive) {
+    return;
+  }
+
+  state.processingFromDrive = true;
+  renderAudioList();
+
+  processExistingAudio(file)
+    .catch((error) => {
+      showMessage(describeAppError(error), true);
+      showScreen('pick');
+    })
+    .finally(() => {
+      state.processingFromDrive = false;
+    });
 }
 
 function renderRecordList() {
@@ -1704,37 +1780,51 @@ el.onPip?.addEventListener('click', () => {
   openPip('online');
 });
 
-document.getElementById('pick-refresh').addEventListener('click', () => {
-  refreshDriveLists({ screen: 'pick' })
-    .then(() => {
-      renderAudioList();
-      showMessage('');
-    })
-    .catch((error) => {
-      showMessage(describeAppError(error), true);
-    });
-});
-
-el.pickRun.addEventListener('click', () => {
-  if (!state.selectedAudio) {
+/*
+ * ボタンを押している間だけ「更新中…」にして無効化する。
+ * 完了・失敗のどちらでも必ず元のラベルへ戻し、連打による重複取得を防ぐ。
+ */
+async function withRefreshing(button, task) {
+  if (button.disabled) {
     return;
   }
 
-  processExistingAudio(state.selectedAudio).catch((error) => {
-    showMessage(describeAppError(error), true);
-    showScreen('pick');
+  const label = button.textContent;
+  button.disabled = true;
+  button.classList.add('ma-button--busy');
+  button.textContent = '更新中…';
+
+  try {
+    await task();
+  } finally {
+    button.disabled = false;
+    button.classList.remove('ma-button--busy');
+    button.textContent = label;
+  }
+}
+
+document.getElementById('pick-refresh').addEventListener('click', (event) => {
+  withRefreshing(event.currentTarget, async () => {
+    try {
+      await refreshDriveLists({ screen: 'pick' });
+      renderAudioList();
+      showMessage('一覧を更新しました。');
+    } catch (error) {
+      showMessage(describeAppError(error), true);
+    }
   });
 });
 
-document.getElementById('rec-refresh').addEventListener('click', () => {
-  refreshDriveLists({ screen: 'records' })
-    .then(() => {
+document.getElementById('rec-refresh').addEventListener('click', (event) => {
+  withRefreshing(event.currentTarget, async () => {
+    try {
+      await refreshDriveLists({ screen: 'records' });
       renderRecordList();
-      showMessage('');
-    })
-    .catch((error) => {
+      showMessage('一覧を更新しました。');
+    } catch (error) {
       showMessage(describeAppError(error), true);
-    });
+    }
+  });
 });
 
 function linkGoogle({ relink = false } = {}) {
