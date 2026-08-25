@@ -60,7 +60,7 @@ for (const id of [
   'vr-state-auth', 'vr-state-oauth', 'vr-state-folder', 'vr-state-device',
   'vr-device-reason', 'vr-connect',
   'vr-time', 'vr-limit', 'vr-indicator', 'vr-indicator-label',
-  'vr-size', 'vr-free', 'vr-start', 'vr-stop',
+  'vr-facts', 'vr-size', 'vr-free', 'vr-start', 'vr-stop',
   'vr-save-panel', 'vr-player', 'vr-recorded-meta',
   'vr-customer', 'vr-name', 'vr-save-folder', 'vr-save-hint', 'vr-save', 'vr-discard',
   'vr-progress-panel', 'vr-progress', 'vr-progress-title', 'vr-progress-bar', 'vr-progress-text',
@@ -316,6 +316,14 @@ function createRecorder() {
       el['vr-start'].hidden = recording;
       el['vr-stop'].hidden = !recording;
       el['vr-start'].disabled = recording;
+
+      /*
+       * 推定サイズ・空き容量は録音中だけ出す（§7）。
+       * 停止後は「録音時間 ／ サイズ」を保存パネルが出すため、ここに残すと
+       * 同じ数字が2か所に並ぶ。開始前は 0.0 MB と空き容量が並ぶだけで、
+       * 利用者の判断材料にならない。
+       */
+      el['vr-facts'].hidden = !recording;
 
       if (recording) {
         setIndicator('recording', '録音中');

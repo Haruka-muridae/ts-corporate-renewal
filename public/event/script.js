@@ -6,22 +6,34 @@
  */
 
 /* =========================
-   受付状態の切り替え方法
+   受付状態の決め方（2026-08 改訂／開催日一覧のLP表示廃止に伴い更新）
    =========================
 
-   1. index.html の #event-status にある data-event-status を書き換える。
-      "preparing" … 準備中（申込ボタンは押せない）
-      "open"      … 受付中（APPLY_URL が設定されていれば申込ボタンが有効になる）
-      "full"      … 申込状況による受付終了（申込ボタンは押せない）
-      "closed"    … 受付期間の終了（申込ボタンは押せない）
-   2. 申込フォームを実装したら、下の APPLY_URL に相対パスを入れる。
-      null のままなら、data-event-status が "open" でもボタンは無効のままにする。
+   開催日はGoogleカレンダー（主催者の予定）が真実源で、サーバー側
+   （lib/event/calendar-sync.mjs）が定期的にDBへ取り込んでいる。
+   このページは /event/api/schedule/ を叩いて、受付状態（バッジ・文言・
+   申込ボタンの有効/無効）だけをその結果から決める。開催日一覧そのものの
+   表示は申込フォーム（/event/apply/、参加日の選択）に一本化したため、
+   このページでは行わない。
+
+   1. 取得できたとき（正）
+      - 受付状態は応答の events から自動で決める。
+        accepting な回が1件以上     … "open"（受付中）
+        1件以上あるが全回 soldOut   … "full"（満席で受付終了）
+        1件以上あるがそれ以外       … "closed"（受付期間の外）
+        events が0件                … "preparing"（準備中）
+      - index.html の data-event-status は使わない。
+   2. 取得できなかったとき（フォールバック）
+      - index.html に直接書いてある data-event-status の値をそのまま使う
+       （このJSは書き換えない）。
+      - API側の障害時にもページの体裁が崩れないようにするための保険であり、
+        日常の更新はカレンダー側で行う（このファイル・index.htmlを編集しない）。
+   3. 申込フォームを実装したら、下の APPLY_URL に相対パスを入れる。
+      null のままなら、"open" でもボタンは無効のままにする。
       リンク先が無い状態で押せるボタンを出さないための保険。
-   3. 開催日時・会場・申込期間は index.html に直接記載する。
-      開催日時は index.html の「開催概要」内 1 箇所にのみ書き、
-      他の箇所では日付・時刻を繰り返さない（次回開催時の編集を1箇所で済ませるため）。
 */
 const APPLY_URL = '/event/apply/';
+const SCHEDULE_API_URL = '/event/api/schedule/';
 
 const STATUS_TEXT = {
   preparing: {
@@ -55,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
   let revealObserver = null;
 
-  /* ---------- Application status ---------- */
+  /* ---------- Application status & schedule ---------- */
 
   const statusElement = document.getElementById('event-status');
   const statusBadge = document.getElementById('event-status-badge');
@@ -63,32 +75,96 @@ document.addEventListener('DOMContentLoaded', () => {
   const applyButton = document.getElementById('apply-button');
   const applyNote = document.getElementById('apply-note');
 
-  /* 未知の値が入っていても表示が壊れないよう preparing へ寄せる。 */
-  const statusKey = statusElement?.dataset.eventStatus ?? 'preparing';
-  const status = STATUS_TEXT[statusKey] ?? STATUS_TEXT.preparing;
-
-  if (statusBadge) {
-    statusBadge.textContent = status.badge;
-  }
-
-  if (statusText) {
-    statusText.textContent = status.text;
-  }
-
-  if (applyNote) {
-    applyNote.textContent = status.note;
-  }
-
-  if (applyButton) {
-    const canApply = statusKey === 'open' && typeof APPLY_URL === 'string' && APPLY_URL !== '';
-    applyButton.disabled = !canApply;
-
-    if (canApply) {
-      applyButton.addEventListener('click', () => {
+  /* ボタンの有効・無効は applyStatus() が都度切り替える。押下時の遷移だけ先に決めておく。 */
+  if (applyButton && typeof APPLY_URL === 'string' && APPLY_URL !== '') {
+    applyButton.addEventListener('click', () => {
+      if (!applyButton.disabled) {
         window.location.href = APPLY_URL;
-      });
+      }
+    });
+  }
+
+  /* 未知の値が入っていても表示が壊れないよう preparing へ寄せる。 */
+  function applyStatus(statusKey) {
+    const status = STATUS_TEXT[statusKey] ?? STATUS_TEXT.preparing;
+
+    if (statusBadge) {
+      statusBadge.textContent = status.badge;
+    }
+
+    if (statusText) {
+      statusText.textContent = status.text;
+    }
+
+    if (applyNote) {
+      applyNote.textContent = status.note;
+    }
+
+    if (applyButton) {
+      /*
+       * 受付中でも、遷移先が無ければ押せるようにしない。
+       * リンク先の無いボタンを押せる状態で出すと、押しても何も起きない。
+       * 上の click ハンドラも同じ条件で登録している（条件を揃えること）。
+       */
+      applyButton.disabled = !(
+        statusKey === 'open' && typeof APPLY_URL === 'string' && APPLY_URL !== ''
+      );
     }
   }
+
+  /*
+   * 開催日一覧から受付状態を決める。
+   *
+   *   accepting が1件以上         … open（受付中）
+   *   公開回はあるが全て soldOut … full（満席で終了）
+   *   公開回はあるがどちらでもない … closed（受付期間の外）
+   *   1件も無い                   … preparing（準備中）
+   *
+   * full と closed を分けるのは、出す文言が違うため（満席なのか、
+   * まだ受付が始まっていない・すでに締め切ったのか）。両方を full に
+   * まとめると、受付開始前の回しか無いときに「満席」と出てしまう。
+   */
+  function resolveStatusFromSchedule(items) {
+    if (items.length === 0) {
+      return 'preparing';
+    }
+
+    if (items.some((item) => item.accepting)) {
+      return 'open';
+    }
+
+    if (items.every((item) => item.soldOut)) {
+      return 'full';
+    }
+
+    return 'closed';
+  }
+
+  /* フォールバック: index.html の data-event-status をそのまま使う。 */
+  function applyFallbackStatus() {
+    applyStatus(statusElement?.dataset.eventStatus ?? 'preparing');
+  }
+
+  async function loadSchedule() {
+    try {
+      const response = await fetch(SCHEDULE_API_URL);
+
+      if (!response.ok) {
+        throw new Error(`schedule api responded with ${response.status}`);
+      }
+
+      const payload = await response.json();
+      const items = Array.isArray(payload?.events) ? payload.events : [];
+
+      applyStatus(resolveStatusFromSchedule(items));
+    } catch {
+      /* 取得できない間はフォールバックのままにする（静的HTML・data-event-status）。 */
+      applyFallbackStatus();
+    }
+  }
+
+  applyFallbackStatus();
+  loadSchedule();
 
   /* ---------- Scroll reveal ---------- */
 

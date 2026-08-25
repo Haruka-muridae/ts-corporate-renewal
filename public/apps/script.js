@@ -63,6 +63,14 @@ const APPS = [
     icon: 'app',
   },
   {
+    name: '名刺管理',
+    description: '登録済みの名刺を検索・閲覧・編集するアプリです。',
+    status: 'public',
+    url: '/apps/card-manager/',
+    tags: ['名刺管理', '検索'],
+    icon: 'app',
+  },
+  {
     name: '音声文字起こし',
     description: '端末またはGoogleドライブの音声ファイルを、端末内AIまたはGemini APIで文字起こしします。',
     status: 'beta',

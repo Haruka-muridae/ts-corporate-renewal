@@ -32,6 +32,14 @@ export type EventRow = {
   is_published: boolean;
   cancel_policy_text: string;
   policy_version: string;
+  /*
+   * ここから下はカレンダー連動（20260818000000_calendar_sync.sql）で足した列。
+   * 手で登録した行では google_calendar_event_id が null になる（＝同期の対象外）。
+   */
+  google_calendar_event_id: string | null;
+  synced_at: string | null;
+  sync_warning: string | null;
+  sync_warning_at: string | null;
 };
 
 export type ApplicationStatus =
@@ -107,6 +115,31 @@ export declare function countPaidApplications(
   config: SupabaseConfig,
   eventId: string,
 ): Promise<number>;
+
+/**
+ * 複数の回の支払済み件数をまとめて数える（一覧表示用の1クエリ）。
+ * 戻り値には渡したIDが必ず全て入る（該当が無い回は 0）。
+ */
+export declare function countPaidApplicationsByEventIds(
+  config: SupabaseConfig,
+  eventIds: string[],
+): Promise<Record<string, number>>;
+
+/**
+ * カレンダーへ書き戻す名簿の材料。
+ *
+ * 取るのは受付番号と氏名だけ（アプリ外へ出す情報を最小限にするため）。
+ * 並びは受付番号の昇順＝支払確定の順。
+ */
+export type PaidAttendeeRow = {
+  receipt_number: string | null;
+  name: string;
+};
+
+export declare function listPaidAttendees(
+  config: SupabaseConfig,
+  eventId: string,
+): Promise<PaidAttendeeRow[]>;
 
 export declare function findEventById(
   config: SupabaseConfig,
@@ -216,3 +249,64 @@ export declare function updateApplicationFields(
   applicationId: string,
   patch: Record<string, unknown>,
 ): Promise<ApplicationRow | null>;
+
+/* ------------------------------------------------------------------ */
+/* カレンダー同期・複数開催日用 */
+
+export declare function listPublishedUpcomingEvents(
+  config: SupabaseConfig,
+  nowIso: string,
+): Promise<EventRow[]>;
+
+export declare function listEventsForAdmin(
+  config: SupabaseConfig,
+): Promise<EventRow[]>;
+
+export declare function findEventByCalendarEventId(
+  config: SupabaseConfig,
+  googleEventId: string,
+): Promise<EventRow | null>;
+
+/**
+ * 未リンクかつ開催日時が一致する行。
+ * eventEndAtIso を渡すと終了時刻の一致も条件に加える（同じ開始で長さの違う
+ * 回を誤って引き取らないため）。候補が複数あるときは作成が古い行を返す。
+ */
+export declare function findUnlinkedEventByDate(
+  config: SupabaseConfig,
+  eventDateIso: string,
+  eventEndAtIso?: string | null,
+): Promise<EventRow | null>;
+
+/** 一意制約に当たった場合は例外にせず duplicate を返す。 */
+export declare function insertEvent(
+  config: SupabaseConfig,
+  row: Record<string, unknown>,
+): Promise<{ row: EventRow | null; duplicate: boolean }>;
+
+export declare function updateEvent(
+  config: SupabaseConfig,
+  eventId: string,
+  patch: Record<string, unknown>,
+): Promise<EventRow | null>;
+
+export type CalendarSyncStateRow = {
+  key: string;
+  last_synced_at: string;
+  last_status: string;
+};
+
+/** 同期の実行権を取れたら true（TTL内・他が実行中なら false）。 */
+export declare function claimCalendarSync(
+  config: SupabaseConfig,
+  input: { nowIso: string; ttlMinutes: number },
+): Promise<boolean>;
+
+export declare function updateCalendarSyncStatus(
+  config: SupabaseConfig,
+  input: { statusText: string },
+): Promise<CalendarSyncStateRow | null>;
+
+export declare function findCalendarSyncState(
+  config: SupabaseConfig,
+): Promise<CalendarSyncStateRow | null>;

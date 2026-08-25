@@ -382,11 +382,13 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
             <p class="apply-card__title">参加申し込み</p>
 
             <!--
-              受付状態の表示。
-              data-event-status を "preparing"（準備中）/ "open"（受付中）/
-              "full"（申込状況による受付終了）/ "closed"（受付期間の終了）の
-              いずれかに書き換えると、
-              バッジの文言と申込ボタンの状態がまとめて切り替わる（script.js）。
+              受付状態の表示（2026-08 改訂）。
+              script.js が /event/api/schedule/ を取得できた場合は、その内容
+              （開催中の回が受付中かどうか）から自動でバッジ・文言・申込ボタンの
+              有効/無効を決める。ここにある data-event-status と静的な表示は、
+              APIが取得できなかったときだけ使われるフォールバック。
+              値は "preparing"（準備中）/ "open"（受付中）/
+              "full"（申込状況による受付終了）/ "closed"（受付期間の終了）。
               "preparing" のときはバッジ・文言の代わりに status-preparing.png を表示する（CSS制御）。
             -->
             <p class="event-status" id="event-status" data-event-status="open">
@@ -418,20 +420,17 @@ body.is-menu-open .menu-toggle__line:nth-child(3){transform:translateY(-7px) rot
         </header>
 
         <!--
-          開催日時は、次回以降の変更が1箇所で済むよう、このページ内では
-          下の「開催日時」の dd だけに記載する。
-          他の箇所（申込期間、申込セクション、特商法ページ）では
-          具体的な日付・時刻を繰り返さず、「開催当日の開始時刻」のように参照する。
+          開催日時は Google カレンダー（主催者の予定）が真実源で、
+          具体的な日時の表示は申込フォーム（/event/apply/、参加日の選択）に
+          一本化している。ここ（LP）では日時を出さず、他の箇所（申込期間、
+          申込セクション、特商法ページ）でも同様に具体的な日付・時刻を
+          繰り返さず「開催当日の開始時刻」のように参照する。
         -->
         <div class="outline-card reveal">
           <dl class="outline-list">
             <div class="outline-row">
               <dt>イベント名</dt>
               <dd>TSAMビジネス&amp;フレンド交流会</dd>
-            </div>
-            <div class="outline-row">
-              <dt>開催日時</dt>
-              <dd><span class="nowrap"><time datetime="2026-08-30T14:30+09:00">2026年8月30日（日）14:30</time>〜<time datetime="2026-08-30T16:00+09:00">16:00</time></span></dd>
             </div>
             <div class="outline-row">
               <dt>開催場所</dt>

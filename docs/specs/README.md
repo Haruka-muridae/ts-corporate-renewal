@@ -11,15 +11,16 @@
 
 | 仕様書 | 対象範囲 | 版 |
 | --- | --- | --- |
-| [login-page-detailed-spec-v3.md](./login-page-detailed-spec-v3.md) | `/login/index.html` ＋ `public/auth/` 共通層 ＋ `gas-auth/`（ログイン関連部分） | v3.2 |
+| [login-page-detailed-spec-v3.md](./login-page-detailed-spec-v3.md) | `/login/index.html` ＋ `public/auth/` 共通層 ＋ `gas-auth/`（ログイン関連部分） | v3.3 |
 | [pricing-consent-spec-v1.md](./pricing-consent-spec-v1.md) | `/pricing/` の同意フロー ＋ `gas-auth/Consent.gs` ＋ `/legal/` 3ページ | v1 |
 | [legal-cms-spec-v1.md](./legal-cms-spec-v1.md) | 法務文書のスプレッドシート管理 ＋ `gas-auth/Legal.gs` ＋ `/legal/` の生成と公開 | v1 |
-| [portal-spec-v1.md](./portal-spec-v1.md) | `/portal/` のレイアウトと表示条件 | v1.4 |
+| [portal-spec-v1.md](./portal-spec-v1.md) | `/portal/` のレイアウトと表示条件 | v1.5.1 |
 | [keystore-spec-v1.md](./keystore-spec-v1.md) | 外部AIサービスのAPIキーの保管（`public/auth/keystore.js`）。端末内のみ・サーバーへ送らない | v1 |
-| [apps-grid-spec-v1.md](./apps-grid-spec-v1.md) | `/portal/` のアプリグリッド（ページ式）と配置データ ＋ `public/portal/app-registry.js` | v1 |
-| [receipt-ocr-v2.md](./receipt-ocr-v2.md) | 領収書スキャナ（`public/production-app/receipt-ocr/`。アプリID `receipt-ocr`）。利用者のドライブに保存し、当社サーバーを通さない | v2.0（ドラフト） |
+| [auth-verify-cache-spec-v1.md](./auth-verify-cache-spec-v1.md) | セッション検証の代理キャッシュ（`workers/auth-verify/`）。保護ページを開くたびの Apps Script 往復を避ける | v1.1 |
+| [apps-grid-spec-v1.md](./apps-grid-spec-v1.md) | `/portal/` のアプリグリッド（ページ式）と配置データ ＋ `public/portal/app-registry.js` | v1.4.1 |
+| [receipt-ocr-v2.md](./receipt-ocr-v2.md) | 領収書スキャナ（`public/production-app/receipt-ocr/`。アプリID `receipt-ocr`）。利用者のドライブに保存し、当社サーバーを通さない | v2.2（ドラフト） |
 | [receipt-ocr-v1.3.md](./receipt-ocr-v1.3.md) | 上の前身。**抽出・検証の仕様（10・11・13・14・15・16.1・18.2章）は現役**で、v2.0 がここを参照する | v1.3 |
-| [short-script-spec-v1.md](./short-script-spec-v1.md) | ショート動画 台本メーカー（`public/production-app/short-script/`。アプリID `short-script`）。テーマ/貼り付け/セグメントから台本を作り、ローカル補助サービスで音声・動画化 | v1.4 |
+| [short-script-spec-v1.md](./short-script-spec-v1.md) | ショート動画 台本メーカー（`public/production-app/short-script/`。アプリID `short-script`）。テーマ/貼り付け/セグメントから台本を作り、ローカル補助サービスで音声・動画化 | v1.6 |
 
 > `receipt-ocr-v1.3.md` にはサーバー（GAS）前提の記述が残っています。
 > **アーキテクチャは v2.0 が正**であり、v1.3 のうち参照してよいのは
@@ -42,15 +43,17 @@
 
 | 要件定義書 | 対象範囲 | 版 |
 | --- | --- | --- |
-| [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.5 |
-| [card-mail-requirements-v1.md](./card-mail-requirements-v1.md) | 名刺メール配信アプリ（`public/production-app/card-mail/`。アプリID `card-mail`）。名刺OCRの台帳から宛先を読み、利用者自身のGmailからBCCで一斉送信する | v1.1 |
+| [meishi-ocr-requirements-v3.md](./meishi-ocr-requirements-v3.md) | 名刺OCR・データ登録Webアプリ（`public/production-app/card-ocr/`。アプリID `card-ocr`）＋ Portal への掲載（`public/portal/app-registry.js`） | v3.6 |
+| [card-mail-requirements-v1.md](./card-mail-requirements-v1.md) | 名刺メール配信アプリ（`public/production-app/card-mail/`。アプリID `card-mail`）。名刺OCRの台帳から宛先を読み、利用者自身のGmailからBCCで一斉送信する | v1.2 |
+| [card-manager-requirements-v1.md](./card-manager-requirements-v1.md) | 名刺管理アプリ（`public/production-app/card-manager/`。アプリID `card-manager`）。名刺OCRの台帳「名刺管理」を検索・閲覧・編集する。台帳の新規作成・列構成の変更は行わず、編集内容は台帳の変更履歴タブへ記録する | v1.0 |
 | [auth-registration-production-v1.md](./auth-registration-production-v1.md) | 本番認証系の初回登録フロー（料金→Stripe決済→利用者作成→初期設定）を Stripe テストモードからライブモードへ切り替える要件。コード変更なしの設定作業 | v1.0 |
-| [audio-transcriber-requirements-v1.md](./audio-transcriber-requirements-v1.md) | 音声文字起こしアプリ（`public/production-app/audio-transcriber/`。アプリID `audio-transcriber`）。端末内Whisper または利用者自身の Gemini APIキー（KeyStore 経由）で文字起こしし、ブラウザ録音アプリの録音を drive.file のまま読む | v1.1 |
-| [threads-mvp-requirements-v1.md](./threads-mvp-requirements-v1.md) | Threads 投稿アプリ（`public/production-app/threads-post/`。アプリID `threads-post`）＋ Portal への掲載。下書き（端末内保存）・AI生成（KeyStore 経由の Gemini）・intent リンクでの投稿・履歴のみの単機能アプリ。Threads 側の API・トークン不使用。旧 GAS 版は `gas-threads/`（保管） | v3.1 |
-| [x-post-requirements-v1.md](./x-post-requirements-v1.md) | X 投稿アプリ（`public/production-app/x-post/`。アプリID `x-post`）。Threads 版の差分仕様: 280ウェイト計数（全角=2）と x.com intent | v1.0 |
-| [note-post-requirements-v1.md](./note-post-requirements-v1.md) | note 下書きアプリ（`public/production-app/note-post/`。アプリID `note-post`）。Threads 版の差分仕様: 本文コピー＋作成画面を開く方式（note にプリフィルURLが無いため）と記事向け生成 | v1.0 |
-| [meeting-minutes-requirements-v1.md](./meeting-minutes-requirements-v1.md) | AI議事録アプリ（`public/production-app/meeting-minutes/`。アプリID `meeting-minutes`）。audio-transcriber の文字起こしをGeminiで議事録へ整理し、原文と並べて確認・編集できる。根拠（evidence）はクライアント側で原文照合し、確認できない場合は「根拠を確認できません」と表示する | v1.0 |
-| [interview-recorder-requirements-v1.md](./interview-recorder-requirements-v1.md) | 面談録音アプリ（`public/production-app/interview-recorder/`。アプリID `interview-recorder`）。単体公開版からの移植。同意確認モーダル、タブ音声＋マイクのミックス、lamejsによるMP3逐次エンコード（WebM安全網付き）、完全クライアントサイドでの外部送信なしのローカルダウンロード | v1.0 |
+| [audio-transcriber-requirements-v1.md](./audio-transcriber-requirements-v1.md) | 音声文字起こしアプリ（`public/production-app/audio-transcriber/`。アプリID `audio-transcriber`）。端末内Whisper または利用者自身の Gemini APIキー（KeyStore 経由）で文字起こしし、ブラウザ録音アプリの録音を drive.file のまま読む | v1.4 |
+| [threads-mvp-requirements-v1.md](./threads-mvp-requirements-v1.md) | Threads 投稿アプリ（`public/production-app/threads-post/`。アプリID `threads-post`）＋ Portal への掲載。下書き（端末内保存）・AI生成（KeyStore 経由の Gemini）・intent リンクでの投稿・履歴のみの単機能アプリ。Threads 側の API・トークン不使用。旧 GAS 版は `gas-threads/`（保管） | v3.2 |
+| [x-post-requirements-v1.md](./x-post-requirements-v1.md) | X 投稿アプリ（`public/production-app/x-post/`。アプリID `x-post`）。Threads 版の差分仕様: 280ウェイト計数（全角=2）と x.com intent | v1.1 |
+| [note-post-requirements-v1.md](./note-post-requirements-v1.md) | note 下書きアプリ（`public/production-app/note-post/`。アプリID `note-post`）。Threads 版の差分仕様: 本文コピー＋作成画面を開く方式（note にプリフィルURLが無いため）と記事向け生成 | v1.2 |
+| [meeting-minutes-requirements-v1.md](./meeting-minutes-requirements-v1.md) | AI議事録アプリ（`public/production-app/meeting-minutes/`。アプリID `meeting-minutes`）。audio-transcriber の文字起こしをGeminiで議事録へ整理し、原文と並べて確認・編集できる。根拠（evidence）はクライアント側で原文照合し、確認できない場合は「根拠を確認できません」と表示する | v1.4 |
+| [interview-recorder-requirements-v1.md](./interview-recorder-requirements-v1.md) | 面談録音アプリ（`public/production-app/interview-recorder/`。アプリID `interview-recorder`）。単体公開版からの移植。同意確認モーダル、タブ音声＋マイクのミックス、lamejsによるMP3逐次エンコード（WebM安全網付き）。v1.1 で保存先・保存形式をブラウザ録音アプリへ統一（同一フォルダ「マイドライブ ＞ TSAM AI ＞ Voice Recorder」へ 128kbps モノラルMP3を保存。当社サーバーへの送信は引き続き無し）。v1.2 で保存名の編集UI（面談相手名・ファイル名）を追加。v1.3 で結果画面の情報量を整理 | v1.3 |
+| [calendar-url-notifier-requirements-v1.md](./calendar-url-notifier-requirements-v1.md) | カレンダーURL通知アプリ（`public/production-app/calendar-url-notifier/`）＋ `gas-notifier/`（配布テンプレートの拡張）＋ `workers/notifier-gate/`（`FEATURE_RULES`） | v1.1 |
 
 要件定義書も**実装の正**です。上の仕様書と同じく、コードと食い違う場合は
 コードのほうが間違っているとみなします。

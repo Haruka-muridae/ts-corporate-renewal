@@ -69,6 +69,7 @@ const SUITES = [
   { name: 'supabase', file: 'unit/supabase.mjs', kind: 'unit', groups: ['auth'] },
   { name: 'paths', file: 'unit/paths.mjs', kind: 'unit', groups: ['auth', 'audit'] },
   { name: 'audit', file: 'unit/audit.mjs', kind: 'unit', groups: ['auth', 'audit'] },
+  { name: 'card-manager', file: 'unit/card-manager.mjs', kind: 'unit', groups: ['card-manager'] },
   { name: 'browser:login-flow', file: 'browser/login-flow.mjs', kind: 'browser', groups: ['auth'] },
   { name: 'browser:phase3-screens', file: 'browser/phase3-screens.mjs', kind: 'browser', groups: ['auth'] },
   { name: 'browser:audit', file: 'browser/audit.mjs', kind: 'browser', groups: ['auth', 'audit'] },
@@ -87,7 +88,7 @@ const selected = selectSuites();
 
 if (selected.length === 0) {
   console.error(`不明な指定: ${mode}`);
-  console.error('使える値: all / unit / browser / runner / shared / auth / audit');
+  console.error('使える値: all / unit / browser / runner / shared / auth / audit / card-manager');
   process.exit(1);
 }
 

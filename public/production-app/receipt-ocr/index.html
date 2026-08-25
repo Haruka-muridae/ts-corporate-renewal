@@ -38,18 +38,22 @@
     </p>
   </header>
 
-  <!-- 初回案内（§9.2 末尾・§0.3・§0.4・§0.5）。 -->
+  <!--
+    初回案内（§9.2 末尾・§0.3・§0.4・§0.5）。
+
+    見出しに件数を書かない（2026-08-19）。以前は「3点だけご確認ください」と
+    書きながら、その下に4件目（Geminiキーの扱い）が段落で続いていた。
+    **数を書けば、増えたときに必ずずれる。** 4件目をリストへ入れ、
+    見出しからは数を落とした。§0.4 の開示そのものは減らしていない。
+  -->
   <section id="ro-first-run" class="ro-panel ro-panel--notice" hidden>
-    <h2 class="ro-panel__title">はじめに、3点だけご確認ください</h2>
+    <h2 class="ro-panel__title">はじめにご確認ください</h2>
     <ul class="ro-list">
-      <li>データと画像は<strong>あなたのGoogleドライブ</strong>に保存されます。当社は閲覧できません。</li>
+      <li>データと画像は<strong>あなたのGoogleドライブ</strong>に保存されます。データは当社のサーバーを経由せず、当社が内容を受け取ることはありません。</li>
       <li>あなたがシートやフォルダを削除した場合、<strong>当社は復元できません</strong>（控えを持たないため）。</li>
       <li>本アプリは電子帳簿保存法のスキャナ保存要件を満たしません。<strong>紙の原本は破棄しないでください。</strong></li>
+      <li id="ro-key-disclosure">Gemini APIキーはあなた自身のものを使います。<strong>無料枠のキーでは、送信した画像や文字がGoogle側で利用される場合があります</strong>（業務では有料枠をご検討ください）。</li>
     </ul>
-    <p class="ro-note" id="ro-key-disclosure">
-      Gemini APIキーはあなた自身のものを使います。無料枠のキーでは、送信した画像や文字が
-      Google 側で利用される場合があります。業務で使う場合は有料枠のご利用をご検討ください。
-    </p>
     <button type="button" id="ro-first-run-ack" class="auth-button">確認しました</button>
   </section>
 
@@ -88,15 +92,13 @@
     </label>
 
     <!--
-      アップロード前の縮小（仕様書 §14 の最終項）。
-      **既定は無効。** 原本は証跡なので、こちらの都合で画質を落とさない。
-      回線が弱い環境で待たされるときだけ、利用者が選ぶ。
-    -->
-    <label class="ro-check">
-      <input type="checkbox" id="ro-shrink">
-      <span>アップロード前に縮小する（長辺2,000px以下・JPEG。回線が遅いとき向け）</span>
-    </label>
+      プレビュー。**画像を選ぶまでは、この中身ごと出さない。**
 
+      画像ハッシュ（SHA-256）はここに出さない（2026-08-19）。
+      重複判定（§10）には引き続き使うが、64桁の16進数は利用者が読む値でも
+      直せる値でもなく、選んだ直後の画面で最も目立つ位置を占めていた。
+      計算そのものは app.js に残してある。
+    -->
     <div class="ro-preview" id="ro-preview" hidden>
       <img id="ro-preview-image" class="ro-preview__image" alt="選択した領収書の画像">
       <dl class="ro-meta">
@@ -105,14 +107,25 @@
           <dd class="ro-meta__value" id="ro-meta-name"></dd>
         </div>
         <div class="ro-meta__row">
-          <dt class="ro-meta__key">画像ハッシュ（SHA-256）</dt>
-          <dd class="ro-meta__value ro-meta__value--mono" id="ro-meta-hash"></dd>
-        </div>
-        <div class="ro-meta__row">
           <dt class="ro-meta__key">保存先</dt>
           <dd class="ro-meta__value" id="ro-meta-folder"></dd>
         </div>
       </dl>
+
+      <!--
+        アップロード前の縮小（仕様書 §14 の最終項）。
+        **既定は無効。** 原本は証跡なので、こちらの都合で画質を落とさない。
+        回線が弱い環境で待たされるときだけ、利用者が選ぶ。
+
+        **プレビューの中に置いてある**（2026-08-19）。画像を選ぶ前は
+        選択肢として意味を持たず、最初に目に入る場所を占めるだけだった。
+        JavaScript で別に出し入れせず、プレビューと同じ `hidden` に
+        乗せている（出し忘れ・消し忘れが起きない）。
+      -->
+      <label class="ro-check ro-check--shrink">
+        <input type="checkbox" id="ro-shrink">
+        <span>アップロード前に縮小する（長辺2,000px以下・JPEG。回線が遅いとき向け）</span>
+      </label>
     </div>
 
     <button type="button" id="ro-start" class="auth-button" disabled>
@@ -173,6 +186,15 @@
   <!-- 状態とエラー（§12）。role="status" で読み上げに乗せる。 -->
   <p class="ro-message" id="ro-message" role="status" aria-live="polite" hidden></p>
   <p class="ro-message ro-message--progress" id="ro-progress" hidden></p>
+
+  <!--
+    ポータルへの戻り道（本番アプリ共通の形。素のテキストリンク）。
+    ボタンにすると「やめる」「保存する」と同じ見た目になり、
+    押す前に移動なのか実行なのかが分からなくなる。
+  -->
+  <footer class="ro-footer">
+    <p class="ro-note"><a href="../../portal/">ポータルへ戻る</a></p>
+  </footer>
 
 </main>
 

@@ -70,7 +70,8 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 - **外部SDKを使わない。** Stripe・Supabase(PostgREST)・Gmail いずれも `fetch` で REST を直接叩いている。`package.json` の dependencies は `next` / `react` / `react-dom` のみ。ライブラリ追加は [AGENTS.md](AGENTS.md) のとおり事前確認が必要。
 - **環境変数は [lib/event/config.mjs](lib/event/config.mjs) を必ず経由する。** BOM・前後空白を落としたうえで、値が無ければ「使う時点で」名前付きの例外にする（起動時に全体を巻き添えにしない）。`SUPABASE_SERVICE_ROLE_KEY` に `NEXT_PUBLIC_` を付けない。`lib/event/db.mjs` は service role キーを扱うサーバー専用モジュールで、クライアントコンポーネントから import しないこと（`server-only` パッケージは入れていないので、呼び出し側を server action / server component に限定することで守っている）。
 - **金額はサーバーが計算する。** フォームから来た金額は一切使わない。割引率は [lib/event/pricing.mjs](lib/event/pricing.mjs) の定数（DBにルールを持たせない方針）で、申込ごとの内訳は `payments` の列にスナップショットとして保存する。JPY は最小通貨単位が円なので `unit_amount` に円額をそのまま渡す（100倍しない）。
-- **開催日時が2か所にある。** 静的な `public/event/index.html` と `events.event_date`。次回開催時は両方を更新する。受付を止めるときは `events.is_published=false`（即時・サーバー側の判定）を先に、`public/event/index.html` の `data-event-status` は表示合わせ。
+- **開催日時はGoogleカレンダーが真実源（2026-08〜）。** 主催者アカウント（`architect@potenitas.com`）のメイン（primary）カレンダーにある、タイトルが「【SV顧客用】渋谷CAFEご予約」に完全一致する予定を `lib/event/calendar-sync.mjs` が sync-on-read（TTL 10分）で `events` テーブルへ取り込む。予定を追加すれば新しい回が増え、削除・改題すれば該当行が `is_published=false` になり受付が止まる（支払済みがある回は `events.sync_warning` に記録し、管理画面で警告表示）。`public/event/index.html` は開催日時そのものを掲載せず（2026-08〜、開催日一覧の描画は廃止し、具体的な日時表示は申込フォームの参加日選択に一本化した）、`data-event-status` によるバッジ・申込ボタン制御だけが残る。この `data-event-status` は `GET /event/api/schedule/` が取得できなかったときだけ使われる静的フォールバック。日常の開催日変更・受付停止は**カレンダー側の操作だけで完結し、コードやHTMLの編集は不要**。
+- **カレンダー予定の説明欄には支払済み人数と予約者名簿の自動更新ブロックが入る（2026-08〜）。** 支払確定・返金反映・管理画面での申込者更新のたびに [lib/event/calendar-note.mjs](lib/event/calendar-note.mjs) がマーカーで囲んだ区間だけを書き換える（手書きメモは残る）。名簿に出すのは支払済みの**受付番号と氏名だけ**（アプリ外へ出す個人情報の最小化。`listPaidAttendees()` がその2列しか取得しない）。書き込みは専用トークン `GOOGLE_CALENDAR_WRITE_REFRESH_TOKEN`（`calendar.events`、未設定なら書き戻しだけ見送る）で行い、読み取り用の `GOOGLE_CALENDAR_REFRESH_TOKEN`（readonly）とは分けてある。**タイトル（`summary`）は同期の完全一致キーなので絶対に書き換えない。**
 
 ### Supabase
 
@@ -92,7 +93,7 @@ CI（[.github/workflows/test.yml](.github/workflows/test.yml)）が実行する�
 - **正式な要件は [docs/requirements/mvp-requirements.md](docs/requirements/mvp-requirements.md)。** 実装・修正時は必ず同文書の §5〜§10 に準拠する。要件と矛盾する実装判断が必要になったときは、**勝手に進めず必ず確認を取る**（判断した内容は §14 の変更履歴へ残す）。
 - **バックエンドを持たない。** 要件書 v1.1 はサーバー側 MP3 変換とAPI 8本を前提にしていたが、Vercel の関数では 90分・約86MB の受信と FFmpeg 実行が成立しないため、v1.2 でブラウザ完結へ改めた。**「APIを足せば解決する」と考える前に §14 を読むこと。**
 - **`public/apps/voice-recorder/`（テスト環境）から import しない。** 長時間録音の実装はそこから**複製**してある（[docs/repository-structure.md](docs/repository-structure.md) §1）。テスト環境側を直しても本番には反映されないし、その逆もない。
-- **保存先フォルダ名は「マイドライブ ＞ TSAM AI ＞ Voice Recorder」。** 音声文字起こしアプリが同じ場所を読みに来るため、名前を変えると両方を同時に変える必要がある。フォルダは**IDで固定登録せず、名前から解決して無ければ作成する**（`drive.file` スコープでは、アプリが作成していないフォルダへ書き込めないため）。
+- **保存先フォルダ名は「マイドライブ ＞ TSAM AI ＞ Voice Recorder」。** 音声文字起こしアプリが同じ場所を読みに来て、**面談録音アプリ（`public/production-app/interview-recorder/`）が同じ場所へ書きに来る**（2026-08-19 / 同アプリ要件 v1.1）。名前を変えるなら3アプリを同時に変える必要がある。フォルダは**IDで固定登録せず、名前から解決して無ければ作成する**（`drive.file` スコープでは、アプリが作成していないフォルダへ書き込めないため）。面談録音アプリが**クライアントIDまで同一にしている**のもこのためで（`drive.file` の可視範囲はクライアントIDごとに分かれる）、IDがずれると同じ名前のフォルダを見つけられず新規作成してしまう。この一致は `tests/unit/interview-recorder.mjs` が両方の `config.js` を読み比べて固定している。
 - **OAuth スコープは `drive.file` のみ。増やさない。** アクセストークンはメモリ上だけで保持し、localStorage / sessionStorage / Cookie / URL / ログのいずれにも書かない（`receipt-ocr` と同じ方針）。クライアントIDは公開値で、実質的な防御は Google Cloud 側の「承認済みの JavaScript 生成元」。
 - **アクセス制御はクライアント側ガード（`guardPage()`）が主。** 静的配信のため HTML と JS の取得自体は防げない（[SECURITY_NOTES.md](SECURITY_NOTES.md)）。Drive のデータを守っているのは OAuth であって、このガードではない。
 

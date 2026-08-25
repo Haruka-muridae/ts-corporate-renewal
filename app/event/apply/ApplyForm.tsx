@@ -8,6 +8,7 @@ import {
   OCCUPATION_LABELS,
   POSITION_LABELS,
 } from "@/lib/event/pricing.mjs";
+import type { ScheduleItem } from "@/lib/event/schedule.mjs";
 
 import { submitApplication, type ApplyFormState } from "./actions";
 
@@ -76,7 +77,7 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export function ApplyForm() {
+export function ApplyForm({ events }: { events: ScheduleItem[] }) {
   const [state, formAction, pending] = useActionState(
     submitApplication,
     initialState,
@@ -105,6 +106,34 @@ export function ApplyForm() {
           {errors.form}
         </p>
       ) : null}
+
+      <fieldset className="form-group">
+        <legend className="form-group__legend">参加日</legend>
+
+        <div className="form-field">
+          <label className="form-field__label" htmlFor={fieldId("eventId")}>
+            参加日<span className="form-field__required">必須</span>
+          </label>
+          <select
+            className="form-field__select"
+            id={fieldId("eventId")}
+            name="eventId"
+            defaultValue={values.eventId ?? ""}
+            aria-invalid={errors.eventId ? true : undefined}
+            aria-describedby={describedBy("eventId")}
+            required
+          >
+            <option value="">開催日を選択してください</option>
+            {events.map((item) => (
+              <option key={item.id} value={item.id} disabled={item.soldOut}>
+                {item.label}
+                {item.soldOut ? "（満席）" : null}
+              </option>
+            ))}
+          </select>
+          <FieldError id={errorId("eventId")} message={errors.eventId} />
+        </div>
+      </fieldset>
 
       <fieldset className="form-group">
         <legend className="form-group__legend">基本情報</legend>

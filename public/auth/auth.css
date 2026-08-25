@@ -1228,23 +1228,36 @@
 }
 
 /*
- * リンクの隣に出す生のURL。
- * 踏まずに行き先を確かめられるようにするため、文字として読める形で置く。
- * 320px でも溢れないよう、どこでも折り返す。
- */
-.auth-api-panel__url {
-  font-family: var(--font-num), monospace;
-  word-break: break-all;
-}
-
-/*
  * Google Workspace の紹介。
  * キーの取得手順とは別の話なので、区切り線で分ける。
+ *
+ * 本文は details で畳んである（portal-spec-v1.md §7-6）。
  */
 .auth-api-panel__promo {
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--c-border);
+}
+
+/*
+ * 「くわしく見る」の押下領域。
+ *
+ * UA 既定のままだと高さが約30pxで、この画面の他の操作子にそろえた
+ * 44px に届かない。上下の余白で伸ばしている。
+ *
+ * **display は list-item のまま残す。** flex にすれば行の中央へ揃えられるが、
+ * 開閉の三角（::marker）が消え、押せば開くことが「くわしく見る」という
+ * 字面からしか分からなくなる。触れる手がかりを減らさないほうを採った。
+ */
+.auth-api-panel__promo summary {
+  min-height: 44px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+
+.auth-api-panel__promo summary:focus-visible {
+  outline: 2px solid var(--c-main);
+  outline-offset: 2px;
 }
 
 .auth-api-panel__promo-title {

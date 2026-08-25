@@ -61,9 +61,13 @@
 
       <header class="np-header">
         <h1>note 下書き</h1>
+        <!--
+          リードは「このアプリで何ができるか」だけにする。
+          流し込みの手順は本文の下（操作の直前）にも書いてあり、
+          両方に書くと同じ説明を2回読ませることになる。
+        -->
         <p class="np-lede">
-          記事を書く・AIで作る・下書きを残す。「note で書く」は本文をコピーして
-          note の作成画面を開くので、エディタに貼り付けて公開はご自身で行ってください。
+          記事を書く・AIで作る・下書きを残す。
         </p>
       </header>
 
@@ -74,9 +78,10 @@
 
       <section class="np-generate" aria-labelledby="np-generate-heading">
         <h2 id="np-generate-heading">AIで作る（任意）</h2>
+        <!-- キー未設定の案内と導線は本番アプリ間で文言を揃えてある。 -->
         <p id="np-key-note" class="np-note" hidden>
-          Gemini APIキーが未設定です。<a href="../../portal/" id="np-key-link">ポータル</a>で
-          設定すると「AIで生成」が使えます（手で書く・貼る場合は不要です）。
+          Gemini APIキーが未設定です。「AIで生成」を使うには設定が必要です（手で書く・貼る場合は不要です）。
+          <a href="../../portal/" id="np-key-link">ポータルで設定する</a>
         </p>
         <form id="np-generate-form">
           <label for="np-theme">テーマ・指示</label>
@@ -84,10 +89,20 @@
             placeholder="例: AI導入の始め方について、初心者向けに" autocomplete="off">
           <button type="submit" id="np-generate" class="auth-button">AIで生成</button>
         </form>
-        <label for="np-style">書き方の調整（任意・この端末に自動保存）</label>
-        <textarea id="np-style" rows="3"
-          placeholder="例: です・ます調で。絵文字は使わない。箇条書きを交える"></textarea>
-        <p class="np-note">ここに書いた指示は、以後の「AIで生成」で毎回使われます。空にすれば使われません。</p>
+
+        <!--
+          書き方の調整は、一度決めたら触らない設定に近い。常時開いていると
+          「毎回書くもの」に見えるため畳む。保存済みの値は details を開かなくても
+          生成に効く（app.js は textarea の値をそのまま読む）。
+          ラベルは summary と重複するので視覚的には隠し、読み上げにだけ残す。
+        -->
+        <details class="np-style-details">
+          <summary>書き方の調整（任意・この端末に自動保存）</summary>
+          <label for="np-style" class="np-visually-hidden">書き方の調整</label>
+          <textarea id="np-style" rows="3"
+            placeholder="例: です・ます調で。絵文字は使わない。箇条書きを交える"></textarea>
+          <p class="np-note">ここに書いた指示は、以後の「AIで生成」で毎回使われます。空にすれば使われません。</p>
+        </details>
       </section>
 
       <section class="np-compose" aria-labelledby="np-compose-heading">
@@ -99,11 +114,17 @@
         <textarea id="np-text" rows="16"
           placeholder="記事本文を書く／貼り付ける（「AIで生成」の結果もここに入ります）"></textarea>
         <p class="np-count-line"><span id="np-count">0</span> / <span id="np-limit">30000</span> 文字</p>
-        <p class="np-note">
-          note はタイトルと本文が別枠のため、流し込みは2段階です。
-          「note で書く」で<strong>タイトル</strong>をコピーして作成画面を開き、
-          貼り付けたらこのタブに戻って「本文をコピー」を押し、本文欄へ貼り付けてください。
-        </p>
+        <!--
+          「なぜ2段階なのか」と「手順」を段落で分ける（1段落だと手順が理由に埋もれる）。
+          枠は1つのままにする。同じ話が2箱に分かれて見えるほうが読みにくい。
+        -->
+        <div class="np-note">
+          <p>note はタイトルと本文が別枠のため、流し込みは2段階です。</p>
+          <p>
+            「note で書く」で<strong>タイトル</strong>をコピーして作成画面を開き、
+            貼り付けたらこのタブに戻って「本文をコピー」を押し、本文欄へ貼り付けてください。
+          </p>
+        </div>
         <p class="np-actions">
           <button type="button" id="np-save" class="auth-button auth-button--secondary">下書き保存</button>
           <button type="button" id="np-post" class="auth-button">note で書く（タイトルをコピー）</button>
@@ -112,21 +133,31 @@
         <p id="np-message" class="np-message" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="np-list" aria-labelledby="np-drafts-heading">
+      <!--
+        下書き・履歴は0件のあいだ**セクションごと出さない**。
+        「下書きはまだありません。」という見出し＋空の一覧は、初めて開いた
+        利用者に何も伝えないまま画面を2段ぶん占めていた。
+        hidden の付け外しは app.js（描画のたび）だけが行う。
+      -->
+      <section class="np-list" id="np-drafts-section" aria-labelledby="np-drafts-heading" hidden>
         <h2 id="np-drafts-heading">下書き</h2>
         <ul id="np-drafts" class="np-items"></ul>
-        <p id="np-drafts-empty" class="np-note">下書きはまだありません。</p>
       </section>
 
-      <section class="np-list" aria-labelledby="np-history-heading">
+      <section class="np-list" id="np-history-section" aria-labelledby="np-history-heading" hidden>
         <h2 id="np-history-heading">履歴</h2>
+        <!-- 記録の範囲の注記は、履歴が1件でもあるときだけ意味を持つ。 -->
         <p class="np-note">
           記録されるのは「作成画面を開いた」ことまでです。実際に公開したかは
           note 側でご確認ください。
         </p>
         <ul id="np-history" class="np-items"></ul>
-        <p id="np-history-empty" class="np-note">履歴はまだありません。</p>
       </section>
+
+      <!-- 戻り道。他の本番アプリと同じく、フッターの素のテキストリンクで置く。 -->
+      <footer class="np-footer">
+        <p><a href="../../portal/">ポータルへ戻る</a></p>
+      </footer>
 
     </div>
   </div>

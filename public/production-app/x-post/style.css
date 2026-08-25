@@ -138,6 +138,38 @@ section + section {
   cursor: pointer;
 }
 
+/* 書き方の調整（既定は畳む）。 */
+.xp-style-details {
+  margin-top: 0.8rem;
+}
+
+.xp-style-details > summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #445;
+}
+
+.xp-style-details > summary:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 2px;
+}
+
+.xp-style-details > textarea {
+  margin-top: 0.5rem;
+}
+
+/* フッター（ポータルへの戻り道）。 */
+.xp-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dde;
+  font-size: 0.9rem;
+}
+
+.xp-footer p {
+  margin: 0;
+}
+
 .xp-visually-hidden {
   position: absolute;
   width: 1px;

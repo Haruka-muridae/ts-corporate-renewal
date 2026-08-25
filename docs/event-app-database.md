@@ -2,7 +2,7 @@
 
 実装仕様書8章のスキーマ。SQLは `supabase/migrations/` に置いてある。
 
-**全件適用済み**（2026-08-06 に `supabase migration list` で確認）。
+**全件適用済み**（2026-08-19 に `supabase migration list` で確認）。
 プロジェクト `tsam-event`（東京リージョン / ref `ixxxlmfhrtommsfiumlz`）に Supabase CLI で
 適用してある。以降のスキーマ変更もマイグレーションで管理する。
 
@@ -14,6 +14,7 @@
 | `20260731000300_receipt_number.sql` | 受付番号を採番するDB関数 | 適用済み |
 | `20260731000400_event_end_at.sql` | 開催の終了時刻の列を追加 | 適用済み |
 | `20260806000000_event_capacity.sql` | 初回イベントの定員を30に設定 | 適用済み |
+| `20260818000000_calendar_sync.sql` | `events` にカレンダー連動用の4列を追加、`calendar_sync_state` を新設 | 適用済み（2026-08-19。コードのデプロイに先行して適用。加算のみのため既存の稼働へ影響しない） |
 
 適用状況はリポジトリからは分からない。追加したときは、このファイルに行を足し、
 `supabase migration list` で突き合わせた結果を書くこと。
@@ -122,13 +123,86 @@ Webhook を二重に受け取っても再発行されないことは、`webhook_
 
 ## 4. 注意点
 
-### 開催日時が2か所になる
+### 開催日時はGoogleカレンダーが真実源（2026-08〜）
 
-詳細ページ（`public/event/index.html`）は静的HTMLのままにする方針のため、開催日時は
-「静的HTMLの1か所」と「`events.event_date`」の2か所に持つことになる。次回開催時は
-**両方**を更新すること。
+以前は「静的HTML（`public/event/index.html`）」と「`events.event_date`」の2か所を
+手で揃える運用だったが、`20260818000000_calendar_sync.sql` 以降は**主催者のGoogleカレンダー
+（`architect@potenitas.com` の primary）が真実源**になった。
 
-将来、詳細ページを Next のページに移す判断をすれば、DB の1か所に集約できる。
+- タイトルが「【SV顧客用】渋谷CAFEご予約」に完全一致する予定が対象。開始+30分〜終了-30分を
+  開催時間として取り込む（前後30分は設営・撤収バッファ）。60分以下の予定は取り込まない。
+- 取り込みは `lib/event/calendar-sync.mjs` の sync-on-read + TTL（10分、`calendar_sync_state`）。
+  `GET /event/api/schedule/` と `/event/apply/` の表示のたびに「前回同期から10分以上経っていれば」
+  実行する。cron は使っていない（採用しなかった理由は
+  [docs/system-design/event-app/02_basic-design.md](system-design/event-app/02_basic-design.md) §9 参照）。
+- 予定を追加すれば新しい回（`events` の行）が増え、削除・改題すれば該当行が
+  `is_published = false` になり受付が止まる。**カレンダー側の操作だけで完結し、コードや
+  静的HTMLの編集は不要。**
+- `public/event/index.html` は開催日時そのものを掲載しない（2026-08〜、開催日一覧の描画は
+  廃止し、具体的な日時表示は申込フォームの参加日選択に一本化した）。`data-event-status` は、
+  `/event/api/schedule/` が取得できなかったとき（Google側の障害・環境変数未設定など）だけ
+  使われる**静的フォールバック**として残っている。日常の開催日変更ではこのファイルを
+  編集しない。
+
+詳しい列・状態遷移は次節「4-1. カレンダー同期用の列」を参照。
+
+### 4-1. カレンダー同期用の列
+
+`20260818000000_calendar_sync.sql` で `events` に4列、`calendar_sync_state`（1行だけの表）を
+追加した。
+
+| 列 | 意味 |
+| --- | --- |
+| `events.google_calendar_event_id` | 取り込み元のカレンダー予定ID。手動登録の行は `null`（同期対象外）。一意索引あり（`null` 同士は重複扱いにしない） |
+| `events.synced_at` | この行を最後にカレンダーと突き合わせた時刻。鮮度の目安 |
+| `events.sync_warning` | 自動では解決できない事象の文言（支払済みがある回の日時変更・削除）。参加者への連絡は手動 |
+| `events.sync_warning_at` | `sync_warning` を記録した時刻 |
+| `calendar_sync_state.last_synced_at` | 直近の同期実行時刻（TTL判定に使う条件付きUPDATEがロックを兼ねる） |
+| `calendar_sync_state.last_status` | 直近の同期結果（成功件数、または失敗理由） |
+
+**同期の状態遷移**（`lib/event/calendar-sync.mjs` の `syncCalendarEvents`）:
+
+| カレンダー側の変化 | 起きること |
+| --- | --- |
+| 新規の対象予定 | ①`google_calendar_event_id` が一致する行があれば何もしない（冪等） ②未リンクで開催**開始と終了の両方**が一致する行があれば、その行を引き取る（既存の手動登録行との共存。候補が複数あるときは `created_at` の古い行） ③どちらも無ければ、最新のイベント行をテンプレートに新しい行を作る（`capacity=30`・`apply_start_at=now`・`apply_end_at=開催開始`・`is_published=true`） |
+| 開催日時の変更 | 該当行を上書き。**支払済みの申込がある回は `sync_warning` に旧→新の日時を記録**（自動では参加者へ連絡しない） |
+| 予定の削除・キャンセル・タイトル変更（対象外に） | 行は消さず `is_published=false` にする。支払済みがあれば `sync_warning` を記録。**カレンダーの応答にそのIDが残っている（`cancelledIds` または `unmatchedActiveIds`）ため、取り込み対象が0件でも必ず反映される**（公開中の回が1件だけのときも同じ） |
+| 予定のIDが応答に**まったく現れず**、かつ取り込み対象も**0件** | **受付を止めない**（`unpublishSkipped` として数え、`last_status` に理由を残す）。カレンダー側の障害・権限変更・カレンダーIDの取り違えでも同じ応答になり、公開中の回を一斉に止めると支払済みの参加者ごと受付が消えるため。取り込み対象が1件以上あるときは、従来どおり止める（[docs/event-admin.md](event-admin.md) 参照） |
+| 取得期間の予定が上限（250件×10ページ）を超える | 一覧が切り詰められた状態で突き合わせない。同期を失敗として中止し、DBは変更しない |
+| 招待で届いた予定（`organizer.self`／`creator.self` が真でない）・`eventType` が `default` 以外 | 取り込まない。第三者が同名の予定へ招待するだけで開催回を作れないようにするため。すでに紐づいている回がこの条件へ変化した場合は「対象外になった」証拠（`unmatchedActiveIds`）として扱い、受付を止める |
+| 改題を戻す・予定を復元 | `google_calendar_event_id` で再リンクし、`is_published=true` に戻る |
+| 60分以下の予定（バッファ適用後に開始≥終了） | 取り込まない（`skipped` としてカウント） |
+| 新規作成時に一意制約（23505）へ当たる | 例外にせず、更新系の処理へフォールバックする（同時実行を考慮） |
+
+管理画面（`/event/admin/`）は選択中の回の `sync_warning` と、`calendar_sync_state` の
+最終同期時刻・結果を表示する。詳しくは [docs/event-admin.md](event-admin.md) を参照。
+
+### 4-2. 支払人数・名簿のカレンダー書き戻し（2026-08〜）
+
+支払が確定したとき・返金が反映されたとき・管理画面で申込者情報を更新したときに、その回の
+支払済み件数と予約者名簿（`applications.status='paid'`）を
+**カレンダー予定の説明欄（description）**へ書き戻す（`lib/event/calendar-note.mjs`）。
+主催者が管理画面を開かなくても、カレンダー上で各回の申込状況を確認できるようにするため。
+
+**DBの変更は無い。** 列も表も追加していない（読むのは既存の `applications`、
+書き込み先はGoogleカレンダー側）。関係するのは次の4点だけ。
+
+- 件数は `countPaidApplications()`（HEAD + `Content-Range` の正確な件数）、名簿は
+  `listPaidAttendees()`（`select=receipt_number,name`・`order=receipt_number.asc`）で取る。
+  **名簿のクエリは受付番号と氏名しか取得しない。** カレンダーはアプリの外へ出る保管先なので、
+  持ち出す個人情報を取得の段階で絞ってある（表示側で捨てる作りにしない。設計判断は
+  [docs/system-design/event-app/02_basic-design.md](system-design/event-app/02_basic-design.md) §9）。
+- 返金すると `status` が `refunded` になるため、件数からも名簿からも自動的に消える
+  （定員判定と同じ仕組み。名簿を消す専用の処理は無い）。
+- `events.google_calendar_event_id` が `null`（手動登録の回）なら書き戻さない。書き込む先が無いため。
+- 書き戻しの結果（成功・失敗・見送り）は `webhook_events.result` の文字列に、
+  メール送信の結果と並べて残る（管理画面からの更新時はサーバーログのみ）。
+  **専用の表は作っていない**（採らなかった理由は同 §9）。
+
+書き込みには読み取り用とは別のリフレッシュトークン（`GOOGLE_CALENDAR_WRITE_REFRESH_TOKEN`、
+スコープ `calendar.events`）を使う。未設定の環境では書き戻しだけを見送り、申込・決済・メールは
+従来どおり動く。発行手順は
+[docs/system-design/event-app/01_requirements.md](system-design/event-app/01_requirements.md) §9-1。
 
 ### capacity 列で定員を持つ
 
@@ -173,18 +247,20 @@ Webhook を二重に受け取っても再発行されないことは、`webhook_
 タブ、確認画面のURLを直接開く、サーバーアクションへの再送のいずれも、最後の
 「決済へ進む」で止まる。
 
-### 手で行うこと
+### 手で行うこと（2026-08〜、原則不要）
 
-**静的ページ（`/event/`）の切り替えは自動では起きない。** `public/event/index.html`
-の `data-event-status` を `"full"` に書き換えてデプロイする。
+**LP（`/event/`）の受付状態は `GET /event/api/schedule/` を見て自動で切り替わる。**
+`script.js` が定員到達（全回 `soldOut`）を検知するとバッジ・申込ボタンを自動で
+「受付終了」にするため、以前のように `public/event/index.html` の
+`data-event-status` を手で書き換えてデプロイし直す必要は無い。
+
+`data-event-status` は、`/event/api/schedule/` が取得できなかったとき（Google側の障害・
+環境変数未設定など）だけ使われる静的フォールバックとして残っている。フォールバック時の
+見え方を変えたい場合だけ、次のように書き換える。
 
 ```html
 <p class="event-status" id="event-status" data-event-status="full">
 ```
-
-切り替えるまでの間、LP は「受付中」のまま、申込ページは満席、という状態になる。
-この不整合は許容する運用としている。管理画面が定員到達を検知すると、この手順を
-促す案内を出す。
 
 ### 定員を超えたとき
 
@@ -207,5 +283,6 @@ Webhook を二重に受け取っても再発行されないことは、`webhook_
 Supabase の SQL エディタから直接更新してもよいが、**次回の環境再構築で失われる**ため、
 後からマイグレーションに残すこと。
 
-定員を増やすと、その場で申込フローが再開する。デプロイは要らない。静的ページの
-`data-event-status` は手で戻す。
+定員を増やすと、その場で申込フローが再開する。デプロイは要らない。LPの受付状態も
+`/event/api/schedule/` 経由で自動的に戻る（フォールバック表示にしていた場合だけ、
+`data-event-status` を手で戻す）。

@@ -1,0 +1,181 @@
+<!--
+  複製元: public/apps/card-manager/（2026-08-20）。本番の流儀
+  （guardPage による認証ガード・CSP・noindex・ポータル導線）を追加し、
+  台帳の対象を card-ocr が作る本番台帳「名刺管理」へ変更している
+  （テスト環境の名刺スキャナ台帳「名刺台帳（表裏対応 v3）」とは別物）。
+  画面構成は card-mail / card-ocr と同じ auth-shell 方式に合わせた
+  （サイト本体のヘッダー・フッターは持たない。ログイン後の単体ツール
+  画面のため）。
+-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>名刺管理｜TSAM AI</title>
+<meta name="description" content="名刺OCRが保存した名刺台帳を検索・閲覧・編集するアプリです。">
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+
+<!--
+  ==================================================================
+  Content-Security-Policy（card-mail / card-ocr と同じ meta 方式）
+  ==================================================================
+  next.config.ts の headers() ではなく meta で宣言する。
+  next.config.ts は public/ 全体の配信に効くため、このアプリのために
+  触ると本体サイトを巻き込む。
+
+  connect-src はこのアプリの通信先そのもの:
+    www.googleapis.com     … Drive（台帳の場所の検索・検証）
+    sheets.googleapis.com  … Sheets（台帳の読み込み・更新・変更履歴）
+    script.google.com / script.googleusercontent.com … TSAM AI 認証系
+    auth-verify.potenitas-lp.workers.dev … セッション検証（verifySession）の
+                                           宛先であるキャッシュ付き代理
+                                           （public/auth/config.js の verifyApiUrl）。
+                                           認証系の一部であり、*.workers.dev に
+                                           広げないこと
+  **ここへ他のホストを足さないこと**（このアプリはメールを送らない・
+  画像を表示しない。表面/裏面画像はDriveへのリンクを新規タブで開くだけで、
+  埋め込み表示はしないため img-src に外部ドメインは要らない）。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self'; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://script.google.com https://script.googleusercontent.com https://auth-verify.potenitas-lp.workers.dev; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../../css/style.css">
+<link rel="stylesheet" href="../../auth/auth.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="auth-page">
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="auth-main auth-main--top" tabindex="-1">
+  <div class="auth-shell auth-shell--wide">
+
+    <!--
+      guardPage() が利用者を返すまで中身を出さない。
+      hidden を外すのは script.js だけ。
+    -->
+    <p id="cm-loading" class="auth-loading">読み込んでいます…</p>
+
+    <div id="cm-content" hidden>
+
+      <header class="cm-header">
+        <h1 class="cm-title">名刺管理</h1>
+        <p class="cm-lead">
+          名刺OCRが保存した名刺台帳「名刺管理」を検索・閲覧・編集します。
+          台帳は<strong>あなたのGoogleドライブ</strong>にあるものをそのまま読み書きし、
+          当社のサーバーへ送信されることはありません。
+        </p>
+      </header>
+
+      <details class="cm-panel cm-panel--notice">
+        <summary class="cm-notice-summary">ご利用の前に</summary>
+        <ul class="cm-notice-list">
+          <li>台帳は<strong>あなたのGoogleドライブ</strong>にある「名刺管理」をそのまま読み書きします。データは当社のサーバーを経由せず、当社が内容を受け取ることはありません。</li>
+          <li>このアプリは<strong>台帳を新規作成しません。</strong>台帳がまだ無い場合は、先に名刺OCRアプリで1件登録してください。</li>
+          <li>編集できるのは氏名・会社名・連絡先などの入力項目だけです。カードID・画像・登録日時などの自動項目は読み取り専用です。</li>
+          <li>編集内容は台帳の「変更履歴」タブに、変更前後の値・日時とともに記録されます。</li>
+          <li>台帳の列構成が名刺OCRの最新版と一致しないときは、閲覧のみ可能で編集はできません（列の追加・修復は名刺OCRアプリの役割です）。</li>
+        </ul>
+      </details>
+
+      <!-- 接続 -->
+      <section id="cm-connect" class="cm-panel">
+        <p id="cm-status" class="cm-guidance-text" role="status" aria-live="polite">Googleドライブに接続していません</p>
+        <p id="cm-message" class="cm-message" aria-live="polite" hidden></p>
+
+        <div class="cm-actions">
+          <button id="cm-connect-button" type="button" class="auth-button">Googleドライブへ接続する</button>
+          <button id="cm-reload-button" type="button" class="auth-button auth-button--ghost" hidden>台帳を再読み込みする</button>
+          <button id="cm-disconnect-button" type="button" class="auth-button auth-button--ghost" hidden>連携を解除する</button>
+        </div>
+
+        <p id="cm-spreadsheet-link" class="cm-note" hidden></p>
+      </section>
+
+      <!-- 台帳が見つからない場合の案内（通常は隠す） -->
+      <section id="cm-not-found" class="cm-panel cm-panel--guidance" hidden>
+        <p class="cm-guidance-text">台帳「名刺管理」が見つかりませんでした。先に<a href="../card-ocr/">名刺OCRアプリ</a>で1件登録してください。</p>
+      </section>
+
+      <!-- 検索・一覧 -->
+      <section id="cm-search-section" hidden>
+        <div class="cm-panel">
+          <form id="cm-search-form" class="cm-search" role="search">
+            <div class="cm-search__row">
+              <label class="cm-search__label" for="cm-search-input">キーワード</label>
+              <input id="cm-search-input" class="cm-field__input" type="search" placeholder="氏名・会社名・メールアドレスなど" autocomplete="off">
+            </div>
+
+            <div class="cm-search__row">
+              <label class="cm-search__label" for="cm-company-filter">会社</label>
+              <select id="cm-company-filter" class="cm-field__input">
+                <option value="">すべて</option>
+              </select>
+            </div>
+          </form>
+
+          <p id="cm-result-count" class="cm-note" role="status" aria-live="polite"></p>
+
+          <div class="cm-table-wrap">
+            <table class="cm-table">
+              <caption class="cm-visually-hidden">登録済みの名刺一覧</caption>
+              <thead>
+                <tr>
+                  <th scope="col">氏名</th>
+                  <th scope="col">会社</th>
+                  <th scope="col">役職</th>
+                  <th scope="col">登録日時</th>
+                </tr>
+              </thead>
+              <tbody id="cm-list-body"></tbody>
+            </table>
+          </div>
+
+          <p id="cm-list-empty" class="cm-note" hidden></p>
+        </div>
+      </section>
+
+      <!-- 詳細・編集 -->
+      <section id="cm-detail" class="cm-panel" hidden>
+        <div class="cm-actions cm-detail__top-actions">
+          <button id="cm-edit-button" type="button" class="auth-button auth-button--ghost">編集する</button>
+          <button id="cm-save-button" type="button" class="auth-button" hidden>保存する</button>
+          <button id="cm-cancel-button" type="button" class="auth-button auth-button--ghost" hidden>編集をやめる</button>
+          <button id="cm-close-button" type="button" class="auth-button auth-button--ghost">一覧に戻る</button>
+        </div>
+
+        <p id="cm-readonly-note" class="cm-note" hidden>台帳の列構成が名刺OCRの最新版と一致しないため、このカードは閲覧のみです。</p>
+
+        <!-- 自動項目（読み取り専用）。record.js の META_FIELDS から生成する。 -->
+        <dl id="cm-meta" class="cm-meta"></dl>
+
+        <!-- 入力欄は records.js の CONTENT_FIELDS から script.js が生成する -->
+        <div id="cm-form" class="cm-form"></div>
+      </section>
+
+    </div>
+
+    <!--
+      ポータルへの戻り道（本番アプリ共通の形）。guardPage() を待つ
+      #cm-content の外に置き、読み込みが失敗しても戻れるようにする。
+    -->
+    <footer class="cm-footer">
+      <p class="cm-note"><a href="../../portal/">ポータルへ戻る</a></p>
+    </footer>
+
+  </div>
+</main>
+
+<script type="module" src="./script.js"></script>
+</body>
+</html>

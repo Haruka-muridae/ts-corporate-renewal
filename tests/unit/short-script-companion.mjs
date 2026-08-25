@@ -351,6 +351,18 @@ try {
     /id="ss-companion-guidance"[^>]*aria-live="polite"/.test(htmlSource),
   );
   check(
+    '**サービス未応答のときの一行案内がある**',
+    /<p id="ss-video-unavailable"/.test(htmlSource),
+  );
+  check(
+    '一行案内は既定 hidden かつ aria-live（表示制御は app.js のみ）',
+    /id="ss-video-unavailable"[^>]*aria-live="polite"[^>]*hidden/.test(htmlSource),
+  );
+  check(
+    '**一行案内は動画パネルの外にある（パネルを畳んでも残る）**',
+    htmlSource.indexOf('id="ss-video-unavailable"') < htmlSource.indexOf('id="ss-video"'),
+  );
+  check(
     'type="button"（フォーム送信を起こさない）',
     /id="ss-engine-start" type="button"/.test(htmlSource),
   );
@@ -433,9 +445,23 @@ try {
 
   {
     /* 文言の実在。案内が3状態それぞれで異なること。 */
+    /*
+     * offline（サービスに到達できない）の扱いは 2026-08-19 に変えた。
+     * 従来は動画パネルを出したまま接続エラーを案内していたが、補助サービスを
+     * 持たない利用者には毎回エラーが出るだけだったため、**パネルごと畳んで
+     * 一行案内に置き換える**。文言と「パネルを出さない」の両方を固定する。
+     */
     check(
-      'offline の文言（ai-video-app の起動を促す）',
-      appSource.includes('お使いのPCの動画生成サービス（ai-video-app）に接続できません。ai-video-app を起動してから「再確認する」を押してください。'),
+      'offline の文言（生成サービスが起動していれば使える、の一行）',
+      appSource.includes('動画の自動生成は、お使いのPCで生成サービスが起動している場合に利用できます。'),
+    );
+    check(
+      '**offline では動画パネルを出さない（hide(dom.video) が先にある）**',
+      /hide\(dom\.video\);[\s\S]{0,400}setCompanionState\('offline'\)/.test(appSource),
+    );
+    check(
+      '**パネルを出すのは応答があったとき（show(dom.video)）だけ**',
+      appSource.split('show(dom.video)').length - 1 === 1,
     );
     check(
       'engine-offline の文言（画面から起動できることを伝える）',
@@ -475,7 +501,15 @@ try {
     );
     check(
       '**アプリ断の文言（ai-video-app の起動し直しへ誘導する）**',
-      appSource.includes('ai-video-app への接続が失われました。ai-video-app を起動し直してから「再確認する」を押してください。'),
+      appSource.includes('ai-video-app への接続が失われました。ai-video-app を起動し直してこの画面に戻ると、自動でやり直します。'),
+    );
+    check(
+      '**アプリ断の案内は一行側（畳んだパネルの中へ書かない）**',
+      /if \(companionState === 'offline'\) \{[\s\S]{0,300}dom\.videoUnavailable\.textContent/.test(appSource),
+    );
+    check(
+      '**offline から自力で復帰できる（戻ってきたときに再確認する）**',
+      /function handleReturnToPage\(\)[\s\S]{0,300}companionState === 'offline'[\s\S]{0,80}refreshCompanion\(\)/.test(appSource),
     );
   }
 

@@ -76,9 +76,20 @@
 
   <header class="at-header">
     <h1 class="at-title">音声文字起こし</h1>
+    <!--
+      説明文は1段落へ詰めず、「何ができるか」と「データがどこへ行くか」で
+      段落を分け、文単位で改行する（interview-recorder の開始画面と同じ流儀。
+      1段落に3文を詰めると折り返しが密で読みづらい、という指摘による）。
+      「外部へ送信しない」と言えるのは端末内モードだけで、Gemini モードは
+      Google へ音声を送る。データの流れが違う以上、まとめて保証しない。
+    -->
     <p class="at-lead">
-      端末またはGoogleドライブの音声ファイルを、端末内AIまたはGemini APIで文字起こしします。
-      端末内モードでは音声を外部へ送信しません。結果はその場で編集し、コピーやTXT保存ができます。
+      端末またはGoogleドライブの音声ファイルを、端末内AIまたはGemini APIで文字起こしします。<br>
+      結果はその場で編集し、コピーやTXT保存ができます。
+    </p>
+    <p class="at-lead">
+      端末内モードでは音声を外部へ送信しません。<br>
+      データは当社のサーバーを経由せず、当社が内容を受け取ることはありません。
     </p>
   </header>
 
@@ -91,17 +102,15 @@
     <!-- ============================================================
          設定
 
-         Gemini APIの状態、音声ファイルの入力元、文字起こしの方法、
-         言語・タイムスタンプ・AIモデルなど、利用者が選ぶ項目をすべて
-         1つのアコーディオンへまとめたもの（利用者フィードバックにより、
-         当初の複数アコーディオン構成から統合・並べ替えを重ねた）。
-         「音声ファイルを選ぶ」より前に置き、
-         「状態を確認 → 入力元・方法を選ぶ → ファイルを選ぶ → 実行」の
+         Gemini APIの状態、文字起こしの方法、言語・タイムスタンプ・AIモデルなど、
+         利用者が選ぶ項目をすべて1つのアコーディオンへまとめたもの
+         （利用者フィードバックにより、当初の複数アコーディオン構成から
+         統合・並べ替えを重ねた）。「音声ファイルを選ぶ」より前に置き、
+         「状態を確認 → 方法を選ぶ → ファイルを選ぶ → 実行」の
          自然な順序にする。
 
-         上から (1) Gemini API → (2) 音声ファイルの入力元 →
-         (3) 文字起こしの方法 → (4) 言語 → (5) タイムスタンプ →
-         (6) AIモデル、の順。
+         上から (1) Gemini API → (2) 文字起こしの方法 → (3) 言語 →
+         (4) タイムスタンプ → (5) AIモデル、の順。
 
          閉じても入力値・選択値は破棄しない（<details> はDOMを維持したまま
          非表示にするだけで、値は保持される）。
@@ -166,37 +175,15 @@
         </div>
 
         <!--
-          (2) よく使う入力元
-
-          「音声ファイルを選ぶ」アコーディオンには端末・Googleドライブの
-          両方の取得操作を常に出すため、ここは「どちらを優先して
-          強調表示するか」の既定値の選択（実機フィードバックにより、
-          片方を隠す方式から強調の差をつけて両方出す方式へ変更した）。
-          ここでの選択変更それ自体はOAuth認可を一切起動しない
-          （認可は利用者がファイル取得操作を行った時点でのみ開始する）。
+          「よく使う入力元」の設定はここにあったが、削除した（認知負荷の見直し）。
+          この設定が実際に変えていたのは「音声ファイルを選ぶ」に並ぶ2つの
+          取得ボタンの強調（塗りつぶし／ゴースト）だけで、使える手段は
+          どちらの値でも変わらなかった。選択肢と説明文を1つ増やす対価に
+          見合わないと判断し、取得ボタンは端末を主・Googleドライブを補助に
+          固定した（両方を常に出すという FR-04 の要点は変えていない）。
         -->
-        <div class="at-settings-section">
-          <h3 class="at-subtitle">よく使う入力元</h3>
-          <p class="at-note">「音声ファイルを選ぶ」でどちらを優先して強調表示するかを選べます。どちらもいつでも使えます。</p>
 
-          <fieldset class="at-fieldset">
-            <legend class="at-visually-hidden">よく使う入力元</legend>
-
-            <div class="at-checkbox">
-              <input id="at-source-local" type="radio" name="at-file-source" value="local" checked>
-              <label for="at-source-local">端末</label>
-            </div>
-            <p class="at-note">この端末に保存されている音声ファイル</p>
-
-            <div class="at-checkbox">
-              <input id="at-source-drive" type="radio" name="at-file-source" value="drive">
-              <label for="at-source-drive">Googleドライブ</label>
-            </div>
-            <p class="at-note">ブラウザ録音アプリで保存した録音（マイドライブ ＞ TSAM AI ＞ Voice Recorder）</p>
-          </fieldset>
-        </div>
-
-        <!-- (3) 文字起こしの方法 -->
+        <!-- (2) 文字起こしの方法 -->
         <div class="at-settings-section">
           <h3 class="at-subtitle">文字起こしの方法</h3>
 
@@ -209,7 +196,12 @@
                 <label class="at-mode-card__label" for="at-mode-local">
                   <span class="at-mode-card__name">完全無料・端末内処理<span class="at-mode-card__badge">推奨</span></span>
                   <span class="at-mode-card__desc">音声を外部サーバーへ送信せず、この端末内で文字起こしします。APIキーは不要です。</span>
-                  <span class="at-mode-card__note">初回はAIモデルをダウンロードします。端末性能や音声の長さによって処理時間が変わります。</span>
+                  <!--
+                    処理時間の話は「文字起こし」セクションの開始ボタン近くに
+                    同趣旨の注記があるため、ここでは端末内モード固有の
+                    「初回のモデルダウンロード」だけを言う（重複の解消）。
+                  -->
+                  <span class="at-mode-card__note">初回はAIモデルをダウンロードします。</span>
                 </label>
               </div>
 
@@ -218,31 +210,33 @@
                 <label class="at-mode-card__label" for="at-mode-gemini">
                   <span class="at-mode-card__name">Gemini API<span class="at-mode-card__badge at-mode-card__badge--beta">ベータ</span></span>
                   <span class="at-mode-card__desc">ユーザー自身のGemini APIキーを使用して文字起こしします。</span>
-                  <span class="at-mode-card__note">音声ファイルはGoogleのGemini APIへ送信されます。利用上限や料金は、ご自身のGoogle Cloudプロジェクトの設定に従います。</span>
                   <!--
-                    実APIキーでの通信は未確認のため、その旨を明示する（テスト版と同じ状態）。
-                    確認できたら、この一文を削除する。
+                    「APIキーが必要です。実環境によって利用できない場合があります。」の
+                    一文はここにあったが、削除した。前半は直上の説明（ユーザー自身の
+                    Gemini APIキーを使う）と重複し、後半は同じ「設定」区画の
+                    Gemini API 状態表示（#at-gemini-connection）が実際の利用可否を
+                    理由付きで出すため、注記として持つ意味が無くなっていた。
                   -->
-                  <span class="at-mode-card__note">APIキーが必要です。実環境によって利用できない場合があります。</span>
+                  <span class="at-mode-card__note">音声ファイルはGoogleのGemini APIへ送信されます。利用上限や料金は、ご自身のGoogle Cloudプロジェクトの設定に従います。</span>
                 </label>
               </div>
             </div>
           </fieldset>
         </div>
 
-        <!-- (4) 言語 -->
+        <!-- (3) 言語 -->
         <div class="at-field">
           <label class="at-label" for="at-language">言語</label>
           <select id="at-language" class="at-select"></select>
         </div>
 
-        <!-- (5) タイムスタンプ -->
+        <!-- (4) タイムスタンプ -->
         <div class="at-checkbox">
           <input id="at-timestamps" type="checkbox" checked>
           <label for="at-timestamps">タイムスタンプを付ける（取得できた場合）</label>
         </div>
 
-        <!-- (6) AIモデル（端末内モードの設定） -->
+        <!-- (5) AIモデル（端末内モードの設定） -->
         <div id="at-local-settings" class="at-mode-settings">
           <div class="at-field">
             <label class="at-label" for="at-whisper-model">AIモデル</label>
@@ -252,7 +246,7 @@
           <p id="at-device-note" class="at-note"></p>
         </div>
 
-        <!-- (6) AIモデル（Geminiモードの設定） -->
+        <!-- (5) AIモデル（Geminiモードの設定） -->
         <div id="at-gemini-settings" class="at-mode-settings" hidden>
           <div class="at-field">
             <label class="at-label" for="at-gemini-model">Geminiモデル</label>
@@ -292,26 +286,29 @@
           「設定」で選んだ側だけを表示する方式をやめた。片方が隠れていると、
           その手段が使えないと誤解されるため）。
 
-          「設定」の『よく使う入力元』は、どちらを主要ボタン（強調）にするかの
-          既定値だけを決める（script.js の applyFileSourceEmphasis）。
-          もう一方は補助的な見た目（.auth-button--ghost）で並べるだけで、
-          押せば従来どおり動作する（Driveボタン押下時にのみOAuth認可が始まる）。
+          強調の差（端末＝塗りつぶし／Googleドライブ＝ゴースト）は固定にした。
+          以前は「設定」の『よく使う入力元』で切り替えていたが、切り替えても
+          変わるのは見た目だけで、押せる操作は同じだった。設定と説明文を
+          増やす対価に見合わないため、設定ごと削除した。
+          Driveボタン押下時にのみOAuth認可が始まる、という境界は変えていない。
         -->
-        <p class="at-note">強調されているボタンは「設定」の「よく使う入力元」です。どちらもいつでも使えます。</p>
-
         <div class="at-source">
           <button id="at-local-button" class="auth-button at-source__button" type="button">端末から選択</button>
           <p class="at-source__hint">この端末に保存されている音声ファイル</p>
         </div>
 
         <div class="at-source">
-          <button id="at-drive-button" class="auth-button auth-button--ghost at-source__button" type="button">Google Driveから選択</button>
-          <!-- 対象フォルダは固定。Drive全体は検索しない。 -->
-          <p class="at-source__path">マイドライブ ＞ TSAM AI ＞ Voice Recorder</p>
+          <button id="at-drive-button" class="auth-button auth-button--ghost at-source__button" type="button">Googleドライブから選択</button>
           <p class="at-source__hint">ブラウザ録音アプリで保存した録音</p>
         </div>
 
         <p class="at-note">対応形式：MP3 / WAV / M4A / AAC / OGG / WebM / FLAC</p>
+        <!--
+          対象フォルダは固定。Drive全体は検索しない。
+          フォルダのパスはこの注記（script.js の updateDriveNote が入れる）が
+          「ドライブ全体は検索しません」とあわせて示すため、
+          ボタン直下に同じパスを重ねて書かない。
+        -->
         <p id="at-drive-note" class="at-note"></p>
 
         <!-- 選択後のファイル情報 -->
@@ -432,6 +429,11 @@
             セカンダリの見た目（.auth-button--ghost）へ降格し、Drive保存の
             あとに続ける。3つとも機能は維持し、削除・非表示にはしない。
 
+            **最も強いトーンはこの並びで1つだけにする。**「AI議事録を作成」も
+            以前は同じ塗りつぶしだったが、同列の強調が2つあると「どちらが
+            本筋か」を毎回読み解くことになる。次のアプリへ進む導線であって
+            この画面の完了操作ではないため、ゴーストへ降格した（機能は不変）。
+
             Drive保存自体の仕様（保存先「マイドライブ＞TSAM AI＞Audio Transcriber」・
             初回保存時のフォルダ自動作成・drive.fileスコープ・OAuthはこの
             ボタン押下起点）は変えていない（onSaveToDrive はそのまま）。
@@ -441,13 +443,14 @@
             <button id="at-save-drive" class="auth-button" type="button" disabled>Googleドライブへ保存</button>
             <button id="at-copy" class="auth-button auth-button--ghost" type="button" disabled>全文をコピー</button>
             <button id="at-download" class="auth-button auth-button--ghost" type="button" disabled>TXTで保存</button>
-            <button id="at-clear-result" class="auth-button at-btn-quiet" type="button" disabled>結果をクリア</button>
             <!--
               AI議事録アプリ（meeting-minutes）への引継ぎ導線。
               結果を sessionStorage（tsam-meeting-minutes-handoff-v1）へ保存してから
               同一タブで ../meeting-minutes/ へ遷移する（script.js）。
             -->
-            <button id="at-create-minutes" class="auth-button" type="button" disabled>AI議事録を作成</button>
+            <button id="at-create-minutes" class="auth-button auth-button--ghost" type="button" disabled>AI議事録を作成</button>
+            <!-- 結果を捨てる操作は、強調を最も落として末尾に置く。 -->
+            <button id="at-clear-result" class="auth-button at-btn-quiet" type="button" disabled>結果をクリア</button>
           </div>
 
           <details class="at-tools">
@@ -485,7 +488,7 @@
        ============================================================ -->
   <dialog id="at-drive-dialog" class="at-dialog" aria-labelledby="at-dialog-title">
     <div class="at-dialog__head">
-      <h2 id="at-dialog-title" class="at-dialog__title">Google Driveの音声を選ぶ</h2>
+      <h2 id="at-dialog-title" class="at-dialog__title">Googleドライブの音声を選ぶ</h2>
       <p class="at-dialog__path">マイドライブ ＞ TSAM AI ＞ Voice Recorder</p>
     </div>
 

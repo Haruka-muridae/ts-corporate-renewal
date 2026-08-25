@@ -74,9 +74,10 @@
 
       <section class="xp-generate" aria-labelledby="xp-generate-heading">
         <h2 id="xp-generate-heading">AIで作る（任意）</h2>
+        <!-- キー未設定の案内と導線は本番アプリ間で文言を揃えてある。 -->
         <p id="xp-key-note" class="xp-note" hidden>
-          Gemini APIキーが未設定です。<a href="../../portal/" id="xp-key-link">ポータル</a>で
-          設定すると「AIで生成」が使えます（手で書く・貼る場合は不要です）。
+          Gemini APIキーが未設定です。「AIで生成」を使うには設定が必要です（手で書く・貼る場合は不要です）。
+          <a href="../../portal/" id="xp-key-link">ポータルで設定する</a>
         </p>
         <form id="xp-generate-form">
           <label for="xp-theme">テーマ・指示</label>
@@ -84,10 +85,19 @@
             placeholder="例: 新サービスの告知。絵文字少なめ" autocomplete="off">
           <button type="submit" id="xp-generate" class="auth-button">AIで生成</button>
         </form>
-        <label for="xp-style">書き方の調整（任意・この端末に自動保存）</label>
-        <textarea id="xp-style" rows="3"
-          placeholder="例: です・ます調で。絵文字は使わない。箇条書きを交える"></textarea>
-        <p class="xp-note">ここに書いた指示は、以後の「AIで生成」で毎回使われます。空にすれば使われません。</p>
+        <!--
+          書き方の調整は、一度決めたら触らない設定に近い。常時開いていると
+          「毎回書くもの」に見えるため畳む。保存済みの値は details を開かなくても
+          生成に効く（app.js は textarea の値をそのまま読む）。
+          ラベルは summary と重複するので視覚的には隠し、読み上げにだけ残す。
+        -->
+        <details class="xp-style-details">
+          <summary>書き方の調整（任意・この端末に自動保存）</summary>
+          <label for="xp-style" class="xp-visually-hidden">書き方の調整</label>
+          <textarea id="xp-style" rows="3"
+            placeholder="例: です・ます調で。絵文字は使わない。箇条書きを交える"></textarea>
+          <p class="xp-note">ここに書いた指示は、以後の「AIで生成」で毎回使われます。空にすれば使われません。</p>
+        </details>
       </section>
 
       <section class="xp-compose" aria-labelledby="xp-compose-heading">
@@ -95,7 +105,13 @@
         <label for="xp-text" class="xp-visually-hidden">投稿文</label>
         <textarea id="xp-text" rows="8"
           placeholder="投稿文を書く／貼り付ける（「AIで生成」の結果もここに入ります）"></textarea>
-        <p class="xp-count-line"><span id="xp-count">0</span> / <span id="xp-limit">280</span> ウェイト（全角1文字=2。日本語なら約140字）</p>
+        <!--
+          X の上限は「280ウェイト（全角=2）」だが、それは X 側の数え方であって
+          利用者の関心事ではない。知りたいのは「あと何字書けるか」だけなので、
+          残りの目安だけを出す（数える側のロジックは post.js のまま変えていない）。
+          文言は app.js が textContent で入れる。
+        -->
+        <p class="xp-count-line"><span id="xp-count"></span></p>
         <p class="xp-actions">
           <button type="button" id="xp-save" class="auth-button auth-button--secondary">下書き保存</button>
           <button type="button" id="xp-post" class="auth-button">X で投稿</button>
@@ -103,21 +119,31 @@
         <p id="xp-message" class="xp-message" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="xp-list" aria-labelledby="xp-drafts-heading">
+      <!--
+        下書き・履歴は0件のあいだ**セクションごと出さない**。
+        「下書きはまだありません。」という見出し＋空の一覧は、初めて開いた
+        利用者に何も伝えないまま画面を2段ぶん占めていた。
+        hidden の付け外しは app.js（描画のたび）だけが行う。
+      -->
+      <section class="xp-list" id="xp-drafts-section" aria-labelledby="xp-drafts-heading" hidden>
         <h2 id="xp-drafts-heading">下書き</h2>
         <ul id="xp-drafts" class="xp-items"></ul>
-        <p id="xp-drafts-empty" class="xp-note">下書きはまだありません。</p>
       </section>
 
-      <section class="xp-list" aria-labelledby="xp-history-heading">
+      <section class="xp-list" id="xp-history-section" aria-labelledby="xp-history-heading" hidden>
         <h2 id="xp-history-heading">履歴</h2>
+        <!-- 記録の範囲の注記は、履歴が1件でもあるときだけ意味を持つ。 -->
         <p class="xp-note">
           記録されるのは「投稿画面を開いた」ことまでです。実際に投稿したかは
           X 側でご確認ください。
         </p>
         <ul id="xp-history" class="xp-items"></ul>
-        <p id="xp-history-empty" class="xp-note">履歴はまだありません。</p>
       </section>
+
+      <!-- 戻り道。他の本番アプリと同じく、フッターの素のテキストリンクで置く。 -->
+      <footer class="xp-footer">
+        <p><a href="../../portal/">ポータルへ戻る</a></p>
+      </footer>
 
     </div>
   </div>

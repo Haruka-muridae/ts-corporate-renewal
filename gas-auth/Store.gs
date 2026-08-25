@@ -125,12 +125,28 @@ function updateCell_(sheetName, rowNumber, column, value) {
  */
 function updateCells_(sheetName, rowNumber, updates) {
   var sheet = getSheet_(sheetName);
-  var columns = Object.keys(updates);
+  var columns = Object.keys(updates).map(Number).filter(function (column) {
+    return isFinite(column) && column >= 1;
+  });
+
+  if (columns.length === 0) {
+    return;
+  }
+
+  /*
+   * 更新する列の最小〜最大を1レンジとして読み、書き換えて1回で戻す。
+   * 1セルずつ setValue すると列数ぶんの往復になり、Webhook の応答を遅らせる。
+   */
+  var first = Math.min.apply(null, columns);
+  var last = Math.max.apply(null, columns);
+  var range = sheet.getRange(rowNumber, first, 1, last - first + 1);
+  var values = range.getValues()[0];
 
   for (var i = 0; i < columns.length; i++) {
-    var column = Number(columns[i]);
-    sheet.getRange(rowNumber, column, 1, 1).setValue(updates[columns[i]]);
+    values[columns[i] - first] = updates[columns[i]];
   }
+
+  range.setValues([values]);
 }
 
 /**

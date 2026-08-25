@@ -1,0 +1,72 @@
+/*
+ * stripe-relay（Stripe Webhook → Apps Script 中継）の Workers 設定。
+ *
+ * ------------------------------------------------------------------
+ * リポジトリ直下の wrangler.jsonc とは別サービス
+ * ------------------------------------------------------------------
+ * 直下のものは tsam-ai.com を配信する OpenNext の Worker。こちらは
+ * 認証システム（gas-auth）向けの Stripe Webhook を中継するだけの
+ * 独立したサービスで、デプロイも別に行う。
+ *
+ *   npm run deploy:stripe-relay
+ *   （= wrangler deploy --config workers/stripe-relay/wrangler.jsonc）
+ *
+ * **`npm run deploy` はこの Worker を更新しない。** 逆もまた同じ。
+ * 交流会アプリの Webhook（/event/api/stripe/webhook/）とも無関係。
+ * ------------------------------------------------------------------
+ *
+ * デプロイ前に必要な作業は README.md §3 にまとめてある。
+ * secrets（GAS_URL_KEY / STRIPE_WEBHOOK_SECRET）を入れないと
+ * /health が 503 を返し、Webhook は not-configured で止まる。
+ */
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "stripe-relay",
+	"account_id": "4a71eb14d3889124d4afedd48c1458d8",
+	"main": "src/index.mjs",
+	/* 直下・notifier-gate・auth-verify と同じ日付にそろえてある。 */
+	"compatibility_date": "2026-08-05",
+	/* nodejs_compat は付けない。署名検証は WebCrypto だけで書いてある。 */
+
+	/*
+	 * 公開先は workers.dev の既定ドメイン（notifier-gate と同じ判断）。
+	 *   https://stripe-relay.potenitas-lp.workers.dev
+	 * Stripe にはこの URL を Webhook エンドポイントとして登録する。
+	 * URL に秘密は含まれない（合言葉は secret として Worker 内に置く）。
+	 */
+	"workers_dev": true,
+
+	"vars": {
+		/*
+		 * Apps Script の /exec URL。auth-verify の AUTH_GAS_URL と同じ値。
+		 * 「新しいデプロイ」を作ると変わる。「デプロイを管理」からの
+		 * バージョン更新なら変わらない（docs/gas-deployment-log.md）。
+		 */
+		"GAS_URL": "https://script.google.com/macros/s/AKfycbwK-Kw9ynTbDpUG7e5pHgXSPLFg1ur62ukbHLHdHBogqcz3YT0Hn3nQg74SpHOzvXAN/exec",
+		/*
+		 * GAS へ運ぶイベント種別。gas-auth/Webhook.gs の HANDLED_EVENTS と同じ。
+		 * Stripe 側のエンドポイント設定でも同じ5種だけを購読すること。
+		 * 交流会アプリ（一回払い）のイベントが届いても、ここで止まるのは
+		 * 種別が違うものだけ。checkout.session.completed は GAS 側の
+		 * mode 判定（subscription 以外は無視）で守る。
+		 */
+		"ALLOWED_EVENT_TYPES": "checkout.session.completed,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed",
+		/* async: 先に 200 を返して転送（既定）。sync: GAS の結果を待って返す。 */
+		"RELAY_MODE": "async"
+	},
+
+	/*
+	 * secrets（wrangler secret put --config workers/stripe-relay/wrangler.jsonc <NAME>）
+	 *   GAS_URL_KEY            … Script Properties の STRIPE_WEBHOOK_URL_KEY と同じ値
+	 *   STRIPE_WEBHOOK_SECRET  … Stripe の「この中継用エンドポイント」の署名シークレット
+	 * ここには書かない。
+	 */
+
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true
+		}
+	}
+}

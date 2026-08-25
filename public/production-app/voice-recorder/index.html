@@ -51,9 +51,18 @@
 
   <header class="vr-header">
     <h1 class="vr-title">ブラウザ録音</h1>
+    <!--
+      リードは「何ができるか」と「データがどこへ行くか」で段落を分ける。
+      1段落に3文以上詰めると折り返しが密になり、肝心のデータの行き先が
+      読み飛ばされる（面談録音アプリの開始画面と同じ扱い）。
+      データの行き先の文言は本番アプリ間で揃えてある。文を作り替えないこと。
+    -->
     <p class="vr-lead">
       この画面だけで録音し、MP3 としてあなたの Google ドライブへ保存します。
-      録音とMP3変換は端末内で完結し、当社のサーバーを経由しません。
+      録音とMP3変換は端末内で完結します。
+    </p>
+    <p class="vr-lead">
+      データは当社のサーバーを経由せず、当社が内容を受け取ることはありません。
     </p>
   </header>
 
@@ -112,7 +121,14 @@
       <span id="vr-indicator-label">待機中</span>
     </p>
 
-    <div class="vr-facts">
+    <!--
+      推定ファイルサイズ・空き容量は**録音中だけ**出す（§7）。
+      録音を始める前は「0.0 MB」と空き容量だけが並び、判断に使えないのに
+      画面の情報量を増やしていた。開始前の空き容量不足は「利用の準備」の
+      「端末の録音環境」が止めるため、ここに出ていなくても見落とさない。
+      hidden の付け外しは app.js（録音状態の変化）だけが行う。
+    -->
+    <div class="vr-facts" id="vr-facts" hidden>
       <div class="vr-fact">
         <span class="vr-fact__label">推定ファイルサイズ</span>
         <span class="vr-fact__value" id="vr-size">0.0 MB</span>
@@ -128,9 +144,16 @@
       <button type="button" id="vr-stop" class="auth-button auth-button--ghost" hidden>録音停止</button>
     </div>
 
+    <!--
+      「利用者がいま気をつけること」と「裏で何が起きているか」を分ける。
+      1段落に詰めると、注意（表示したままにする）が一時保存の説明に埋もれる。
+      一時保存の説明は警告ではないため、黄色の枠の外へ出す。
+    -->
     <p class="vr-warn">
       <strong>録音中はこのページを表示したままにしてください。</strong>
       画面ロックやアプリの切り替えで録音が停止する場合があります。停止した場合も、その時点までは保存できます。
+    </p>
+    <p class="vr-note">
       録音中の音声は端末内のブラウザ用ストレージへ一時保存され、保存または破棄のあとに削除されます。
     </p>
   </section>
@@ -147,8 +170,13 @@
       <input type="text" id="vr-customer" class="vr-input" autocomplete="off" spellcheck="false"
              aria-describedby="vr-customer-help">
     </label>
+    <!--
+      「当社サーバーへ送らない」はリード（画面上部）で一度言っている。
+      ここで繰り返すと同じ話を2回読むことになるため、この欄に固有の事実
+      （入力そのものは残さない）だけを書く。
+    -->
     <p class="vr-note" id="vr-customer-help">
-      入力すると、下のファイル名欄の初期値（日時のあと）に使います。端末や当社サーバーには保存しません。
+      入力すると、下のファイル名欄の初期値（日時のあと）に使います。入力した内容そのものは保存しません。
     </p>
 
     <label class="vr-field">
@@ -170,7 +198,8 @@
     <p class="vr-note vr-note--hint" id="vr-save-hint" role="status" hidden></p>
 
     <div class="vr-actions">
-      <button type="button" id="vr-save" class="auth-button">Google Driveに保存</button>
+      <!-- 保存ボタンの文言は本番アプリ間で統一（面談録音アプリと同じ）。 -->
+      <button type="button" id="vr-save" class="auth-button">Googleドライブへ保存</button>
       <button type="button" id="vr-discard" class="auth-button auth-button--ghost">破棄</button>
     </div>
   </section>

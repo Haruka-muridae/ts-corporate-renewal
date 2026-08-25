@@ -10,6 +10,7 @@
  *   - checkout.session.completed で未確定なら支払済みにしないこと
  *   - 手動返金が「返金済み（例外対応）」に反映されること
  *   - メールの失敗で支払の記録を巻き戻さないこと
+ *   - カレンダーへの人数・名簿の書き戻しが失敗しても支払の記録を巻き戻さないこと
  * ==================================================================
  */
 
@@ -50,6 +51,9 @@ const EVENT_ROW = {
   name: 'TSAMビジネス&フレンド交流会',
   event_date: '2026-08-30T14:30:00+09:00',
   venue: 'CAFE&BAR ZERA\n東京都渋谷区道玄坂1丁目17-4 道玄坂ビル4F',
+  capacity: 30,
+  /* カレンダー連動の回（書き戻しの対象）。手動登録の回は null になる。 */
+  google_calendar_event_id: 'gcal-1',
 };
 
 /* DBの偽物。呼ばれた回数と最終状態を見られるようにする。 */
@@ -67,6 +71,16 @@ function createFakeDb() {
     receiptAssignments: 0,
     processedResults: [],
     nextReceiptNumber: 'TSAM-0001',
+    event: { ...EVENT_ROW },
+    /* カレンダーへ書き戻す人数。支払済みの件数として返す。 */
+    paidCount: 4,
+    /* 同じくカレンダーへ書き戻す名簿（受付番号と氏名だけ）。 */
+    attendees: [
+      { receipt_number: 'TSAM-0001', name: '山田 太郎' },
+      { receipt_number: 'TSAM-0002', name: '鈴木 花子' },
+      { receipt_number: 'TSAM-0003', name: '佐藤 次郎' },
+      { receipt_number: 'TSAM-0004', name: '高橋 三郎' },
+    ],
   };
 
   const db = {
@@ -91,7 +105,15 @@ function createFakeDb() {
     },
 
     async findEventById(_config, id) {
-      return id === EVENT_ROW.id ? { ...EVENT_ROW } : null;
+      return id === state.event.id ? { ...state.event } : null;
+    },
+
+    async countPaidApplications(_config, _eventId) {
+      return state.paidCount;
+    },
+
+    async listPaidAttendees(_config, _eventId) {
+      return state.attendees.map((row) => ({ ...row }));
     },
 
     async findPaymentByApplicationId() {
@@ -145,6 +167,26 @@ function createFakeMailer({ failWith = null } = {}) {
 
       sent.push(message);
       return { id: 'msg-1' };
+    },
+  };
+}
+
+/*
+ * カレンダー書き戻しの偽物。
+ * 本物（lib/event/calendar-note.mjs の writeAttendeeNote）と同じ形の口だけを持つ。
+ */
+function createFakeCalendarNote({ failWith = null } = {}) {
+  const written = [];
+
+  return {
+    written,
+    async write(note) {
+      if (failWith !== null) {
+        throw new Error(failWith);
+      }
+
+      written.push(note);
+      return { updated: true };
     },
   };
 }
@@ -332,6 +374,8 @@ try {
   check('参加確定メールを送る', paidMailer.sent.length === 1, paidMailer.sent.length);
   check('メールの宛先は申込者', paidMailer.sent[0].to === 'taro@example.com');
   check('件名に受付番号が入る', paidMailer.sent[0].subject.includes('TSAM-0001'));
+  check('件名に開催日が入る（開催日が複数あるため）',
+    paidMailer.sent[0].subject.includes('2026年8月30日'), paidMailer.sent[0].subject);
   check('本文に名札の案内が入る', paidMailer.sent[0].text.includes('名札を着用いただきます'));
   check('メール送信を記録する',
     paidDb.state.emailLogs.length === 1 && paidDb.state.emailLogs[0].status === 'sent');
@@ -515,6 +559,183 @@ try {
   check('失敗した旨を記録する',
     brokenDb.state.processedResults.some((r) => r.result.startsWith('失敗:')),
     JSON.stringify(brokenDb.state.processedResults));
+
+  /* ---------------------------------------------------------------- */
+  section('カレンダーへの人数の書き戻し');
+
+  const noteDb = createFakeDb();
+  const note = createFakeCalendarNote();
+
+  const noteResult = await handleStripeEvent({
+    event: sessionEvent('checkout.session.completed'),
+    config: {}, db: noteDb, mailer: createFakeMailer(), calendarNote: note,
+  });
+
+  check('支払確定で1回だけ書き戻す', note.written.length === 1, note.written.length);
+  check('書き戻す先はカレンダー予定のID',
+    note.written[0].googleCalendarEventId === 'gcal-1', note.written[0].googleCalendarEventId);
+  check('支払済みの件数を渡す', note.written[0].paidCount === 4, note.written[0].paidCount);
+  check('定員も渡す', note.written[0].capacity === 30, note.written[0].capacity);
+  check('更新時刻を渡す', note.written[0].now instanceof Date);
+  check('名簿を渡す', note.written[0].attendees.length === 4, note.written[0].attendees.length);
+  check('名簿は受付番号と氏名だけ（列名はキャメルケースへ寄せる）',
+    note.written[0].attendees[0].receiptNumber === 'TSAM-0001'
+      && note.written[0].attendees[0].name === '山田 太郎'
+      && Object.keys(note.written[0].attendees[0]).length === 2,
+    JSON.stringify(note.written[0].attendees[0]));
+  check('結果に人数と名簿の件数を残す',
+    noteResult.result.includes('カレンダーに支払済み4名（名簿4件）を書き戻しました'),
+    noteResult.result);
+
+  /* 返金でも書き戻す（席が空くため）。 */
+  const refundNoteDb = createFakeDb();
+  refundNoteDb.state.payment.stripe_payment_intent_id = 'pi_test_1';
+  refundNoteDb.state.payment.payment_status = 'succeeded';
+  refundNoteDb.state.paidCount = 3;
+  /* 返金された1名は status が paid でなくなるため、名簿からも消える。 */
+  refundNoteDb.state.attendees = refundNoteDb.state.attendees.slice(0, 3);
+  const refundNote = createFakeCalendarNote();
+
+  const refundNoteResult = await handleStripeEvent({
+    event: {
+      id: 'evt_refund_note',
+      type: 'charge.refunded',
+      data: { object: { id: 'ch_3', payment_intent: 'pi_test_1', amount_refunded: 4400 } },
+    },
+    config: {}, db: refundNoteDb, mailer: null, calendarNote: refundNote,
+  });
+
+  check('返金でも書き戻す', refundNote.written.length === 1);
+  check('返金後の人数を渡す', refundNote.written[0].paidCount === 3);
+  check('返金された1名は名簿から消える',
+    refundNote.written[0].attendees.length === 3
+      && !refundNote.written[0].attendees.some((row) => row.receiptNumber === 'TSAM-0004'),
+    JSON.stringify(refundNote.written[0].attendees));
+  check('返金の結果にも残す',
+    refundNoteResult.result.includes('カレンダーに支払済み3名（名簿3件）を書き戻しました'),
+    refundNoteResult.result);
+
+  /* 支払が成立しなかった経路では書き戻さない（人数が変わらないため）。 */
+  const failNoteDb = createFakeDb();
+  const failNote = createFakeCalendarNote();
+
+  await handleStripeEvent({
+    event: sessionEvent('checkout.session.expired'),
+    config: {}, db: failNoteDb, mailer: null, calendarNote: failNote,
+  });
+
+  check('期限切れでは書き戻さない', failNote.written.length === 0);
+
+  /* 同じイベントの2回目は、既存の冪等機構でここまで来ない。 */
+  const twiceNoteDb = createFakeDb();
+  const twiceNote = createFakeCalendarNote();
+  const sameNoteEvent = sessionEvent('checkout.session.completed', { suffix: 'note' });
+
+  await handleStripeEvent({
+    event: sameNoteEvent, config: {}, db: twiceNoteDb, mailer: null, calendarNote: twiceNote,
+  });
+  await handleStripeEvent({
+    event: sameNoteEvent, config: {}, db: twiceNoteDb, mailer: null, calendarNote: twiceNote,
+  });
+
+  check('同じ通知を2回受けても書き戻しは1回だけ',
+    twiceNote.written.length === 1, twiceNote.written.length);
+
+  /* ---------------------------------------------------------------- */
+  section('カレンダーへの書き戻しが失敗した場合');
+
+  const noteFailDb = createFakeDb();
+  const noteFailMailer = createFakeMailer();
+
+  const noteFail = await handleStripeEvent({
+    event: sessionEvent('checkout.session.completed'),
+    config: {}, db: noteFailDb, mailer: noteFailMailer,
+    calendarNote: createFakeCalendarNote({
+      failWith: 'カレンダー予定を更新できませんでした（HTTP 403）',
+    }),
+  });
+
+  check('支払の記録は残る', noteFailDb.state.payment.payment_status === 'succeeded');
+  check('受付番号も残る', noteFailDb.state.application.receipt_number === 'TSAM-0001');
+  check('申込は支払済みのまま', noteFailDb.state.application.status === 'paid');
+  check('参加確定メールは送られる', noteFailMailer.sent.length === 1);
+  check('例外にせず処理を完了する', noteFail.handled === true);
+  check('失敗を結果に残す',
+    noteFail.result.includes('カレンダーへの書き戻しに失敗'), noteFail.result);
+  check('処理済みとして記録する',
+    noteFailDb.state.processedResults[0].result.includes('カレンダーへの書き戻しに失敗'));
+
+  /* DB側（件数の取得）が失敗しても同じ扱いにする。 */
+  const countFailDb = createFakeDb();
+  countFailDb.countPaidApplications = async () => {
+    throw new Error('件数を取得できませんでした（HTTP 500）');
+  };
+
+  const countFail = await handleStripeEvent({
+    event: sessionEvent('checkout.session.completed'),
+    config: {}, db: countFailDb, mailer: null, calendarNote: createFakeCalendarNote(),
+  });
+
+  check('件数を数えられなくても支払は確定したまま',
+    countFailDb.state.application.status === 'paid' && countFail.handled === true);
+  check('件数の失敗も結果に残す',
+    countFail.result.includes('カレンダーへの書き戻しに失敗'), countFail.result);
+
+  /* 名簿の取得が失敗した場合も同じ（支払は確定したまま）。 */
+  const rosterFailDb = createFakeDb();
+  rosterFailDb.listPaidAttendees = async () => {
+    throw new Error('データベース操作に失敗しました（HTTP 500）');
+  };
+
+  const rosterFail = await handleStripeEvent({
+    event: sessionEvent('checkout.session.completed'),
+    config: {}, db: rosterFailDb, mailer: null, calendarNote: createFakeCalendarNote(),
+  });
+
+  check('名簿を取れなくても支払は確定したまま',
+    rosterFailDb.state.application.status === 'paid' && rosterFail.handled === true);
+  check('名簿の失敗も結果に残す',
+    rosterFail.result.includes('カレンダーへの書き戻しに失敗'), rosterFail.result);
+
+  /* ---------------------------------------------------------------- */
+  section('書き戻しを行わない場合');
+
+  /* 書き込み用トークンが未設定の環境（route.ts が null を渡す）。 */
+  const noNoteDb = createFakeDb();
+  const noNote = await handleStripeEvent({
+    event: sessionEvent('checkout.session.completed'),
+    config: {}, db: noNoteDb, mailer: null, calendarNote: null,
+  });
+
+  check('未設定でも支払済みにする', noNoteDb.state.application.status === 'paid');
+  check('見送った旨を記録する',
+    noNote.result.includes('カレンダーへの書き戻しは未設定のため見送りました'), noNote.result);
+
+  /* 引数ごと渡されない場合も同じ（既定は未設定扱い）。 */
+  const omittedDb = createFakeDb();
+  const omitted = await handleStripeEvent({
+    event: sessionEvent('checkout.session.completed'),
+    config: {}, db: omittedDb, mailer: null,
+  });
+
+  check('引数が無くても落ちない', omitted.handled === true);
+  check('引数が無い場合も見送りとして記録する',
+    omitted.result.includes('見送りました'), omitted.result);
+
+  /* 手で登録した回（カレンダー連動ではない）。 */
+  const manualDb = createFakeDb();
+  manualDb.state.event.google_calendar_event_id = null;
+  const manualNote = createFakeCalendarNote();
+
+  const manual = await handleStripeEvent({
+    event: sessionEvent('checkout.session.completed'),
+    config: {}, db: manualDb, mailer: null, calendarNote: manualNote,
+  });
+
+  check('手動登録の回では書き戻さない', manualNote.written.length === 0);
+  check('支払は通常どおり確定する', manualDb.state.application.status === 'paid');
+  check('対象外として記録する',
+    manual.result.includes('カレンダーへの書き戻しは対象外'), manual.result);
 
   finish();
 } catch (error) {

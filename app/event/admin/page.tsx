@@ -1,8 +1,16 @@
 import { requireAdmin } from "@/lib/event/admin-session";
-import { toAdminRow } from "@/lib/event/admin-view.mjs";
+import {
+  describeCalendarSyncState,
+  formatDateTime,
+  toAdminRow,
+} from "@/lib/event/admin-view.mjs";
 import { resolveCapacityStatus } from "@/lib/event/capacity.mjs";
 import { supabaseConfig } from "@/lib/event/config.mjs";
-import { findPublishedEvent, listApplications } from "@/lib/event/db.mjs";
+import {
+  findCalendarSyncState,
+  listApplications,
+  listEventsForAdmin,
+} from "@/lib/event/db.mjs";
 
 import { logout } from "./actions";
 
@@ -11,32 +19,57 @@ import { logout } from "./actions";
  *
  * 未ログインでは表示しない（受入条件10）。requireAdmin() が
  * ログイン画面へ送る。
+ *
+ * 開催日が複数あるため、?eventId= で回を選ぶ。指定が無ければ
+ * 「直近の公開回（開催日が最も近い未来の公開回）」、それも無ければ
+ * 最新の行（listEventsForAdmin は開催日の新しい順）を既定にする。
+ * 定員は回ごとの値なので、全回を混ぜて数えると「支払済み / 定員」が
+ * 合わなくなる。イベントが1件も無いときだけ、従来どおり全件を出す。
  */
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminListPage() {
+type SearchParams = Promise<{ eventId?: string }>;
+
+export default async function AdminListPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const { eventId: eventIdParam } = await searchParams;
   const admin = await requireAdmin();
 
   const config = supabaseConfig();
 
-  /*
-   * 一覧は公開中のイベントに絞る。定員は イベントごとの値なので、
-   * 全イベントを混ぜて数えると「支払済み / 定員」が合わなくなる。
-   * 公開中のイベントが無いときだけ、従来どおり全件を出す。
-   */
-  const event = await findPublishedEvent(config);
-  const applications = await listApplications(config, { eventId: event?.id ?? null });
+  const events = await listEventsForAdmin(config);
+  const now = new Date();
+
+  const upcomingPublished = events
+    .filter(
+      (row) => row.is_published && new Date(row.event_date).getTime() >= now.getTime(),
+    )
+    .sort((a, b) => Date.parse(a.event_date) - Date.parse(b.event_date));
+
+  const defaultEvent = upcomingPublished[0] ?? events[0] ?? null;
+
+  const selectedEvent =
+    (eventIdParam ? events.find((row) => row.id === eventIdParam) : undefined)
+    ?? defaultEvent;
+
+  const applications = await listApplications(config, { eventId: selectedEvent?.id ?? null });
   const rows = applications.map(toAdminRow);
 
   const paidCount = rows.filter((row) => row.statusKey === "paid").length;
   const capacity = resolveCapacityStatus({
-    capacity: event?.capacity ?? null,
+    capacity: selectedEvent?.capacity ?? null,
     paidCount,
   });
   const total = rows
     .filter((row) => row.statusKey === "paid")
     .reduce((sum, row) => sum + Number(row.finalPrice || 0), 0);
+
+  const syncState = await findCalendarSyncState(config);
+  const csvQuery = selectedEvent ? `?eventId=${selectedEvent.id}` : "";
 
   return (
     <main id="main-content" className="admin">
@@ -55,6 +88,55 @@ export default async function AdminListPage() {
       </header>
 
       <div className="admin__body">
+        {events.length > 0 ? (
+          <nav className="admin-event-switch" aria-label="開催日の切り替え">
+            <ul className="admin-event-switch__list">
+              {events.map((row) => {
+                const isSelected = selectedEvent?.id === row.id;
+
+                return (
+                  <li key={row.id}>
+                    <a
+                      className={`admin-event-switch__link${
+                        isSelected ? " is-active" : ""
+                      }`}
+                      href={isSelected ? "/event/admin/" : `/event/admin/?eventId=${row.id}`}
+                      aria-current={isSelected ? "page" : undefined}
+                    >
+                      {formatDateTime(row.event_date)}
+                      {row.is_published ? "" : "（非公開）"}
+                      {row.sync_warning ? " ⚠" : ""}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        ) : null}
+
+        {/*
+          カレンダーが真実源のため、予定の削除・改題で is_published=false に
+          なった回・日時がずれた回には sync_warning が付く（支払済みがある場合のみ）。
+          自動では参加者へ連絡しないため、ここで気づいて手動対応する。
+        */}
+        {selectedEvent?.sync_warning ? (
+          <p className="admin-notice" role="alert">
+            <span className="admin-flag">要確認</span> {selectedEvent.sync_warning}
+            {selectedEvent.sync_warning_at
+              ? `（${formatDateTime(selectedEvent.sync_warning_at)}）`
+              : ""}
+          </p>
+        ) : null}
+
+        {/*
+          初期状態（calendar_sync_state.last_synced_at = epoch）や結果が空のときは
+          「未実行」と出す。1970年の日時を見せても、同期が動いていないのか
+          壊れているのかが読み取れないため（判定は admin-view.mjs に置いてある）。
+        */}
+        <p className="admin__note">
+          カレンダー同期の最終実行：{describeCalendarSyncState(syncState)}
+        </p>
+
         {/*
           定員の状態。超過は返金対応が要るため、ちょうど（full）より強く出す。
           申込フローは支払済みが定員に達した時点で自動的に止まっている。
@@ -71,8 +153,6 @@ export default async function AdminListPage() {
         ) : capacity.state === "full" ? (
           <p className="admin-notice" role="status">
             定員 <strong>{capacity.capacity}</strong> 名に達したため、申込フローを停止しました。
-            静的ページ（/event/）の <code>data-event-status</code> を{" "}
-            <code>&quot;full&quot;</code> に切り替えてデプロイしてください。
           </p>
         ) : null}
 
@@ -87,10 +167,16 @@ export default async function AdminListPage() {
 
           <div className="admin__downloads">
             {/* CSVは別のルートで返す。ダウンロードとして扱わせる。 */}
-            <a className="btn btn--secondary" href="/event/admin/csv/applications/">
-              申込者CSV（全件）
+            <a
+              className="btn btn--secondary"
+              href={`/event/admin/csv/applications/${csvQuery}`}
+            >
+              申込者CSV（{selectedEvent ? "この回" : "全件"}）
             </a>
-            <a className="btn btn--secondary" href="/event/admin/csv/nametags/">
+            <a
+              className="btn btn--secondary"
+              href={`/event/admin/csv/nametags/${csvQuery}`}
+            >
               名札印刷用CSV（支払済みのみ）
             </a>
           </div>

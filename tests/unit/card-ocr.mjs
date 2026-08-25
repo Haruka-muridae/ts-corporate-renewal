@@ -919,62 +919,82 @@ try {
   }
 
   {
-    /* 「準備」の親アコーディオンと、その中の3つ。 */
+    /*
+     * 「準備」の折りたたみ（2026-08-19 に平坦化）。
+     *
+     * 以前は「準備」の中に「ご利用の前に」「準備の状況」「保存先」の
+     * 3枚の <details> を入れ子にしていた。中身へ辿り着くのに開く操作が
+     * 2回必要で、認知負荷のレビューで指摘された。
+     * **いまは <details> を入れ子にしない**ことをここで固定する。
+     */
+    /* コメントの中の <details> を数えないよう、先に落とす。 */
+    const htmlBody = htmlSource.replace(/<!--[\s\S]*?-->/g, '');
+    const prepStart = htmlBody.indexOf('<details id="co-prep"');
+    const prepBody = htmlBody.slice(prepStart, htmlBody.indexOf('</details>', prepStart));
+
     check(
-      '親アコーディオンがある',
+      '「準備」の折りたたみがある',
       /<details id="co-prep"[^>]*>/.test(htmlSource) && /<summary id="co-prep-summary"/.test(htmlSource),
     );
     check(
-      '**親は既定で開く（JS が動く前に畳まれていない）**',
+      '**既定で開く（JS が動く前に畳まれていない）**',
       /<details id="co-prep"[^>]*\sopen>/.test(htmlSource),
     );
     check(
-      '準備の状況も保存先も details にした',
-      /<details id="co-status-panel"[^>]*\sopen>/.test(htmlSource)
-        && /<details id="co-storage"[^>]*\sopen[\s>]/.test(htmlSource),
+      '**<details> を入れ子にしない（開く操作は1回まで）**',
+      /* prepBody は開始タグ自身を含むので、1個ちょうどなら入れ子は無い。 */
+      prepStart !== -1 && (prepBody.match(/<details\b/g) ?? []).length === 1,
     );
     check(
-      '**誘導は親の外に置く（畳まれて気づかない、を作らない）**',
-      htmlSource.indexOf('id="co-guidance"') > htmlSource.indexOf('／親アコーディオン「準備」ここまで'),
+      '**画面の <details> は「ご利用の前に」と「準備」の2枚だけ**',
+      (htmlBody.match(/<details\b/g) ?? []).length === 2,
+      String((htmlBody.match(/<details\b/g) ?? []).length),
     );
     check(
-      'ご利用の前に・準備の状況・保存先は親の中にある',
-      ['co-notice', 'co-status-panel', 'co-storage'].every((id) => {
-        const at = htmlSource.indexOf(`id="${id}"`);
-        return at > htmlSource.indexOf('id="co-prep"')
-          && at < htmlSource.indexOf('／親アコーディオン「準備」ここまで');
-      }),
+      '**誘導は「準備」の外に置く（畳まれて気づかない、を作らない）**',
+      htmlBody.indexOf('id="co-guidance"') > prepStart + prepBody.length,
+    );
+    check(
+      '準備の状況と保存先は「準備」の中にある',
+      ['co-status', 'co-storage'].every((id) => prepBody.includes(`id="${id}"`)),
+    );
+    check(
+      '**「ご利用の前に」は「準備」の外に出す（既定は閉のままにするため）**',
+      htmlBody.indexOf('id="co-notice"') < prepStart,
     );
 
     check(
-      '**すべて完了のときだけ準備の状況を畳む**',
-      /setPanelOpen\('co-status-panel', !allReady\)/.test(appSource),
+      '**開閉の判断材料は DOM ではなく1か所に持つ**',
+      /const prepFacts = \{ allReady: false, storage: null \}/.test(appSource)
+        && /function applyStatusPanel\(allReady\) \{\s*prepFacts\.allReady = allReady;/.test(appSource),
     );
     check(
       '**保存先は異常か案内があるときに開く**',
-      /setPanelOpen\('co-storage', !ok \|\| hasNotices\)/.test(appSource),
+      /!prepFacts\.storage\.ok \|\| prepFacts\.storage\.hasNotices/.test(appSource),
     );
     check(
-      '**中のどれかが開いていれば親も開く**',
-      /const anyOpen = el\['co-status-panel'\]\.open \|\|/.test(appSource)
-        && /setPanelOpen\('co-prep', anyOpen\)/.test(appSource),
+      '**前提が1つでも欠けていれば開く**',
+      /const needsCare = !prepFacts\.allReady \|\| storageNeedsCare/.test(appSource)
+        && /setPanelOpen\('co-prep', needsCare\)/.test(appSource),
     );
     check(
       '見出しに状態を添える（閉じていても分かる）',
-      /setSummary\('co-status-summary', '準備の状況'/.test(appSource)
-        && /setSummary\('co-storage-summary', '保存先'/.test(appSource)
-        && /setSummary\('co-prep-summary', '準備'/.test(appSource),
+      /setSummary\('co-prep-summary', '準備'/.test(appSource),
     );
     check(
       '**書き込み停止と失敗のときは開いたままにする**',
-      (appSource.match(/applyStoragePanel\(\{ label: '[^']*', ok: false/g) ?? []).length >= 2,
+      (appSource.match(/applyStoragePanel\(\{ ok: false/g) ?? []).length >= 2,
     );
     check(
-      '**どの経路でも最後に親を決め直す（finally）**',
+      '**保存先を隠したら判断材料からも外す（消えた表示で開いたままにしない）**',
+      /el\['co-storage'\]\.hidden = true;[\s\S]{0,200}prepFacts\.storage = null;/.test(appSource),
+    );
+    check(
+      '**どの経路でも最後に「準備」を決め直す（finally）**',
       /finally \{[\s\S]{0,300}applyPrepPanel\(\)/.test(appSource),
     );
     check(
-      '前提が欠けたときも親を開き直す',
+      '前提が欠けたときも開き直す',
       (appSource.match(/applyPrepPanel\(\)/g) ?? []).length >= 4,
       String((appSource.match(/applyPrepPanel\(\)/g) ?? []).length),
     );
@@ -984,6 +1004,38 @@ try {
     !/<script(?![^>]*\ssrc=)[^>]*>/.test(htmlSource),
   );
   check('本文へのスキップリンクがある', htmlSource.includes('skip-link'));
+
+  {
+    /*
+     * ポータルへの戻り道（本番アプリ共通、2026-08-19）。
+     *
+     * **素のテキストリンクにする。** ボタンの見た目にすると、
+     * 「連携を解除する」のような取り消せない操作と区別が付かない。
+     * guardPage() を待つ #co-content の外に置き、読み込みが失敗しても
+     * 戻る道が残るようにする。
+     */
+    const footer = /<footer[^>]*>([\s\S]*?)<\/footer>/.exec(htmlSource)?.[1] ?? '';
+
+    check('footer に「ポータルへ戻る」がある', /href="\.\.\/\.\.\/portal\/"[^>]*>ポータルへ戻る</.test(footer));
+    check(
+      '**ボタンではなく素のテキストリンク**',
+      footer.includes('ポータルへ戻る') && !/auth-button/.test(footer),
+    );
+    /*
+     * #co-content の外にあること。中の最後の要素（co-message）と
+     * <footer> の間で、いちど </div> が閉じていれば外に出ている。
+     */
+    const afterMessage = htmlSource.slice(
+      htmlSource.indexOf('id="co-message"'),
+      htmlSource.indexOf('<footer'),
+    );
+
+    check(
+      '**#co-content の外に置く（読み込み失敗でも戻れる）**',
+      htmlSource.indexOf('<footer') > htmlSource.indexOf('id="co-message"')
+        && afterMessage.includes('</div>'),
+    );
+  }
 
   {
     /*
@@ -1116,6 +1168,22 @@ try {
     check(
       '**読み取った本文を localStorage へ書いていない**',
       !/setItem\([^)]*ocrText/.test(appSource),
+    );
+    /*
+     * 内部の事情を画面に出さない（2026-08-19。要件定義書 v3.6）。
+     * 再試行の回数・一時ファイルの消し残し・Gemini へ渡す文字数は、
+     * いずれも利用者が判断に使う情報ではない。
+     */
+    check(
+      '**再試行・一時ファイル・Geminiへの入力長を画面へ出していない**',
+      !/label: '表面の再試行'/.test(appSource)
+        && !/label: 'Geminiへ渡すテキスト'/.test(appSource)
+        && !/label: '一時ファイル'/.test(appSource),
+    );
+    check(
+      '**入力上限を超えた回だけは知らせる（結果が欠けうるため）**',
+      /normalizeText\(ocrText\)\.length/.test(appSource)
+        && /> MAX_GEMINI_INPUT_LENGTH/.test(appSource),
     );
     check('二重送信を防いでいる', /if \(reading \|\|/.test(appSource));
     check(

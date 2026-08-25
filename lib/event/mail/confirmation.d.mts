@@ -38,6 +38,11 @@ export declare function formatEventDateTime(
 
 export declare function formatYen(amount: number): string;
 
+/** 「2026年8月30日」形式（Asia/Tokyo、時刻を含まない）。件名など短い表記に使う。 */
+export declare function formatEventDateLabel(
+  startAt: Date | string | number,
+): string;
+
 export declare function buildConfirmationMail(
   input: ConfirmationMailInput,
 ): { subject: string; text: string };
