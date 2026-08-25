@@ -11,6 +11,7 @@
 | 版 | 日付 | 内容 |
 | --- | --- | --- |
 | v1.0 | 2026-08-25 | 初版。ブラウザ / PWA 版の完成状態（PR #63 / #64、Cloudflare Workers Version `2954f7a8`）を要件として確定。スマートフォンネイティブ版（`mobile/meeting-assistant/`）は開発停止・保持 |
+| v1.3 | 2026-08-25 | 失敗時の診断情報を画面に折りたたみ表示（stage/code/HTTP status/detail のみ、機密なし）。NETWORK の detail を通信箇所ごとの識別子に細分化（§6-1 / §9）。通信処理・CSP・リトライは変更なし |
 | v1.2 | 2026-08-25 | 保存時に Google 認証を確定（録音開始時には求めない）、保存先フォルダの自動保証と ID 保持、認証エラー文言の切り分け（§4-4 / §5-1 / §5-2 / §9）。drive.file は拡大しない |
 | v1.1 | 2026-08-25 | 本番障害（On-site 録音停止後「処理に失敗しました」）の修正。§4-4 の順序を「議事録の処理が終わるまで OPFS を消さない」に改め、台帳に `PROCESSING` / `PROCESS_FAILED` と「議事録を作成」を追加。§6-1 に Gemini 失敗の案内と診断ログ、§9 に順序の再発防止テスト |
 
@@ -207,6 +208,7 @@ drive.file スコープの範囲: 見えるのは、このアプリ（同じ GCP
 | API キー | 利用者が Google AI Studio で発行し、設定画面から登録。未登録なら音声の Drive 保存までを行い、設定を開いて案内する（台帳は `UPLOADED` で残り、登録後に「議事録を作成」で続きができる） |
 | 失敗の案内 | `GeminiError` の code ごとに文言を分ける（`errors.js` の `describeGeminiError`）: キー無効 / 403 / 利用上限 / モデル無し / 音声形式 / 送信・処理失敗 / 結果が空 / JSON 不正 / 通信 / サーバー。すべてを「処理に失敗しました」に潰さない。Gemini の `PERMISSION_DENIED` を録音側（マイク）の文言にしない |
 | 診断ログ | `diagnostics.js` が console に段階（`load-local` / `drive-upload` / `process` / `gemini:*` / `markdown-save` / `cleanup`）と失敗の name / code / status / 固定の detail を出す。音声・API キー・トークン・応答本文・氏名を含むファイル名は出さない |
+| 診断の画面表示 | 失敗時のみエラー文言の下に折りたたみ「診断情報」を出す（`app.js` の `renderDiagnostic`）。表示は **stage / code / HTTP status / detail** の 4 項目だけ（`sessionStorage` `meeting-assistant-diagnostic` に直近 1 件を保持）。DevTools を開けない iPhone でも失敗箇所を確認するため。NETWORK の detail は通信箇所ごとの固定識別子（`upload-start` / `upload-body` / `upload-poll` / `generate` / `minutes-generate` / `models-list` / `connection`）で、Files API のどこで落ちたかを区別できる。この読み込みで記録した失敗のときだけ表示し（再読み込み後は出さない）、機密は含めない |
 | モック | `localhost` かつ `?mockGemini=1` のときだけ固定結果を返す（テスト用。本番では無効） |
 
 ### §6-2 Markdown の固定構造（`markdown.js`）
@@ -246,7 +248,7 @@ drive.file スコープの範囲: 見えるのは、このアプリ（同じ GCP
 
 | 種別 | 実行 | 内容 |
 | --- | --- | --- |
-| 単体（純ロジック） | `~/dev/node22/bin/node tests/run.mjs meeting-assistant`（324 件） | モデルと秘密情報、Drive フォルダ、ファイル名、対応種別、Markdown 命名と処理済み判定、Markdown 固定構造、To Do の非推測、Gemini モック、独立入口（HTML の導線・文言）、PiP、ネイティブ分岐の保持、環境判定、OAuth リダイレクト（認可 URL・fragment・state 突き合わせ・古い往復・トークンを保存しない）、保存待ち台帳、**保存前の認証チェックポイント**（有効／残り不足／期限切れ／未連携、ポップアップ阻止と操作猶予なしの切り分け）、**保存先フォルダの自動保証**（Drive API の偽物で: 全部あり→再利用、一部欠け→不足分だけ、全部なし→順に作成、何度実行しても重複しない、保持 ID の検証＝削除・ゴミ箱・移動・改名・別アカウント、作成失敗→OPFS と台帳を保持して再試行）、**保存フローの順序**（削除後は読めない偽 OPFS ＋ fetch 差し替えの Gemini 実コードで「Drive 保存 → Gemini が録音を読める → Markdown 保存 → 最後に OPFS 削除」を検証。旧順序の再現、Gemini / Markdown 失敗時の保持と再処理、二重アップロード無し、1 秒相当でも通る）、Gemini エラー文言、診断ログ |
+| 単体（純ロジック） | `~/dev/node22/bin/node tests/run.mjs meeting-assistant`（344 件） | モデルと秘密情報、Drive フォルダ、ファイル名、対応種別、Markdown 命名と処理済み判定、Markdown 固定構造、To Do の非推測、Gemini モック、独立入口（HTML の導線・文言）、PiP、ネイティブ分岐の保持、環境判定、OAuth リダイレクト（認可 URL・fragment・state 突き合わせ・古い往復・トークンを保存しない）、保存待ち台帳、**保存前の認証チェックポイント**（有効／残り不足／期限切れ／未連携、ポップアップ阻止と操作猶予なしの切り分け）、**保存先フォルダの自動保証**（Drive API の偽物で: 全部あり→再利用、一部欠け→不足分だけ、全部なし→順に作成、何度実行しても重複しない、保持 ID の検証＝削除・ゴミ箱・移動・改名・別アカウント、作成失敗→OPFS と台帳を保持して再試行）、**保存フローの順序**（削除後は読めない偽 OPFS ＋ fetch 差し替えの Gemini 実コードで「Drive 保存 → Gemini が録音を読める → Markdown 保存 → 最後に OPFS 削除」を検証。旧順序の再現、Gemini / Markdown 失敗時の保持と再処理、二重アップロード無し、1 秒相当でも通る）、Gemini エラー文言、診断ログ、**診断の画面表示**（NETWORK の detail が upload-start / upload-body / generate を区別、機密非表示、再読み込み後は非表示） |
 | 全体 | `node tests/run.mjs unit`（5503 件）、`node public/apps/tests/run.mjs unit`（659 件）、`npm run typecheck`、eslint | 他アプリへの回帰 |
 | CI | GitHub Actions `tests`（push / pull_request） | 上記スイート |
 | 描画 | Windows Chrome ヘッドレス（PC 1280px、iframe ラッパーでスマートフォン幅 320 / 390 / 412 / 横向き） | 円の配置、Remote 非表示、横はみ出しなし |

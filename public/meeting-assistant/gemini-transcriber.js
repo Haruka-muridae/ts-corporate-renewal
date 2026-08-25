@@ -137,7 +137,7 @@ export function mapGeminiError(status, body) {
   return GeminiErrorCode.UNKNOWN;
 }
 
-async function geminiFetch(url, { apiKey, method = 'GET', headers = {}, body = null, signal }) {
+async function geminiFetch(url, { apiKey, method = 'GET', headers = {}, body = null, signal, label = 'fetch' }) {
   let response;
 
   try {
@@ -152,7 +152,12 @@ async function geminiFetch(url, { apiKey, method = 'GET', headers = {}, body = n
       throw new GeminiError(GeminiErrorCode.CANCELLED, 0, 'aborted');
     }
 
-    throw new GeminiError(GeminiErrorCode.NETWORK, 0, error?.name ?? 'fetch_failed');
+    /*
+     * detail は「どの通信で失敗したか」を表す固定の識別子だけにする。
+     * error.name（TypeError 等）や応答本文は入れない（診断を画面に出すため、
+     * 機密が混じらない語彙に限定する）。呼び出し側が label で箇所を指定する。
+     */
+    throw new GeminiError(GeminiErrorCode.NETWORK, 0, label);
   }
 
   if (!response.ok) {
@@ -189,7 +194,7 @@ export async function listUsableModels({ apiKey, signal }) {
         params.set('pageToken', pageToken);
       }
 
-      const response = await geminiFetch(`${baseUrl()}/models?${params}`, { apiKey, signal });
+      const response = await geminiFetch(`${baseUrl()}/models?${params}`, { apiKey, signal, label: 'models-list' });
       const body = await readJsonSafely(response);
 
       if (Array.isArray(body?.models)) {
@@ -308,7 +313,7 @@ export async function checkGeminiConnection({ apiKey, signal } = {}) {
   }
 
   try {
-    await geminiFetch(`${baseUrl()}/models?pageSize=1`, { apiKey: key, signal });
+    await geminiFetch(`${baseUrl()}/models?pageSize=1`, { apiKey: key, signal, label: 'connection' });
     return { ok: true, code: null, status: 200 };
   } catch (error) {
     if (error instanceof GeminiError && error.code === GeminiErrorCode.CANCELLED) {
@@ -342,6 +347,7 @@ export async function uploadAudio({ apiKey, blob, displayName, signal, onProgres
   const startResponse = await geminiFetch(`${GEMINI.apiBase}/upload/${GEMINI.apiVersion}/files`, {
     apiKey,
     signal,
+    label: 'upload-start',
     method: 'POST',
     headers: {
       'X-Goog-Upload-Protocol': 'resumable',
@@ -389,7 +395,7 @@ export async function uploadAudio({ apiKey, blob, displayName, signal, onProgres
       throw new GeminiError(GeminiErrorCode.CANCELLED, 0, 'aborted');
     }
 
-    throw new GeminiError(GeminiErrorCode.NETWORK, 0, error?.name ?? 'upload_failed');
+    throw new GeminiError(GeminiErrorCode.NETWORK, 0, 'upload-body');
   }
 
   if (!uploadResponse.ok) {
@@ -430,7 +436,7 @@ export async function waitUntilActive({ apiKey, fileName, initialState, signal, 
       throw new GeminiError(GeminiErrorCode.CANCELLED, 0, 'aborted');
     }
 
-    const response = await geminiFetch(`${baseUrl()}/${fileName}`, { apiKey, signal });
+    const response = await geminiFetch(`${baseUrl()}/${fileName}`, { apiKey, signal, label: 'upload-poll' });
     const body = await readJsonSafely(response);
     const state = String(body?.state ?? '');
 
@@ -464,7 +470,7 @@ export async function waitUntilActive({ apiKey, fileName, initialState, signal, 
  */
 export async function deleteUploadedFile({ apiKey, fileName }) {
   try {
-    await geminiFetch(`${baseUrl()}/${fileName}`, { apiKey, method: 'DELETE' });
+    await geminiFetch(`${baseUrl()}/${fileName}`, { apiKey, method: 'DELETE', label: 'delete-file' });
     return true;
   } catch {
     return false;
@@ -550,6 +556,7 @@ export async function generateTranscript({ apiKey, fileUri, mimeType, modelOrder
         {
           apiKey,
           signal,
+          label: 'generate',
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: requestBody,

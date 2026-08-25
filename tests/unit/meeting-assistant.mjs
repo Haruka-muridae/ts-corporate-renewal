@@ -772,6 +772,130 @@ try {
     check('Gemini 実 API を呼ぶテストは無い', true);
   }
 
+  section('診断情報の画面表示（機密なし。iPhone 実機で失敗箇所を特定するため）');
+
+  {
+    const transcriber = await import('../../public/meeting-assistant/gemini-transcriber.js');
+    const minutesMod = await import('../../public/meeting-assistant/gemini-minutes.js');
+    const diagnosticsMod = await import('../../public/meeting-assistant/diagnostics.js');
+    const appSource = readFileSync(resolve(appRoot, 'app.js'), 'utf8');
+
+    /* fetch が TypeError（iOS の「Load failed」相当）になったとき、NETWORK の detail が
+       どの通信かを表す固定識別子になることを、実コード（gemini-transcriber）で確かめる。
+       実 API は呼ばない。fetch を差し替え、応答本文も一切読ませない。 */
+    const KEY = 'test-key-not-real';
+    async function withFetch(impl, fn) {
+      const previous = globalThis.fetch;
+      globalThis.fetch = impl;
+      try { return await fn(); } finally { globalThis.fetch = previous; }
+    }
+    const codeOf = async (fn) => { try { await fn(); return null; } catch (e) { return { name: e.name, code: e.code, status: e.status, detail: e.detail }; } };
+
+    /* upload-start: 最初の POST /upload/v1beta/files で TypeError */
+    {
+      const err = await withFetch(async () => { throw new TypeError('Load failed'); }, () =>
+        codeOf(() => transcriber.transcribeWithGemini(new Blob([new Uint8Array(1000)], { type: 'audio/mpeg' }), { apiKey: KEY, displayName: 'x.mp3' })));
+      check('upload-start: NETWORK / status 0 / detail=upload-start（応答名 TypeError は出さない）', err?.code === 'NETWORK' && err.status === 0 && err.detail === 'upload-start');
+    }
+
+    /* upload-body: start は成功、本体アップロード（x-goog-upload-url への POST）で TypeError */
+    {
+      const impl = async (url) => {
+        const u = String(url);
+        if (u.endsWith('/upload/v1beta/files') && !u.includes('upload_id')) {
+          return new Response('{}', { status: 200, headers: { 'x-goog-upload-url': 'https://generativelanguage.googleapis.com/upload/v1beta/files?upload_id=x' } });
+        }
+        throw new TypeError('Load failed'); /* 本体 POST */
+      };
+      const err = await withFetch(impl, () =>
+        codeOf(() => transcriber.transcribeWithGemini(new Blob([new Uint8Array(1000)], { type: 'audio/mpeg' }), { apiKey: KEY, displayName: 'x.mp3' })));
+      check('upload-body: NETWORK / status 0 / detail=upload-body', err?.code === 'NETWORK' && err.status === 0 && err.detail === 'upload-body');
+    }
+
+    /* generate: アップロード成功・ACTIVE、generateContent で TypeError */
+    {
+      const impl = async (url, init = {}) => {
+        const u = String(url);
+        if (u.endsWith('/upload/v1beta/files') && !u.includes('upload_id')) {
+          return new Response('{}', { status: 200, headers: { 'x-goog-upload-url': 'https://generativelanguage.googleapis.com/upload/v1beta/files?upload_id=x' } });
+        }
+        if (u.includes('upload_id=x')) {
+          return Response.json({ file: { uri: 'https://generativelanguage.googleapis.com/v1beta/files/x', name: 'files/x', mimeType: 'audio/mpeg', state: 'ACTIVE' } });
+        }
+        if (u.includes(':generateContent')) { throw new TypeError('Load failed'); }
+        if (init.method === 'DELETE') { return Response.json({}); }
+        throw new Error('unexpected ' + u);
+      };
+      const err = await withFetch(impl, () =>
+        codeOf(() => transcriber.transcribeWithGemini(new Blob([new Uint8Array(1000)], { type: 'audio/mpeg' }), { apiKey: KEY, displayName: 'x.mp3' })));
+      check('generate: NETWORK / status 0 / detail=generate', err?.code === 'NETWORK' && err.status === 0 && err.detail === 'generate');
+    }
+
+    /* AbortError は NETWORK ではなく CANCELLED（別扱い）のまま */
+    {
+      const err = await withFetch(async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }, () =>
+        codeOf(() => transcriber.transcribeWithGemini(new Blob([new Uint8Array(1000)], { type: 'audio/mpeg' }), { apiKey: KEY, displayName: 'x.mp3' })));
+      check('中断は CANCELLED（NETWORK と混同しない）', err?.code === 'CANCELLED' && err.detail === 'aborted');
+    }
+
+    /* 議事録生成の NETWORK は minutes-generate（文字起こしの generate と区別できる） */
+    {
+      const err = await withFetch(async () => { throw new TypeError('Load failed'); }, () =>
+        codeOf(() => minutesMod.generateMinutes({ apiKey: KEY, transcript: 'あ' })));
+      check('議事録生成の NETWORK は detail=minutes-generate', err?.code === 'NETWORK' && err.detail === 'minutes-generate');
+    }
+
+    /* diagnostics: 直近 1 件を sessionStorage 相当へ保存し、4 項目だけ読み出す */
+    {
+      const data = {};
+      const storage = { getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); }, removeItem: (k) => { delete data[k]; } };
+      const diag = diagnosticsMod.createDiagnostics(null, storage);
+
+      diag.stage('gemini:uploading', { sizeBytes: 1000 });
+      const netErr = new transcriber.GeminiError('NETWORK', 0, 'upload-body');
+      /* 機密が混ざった例外でも、保存されるのは stage/code/status/detail の 4 項目だけ */
+      netErr.message = 'apiKey=AIzaSECRET token=ya29.SECRET 山田太郎 応答本文';
+      netErr.apiKey = 'AIzaSECRET';
+      diag.recordFailure(netErr);
+
+      const saved = diag.readFailure();
+      check('診断は 4 項目だけ（stage/code/status/detail）', Object.keys(saved).sort().join(',') === 'code,detail,stage,status');
+      check('診断の値: stage=直近の gemini 段階 / code=NETWORK / status=0 / detail=upload-body', saved.stage === 'gemini:uploading' && saved.code === 'NETWORK' && saved.status === 0 && saved.detail === 'upload-body');
+      check('保存内容に機密（APIキー・トークン・氏名・応答本文）を含まない', !/AIza|ya29|山田|応答本文|apiKey|token/.test(JSON.stringify(data)));
+
+      /* failure（save-flow 経由）でも同様に保存される */
+      diag.stage('markdown-save', {});
+      diag.failure('process', new (await import('../../public/meeting-assistant/errors.js')).AppError('UPLOAD_FAILED', 'http_500'), { recordingId: 'r1' });
+      const saved2 = diag.readFailure();
+      check('save-flow 経由（failure）でも保存され、直近 stage を残す', saved2.stage === 'markdown-save' && saved2.code === 'UPLOAD_FAILED' && saved2.detail === 'http_500');
+
+      check('readFreshFailure はこの読み込みで記録した失敗だけ返す（画面表示用）', diag.readFreshFailure()?.detail === 'http_500');
+      /* 別インスタンス（＝ページ再読み込み相当）は fresh でないので画面には出さない（sessionStorage には残る） */
+      const reloaded = diagnosticsMod.createDiagnostics(null, storage);
+      check('再読み込み後は readFreshFailure が null（無関係なエラーに古い診断を出さない）だが readFailure では残る', reloaded.readFreshFailure() === null && reloaded.readFailure()?.detail === 'http_500');
+
+      diag.clearFailure();
+      check('clearFailure で消える（fresh も下ろす）', diag.readFailure() === null && diag.readFreshFailure() === null && storage.getItem(diagnosticsMod.DIAGNOSTIC_KEY) === null);
+
+      /* storage が無くても落ちない（プライベートモード） */
+      const noStore = diagnosticsMod.createDiagnostics(null, null);
+      noStore.recordFailure(new transcriber.GeminiError('NETWORK', 0, 'generate'));
+      check('sessionStorage が無くても例外にならず null を返す', noStore.readFailure() === null);
+
+      /* toDiagnostic は HTTP status を数値で残す（0 は「応答なし」の意味） */
+      const withStatus = diagnosticsMod.toDiagnostic('gemini:transcribing', new transcriber.GeminiError('QUOTA_EXCEEDED', 429, 'http_error'));
+      check('HTTP status がある場合は数値で残る', withStatus.status === 429 && withStatus.detail === 'http_error');
+    }
+
+    /* app.js: 診断の消去・記録・表示が繋がっている（Drive 画面経路も拾う） */
+    check('app.js: 新しい試行の冒頭で診断を消す', appSource.includes('diagnostics.clearFailure();'));
+    check('app.js: Gemini/Markdown 失敗を診断へ記録（Drive から音声を選ぶ経路も）', appSource.includes('diagnostics.recordFailure(error);'));
+    check('app.js: 失敗表示のときだけ折りたたみ診断を出す', appSource.includes('renderDiagnostic(isError)') && appSource.includes("box.id = 'ma-diagnostic'") && appSource.includes('diagnostics.readFreshFailure()'));
+    check('app.js: 診断に出すのは stage/code/HTTP status/detail の 4 行だけ', appSource.includes("'stage', failure.stage") && appSource.includes("'code', failure.code") && appSource.includes("'HTTP status'") && appSource.includes("'detail', failure.detail"));
+    check('app.js: 診断は innerHTML を使わず textContent で組む', !/ma-diagnostic[\s\S]{0,400}innerHTML/.test(appSource));
+    check('CSP は変更していない（connect-src は据え置き）', readFileSync(resolve(appRoot, 'index.html'), 'utf8').includes("connect-src 'self' capacitor://localhost ionic://localhost https://localhost https://www.googleapis.com https://generativelanguage.googleapis.com"));
+  }
+
   section('保存フロー: 議事録の処理が終わるまで OPFS を消さない（2026-08-25 障害の再発防止）');
 
   {

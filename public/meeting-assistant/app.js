@@ -249,12 +249,78 @@ function showMessage(text, isError = false) {
     el.message.hidden = true;
     el.message.textContent = '';
     el.message.classList.remove('vr-message--error');
+    renderDiagnostic(false);
     return;
   }
 
   el.message.hidden = false;
   el.message.textContent = text;
   el.message.classList.toggle('vr-message--error', isError);
+  /* 失敗表示のときだけ、記録済みの診断（あれば）を折りたたみで添える。 */
+  renderDiagnostic(isError);
+}
+
+/*
+ * 失敗時に「診断情報 ▼」を出す。中身は stage / code / HTTP status / detail の 4 項目だけ。
+ * これらは diagnostics.js が機密を除外した値（code/status/detail は固定識別子、
+ * stage は段階名）。APIキー・トークン・音声・氏名・応答本文・URL 全文は含めない。
+ * DevTools を開けない iPhone でも、どの段階でどのコードで失敗したかを確認できる。
+ */
+function renderDiagnostic(show) {
+  let box = document.getElementById('ma-diagnostic');
+
+  if (!show) {
+    if (box) {
+      box.hidden = true;
+    }
+    return;
+  }
+
+  const failure = diagnostics.readFreshFailure();
+
+  if (!failure) {
+    if (box) {
+      box.hidden = true;
+    }
+    return;
+  }
+
+  if (!box) {
+    box = document.createElement('details');
+    box.id = 'ma-diagnostic';
+    box.className = 'ma-diagnostic';
+
+    const summary = document.createElement('summary');
+    summary.className = 'ma-diagnostic__summary';
+    summary.textContent = '診断情報';
+    box.append(summary);
+
+    const list = document.createElement('dl');
+    list.className = 'ma-diagnostic__list';
+    box.append(list);
+
+    el.message.after(box);
+  }
+
+  const list = box.querySelector('.ma-diagnostic__list');
+  list.replaceChildren();
+
+  const rows = [
+    ['stage', failure.stage || '（記録なし）'],
+    ['code', failure.code || '（記録なし）'],
+    ['HTTP status', failure.status === 0 ? '0（応答なし）' : String(failure.status)],
+    ['detail', failure.detail || '（記録なし）'],
+  ];
+
+  for (const [label, value] of rows) {
+    const dt = document.createElement('dt');
+    dt.textContent = label;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    list.append(dt, dd);
+  }
+
+  box.hidden = false;
 }
 
 function showScreen(name) {
@@ -1055,6 +1121,8 @@ async function dropMissingBrowserEntries() {
  * completed=false で、失敗ではない。失敗は例外で伝える。
  */
 async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
+  /* 新しい試行の開始。前回の診断は消す（失敗したら下の catch で記録しなおす）。 */
+  diagnostics.clearFailure();
   showScreen('process');
   el.procFile.textContent = file.name;
 
@@ -1092,7 +1160,11 @@ async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
 
   diagnostics.stage('gemini', { sizeBytes: blob?.size ?? 0, mimeType: blob?.type ?? '' });
 
-  const result = await runGeminiPipeline({
+  let result;
+  let saved;
+
+  try {
+    result = await runGeminiPipeline({
     blob,
     displayName: file.name,
     apiKey,
@@ -1117,24 +1189,33 @@ async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
     },
   });
 
-  setStep('transcribe', '完了', 'ok');
-  setStep('minutes', '完了', 'ok');
-  setStep('save', '処理中');
-  el.procStatus.textContent = 'Markdown を Drive へ保存しています。';
-  diagnostics.stage('markdown-save', { modelId: result.modelId ?? '' });
+    setStep('transcribe', '完了', 'ok');
+    setStep('minutes', '完了', 'ok');
+    setStep('save', '処理中');
+    el.procStatus.textContent = 'Markdown を Drive へ保存しています。';
+    diagnostics.stage('markdown-save', { modelId: result.modelId ?? '' });
 
-  const markdownName = toMarkdownFileName(file.name);
-  const matching = findMatchingMarkdown(file.name, state.recordFiles);
+    const markdownName = toMarkdownFileName(file.name);
+    const matching = findMatchingMarkdown(file.name, state.recordFiles);
 
-  const saved = await withGoogleRetry(async (auth) => {
-    const folderId = await folders.resolve('record', auth);
-    return saveMarkdown({
-      text: result.markdown,
-      fileName: markdownName,
-      folderId,
-      existingId: matching?.id ?? null,
-    }, auth);
-  }, { screen: 'pick' });
+    saved = await withGoogleRetry(async (auth) => {
+      const folderId = await folders.resolve('record', auth);
+      return saveMarkdown({
+        text: result.markdown,
+        fileName: markdownName,
+        folderId,
+        existingId: matching?.id ?? null,
+      }, auth);
+    }, { screen: 'pick' });
+  } catch (error) {
+    /*
+     * Gemini / Markdown 保存の失敗をここで診断に記録する。
+     * save-flow を経由しない「Drive から音声を選ぶ」経路もこの関数を通るため、
+     * ここで記録しておけば両方の経路で診断が残る。文言・制御は変えず、記録だけ足す。
+     */
+    diagnostics.recordFailure(error);
+    throw error;
+  }
 
   state.recordFiles = [
     {
