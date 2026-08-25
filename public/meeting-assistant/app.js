@@ -7,7 +7,8 @@
  * ------------------------------------------------------------------
  *   PC ブラウザ / スマートフォンブラウザ
  *     Recorder（AudioWorklet → Worker → OPFS）で確定 → 保存待ち台帳（pending-store.js）
- *     → Drive へアップロード → 台帳と OPFS から削除 → 文字起こし・議事録
+ *     → Drive へアップロード → 文字起こし・議事録 → Markdown を Drive へ保存
+ *     → 全工程の成功を確認してから台帳と OPFS から削除（save-flow.js）
  *   ネイティブ（Capacitor。現フェーズは停止中だが経路は残す）
  *     NativeRecorder → 端末ファイル → Drive
  *
@@ -28,7 +29,9 @@ import {
   OAUTH,
   formatFolderPath,
 } from './config.js';
-import { AppError, ErrorCode, describeError } from './errors.js';
+import { AppError, ErrorCode, describeAppError, describeError } from './errors.js';
+import { diagnostics } from './diagnostics.js';
+import { SaveOutcome, SaveStage, saveAndProcessRecording } from './save-flow.js';
 import { buildRecordingFileName } from './filename.js';
 import {
   consumeRedirectResult,
@@ -68,9 +71,9 @@ import {
 } from './native-bridge.js';
 import {
   RecordingState,
-  applyUploadFailure,
   createRecordingId,
   elapsedSecondsFrom,
+  isDriveSaved,
   isPendingUpload,
 } from './recording-checkpoint.js';
 import {
@@ -107,6 +110,7 @@ const NOT_CONNECTED_RECORDING = 'Google 未連携のまま録音します。停�
 const RECORDING_IN_PROGRESS = '録音中です。先に「録音停止」を押してください。';
 const LEDGER_NOT_PERSISTED = 'この端末では録音の一覧を保存できません（プライベートモード等）。この画面を閉じる前に「Driveへ保存」を押してください。';
 const REMOTE_CONNECT_FIRST = '先に設定の「Google Drive 連携」で連携しておくと、停止後すぐに保存されます。';
+const PROCESS_RETRY_HINT = '端末の録音も残っています。ホームの一覧の「議事録を作成」からやり直せます（Drive へは再送しません）。';
 
 const el = {
   main: document.getElementById('ma-main'),
@@ -844,8 +848,13 @@ function registerRecordingStart(mode, recorder) {
 }
 
 /*
- * 台帳の 1 件を Drive へ上げ、成功したら台帳と OPFS から消して議事録処理へ進む。
- * 失敗したら台帳を「失敗」にして残す。
+ * 台帳の 1 件を Drive へ上げ、議事録の処理まで進める。
+ * 順序と失敗時の扱いは save-flow.js に集約している。ここは画面とのつなぎだけ。
+ *
+ *   Drive 保存に失敗   → 台帳を失敗にして残し、ホームで「再送」を案内
+ *   議事録の処理に失敗 → 台帳を PROCESS_FAILED にして残し（端末の録音も Drive の音声も残る）、
+ *                        ホームで「議事録を作成」を案内
+ *   すべて成功         → 台帳と OPFS から削除（processExistingAudio が完了画面を出す）
  */
 async function uploadBrowserRecordingAndProcess(entry, { file = null } = {}) {
   if (state.uploading.has(entry.recordingId)) {
@@ -866,64 +875,60 @@ async function uploadBrowserRecording(entry, file) {
   el.procFile.textContent = entry.fileName;
   resetSteps();
   setStep('audio', '処理中');
-  el.procStatus.textContent = '音声を Drive へ保存しています。';
+  el.procStatus.textContent = isDriveSaved(entry)
+    ? '音声は Drive に保存済みです。議事録の作成へ進みます。'
+    : '音声を Drive へ保存しています。';
 
-  let blob = file;
-
-  if (!blob) {
-    try {
-      blob = await getRecordingFile(entry.localPath);
-    } catch (error) {
-      if (error?.name === 'NotFoundError') {
-        /* OPFS から消えている。台帳だけ残っても意味がないので落とす。 */
-        pendingStore.remove(entry.recordingId);
-        await refreshPendingRecordings();
-      }
-
-      throw new AppError(ErrorCode.UPLOAD_FAILED, 'local_file_unavailable', error);
-    }
-  }
-
-  if (!blob || blob.size === 0) {
-    pendingStore.remove(entry.recordingId);
-    await deleteRecording(entry.localPath);
-    await refreshPendingRecordings();
-    throw new AppError(ErrorCode.ENCODE_FAILED, 'empty_recording');
-  }
-
-  let uploaded;
+  let failedStage = null;
+  let result;
 
   try {
-    uploaded = await withGoogleRetry(async (auth) => {
-      const folderId = state.voiceFolderId ?? await resolveVoiceFolder(auth);
-      state.voiceFolderId = folderId;
-      return uploadResumable({
-        file: blob,
-        name: entry.fileName,
-        folderId,
-        mimeType: entry.mimeType || blob.type || MP3_MIME,
-      }, auth);
-    }, { screen: 'home', action: { type: 'upload', recordingId: entry.recordingId } });
+    result = await saveAndProcessRecording({ entry, file }, {
+      ledger: pendingStore,
+      loadFile: getRecordingFile,
+      deleteLocal: deleteRecording,
+      uploadToDrive: (blob, current) => withGoogleRetry(async (auth) => {
+        const folderId = state.voiceFolderId ?? await resolveVoiceFolder(auth);
+        state.voiceFolderId = folderId;
+        return uploadResumable({
+          file: blob,
+          name: current.fileName,
+          folderId,
+          mimeType: current.mimeType || blob.type || MP3_MIME,
+        }, auth);
+      }, { screen: 'home', action: { type: 'upload', recordingId: current.recordingId } }),
+      process: (driveFile) => {
+        setStep('audio', '完了', 'ok');
+        /* OPFS の File をそのまま渡す。この時点では OPFS の実体はまだ消していない。 */
+        return processExistingAudio(driveFile, { skipProcessedCheck: true });
+      },
+      onStage: (stage, info) => diagnostics.stage(stage, info),
+      onFailure: (stage, error, info) => {
+        failedStage = stage;
+        diagnostics.failure(stage, error, info);
+      },
+    });
   } catch (error) {
-    pendingStore.put(applyUploadFailure({ ...entry, sizeBytes: blob.size }, error?.code || ''));
+    /* 端末の録音を取れない・空録音・Drive 保存の失敗。台帳は save-flow が更新済み。 */
     await refreshPendingRecordings();
     goHomeFlat();
-    showMessage(`${describeAppError(error)} ${LOCAL_KEPT_DRIVE_FAILED}`, true);
+    const note = failedStage === SaveStage.DRIVE_UPLOAD ? ` ${LOCAL_KEPT_DRIVE_FAILED}` : '';
+    showMessage(`${describeAppError(error)}${note}`, true);
     return;
   }
 
-  pendingStore.remove(entry.recordingId);
-  await deleteRecording(entry.localPath);
   await refreshPendingRecordings();
 
-  setStep('audio', '完了', 'ok');
-  await processExistingAudio({
-    id: uploaded.id,
-    name: uploaded.name,
-    webViewLink: uploaded.webViewLink,
-    url: uploaded.url,
-    blob,
-  }, { skipProcessedCheck: true });
+  if (result.outcome === SaveOutcome.PROCESS_FAILED) {
+    goHomeFlat();
+    showMessage(`${describeAppError(result.error)} ${PROCESS_RETRY_HINT}`, true);
+  }
+
+  /*
+   * COMPLETED     … processExistingAudio が完了画面を出している
+   * NOT_COMPLETED … processExistingAudio がホームへ戻して案内済み（APIキー未設定など）。
+   *                 台帳は UPLOADED のまま残り、「議事録を作成」で続きができる
+   */
 }
 
 async function discardBrowserRecording(entry) {
@@ -970,6 +975,11 @@ async function dropMissingBrowserEntries() {
 
 /* ---------- 議事録処理 ---------- */
 
+/*
+ * Drive 上の音声（または録音直後の OPFS File）から文字起こし・議事録・Markdown を作る。
+ * 戻り値は { completed } 。完了せずに戻る場合（APIキー未設定・再生成のキャンセル）は
+ * completed=false で、失敗ではない。失敗は例外で伝える。
+ */
 async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
   showScreen('process');
   el.procFile.textContent = file.name;
@@ -981,7 +991,7 @@ async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
     if (matching && !window.confirm(OVERWRITE_CONFIRM)) {
       showScreen('pick');
       showMessage('再生成をキャンセルしました。');
-      return;
+      return { completed: false, reason: 'cancelled' };
     }
   }
 
@@ -989,7 +999,7 @@ async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
     goHomeFlat();
     openHomeSettings({ openKey: true });
     showMessage('音声は Drive に保存しました。議事録を作るには Gemini APIキーを設定してください。', true);
-    return;
+    return { completed: false, reason: 'API_KEY_MISSING' };
   }
 
   setStep('transcribe', '処理中');
@@ -1006,12 +1016,18 @@ async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
 
   setStep('audio', '完了', 'ok');
 
+  diagnostics.stage('gemini', { sizeBytes: blob?.size ?? 0, mimeType: blob?.type ?? '' });
+
   const result = await runGeminiPipeline({
     blob,
     displayName: file.name,
     apiKey,
     audioUrl,
     onProgress(progress) {
+      if (progress?.phase) {
+        diagnostics.stage(`gemini:${progress.phase}`, progress.modelId ? { modelId: progress.modelId } : {});
+      }
+
       if (progress?.phase === 'transcribing' || progress?.phase === 'mock') {
         setStep('transcribe', '処理中');
       }
@@ -1031,6 +1047,7 @@ async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
   setStep('minutes', '完了', 'ok');
   setStep('save', '処理中');
   el.procStatus.textContent = 'Markdown を Drive へ保存しています。';
+  diagnostics.stage('markdown-save', { modelId: result.modelId ?? '' });
 
   const markdownName = toMarkdownFileName(file.name);
   const matching = findMatchingMarkdown(file.name, state.recordFiles);
@@ -1062,6 +1079,8 @@ async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
     : '議事録を保存しました。';
   el.doneOpen.href = saved.url || '#';
   showScreen('done');
+
+  return { completed: true, saved };
 }
 
 /* ---------- 録音開始・停止 ---------- */
@@ -1452,50 +1471,6 @@ function applyNativeShell() {
   if (el.offMobileHint) {
     el.offMobileHint.hidden = !(env.mobile && !native);
   }
-}
-
-function describeAppError(error) {
-  if (!error) {
-    return '処理に失敗しました。';
-  }
-
-  if (error instanceof AppError) {
-    return describeError(error);
-  }
-
-  if (error.code === 'API_KEY_MISSING' || error.code === 'KEY_MISSING') {
-    return 'Gemini APIキーを設定してください。';
-  }
-
-  if (error.code === 'DISPLAY_UNSUPPORTED') {
-    return 'この端末ではオンライン録音を使えません。';
-  }
-
-  if (error.name === 'NotAllowedError' || error.code === 'PERMISSION_DENIED') {
-    return '録音の許可が得られませんでした。画面共有またはマイクの許可を確認してください。';
-  }
-
-  if (error.code === 'NO_DEVICE') {
-    return 'マイクが見つかりません。マイクを接続してから、もう一度お試しください。';
-  }
-
-  if (error.code === 'DEVICE_BUSY') {
-    return 'マイクを他のアプリが使用しています。他のアプリを閉じてから、もう一度お試しください。';
-  }
-
-  if (error.code === 'UNSUPPORTED' || error.code === 'SYNC_ACCESS_UNSUPPORTED') {
-    return 'このブラウザは録音に対応していません。最新の Chrome / Safari / Edge でお試しください。';
-  }
-
-  if (error.code === 'AUDIO_SUSPENDED') {
-    return '音声の取り込みを開始できませんでした。画面を一度タップしてから、もう一度「録音開始」を押してください。';
-  }
-
-  if (error.code === 'INSUFFICIENT_STORAGE') {
-    return '端末の空き容量が足りないため録音を開始できません。不要なファイルを削除してから、もう一度お試しください。';
-  }
-
-  return '処理に失敗しました。もう一度お試しください。';
 }
 
 /* ---------- イベント ---------- */

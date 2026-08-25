@@ -502,7 +502,7 @@ try {
     check('Remote mix を移植していない', mixSource.includes('getDisplayMedia') && !mixSource.includes('NativeRecorder'));
     check('Drive はチャンク reader を受け付ける', driveSource.includes('readChunk') && driveSource.includes('file.slice'));
     check('未アップロード UI がある', html.includes('id="pending-recordings"') && html.includes('id="pending-list"'));
-    check('pending 見出しがある', pending.pendingHeading() === '未アップロードの録音があります' && pending.retryButtonLabel() === 'Driveへ再送');
+    check('pending 見出しがある', pending.pendingHeading() === '処理が終わっていない録音があります' && pending.retryButtonLabel() === 'Driveへ再送');
     check('スマホ Remote を出さない', appSource.includes("body.classList.toggle('ma-native'") && appSource.includes('Remote録音はパソコン版で利用できます'));
     check('Wake Lock はブラウザ録音の補助だけ（ネイティブ・Recorder 本体には足していない）', !swift.includes('wakeLock') && !recorderSource.includes('wakeLock') && appSource.includes("from './wake-lock.js'"));
     check('iOS は AVAudioRecorder', swift.includes('AVAudioRecorder') && swift.includes('kAudioFormatMPEG4AAC') && swift.includes('UIBackgroundModes') === false);
@@ -757,15 +757,446 @@ try {
     check('録音中は画面遷移・再読み込みを止める', appSource.includes('isRecordingActive()') && appSource.includes("addEventListener('beforeunload'"));
     check('OPFS 不達では台帳を消さない', appSource.includes("error?.name === 'NotFoundError'") && appSource.includes('getRecordingsDir(false)'));
     check('finalize のタイムアウトがある', recorderSource.includes('FINALIZE_TIMEOUT_MS') && recorderSource.includes('clearFinalizeTimer'));
-    check('AudioContext が running にならなければ開始しない', recorderSource.includes("AUDIO_SUSPENDED") && appSource.includes("error.code === 'AUDIO_SUSPENDED'"));
+    check('AudioContext が running にならなければ開始しない', recorderSource.includes("AUDIO_SUSPENDED") && readFileSync(resolve(appRoot, 'errors.js'), 'utf8').includes("error.code === 'AUDIO_SUSPENDED'"));
     check('CSP に form-action がある', readFileSync(resolve(appRoot, 'index.html'), 'utf8').includes("form-action 'none'"));
-    check('Drive 成功後に台帳と OPFS から削除', appSource.includes('pendingStore.remove(entry.recordingId);') && appSource.includes('await deleteRecording(entry.localPath);'));
-    check('Drive 失敗は台帳を failed にして残す', appSource.includes('pendingStore.put(applyUploadFailure('));
+    {
+      const flowSource = readFileSync(resolve(appRoot, 'save-flow.js'), 'utf8');
+      check('保存の順序は save-flow.js に集約し、app.js は Drive 直後に OPFS を消さない', appSource.includes('saveAndProcessRecording(') && !appSource.includes('await deleteRecording(entry.localPath);\n  await refreshPendingRecordings();\n\n  setStep'));
+      check('Drive 失敗は台帳を failed にして残す', flowSource.includes('applyUploadFailure(') && flowSource.includes('ledger.put(current);\n      throw error;'));
+      check('OPFS の削除は議事録の処理（process）より後', flowSource.lastIndexOf('await deleteLocal(current.localPath)') > flowSource.indexOf('await process('));
+    }
     check('起動時の OPFS 掃除は台帳のファイルを残す', opfsSource.includes('!keep.has(entry.name)') && appSource.includes('cleanupStaleFiles({ keep: pendingStore.keepFileNames() })'));
     check('AudioContext を resume する（iOS の無音録音対策）', recorderSource.includes('await this.audioContext.resume()'));
     check('Wake Lock は録音開始後に取り、確定・失敗で解放', appSource.includes('wakeLock.start()') && appSource.includes('wakeLock.stop()'));
     check('standalone では認証をリダイレクト方式にする', appSource.includes('prefersRedirectAuth(') && appSource.includes('consumeRedirectResult()') && appSource.includes('resumeAfterRedirect('));
     check('Gemini 実 API を呼ぶテストは無い', true);
+  }
+
+  section('保存フロー: 議事録の処理が終わるまで OPFS を消さない（2026-08-25 障害の再発防止）');
+
+  {
+    const flow = await import('../../public/meeting-assistant/save-flow.js');
+    const errors = await import('../../public/meeting-assistant/errors.js');
+    const store = await import('../../public/meeting-assistant/pending-store.js');
+    const checkpoint = await import('../../public/meeting-assistant/recording-checkpoint.js');
+    const pending = await import('../../public/meeting-assistant/pending-recordings.js');
+    const transcriber = await import('../../public/meeting-assistant/gemini-transcriber.js');
+    const diagnosticsMod = await import('../../public/meeting-assistant/diagnostics.js');
+    const flowSource = readFileSync(resolve(appRoot, 'save-flow.js'), 'utf8');
+    const appSource = readFileSync(resolve(appRoot, 'app.js'), 'utf8');
+
+    /*
+     * OPFS の偽物。Chromium と同じく、getFile() で得た File は参照であり、
+     * 実体を削除したあとに読もうとすると失敗する（本番で踏んだ挙動そのもの）。
+     */
+    function createFakeOpfs(events) {
+      const files = new Map();
+      const deleted = new Set();
+
+      const notFound = () => {
+        const error = new Error('A requested file or directory could not be found at the time an operation was processed.');
+        error.name = 'NotFoundError';
+        return error;
+      };
+
+      class OpfsFile extends Blob {
+        #name;
+        #bytes;
+
+        constructor(name, bytes) {
+          super([bytes], { type: '' });
+          this.#name = name;
+          this.#bytes = bytes;
+          this.name = name;
+        }
+
+        #guard() {
+          if (deleted.has(this.#name)) {
+            throw notFound();
+          }
+        }
+
+        arrayBuffer() { this.#guard(); return super.arrayBuffer(); }
+        text() { this.#guard(); return super.text(); }
+        stream() { this.#guard(); return super.stream(); }
+        bytes() { this.#guard(); return super.bytes(); }
+        slice(start = 0, end = this.size) { return new OpfsFile(this.#name, this.#bytes.subarray(start, end)); }
+      }
+
+      return {
+        write(name, size) {
+          const bytes = new Uint8Array(size);
+          for (let i = 0; i < size; i += 1) bytes[i] = i % 251;
+          files.set(name, bytes);
+          deleted.delete(name);
+        },
+        exists(name) { return files.has(name) && !deleted.has(name); },
+        async loadFile(name) {
+          if (!files.has(name) || deleted.has(name)) throw notFound();
+          return new OpfsFile(name, files.get(name));
+        },
+        async deleteLocal(name) {
+          deleted.add(name);
+          events.push('opfs:delete');
+        },
+      };
+    }
+
+    /*
+     * Gemini の偽物（fetch を差し替える。実 API は呼ばない）。
+     * 本番と同じく、送信は body の File を実際に読む。読めなければ Chromium と同じく
+     * 「TypeError: Failed to fetch」で fetch 自体が失敗する。
+     */
+    const minutesJson = {
+      meeting: { title: '', date: '', time: '', participants: [], purpose: '' },
+      summary: '挨拶のみ',
+      topics: [{ title: '挨拶', summary: '冒頭の挨拶', keyPoints: [] }],
+      decisions: [],
+      actionItems: [{ task: '資料を送る', assignee: '', dueDate: '', evidence: '資料を送ります' }],
+      openIssues: [],
+      notes: [],
+    };
+    const TRANSCRIPT = '話者1: こんにちは。資料を送ります。';
+
+    function createFakeGeminiFetch(events, options = {}) {
+      const calls = { start: 0, upload: 0, generate: 0, remove: 0 };
+      const impl = async (url, init = {}) => {
+        const target = String(url);
+
+        if (target.endsWith('/upload/v1beta/files')) {
+          calls.start += 1;
+          return new Response('{}', { status: 200, headers: { 'x-goog-upload-url': 'https://fake.upload.invalid/session-1' } });
+        }
+
+        if (target === 'https://fake.upload.invalid/session-1') {
+          calls.upload += 1;
+          let buffer;
+          try {
+            buffer = await init.body.arrayBuffer();
+          } catch {
+            throw new TypeError('Failed to fetch');
+          }
+          events.push(`gemini:upload-read ${buffer.byteLength}`);
+          return Response.json({ file: { uri: 'https://fake.files.invalid/abc', name: 'files/abc', mimeType: 'audio/mpeg', state: 'ACTIVE' } });
+        }
+
+        if (target.includes(':generateContent')) {
+          calls.generate += 1;
+          if (options.generateStatus) {
+            return Response.json({ error: { status: 'RESOURCE_EXHAUSTED', message: 'quota' } }, { status: options.generateStatus });
+          }
+          const body = JSON.parse(init.body);
+          const isMinutes = body.generationConfig?.responseMimeType === 'application/json';
+          events.push(isMinutes ? 'gemini:minutes' : 'gemini:transcribe');
+          return Response.json({ candidates: [{ content: { parts: [{ text: isMinutes ? JSON.stringify(minutesJson) : TRANSCRIPT }] } }] });
+        }
+
+        if (init.method === 'DELETE') {
+          calls.remove += 1;
+          return Response.json({});
+        }
+
+        throw new Error(`unexpected fetch: ${target}`);
+      };
+      return { impl, calls };
+    }
+
+    function createLedger(events) {
+      const data = {};
+      const storage = {
+        getItem: (k) => (k in data ? data[k] : null),
+        setItem: (k, v) => { data[k] = String(v); },
+        removeItem: (k) => { delete data[k]; },
+      };
+      const inner = store.createPendingStore(storage);
+      return {
+        get: (id) => inner.get(id),
+        put(entry) { events.push(`ledger:${entry.state}`); return inner.put(entry); },
+        remove(id) { events.push('ledger:remove'); return inner.remove(id); },
+        list: () => inner.list(),
+      };
+    }
+
+    function makeEntry(localPath, sizeBytes, durationSeconds) {
+      return store.createBrowserEntry({
+        recordingId: `rec-${localPath}`,
+        fileName: '【現地対応】2026-08-25_14-25.mp3',
+        localPath,
+        sizeBytes,
+        durationSeconds,
+        method: 'offline',
+      });
+    }
+
+    /* 依存の組み立て。Drive と Markdown 保存は偽物、Gemini は実コード＋fetch 差し替え。 */
+    function createDeps({ events, opfs, ledger, gemini, markdownFails = false, processOverride = null }) {
+      const drive = { uploads: 0 };
+      return {
+        drive,
+        deps: {
+          ledger,
+          loadFile: opfs.loadFile,
+          deleteLocal: opfs.deleteLocal,
+          async uploadToDrive(blob) {
+            drive.uploads += 1;
+            const buffer = await blob.slice(0, blob.size).arrayBuffer();
+            events.push(`drive:upload-read ${buffer.byteLength}`);
+            return { id: 'drive-file-1', name: '【現地対応】2026-08-25_14-25.mp3', webViewLink: 'https://drive.google.com/file/d/drive-file-1/view', url: 'https://drive.google.com/file/d/drive-file-1/view' };
+          },
+          process: processOverride ?? (async (driveFile) => {
+            const previousFetch = globalThis.fetch;
+            globalThis.fetch = gemini.impl;
+            try {
+              const result = await pipeline.runGeminiPipeline({
+                blob: driveFile.blob,
+                displayName: driveFile.name,
+                apiKey: 'test-key-not-real',
+                audioUrl: driveFile.url,
+                mock: false,
+              });
+              if (markdownFails) {
+                throw new errors.AppError(errors.ErrorCode.UPLOAD_FAILED, 'http_500');
+              }
+              events.push(`markdown:save ${result.markdown.includes(TRANSCRIPT) ? 'ok' : 'ng'}`);
+              return { completed: true };
+            } finally {
+              globalThis.fetch = previousFetch;
+            }
+          }),
+          onStage: (stage) => events.push(`stage:${stage}`),
+          onFailure: (stage) => events.push(`failure:${stage}`),
+        },
+      };
+    }
+
+    /* ---- 偽物自体の妥当性: 削除後の File は読めない（本番の挙動を再現できている） ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      opfs.write('sanity.mp3.part', 1000);
+      const file = await opfs.loadFile('sanity.mp3.part');
+      const before = (await file.arrayBuffer()).byteLength;
+      await opfs.deleteLocal('sanity.mp3.part');
+      let after = 'readable';
+      try { await file.arrayBuffer(); } catch (error) { after = error.name; }
+      check('偽 OPFS: 削除前は読める・削除後は NotFoundError（Chromium と同じ）', before === 1000 && after === 'NotFoundError');
+
+      /* 旧実装の順序（Drive 保存 → OPFS 削除 → Gemini 送信）を実 transcriber で再現すると必ず失敗する */
+      const gemini = createFakeGeminiFetch(events);
+      const previousFetch = globalThis.fetch;
+      globalThis.fetch = gemini.impl;
+      let oldOrder = null;
+      try {
+        await transcriber.transcribeWithGemini(file, { apiKey: 'test-key-not-real', displayName: 'x.mp3' });
+      } catch (error) {
+        oldOrder = error;
+      } finally {
+        globalThis.fetch = previousFetch;
+      }
+      check('旧順序（削除後に Gemini へ送る）は GeminiError NETWORK になる（障害の再現）', oldOrder?.name === 'GeminiError' && oldOrder.code === 'NETWORK');
+      check('旧順序の失敗は「処理に失敗しました」ではなく通信の失敗として案内する', errors.describeAppError(oldOrder).includes('Gemini との通信に失敗') && errors.describeAppError(oldOrder).includes('Drive に保存済み'));
+    }
+
+    /* ---- 正常系: 順序の検証 ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      const SIZE = 362112; /* 本番で失敗した 23 秒録音と同じサイズ */
+      opfs.write('rec-a.mp3.part', SIZE);
+      const ledger = createLedger(events);
+      const entry = makeEntry('rec-a.mp3.part', SIZE, 23);
+      ledger.put(entry);
+      events.length = 0;
+      const gemini = createFakeGeminiFetch(events);
+      const { deps, drive } = createDeps({ events, opfs, ledger, gemini });
+
+      const result = await flow.saveAndProcessRecording({ entry, file: await opfs.loadFile('rec-a.mp3.part') }, deps);
+
+      const idx = (label) => events.findIndex((e) => e.startsWith(label));
+      check('結果は COMPLETED', result.outcome === flow.SaveOutcome.COMPLETED);
+      check('Drive 送信は録音全体を読めた', events.includes(`drive:upload-read ${SIZE}`));
+      check('台帳は Drive 保存後に UPLOADED（driveFileId 付き）', idx('ledger:UPLOADED') > idx('drive:upload-read') && events.includes('ledger:PROCESSING'));
+      check('Gemini へ渡す時点で録音がまだ読める（送信が録音全体を読んだ）', events.includes(`gemini:upload-read ${SIZE}`) && idx('gemini:upload-read') > idx('ledger:UPLOADED'));
+      check('文字起こし → 議事録 → Markdown 保存の順', idx('gemini:transcribe') < idx('gemini:minutes') && idx('gemini:minutes') < idx('markdown:save ok'));
+      check('OPFS 削除は Markdown 保存より後で、最後', idx('opfs:delete') > idx('markdown:save ok') && events[events.length - 1] === 'opfs:delete');
+      check('台帳からの削除は Markdown 保存の後', idx('ledger:remove') > idx('markdown:save ok') && idx('ledger:remove') < idx('opfs:delete'));
+      check('完了後は台帳が空で OPFS も消えている', ledger.list().length === 0 && !opfs.exists('rec-a.mp3.part'));
+      check('Drive へは 1 回だけ送った', drive.uploads === 1 && gemini.calls.upload === 1);
+      check('Gemini 側の一時ファイルは削除している', gemini.calls.remove === 1);
+    }
+
+    /* ---- 録音時間による最低時間の制限は無い（1 秒相当でも同じ順序で通る） ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      const SIZE = 16000; /* 128kbps で約 1 秒 */
+      opfs.write('rec-short.mp3.part', SIZE);
+      const ledger = createLedger(events);
+      const entry = makeEntry('rec-short.mp3.part', SIZE, 1);
+      ledger.put(entry);
+      const gemini = createFakeGeminiFetch(events);
+      const { deps } = createDeps({ events, opfs, ledger, gemini });
+      const result = await flow.saveAndProcessRecording({ entry }, deps);
+      check('1 秒相当の録音でも最低時間で弾かず完了する', result.outcome === flow.SaveOutcome.COMPLETED && events.includes(`gemini:upload-read ${SIZE}`));
+      check('save-flow に録音時間の下限が無い', !/durationSeconds\s*[<>]/.test(flowSource) && !/MIN_(DURATION|SECONDS)/.test(flowSource) && !/MIN_(DURATION|SECONDS)/.test(readFileSync(resolve(appRoot, 'config.js'), 'utf8')));
+    }
+
+    /* ---- Gemini 失敗: 録音を失わず、Drive へ再送せずにやり直せる ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      opfs.write('rec-b.mp3.part', 50000);
+      const ledger = createLedger(events);
+      const entry = makeEntry('rec-b.mp3.part', 50000, 3);
+      ledger.put(entry);
+      const failing = createFakeGeminiFetch(events, { generateStatus: 429 });
+      const first = createDeps({ events, opfs, ledger, gemini: failing });
+
+      const failed = await flow.saveAndProcessRecording({ entry }, first.deps);
+      const row = ledger.get(entry.recordingId);
+      check('Gemini 失敗は例外ではなく PROCESS_FAILED として返る', failed.outcome === flow.SaveOutcome.PROCESS_FAILED && failed.error?.name === 'GeminiError' && failed.error.code === 'QUOTA_EXCEEDED');
+      check('台帳は PROCESS_FAILED で残り、Drive 保存の情報とエラーコードを持つ', row?.state === checkpoint.RecordingState.PROCESS_FAILED && row.driveFileId === 'drive-file-1' && row.error === 'QUOTA_EXCEEDED');
+      check('端末の録音（OPFS）は消えていない', opfs.exists('rec-b.mp3.part') && !events.includes('opfs:delete'));
+      check('一覧に「議事録を作成」で出る（Drive 保存済みと分かる）', pending.visiblePendingRecordings([row]).length === 1 && pending.saveButtonLabel(row) === '議事録を作成' && pending.pendingStateNote(row).includes('Drive に保存済み'));
+      check('破棄の確認文は Drive 保存済みと伝える', pending.discardConfirmText(row).includes('Drive に保存済み'));
+      check('利用者向け文言は上限到達と分かる', errors.describeAppError(failed.error).includes('利用上限'));
+
+      /* やり直し: Drive へは送らず、Gemini からやり直して完了する */
+      const ok = createFakeGeminiFetch(events);
+      const second = createDeps({ events, opfs, ledger, gemini: ok });
+      const retried = await flow.saveAndProcessRecording({ entry: ledger.get(entry.recordingId) }, second.deps);
+      check('再処理は Drive へ二重送信しない', second.drive.uploads === 0 && events.filter((e) => e.startsWith('stage:drive-upload')).length === 2);
+      check('再処理で完了し、OPFS と台帳から消える', retried.outcome === flow.SaveOutcome.COMPLETED && !opfs.exists('rec-b.mp3.part') && ledger.list().length === 0);
+    }
+
+    /* ---- Markdown（record）保存の失敗でも録音を失わない ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      opfs.write('rec-c.mp3.part', 40000);
+      const ledger = createLedger(events);
+      const entry = makeEntry('rec-c.mp3.part', 40000, 2);
+      ledger.put(entry);
+      const gemini = createFakeGeminiFetch(events);
+      const { deps } = createDeps({ events, opfs, ledger, gemini, markdownFails: true });
+      const result = await flow.saveAndProcessRecording({ entry }, deps);
+      check('Markdown 保存失敗は PROCESS_FAILED で、OPFS は残る', result.outcome === flow.SaveOutcome.PROCESS_FAILED && result.error instanceof errors.AppError && opfs.exists('rec-c.mp3.part') && ledger.get(entry.recordingId)?.state === checkpoint.RecordingState.PROCESS_FAILED);
+    }
+
+    /* ---- 完了せず戻る（APIキー未設定）: UPLOADED のまま残す ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      opfs.write('rec-d.mp3.part', 30000);
+      const ledger = createLedger(events);
+      const entry = makeEntry('rec-d.mp3.part', 30000, 2);
+      ledger.put(entry);
+      const gemini = createFakeGeminiFetch(events);
+      const { deps } = createDeps({ events, opfs, ledger, gemini, processOverride: async () => ({ completed: false, reason: 'API_KEY_MISSING' }) });
+      const result = await flow.saveAndProcessRecording({ entry }, deps);
+      const row = ledger.get(entry.recordingId);
+      check('APIキー未設定は失敗ではなく NOT_COMPLETED。台帳は UPLOADED で OPFS は残る', result.outcome === flow.SaveOutcome.NOT_COMPLETED && row?.state === checkpoint.RecordingState.UPLOADED && opfs.exists('rec-d.mp3.part'));
+      check('その行は「議事録を作成」として一覧に出る', pending.saveButtonLabel(row) === '議事録を作成' && pending.pendingStateNote(row).includes('未作成'));
+    }
+
+    /* ---- Drive 保存の失敗: 従来どおり UPLOAD_FAILED で例外、録音は残る ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      opfs.write('rec-e.mp3.part', 30000);
+      const ledger = createLedger(events);
+      const entry = makeEntry('rec-e.mp3.part', 30000, 2);
+      ledger.put(entry);
+      const gemini = createFakeGeminiFetch(events);
+      const { deps } = createDeps({ events, opfs, ledger, gemini });
+      deps.uploadToDrive = async () => { throw new errors.AppError(errors.ErrorCode.NETWORK, 'fetch_failed'); };
+      let thrown = null;
+      try { await flow.saveAndProcessRecording({ entry }, deps); } catch (error) { thrown = error; }
+      const row = ledger.get(entry.recordingId);
+      check('Drive 失敗は例外で伝え、台帳は UPLOAD_FAILED、OPFS は残る', thrown?.code === 'NETWORK' && row?.state === checkpoint.RecordingState.UPLOAD_FAILED && opfs.exists('rec-e.mp3.part') && events.includes('failure:drive-upload'));
+      check('Gemini は呼ばれていない', gemini.calls.start === 0);
+    }
+
+    /* ---- 処理の途中で落ちた（PROCESSING のまま）行の回収 ---- */
+    {
+      const entry = checkpoint.applyProcessing(checkpoint.applyUploaded(makeEntry('rec-f.mp3.part', 1000, 1), { driveFileId: 'drive-f', driveUrl: 'https://drive.google.com/file/d/drive-f/view' }));
+      check('PROCESSING の行は一覧に出て「議事録を作成」', pending.visiblePendingRecordings([entry]).length === 1 && pending.saveButtonLabel(entry) === '議事録を作成' && pending.pendingStateNote(entry).includes('途中'));
+      check('ネイティブ行の UPLOADED は一覧に出さない', pending.visiblePendingRecordings([{ ...entry, source: 'native' }]).length === 0);
+      check('Drive 保存済みの判定は driveFileId を要する', checkpoint.isDriveSaved(entry) && !checkpoint.isDriveSaved({ ...entry, driveFileId: '' }));
+    }
+
+    /* ---- 空録音・端末の録音が無い ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      const ledger = createLedger(events);
+      const gemini = createFakeGeminiFetch(events);
+
+      opfs.write('rec-empty.mp3.part', 0);
+      const empty = makeEntry('rec-empty.mp3.part', 0, 0);
+      ledger.put(empty);
+      let thrown = null;
+      try { await flow.saveAndProcessRecording({ entry: empty }, createDeps({ events, opfs, ledger, gemini }).deps); } catch (error) { thrown = error; }
+      check('0 バイトだけを空録音として落とす', thrown?.code === 'ENCODE_FAILED' && ledger.get(empty.recordingId) === null);
+
+      const missing = checkpoint.applyUploaded(makeEntry('rec-missing.mp3.part', 1000, 1), { driveFileId: 'drive-m', driveUrl: '' });
+      ledger.put(missing);
+      thrown = null;
+      try { await flow.saveAndProcessRecording({ entry: missing }, createDeps({ events, opfs, ledger, gemini }).deps); } catch (error) { thrown = error; }
+      check('Drive 保存済みで端末の録音が無ければ、Drive の一覧から作れると案内する', thrown?.code === 'LOCAL_FILE_MISSING_DRIVE_SAVED' && errors.describeAppError(thrown).includes('Drive') && ledger.get(missing.recordingId) === null);
+    }
+
+    /* ---- 診断ログ: 段階と code / 安全な detail だけ ---- */
+    {
+      const lines = [];
+      const fakeConsole = { info: (...a) => lines.push(['info', ...a]), error: (...a) => lines.push(['error', ...a]) };
+      const diag = diagnosticsMod.createDiagnostics(fakeConsole);
+      const geminiError = new transcriber.GeminiError('NETWORK', 0, 'TypeError');
+      geminiError.message = 'SECRET-LIKE-RESPONSE-BODY';
+      diag.stage('drive-upload', { recordingId: 'r1', sizeBytes: 10 });
+      diag.failure('process', geminiError, { recordingId: 'r1' });
+      const failure = lines[1];
+      const summary = failure[4].error;
+      check('段階のログが出る', lines[0][0] === 'info' && lines[0][3] === 'drive-upload');
+      check('失敗ログは name / code / detail を持ち、message（応答本文の恐れ）を出さない', failure[0] === 'error' && summary.name === 'GeminiError' && summary.code === 'NETWORK' && summary.detail === 'TypeError' && !JSON.stringify(failure).includes('SECRET-LIKE'));
+      const appError = new errors.AppError(errors.ErrorCode.UPLOAD_FAILED, 'http_500', new TypeError('Failed to fetch'));
+      const appSummary = diagnosticsMod.summarizeError(appError);
+      check('AppError は code と識別子 message、cause を 1 段だけ', appSummary.code === 'UPLOAD_FAILED' && appSummary.detail === 'http_500' && appSummary.cause?.name === 'TypeError');
+      const rec = diagnosticsMod.summarizeRecording({ recordingId: 'r1', fileName: '【現地対応】山田 太郎.mp3', sizeBytes: 5, durationSeconds: 1, mimeType: 'audio/mpeg', driveFileId: 'x', state: 'UPLOADED' });
+      check('録音の要約に氏名を含むファイル名を出さない', !('fileName' in rec) && rec.driveSaved === true && rec.sizeBytes === 5);
+      check('app.js は診断ログを保存フローと Gemini 段階で使う', appSource.includes('diagnostics.failure(stage, error, info)') && appSource.includes("diagnostics.stage('gemini'") && appSource.includes("diagnostics.stage('markdown-save'"));
+      check('APIキーをログに出さない', !/diagnostics\.(stage|failure)\([^)]*apiKey/.test(appSource));
+    }
+  }
+
+  section('エラー文言: Gemini の失敗を「処理に失敗しました」に潰さない');
+
+  {
+    const errors = await import('../../public/meeting-assistant/errors.js');
+    const transcriber = await import('../../public/meeting-assistant/gemini-transcriber.js');
+    const minutesMod = await import('../../public/meeting-assistant/gemini-minutes.js');
+    const appSource = readFileSync(resolve(appRoot, 'app.js'), 'utf8');
+    const t = (code, status = 0) => new transcriber.GeminiError(code, status, 'x');
+    const m = (code, status = 0) => new minutesMod.GeminiError(code, status, 'x');
+    const generic = '処理に失敗しました。もう一度お試しください。';
+
+    check('describeAppError は errors.js にあり app.js には無い', typeof errors.describeAppError === 'function' && !appSource.includes('function describeAppError'));
+    check('Gemini の PERMISSION_DENIED をマイク権限と言わない', !errors.describeAppError(t('PERMISSION_DENIED', 403)).includes('マイク') && errors.describeAppError(t('PERMISSION_DENIED', 403)).includes('403'));
+    check('録音側の PERMISSION_DENIED は従来どおりマイク・画面共有の案内', errors.describeAppError({ code: 'PERMISSION_DENIED' }).includes('マイク'));
+    check('NETWORK（Gemini）は通信の失敗と Drive 保存済みを伝える', errors.describeAppError(t('NETWORK')).includes('通信') && errors.describeAppError(t('NETWORK')).includes('Drive に保存済み'));
+    check('NETWORK（Drive の AppError）は従来の Drive 文言', errors.describeAppError(new errors.AppError(errors.ErrorCode.NETWORK)).includes('録音は残っています'));
+    check('API_KEY_INVALID / KEY_REJECTED はキーの確認を促す', errors.describeAppError(t('API_KEY_INVALID', 400)).includes('APIキー') && errors.describeAppError(m('KEY_REJECTED', 403)).includes('APIキー'));
+    check('API_KEY_MISSING / KEY_MISSING は設定を促す', errors.describeAppError(t('API_KEY_MISSING')).includes('設定') && errors.describeAppError(m('KEY_MISSING')).includes('設定'));
+    check('QUOTA_EXCEEDED / RATE_LIMITED は利用上限', errors.describeAppError(t('QUOTA_EXCEEDED', 429)).includes('利用上限') && errors.describeAppError(m('RATE_LIMITED', 429)).includes('利用上限'));
+    check('EMPTY_RESULT は結果が空', errors.describeAppError(t('EMPTY_RESULT')).includes('空'));
+    check('BAD_JSON は形式', errors.describeAppError(m('BAD_JSON')).includes('形式'));
+    check('MODEL_NOT_FOUND / AUDIO_NOT_SUPPORTED は管理者へ', errors.describeAppError(t('MODEL_NOT_FOUND', 404)).includes('管理者') && errors.describeAppError(t('AUDIO_NOT_SUPPORTED', 400)).includes('音声形式'));
+    check('SERVER_ERROR は時間をおく', errors.describeAppError(m('SERVER_ERROR', 503)).includes('時間をおいて'));
+    check('UNKNOWN でも Gemini の失敗と分かる文言', errors.describeAppError(t('UNKNOWN')) !== generic && errors.describeAppError(t('UNKNOWN')).includes('議事録'));
+    const allCodes = [...Object.values(transcriber.GeminiErrorCode), ...Object.values(minutesMod.GeminiErrorCode)];
+    check('すべての Gemini コードが汎用文言にならない', allCodes.every((code) => errors.describeAppError(t(code)) !== generic));
+    check('文言に例外 message を出さない', !errors.describeAppError(Object.assign(t('NETWORK'), { message: 'LEAK' })).includes('LEAK'));
+    check('未知の例外は従来の汎用文言', errors.describeAppError(new Error('boom')) === generic);
   }
 
   finish();
