@@ -11,6 +11,7 @@
 | 版 | 日付 | 内容 |
 | --- | --- | --- |
 | v1.0 | 2026-08-25 | 初版。ブラウザ / PWA 版の完成状態（PR #63 / #64、Cloudflare Workers Version `2954f7a8`）を要件として確定。スマートフォンネイティブ版（`mobile/meeting-assistant/`）は開発停止・保持 |
+| v1.1 | 2026-08-25 | 本番障害（On-site 録音停止後「処理に失敗しました」）の修正。§4-4 の順序を「議事録の処理が終わるまで OPFS を消さない」に改め、台帳に `PROCESSING` / `PROCESS_FAILED` と「議事録を作成」を追加。§6-1 に Gemini 失敗の案内と診断ログ、§9 に順序の再発防止テスト |
 
 ## §1 目的と位置づけ
 
@@ -150,10 +151,12 @@
 
 1. **録音開始の直後**に台帳（`localStorage` `meeting-assistant-pending`）へ「録音中」の行を載せる。録音中にページが落ちても、次回起動時にこの行が OPFS の途中ファイルを掃除から守り、「録音が途中で終わっています」として回収できる。
 2. 確定したら行を「保存待ち」に更新する。音声データ・トークンは台帳に入れない。台帳はメモリ上が正で、`localStorage` に書けない環境でも画面を開いている間は一覧に出る（その旨を案内する）。件数の上限は設けない。
-3. Google 連携済み（トークン有効）なら、そのまま Drive へアップロード → 台帳と OPFS から削除 → 文字起こし・議事録へ。
-4. 未連携なら台帳に残してホームへ戻す。ホームの「未アップロードの録音があります」から**「Driveへ保存」**（利用者の押下）で連携し、保存 → 議事録へ進む。失敗した行は「前回の保存に失敗」となり「Driveへ再送」。「破棄」で端末から削除できる。
-5. 起動時の OPFS 掃除は、台帳に載っているファイルを残し、それ以外の `.part` と probe 用 `.tmp` だけ消す。台帳にあるのに OPFS に無い行（`NotFoundError`）だけ落とし、OPFS 自体に届かないときは台帳に触らない。
-6. 同じ録音の Drive 送信中は「Driveへ保存」を無効にする（二重送信防止）。Worker が 0 バイトと報告したときだけ「空録音」として削除する。
+3. Google 連携済み（トークン有効）なら、そのまま次の順で進める（`save-flow.js`。v1.1）。
+   **Drive へアップロード → 台帳を `UPLOADED`（`driveFileId` 付き）→ 台帳を `PROCESSING` → 文字起こし・議事録 → Markdown を Potenitas record へ保存 → 全工程の成功を確認 → 台帳から削除 → OPFS の録音を削除。**
+   議事録の処理（Gemini・Markdown）が終わるまで OPFS の録音は消さない。Gemini への送信は fetch の body として OPFS の `File` を読むため、実体を先に消すと送信が `Failed to fetch` で必ず失敗する（2026-08-25 の本番障害）。録音を別の Blob へ複製してメモリに載せることもしない（90 分・約 86MB を想定するため）。
+4. 未連携なら台帳に残してホームへ戻す。ホームの「処理が終わっていない録音があります」から**「Driveへ保存」**（利用者の押下）で連携し、保存 → 議事録へ進む。Drive 保存に失敗した行は「前回の保存に失敗」となり「Driveへ再送」。議事録の処理に失敗した行は `PROCESS_FAILED`（音声は Drive に保存済み・端末の録音も残る）となり**「議事録を作成」**で処理だけをやり直す（Drive へは再送しない）。処理の途中でページが落ちた行は `PROCESSING` のまま残り、同じく「議事録を作成」で回収する。API キー未設定などで完了せずに戻った行は `UPLOADED` のまま残る。「破棄」で端末から削除できる（Drive 保存済みならその旨を確認文に出す）。
+5. 起動時の OPFS 掃除は、台帳に載っているファイルを残し、それ以外の `.part` と probe 用 `.tmp` だけ消す。台帳にあるのに OPFS に無い行（`NotFoundError`）だけ落とし、OPFS 自体に届かないときは台帳に触らない。Drive 保存済みの行の OPFS が無いときは「Drive の一覧から作れる」と案内する。
+6. 同じ録音の処理中は「Driveへ保存」「議事録を作成」を無効にする（二重送信防止）。Worker が 0 バイトと報告したときだけ「空録音」として削除する。録音時間による最低時間の制限は設けない。
 
 On-site は録音開始の押下で先に Google 連携を求める（停止後ではポップアップが阻止されるため）。断られても録音は始め、そのセッション中は再要求しない。
 
@@ -193,7 +196,9 @@ On-site は録音開始の押下で先に Google 連携を求める（停止後�
 | 文字起こし | Files API（resumable、`upload, finalize`）へ音声を上げ、`TRANSCRIPTION_PROMPT`（要約しない・補完しない・聞き取れない箇所は「[聞き取り不能]」・話者は「話者1」「話者2」・可能ならタイムスタンプ）で本文のみ返させる |
 | 議事録 | `responseSchema`（JSON）で 概要 / 議題 / 決定事項 / タスク / 未決事項 を構造化出力。決定事項・タスクの `evidence` を文字起こし原文と照合し、見つからなければ「根拠を確認できません」に降格する。担当・期限は推測せず空のまま |
 | 上限 | 音声 200MB / 2 時間、文字起こし 60,000 文字（45,000 で警告）、出力 8,192 トークン |
-| API キー | 利用者が Google AI Studio で発行し、設定画面から登録。未登録なら音声の Drive 保存までを行い、設定を開いて案内する |
+| API キー | 利用者が Google AI Studio で発行し、設定画面から登録。未登録なら音声の Drive 保存までを行い、設定を開いて案内する（台帳は `UPLOADED` で残り、登録後に「議事録を作成」で続きができる） |
+| 失敗の案内 | `GeminiError` の code ごとに文言を分ける（`errors.js` の `describeGeminiError`）: キー無効 / 403 / 利用上限 / モデル無し / 音声形式 / 送信・処理失敗 / 結果が空 / JSON 不正 / 通信 / サーバー。すべてを「処理に失敗しました」に潰さない。Gemini の `PERMISSION_DENIED` を録音側（マイク）の文言にしない |
+| 診断ログ | `diagnostics.js` が console に段階（`load-local` / `drive-upload` / `process` / `gemini:*` / `markdown-save` / `cleanup`）と失敗の name / code / status / 固定の detail を出す。音声・API キー・トークン・応答本文・氏名を含むファイル名は出さない |
 | モック | `localhost` かつ `?mockGemini=1` のときだけ固定結果を返す（テスト用。本番では無効） |
 
 ### §6-2 Markdown の固定構造（`markdown.js`）
@@ -233,12 +238,12 @@ On-site は録音開始の押下で先に Google 連携を求める（停止後�
 
 | 種別 | 実行 | 内容 |
 | --- | --- | --- |
-| 単体（純ロジック） | `~/dev/node22/bin/node tests/run.mjs meeting-assistant`（221 件） | モデルと秘密情報、Drive フォルダ、ファイル名、対応種別、Markdown 命名と処理済み判定、Markdown 固定構造、To Do の非推測、Gemini モック、独立入口（HTML の導線・文言）、PiP、ネイティブ分岐の保持、環境判定、OAuth リダイレクト（認可 URL・fragment・state 突き合わせ・古い往復・トークンを保存しない）、保存待ち台帳 |
+| 単体（純ロジック） | `~/dev/node22/bin/node tests/run.mjs meeting-assistant`（277 件） | モデルと秘密情報、Drive フォルダ、ファイル名、対応種別、Markdown 命名と処理済み判定、Markdown 固定構造、To Do の非推測、Gemini モック、独立入口（HTML の導線・文言）、PiP、ネイティブ分岐の保持、環境判定、OAuth リダイレクト（認可 URL・fragment・state 突き合わせ・古い往復・トークンを保存しない）、保存待ち台帳、**保存フローの順序**（削除後は読めない偽 OPFS ＋ fetch 差し替えの Gemini 実コードで「Drive 保存 → Gemini が録音を読める → Markdown 保存 → 最後に OPFS 削除」を検証。旧順序の再現、Gemini / Markdown 失敗時の保持と再処理、二重アップロード無し、1 秒相当でも通る）、Gemini エラー文言、診断ログ |
 | 全体 | `node tests/run.mjs unit`（5503 件）、`node public/apps/tests/run.mjs unit`（659 件）、`npm run typecheck`、eslint | 他アプリへの回帰 |
 | CI | GitHub Actions `tests`（push / pull_request） | 上記スイート |
 | 描画 | Windows Chrome ヘッドレス（PC 1280px、iframe ラッパーでスマートフォン幅 320 / 390 / 412 / 横向き） | 円の配置、Remote 非表示、横はみ出しなし |
 
-Gemini API の実呼び出しはテストしない（モックのみ）。
+Gemini API の実呼び出しはテストしない（モックのみ）。ただし Blob を一切読まないモックだけでは 2026-08-25 の障害を検出できないため、Gemini 送信相当の処理（`gemini-transcriber.js` の実コード）が `fetch` の body として録音を実際に読むことまで検証する。
 
 ## §10 実機で確認すること（リリース後）
 

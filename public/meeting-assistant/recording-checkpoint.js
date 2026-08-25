@@ -12,6 +12,13 @@ export const RecordingState = Object.freeze({
   UPLOADING: 'UPLOADING',
   UPLOADED: 'UPLOADED',
   UPLOAD_FAILED: 'UPLOAD_FAILED',
+  /*
+   * Drive 保存後の議事録処理（Gemini → Markdown → Potenitas record）。
+   * ブラウザ録音だけが使う。処理が終わるまで端末の録音（OPFS）は消さない。
+   * 完了は行の削除で表す（COMPLETED 状態は持たない）。
+   */
+  PROCESSING: 'PROCESSING',
+  PROCESS_FAILED: 'PROCESS_FAILED',
 });
 
 export const DriveUploadState = Object.freeze({
@@ -94,6 +101,21 @@ export function isPendingUpload(checkpoint) {
     || state === RecordingState.UPLOAD_FAILED;
 }
 
+/*
+ * Drive には保存済みだが、議事録の処理が終わっていない行。
+ * Drive へは二度と送らず、議事録の処理だけをやり直す。
+ */
+export function isPendingProcessing(checkpoint) {
+  const state = checkpoint?.state;
+  return state === RecordingState.UPLOADED
+    || state === RecordingState.PROCESSING
+    || state === RecordingState.PROCESS_FAILED;
+}
+
+export function isDriveSaved(checkpoint) {
+  return isPendingProcessing(checkpoint) && String(checkpoint?.driveFileId || '') !== '';
+}
+
 export function shouldOfferRetry(checkpoint) {
   return isPendingUpload(checkpoint) || isIncompleteRecording(checkpoint);
 }
@@ -130,6 +152,24 @@ export function applyUploaded(checkpoint, { driveFileId, driveUrl, lastCheckpoin
     driveUrl: driveUrl ?? checkpoint.driveUrl,
     lastCheckpointAt: lastCheckpointAt || new Date().toISOString(),
     error: '',
+  };
+}
+
+export function applyProcessing(checkpoint, { lastCheckpointAt } = {}) {
+  return {
+    ...checkpoint,
+    state: RecordingState.PROCESSING,
+    lastCheckpointAt: lastCheckpointAt || new Date().toISOString(),
+    error: '',
+  };
+}
+
+export function applyProcessFailure(checkpoint, error = '') {
+  return {
+    ...checkpoint,
+    state: RecordingState.PROCESS_FAILED,
+    lastCheckpointAt: new Date().toISOString(),
+    error: String(error || ''),
   };
 }
 
