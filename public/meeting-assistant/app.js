@@ -67,6 +67,7 @@ import {
   stopNativeRecording,
 } from './native-bridge.js';
 import {
+  RecordingState,
   applyUploadFailure,
   createRecordingId,
   elapsedSecondsFrom,
@@ -77,6 +78,7 @@ import {
   discardConfirmText,
   formatPendingTitle,
   pendingHeading,
+  pendingStateNote,
   retryButtonLabel,
   saveButtonLabel,
   visiblePendingRecordings,
@@ -90,13 +92,21 @@ import {
 } from './platform.js';
 import { createWakeLockKeeper } from './wake-lock.js';
 import { formatDuration } from './recorder/capabilities.js';
-import { cleanupStaleFiles, deleteRecording, getRecordingFile } from './recorder/opfs-storage.js';
+import {
+  cleanupStaleFiles,
+  deleteRecording,
+  getRecordingFile,
+  getRecordingsDir,
+} from './recorder/opfs-storage.js';
 import { Recorder, RecorderState } from './recorder/recorder.js';
 
 const OVERWRITE_CONFIRM = 'すでに議事録があります。再生成しますか？';
 const REMOTE_PC_ONLY = 'Remote録音はパソコン版で利用できます。';
 const SAVED_LOCAL_CONNECT = '録音を端末に保存しました。「Driveへ保存」を押して Google と連携し、保存してください。';
 const NOT_CONNECTED_RECORDING = 'Google 未連携のまま録音します。停止後に「Driveへ保存」から連携できます。';
+const RECORDING_IN_PROGRESS = '録音中です。先に「録音停止」を押してください。';
+const LEDGER_NOT_PERSISTED = 'この端末では録音の一覧を保存できません（プライベートモード等）。この画面を閉じる前に「Driveへ保存」を押してください。';
+const REMOTE_CONNECT_FIRST = '先に設定の「Google Drive 連携」で連携しておくと、停止後すぐに保存されます。';
 
 const el = {
   main: document.getElementById('ma-main'),
@@ -163,7 +173,10 @@ const state = {
   mode: null,
   recordingMeta: null,
   recordingStartedAt: null,
+  recordingId: null,
   nativeRecording: null,
+  /* Drive へ送信中の recordingId。二重押しで同名ファイルを 2 つ作らない。 */
+  uploading: new Set(),
   /* このセッションで利用者が Google 連携を断った。録音開始のたびに再要求しない。 */
   authDeclined: false,
 };
@@ -206,7 +219,8 @@ function authOptions(resume = null, prompt = '') {
     prompt,
     resume,
     redirect: shouldRedirectAuth(),
-    allowRedirectFallback: OAUTH.redirectFallback === true && !env.native,
+    /* PC でポップアップが阻止された場合は従来どおり解除を案内する。リダイレクトへ切り替えるのはスマートフォンだけ。 */
+    allowRedirectFallback: OAUTH.redirectFallback === true && !env.native && (env.mobile || env.standalone),
   };
 }
 
@@ -238,6 +252,7 @@ function hashScreen() {
   return screens[hash] ? hash : '';
 }
 
+/* 実際に表示した画面名を返す（Remote 不可でホームへ差し戻したときは 'home'）。 */
 function enterScreen(name) {
   if (name === 'online' && !remoteAvailable()) {
     showMessage(REMOTE_PC_ONLY, true);
@@ -274,9 +289,23 @@ function enterScreen(name) {
         showMessage(describeAppError(error), true);
       });
   }
+
+  return name;
+}
+
+function isRecordingActive() {
+  return state.recorder?.state === RecorderState.RECORDING
+    || state.recorder?.state === RecorderState.STOPPING
+    || state.nativeRecording !== null;
 }
 
 function navigateTo(name) {
+  /* 録音中に画面を離れると停止手段を失う。先に停止してもらう。 */
+  if (isRecordingActive() && name !== state.mode) {
+    showMessage(RECORDING_IN_PROGRESS, true);
+    return;
+  }
+
   showMessage('');
 
   if (name === 'home') {
@@ -290,10 +319,15 @@ function navigateTo(name) {
     return;
   }
 
-  enterScreen(name);
+  const shown = enterScreen(name);
 
-  if (HISTORY_SCREENS.has(name) && history.state?.screen !== name) {
-    history.pushState({ screen: name }, '', `${location.pathname}${location.search}#${name}`);
+  if (shown === 'home') {
+    history.replaceState({ screen: 'home' }, '', `${location.pathname}${location.search}`);
+    return;
+  }
+
+  if (HISTORY_SCREENS.has(shown) && history.state?.screen !== shown) {
+    history.pushState({ screen: shown }, '', `${location.pathname}${location.search}#${shown}`);
   }
 }
 
@@ -740,19 +774,25 @@ async function handleFinalizedRecording(mode, result) {
   });
 
   const file = result.file;
+  const bytes = Number(result.sizeBytes) || (file ? file.size : 0);
+  const recordingId = state.recordingId ?? createRecordingId();
+  state.recordingId = null;
 
-  if (!file || file.size === 0) {
+  /* Worker が 0 バイトと言っているときだけ「空録音」。File の取得失敗だけでは消さない。 */
+  if (bytes === 0) {
+    pendingStore.remove(recordingId);
     await deleteRecording(result.fileName);
+    await refreshPendingRecordings();
     throw new AppError(ErrorCode.ENCODE_FAILED, 'empty_recording');
   }
 
   const entry = createBrowserEntry({
-    recordingId: createRecordingId(),
+    recordingId,
     fileName: buildRecordingFileName({ method: mode, ...meta, date: startedAt }),
     localPath: result.fileName,
-    sizeBytes: Number(result.sizeBytes) || file.size,
+    sizeBytes: bytes,
     durationSeconds: Number(result.durationSeconds) || 0,
-    mimeType: file.type || MP3_MIME,
+    mimeType: file?.type || MP3_MIME,
     method: mode,
     organization: meta.organization,
     personName: meta.personName,
@@ -760,7 +800,7 @@ async function handleFinalizedRecording(mode, result) {
     startedAt: startedAt.toISOString(),
   });
 
-  pendingStore.put(entry);
+  const persisted = pendingStore.put(entry);
   await refreshPendingRecordings();
 
   if (hasValidToken()) {
@@ -769,7 +809,38 @@ async function handleFinalizedRecording(mode, result) {
   }
 
   goHomeFlat();
-  showMessage(SAVED_LOCAL_CONNECT);
+  showMessage(persisted ? SAVED_LOCAL_CONNECT : `${SAVED_LOCAL_CONNECT} ${LEDGER_NOT_PERSISTED}`, !persisted);
+}
+
+/*
+ * 録音開始直後に「録音中」の行を台帳へ載せる。
+ * 録音中にページが落ちても、次回起動時にこの行が OPFS の途中ファイルを掃除から守る。
+ */
+function registerRecordingStart(mode, recorder) {
+  const meta = state.recordingMeta ?? readRecordingMeta(mode);
+  const startedAt = state.recordingStartedAt ?? new Date();
+  state.recordingId = createRecordingId();
+
+  if (!recorder?.partName) {
+    return;
+  }
+
+  const persisted = pendingStore.put(createBrowserEntry({
+    recordingId: state.recordingId,
+    fileName: buildRecordingFileName({ method: mode, ...meta, date: startedAt }),
+    localPath: recorder.partName,
+    mimeType: MP3_MIME,
+    method: mode,
+    organization: meta.organization,
+    personName: meta.personName,
+    kind: meta.kind,
+    startedAt: startedAt.toISOString(),
+    state: RecordingState.RECORDING,
+  }));
+
+  if (!persisted) {
+    setRecorderUi(mode, { status: LEDGER_NOT_PERSISTED });
+  }
 }
 
 /*
@@ -777,6 +848,20 @@ async function handleFinalizedRecording(mode, result) {
  * 失敗したら台帳を「失敗」にして残す。
  */
 async function uploadBrowserRecordingAndProcess(entry, { file = null } = {}) {
+  if (state.uploading.has(entry.recordingId)) {
+    return;
+  }
+
+  state.uploading.add(entry.recordingId);
+
+  try {
+    await uploadBrowserRecording(entry, file);
+  } finally {
+    state.uploading.delete(entry.recordingId);
+  }
+}
+
+async function uploadBrowserRecording(entry, file) {
   showScreen('process');
   el.procFile.textContent = entry.fileName;
   resetSteps();
@@ -788,12 +873,22 @@ async function uploadBrowserRecordingAndProcess(entry, { file = null } = {}) {
   if (!blob) {
     try {
       blob = await getRecordingFile(entry.localPath);
-    } catch {
-      /* OPFS から消えている。台帳だけ残っても意味がないので落とす。 */
-      pendingStore.remove(entry.recordingId);
-      await refreshPendingRecordings();
-      throw new AppError(ErrorCode.UPLOAD_FAILED, 'local_file_missing');
+    } catch (error) {
+      if (error?.name === 'NotFoundError') {
+        /* OPFS から消えている。台帳だけ残っても意味がないので落とす。 */
+        pendingStore.remove(entry.recordingId);
+        await refreshPendingRecordings();
+      }
+
+      throw new AppError(ErrorCode.UPLOAD_FAILED, 'local_file_unavailable', error);
     }
+  }
+
+  if (!blob || blob.size === 0) {
+    pendingStore.remove(entry.recordingId);
+    await deleteRecording(entry.localPath);
+    await refreshPendingRecordings();
+    throw new AppError(ErrorCode.ENCODE_FAILED, 'empty_recording');
   }
 
   let uploaded;
@@ -810,7 +905,7 @@ async function uploadBrowserRecordingAndProcess(entry, { file = null } = {}) {
       }, auth);
     }, { screen: 'home', action: { type: 'upload', recordingId: entry.recordingId } });
   } catch (error) {
-    pendingStore.put(applyUploadFailure(entry, error?.code || ''));
+    pendingStore.put(applyUploadFailure({ ...entry, sizeBytes: blob.size }, error?.code || ''));
     await refreshPendingRecordings();
     goHomeFlat();
     showMessage(`${describeAppError(error)} ${LOCAL_KEPT_DRIVE_FAILED}`, true);
@@ -842,13 +937,33 @@ async function discardBrowserRecording(entry) {
   showMessage('録音を端末から削除しました。');
 }
 
-/* 台帳に載っているのに OPFS に無いものを落とす（起動時に一度）。 */
+/*
+ * 台帳に載っているのに OPFS に無いものを落とす（起動時に一度）。
+ * OPFS 自体に届かない（ディレクトリ未作成・API 失敗）ときは台帳に触らない。
+ * 落とすのはファイル個別の NotFoundError だけ。
+ */
 async function dropMissingBrowserEntries() {
-  for (const entry of pendingStore.list().filter(isBrowserEntry)) {
+  const browserEntries = pendingStore.list().filter(isBrowserEntry);
+
+  if (browserEntries.length === 0) {
+    return;
+  }
+
+  let dir;
+
+  try {
+    dir = await getRecordingsDir(false);
+  } catch {
+    return;
+  }
+
+  for (const entry of browserEntries) {
     try {
-      await getRecordingFile(entry.localPath);
-    } catch {
-      pendingStore.remove(entry.recordingId);
+      await dir.getFileHandle(entry.localPath, { create: false });
+    } catch (error) {
+      if (error?.name === 'NotFoundError') {
+        pendingStore.remove(entry.recordingId);
+      }
     }
   }
 }
@@ -982,14 +1097,18 @@ async function connectBeforeRecording(mode) {
   }
 
   try {
-    await requestAccess(authOptions({ screen: mode }));
+    await requestAccess(authOptions({ screen: mode, action: { type: 'record' } }));
     refreshGoogleState();
   } catch (error) {
     if (error?.code === ErrorCode.OAUTH_REDIRECT_FAILED) {
       throw error;
     }
 
-    state.authDeclined = true;
+    /* 利用者が閉じた・断ったときだけ、このセッションでは再要求しない。読み込み失敗等は次回また試す。 */
+    if (error?.code === ErrorCode.OAUTH_POPUP_CLOSED) {
+      state.authDeclined = true;
+    }
+
     setRecorderUi(mode, { status: NOT_CONNECTED_RECORDING });
   }
 }
@@ -1071,6 +1190,7 @@ async function startOffline() {
   state.nativeRecording = null;
   state.recorder = attachRecorder('offline');
   await state.recorder.start();
+  registerRecordingStart('offline', state.recorder);
   setRecorderUi('offline', { recording: true, seconds: 0, error: '' });
   wakeLock.start().catch(() => {});
 }
@@ -1106,6 +1226,12 @@ async function startOnline() {
   }
 
   await state.recorder.start({ stream: state.mix.stream });
+  registerRecordingStart('online', state.recorder);
+
+  if (!hasValidToken()) {
+    status = status ? `${status} ${REMOTE_CONNECT_FIRST}` : REMOTE_CONNECT_FIRST;
+  }
+
   setRecorderUi('online', { recording: true, seconds: 0, status, error: '' });
   wakeLock.start().catch(() => {});
 }
@@ -1222,14 +1348,20 @@ function renderPendingRecordings(items) {
 
     const sub = document.createElement('div');
     sub.className = 'ma-item__sub';
-    const parts = [formatDuration(item.durationSeconds)];
+    const parts = [];
+
+    if (Number(item.durationSeconds) > 0) {
+      parts.push(formatDuration(item.durationSeconds));
+    }
 
     if (item.startedAt) {
       parts.push(formatWhen(item.startedAt));
     }
 
-    if (item.driveUploadState === 'failed') {
-      parts.push('前回の保存に失敗');
+    const note = pendingStateNote(item);
+
+    if (note) {
+      parts.push(note);
     }
 
     sub.textContent = parts.join(' / ');
@@ -1254,7 +1386,14 @@ function renderPendingRecordings(items) {
       save.type = 'button';
       save.className = 'ma-button ma-button--small';
       save.textContent = saveButtonLabel(item);
+      save.disabled = state.uploading.has(item.recordingId);
       save.addEventListener('click', () => {
+        if (state.uploading.has(item.recordingId)) {
+          return;
+        }
+
+        save.disabled = true;
+        discard.disabled = true;
         showMessage('');
         uploadBrowserRecordingAndProcess(item).catch((error) => {
           goHomeFlat();
@@ -1348,6 +1487,10 @@ function describeAppError(error) {
     return 'このブラウザは録音に対応していません。最新の Chrome / Safari / Edge でお試しください。';
   }
 
+  if (error.code === 'AUDIO_SUSPENDED') {
+    return '音声の取り込みを開始できませんでした。画面を一度タップしてから、もう一度「録音開始」を押してください。';
+  }
+
   if (error.code === 'INSUFFICIENT_STORAGE') {
     return '端末の空き容量が足りないため録音を開始できません。不要なファイルを削除してから、もう一度お試しください。';
   }
@@ -1397,9 +1540,25 @@ el.offStop.addEventListener('click', () => {
   });
 });
 
+/*
+ * Remote は事前の Google 連携を挟まない。
+ * getDisplayMedia は利用者操作の猶予（transient activation）を要し、
+ * 先にポップアップを開くとその猶予が消費されて画面共有が拒否されるため。
+ * 未連携なら停止後に台帳へ残り、「Driveへ保存」で回収できる。
+ */
 el.onStart.addEventListener('click', () => {
-  connectBeforeRecording('online')
-    .then(() => startOnline())
+  if (!canCaptureTabAudio()) {
+    el.onUnsupported.hidden = false;
+    el.onStart.disabled = true;
+    return;
+  }
+
+  if (!el.onConsent.checked) {
+    showMessage('録音を始める前に、同意の確認にチェックしてください。', true);
+    return;
+  }
+
+  startOnline()
     .catch((error) => {
       releaseRecordingResources();
       setRecordingMetaDisabled('online', false);
@@ -1609,29 +1768,49 @@ function boot() {
     enterScreen(event.state?.screen || hashScreen() || 'home');
   });
 
+  /* 録音中の再読み込み・タブ閉じは確認を挟む（録音は台帳に残るが、停止の機会を失うため）。 */
+  window.addEventListener('beforeunload', (event) => {
+    if (isRecordingActive()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+
   let initial = hashScreen() || 'home';
 
   if (redirect) {
-    if (redirect.ok) {
-      const wanted = redirect.resume?.screen;
-      initial = wanted && screens[wanted] && wanted !== 'process' && wanted !== 'done' ? wanted : 'home';
-    } else {
-      initial = 'home';
+    const wanted = redirect.resume?.screen;
+    initial = wanted && screens[wanted] && wanted !== 'process' && wanted !== 'done' ? wanted : 'home';
+
+    if (!redirect.ok) {
       showMessage(describeError(new AppError(redirect.code)), true);
+
+      /* 録音開始から飛んで断られた場合、次の「録音開始」で再び Google へ飛ばない。 */
+      if (redirect.resume?.action?.type === 'record') {
+        state.authDeclined = true;
+      }
     }
   }
 
-  const url = initial === 'home'
-    ? `${location.pathname}${location.search}`
-    : `${location.pathname}${location.search}#${initial}`;
-  history.replaceState({ screen: initial }, '', url);
+  if (!pendingStore.available) {
+    showMessage(LEDGER_NOT_PERSISTED, true);
+  }
 
   document.getElementById('home-reload')?.addEventListener('click', () => {
+    if (isRecordingActive()) {
+      showMessage(RECORDING_IN_PROGRESS, true);
+      return;
+    }
+
     window.location.reload();
   });
 
   el.main.hidden = false;
-  enterScreen(initial);
+  const shown = enterScreen(initial);
+  const url = shown === 'home'
+    ? `${location.pathname}${location.search}`
+    : `${location.pathname}${location.search}#${shown}`;
+  history.replaceState({ screen: shown }, '', url);
   resumeAfterRedirect(redirect);
 }
 

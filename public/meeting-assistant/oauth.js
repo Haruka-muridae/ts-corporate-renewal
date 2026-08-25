@@ -40,6 +40,9 @@
 
 import { OAUTH, isOauthConfigured } from './config.js';
 import { AppError, ErrorCode } from './errors.js';
+import { redirectUri } from './platform.js';
+
+export { redirectUri };
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -49,6 +52,9 @@ export const REDIRECT_STATE_KEY = 'meeting-assistant-oauth-state';
 
 /* 往復に時間がかかりすぎた state は捨てる（古い戻り URL の再利用を防ぐ）。 */
 const REDIRECT_STATE_TTL_MS = 10 * 60 * 1000;
+
+/* location.assign のあと pagehide が来ないまま待つ上限。 */
+const REDIRECT_NAVIGATION_TIMEOUT_MS = 20 * 1000;
 
 /* **この2つを外へ出さないこと。** 参照を返す getter も作らない。 */
 let accessToken = null;
@@ -174,20 +180,6 @@ async function requestViaPopup(prompt) {
 
 /* ---------- リダイレクト方式 ---------- */
 
-/*
- * 戻り先 URL。今開いている場所そのもの（クエリ・fragment は除く）。
- * /meeting-assistant/index.html で開いていても /meeting-assistant/ に揃える。
- * Google Cloud Console に登録する値と一致させるため、推測の固定文字列は使わない。
- */
-export function redirectUri(loc = globalThis.location) {
-  if (!loc) {
-    return '';
-  }
-
-  const path = String(loc.pathname ?? '/').replace(/index\.html$/i, '');
-  return `${loc.origin}${path}`;
-}
-
 function randomState() {
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
@@ -207,7 +199,11 @@ export function buildAuthorizationUrl({
   url.searchParams.set('response_type', 'token');
   url.searchParams.set('scope', scope);
   url.searchParams.set('state', state);
-  url.searchParams.set('include_granted_scopes', 'true');
+  /*
+   * include_granted_scopes は付けない。
+   * この clientId は兄弟アプリと共有しており、他アプリが将来広いスコープを
+   * 求めたとき、そのスコープがこのアプリのトークンへ黙って乗るのを防ぐ。
+   */
 
   if (prompt) {
     url.searchParams.set('prompt', prompt);
@@ -288,12 +284,16 @@ function requestViaRedirect({ prompt = '', resume = null } = {}) {
   const url = buildAuthorizationUrl({ redirect: redirectUri(), state, prompt });
 
   return new Promise((_, reject) => {
-    globalThis.location.assign(url);
-
-    /* ここに来るのは遷移が阻止されたときだけ。 */
-    globalThis.setTimeout(() => {
+    /*
+     * 遷移が始まれば pagehide が来るので、タイマーを止める（低速回線で
+     * 正常な遷移中に「失敗」と出さないため）。来ないまま時間が経ったら阻止と判断する。
+     */
+    const timer = globalThis.setTimeout(() => {
       reject(new AppError(ErrorCode.OAUTH_REDIRECT_FAILED, 'navigation_did_not_happen'));
-    }, 5000);
+    }, REDIRECT_NAVIGATION_TIMEOUT_MS);
+
+    globalThis.addEventListener?.('pagehide', () => globalThis.clearTimeout(timer), { once: true });
+    globalThis.location.assign(url);
   });
 }
 
@@ -334,7 +334,8 @@ export function consumeRedirectResult({
   }
 
   const resume = saved?.resume ?? null;
-  const fresh = saved && Number.isFinite(saved.createdAt) && (now - saved.createdAt) <= REDIRECT_STATE_TTL_MS;
+  const age = saved ? now - Number(saved.createdAt) : NaN;
+  const fresh = Number.isFinite(age) && age >= 0 && age <= REDIRECT_STATE_TTL_MS;
 
   if (!saved || !fresh || !result.state || result.state !== saved.state) {
     return { ok: false, code: ErrorCode.OAUTH_STATE_MISMATCH, resume: null };

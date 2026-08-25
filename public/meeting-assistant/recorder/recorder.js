@@ -62,7 +62,11 @@ export const RecorderErrorCode = {
   OPFS_FAILED: 'OPFS_FAILED',
   ENCODE_FAILED: 'ENCODE_FAILED',
   FINALIZE_FAILED: 'FINALIZE_FAILED',
+  AUDIO_SUSPENDED: 'AUDIO_SUSPENDED',
 };
+
+/* stop() のあと Worker の finalized を待つ上限。超えたら FINALIZE_FAILED で UI を解放する。 */
+const FINALIZE_TIMEOUT_MS = 30000;
 
 /*
  * バックプレッシャ（未処理秒数）の閾値（§8.2）。
@@ -109,6 +113,7 @@ export class Recorder {
     this.startedAt = null;
     this.tickTimer = null;
     this.capacityTimer = null;
+    this.finalizeTimer = null;
 
     this.sentSeconds = 0;
     this.encodedSeconds = 0;
@@ -193,7 +198,18 @@ export class Recorder {
      * 失敗しても後段の onstatechange で検出できるため、ここでは止めない。
      */
     if (this.audioContext.state !== 'running') {
-      try { await this.audioContext.resume(); } catch { /* onstatechange で扱う */ }
+      try { await this.audioContext.resume(); } catch { /* 直後の状態確認で扱う */ }
+    }
+
+    /*
+     * それでも running でなければ開始しない。suspended のまま録音を続けると
+     * PCM が 1 サンプルも来ず、状態変化イベントも起きないため誰も気付けない。
+     */
+    if (this.audioContext.state !== 'running') {
+      await this.teardownAudio();
+      this.teardownStream();
+      this.setState(RecorderState.IDLE);
+      throw this.fail(RecorderErrorCode.AUDIO_SUSPENDED);
     }
 
     this.sampleRate = this.audioContext.sampleRate;
@@ -409,7 +425,14 @@ export class Recorder {
     this.teardownStream();
     this.teardownAudioSoon();
 
-    /* Worker に確定を依頼。finalized を待つ。 */
+    /* Worker に確定を依頼。finalized を待つ。待ちきれなければ失敗として UI を解放する。 */
+    this.finalizeTimer = window.setTimeout(() => {
+      this.finalizeTimer = null;
+      if (this.state === RecorderState.STOPPING) {
+        this.handleWorkerError(RecorderErrorCode.FINALIZE_FAILED);
+      }
+    }, FINALIZE_TIMEOUT_MS);
+
     try {
       this.worker?.postMessage({ type: 'stop' });
     } catch (error) {
@@ -417,7 +440,15 @@ export class Recorder {
     }
   }
 
+  clearFinalizeTimer() {
+    if (this.finalizeTimer !== null) {
+      window.clearTimeout(this.finalizeTimer);
+      this.finalizeTimer = null;
+    }
+  }
+
   async completeFinalize(message) {
+    this.clearFinalizeTimer();
     this.teardownWorker();
 
     let file = null;
@@ -461,6 +492,7 @@ export class Recorder {
   }
 
   handleWorkerError(code) {
+    this.clearFinalizeTimer();
     this.teardownTimers();
     document.removeEventListener('visibilitychange', this.boundVisibility);
     this.teardownStream();

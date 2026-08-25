@@ -562,12 +562,15 @@ try {
 
     check('戻り先 URL は index.html を落とす', oauth.redirectUri({ origin: 'https://tsam-ai.com', pathname: '/meeting-assistant/index.html' }) === 'https://tsam-ai.com/meeting-assistant/');
     check('戻り先 URL はクエリ・fragment を含まない', oauth.redirectUri({ origin: 'https://tsam-ai.com', pathname: '/meeting-assistant/', search: '?x=1', hash: '#pick' }) === 'https://tsam-ai.com/meeting-assistant/');
+    check('末尾スラッシュ無しでも付ける（Google は完全一致）', oauth.redirectUri({ origin: 'https://tsam-ai.com', pathname: '/meeting-assistant' }) === 'https://tsam-ai.com/meeting-assistant/');
+    check('errors.js の案内文も同じ算出を使う', readFileSync(resolve(appRoot, 'errors.js'), 'utf8').includes("import { redirectUri } from './platform.js'"));
 
     const url = new URL(oauth.buildAuthorizationUrl({ clientId: 'cid', scope: 'scope-a', redirect: 'https://tsam-ai.com/meeting-assistant/', state: 'abc' }));
     check('認可 URL は Google の accounts', url.origin === 'https://accounts.google.com' && url.pathname === '/o/oauth2/v2/auth');
     check('暗黙フロー（response_type=token）', url.searchParams.get('response_type') === 'token');
     check('client_id / scope / state / redirect_uri を持つ', url.searchParams.get('client_id') === 'cid' && url.searchParams.get('scope') === 'scope-a' && url.searchParams.get('state') === 'abc' && url.searchParams.get('redirect_uri') === 'https://tsam-ai.com/meeting-assistant/');
     check('client_secret を送らない', !url.searchParams.has('client_secret'));
+    check('include_granted_scopes を送らない（共有 clientId の他アプリのスコープを拾わない）', !url.searchParams.has('include_granted_scopes'));
 
     check('通常の #画面名 は OAuth の戻りではない', oauth.parseRedirectFragment('#pick') === null && oauth.parseRedirectFragment('') === null);
     const parsed = oauth.parseRedirectFragment('#access_token=tok&token_type=Bearer&expires_in=3599&scope=x&state=abc');
@@ -642,6 +645,17 @@ try {
     }
 
     {
+      const storage = fakeStorage({ [oauth.REDIRECT_STATE_KEY]: JSON.stringify({ state: 'abc', createdAt: 5000, resume: null }) });
+      const result = oauth.consumeRedirectResult({
+        loc: { hash: '#access_token=future&expires_in=3599&state=abc', pathname: '/', search: '' },
+        hist: fakeHistory(),
+        storage,
+        now: 1000,
+      });
+      check('時計が巻き戻った往復（createdAt が未来）は捨てる', result?.ok === false && !oauth.hasValidToken());
+    }
+
+    {
       const storage = fakeStorage({ [oauth.REDIRECT_STATE_KEY]: JSON.stringify({ state: 'abc', createdAt: 1000, resume: { screen: 'home' } }) });
       const result = oauth.consumeRedirectResult({
         loc: { hash: '#error=access_denied&state=abc', pathname: '/', search: '' },
@@ -691,6 +705,13 @@ try {
     check('台帳行に音声データを持たない', !('blob' in entry) && !('file' in entry));
 
     check('put / list', s.put(entry) && s.list().length === 1 && s.get('rec-1')?.fileName === entry.fileName);
+
+    const recording = store.createBrowserEntry({ recordingId: 'rec-live', fileName: 'live.mp3', localPath: 'live.mp3.part', state: checkpoint.RecordingState.RECORDING });
+    check('録音開始時の行は RECORDING / Drive none', recording.state === checkpoint.RecordingState.RECORDING && recording.driveUploadState === checkpoint.DriveUploadState.NONE);
+    check('録音中の行も保存待ち一覧に出る（途中で落ちた録音の回収）', pending.visiblePendingRecordings([recording]).length === 1 && pending.pendingStateNote(recording).includes('途中'));
+    s.put(recording);
+    check('録音中の行のファイルも掃除から守る', s.keepFileNames().has('live.mp3.part'));
+    s.remove('rec-live');
     check('保存待ちの一覧に出る', pending.visiblePendingRecordings(s.list()).length === 1);
     check('初回は「Driveへ保存」', pending.saveButtonLabel(entry) === 'Driveへ保存');
 
@@ -703,21 +724,43 @@ try {
     check('remove', s.remove('rec-1') && s.list().length === 0 && !s.remove('rec-1'));
     check('空になれば localStorage のキーも消す', storage.getItem(store.PENDING_STORAGE_KEY) === null);
 
-    for (let i = 0; i < store.MAX_PENDING_ENTRIES + 3; i += 1) {
+    for (let i = 0; i < 40; i += 1) {
       s.put(store.createBrowserEntry({ recordingId: `r-${i}`, fileName: `f${i}.mp3`, localPath: `p${i}.mp3.part` }));
     }
-    check('台帳は上限件数で古いものから落ちる', s.list().length === store.MAX_PENDING_ENTRIES && s.get('r-0') === null);
+    check('件数上限で黙って落とさない', s.list().length === 40 && s.get('r-0') !== null && !('MAX_PENDING_ENTRIES' in store));
 
     data[store.PENDING_STORAGE_KEY] = '{broken';
-    check('壊れた JSON は空扱い', s.list().length === 0);
+    check('壊れた JSON は空扱い', store.createPendingStore(storage).list().length === 0);
     check('localStorage が無くても落ちない', store.createPendingStore(null).list().length === 0 && store.createPendingStore(null).put(entry) === false);
+
+    {
+      const memoryOnly = store.createPendingStore(null);
+      memoryOnly.put(entry);
+      check('localStorage が無くてもメモリ上には残る（この画面の間は Driveへ保存 が押せる）', memoryOnly.list().length === 1 && memoryOnly.persisted === false);
+
+      const throwing = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); }, removeItem: () => {} };
+      const quota = store.createPendingStore(throwing);
+      const ok = quota.put(entry);
+      check('書き込み失敗（容量超過）でもメモリ上には残り、戻り値で分かる', ok === false && quota.list().length === 1 && quota.persisted === false);
+    }
 
     check('確定は onFinalized に集約（手動停止以外も保存）', appSource.includes('onFinalized(result)') && appSource.includes('handleFinalizedRecording(') && !appSource.includes('waitForRecorderResult'));
     check('停止理由ごとの案内がある', ['limit', 'interrupted', 'capacity', 'backpressure', 'mic-ended'].every((r) => appSource.includes(`case '${r}':`)));
     check('未連携なら台帳に残してホームへ（停止後にポップアップを開かない）', appSource.includes('if (hasValidToken()) {') && appSource.includes('goHomeFlat();') && appSource.includes('SAVED_LOCAL_CONNECT'));
-    check('録音開始の押下で先に Google 連携', appSource.includes('connectBeforeRecording(') && appSource.includes("connectBeforeRecording('offline')") && appSource.includes("connectBeforeRecording('online')"));
+    check('On-site は録音開始の押下で先に Google 連携', appSource.includes("connectBeforeRecording('offline')"));
+    check('Remote は事前連携しない（getDisplayMedia の操作猶予を消費しない）', !appSource.includes("connectBeforeRecording('online')"));
+    check('Remote は同意チェックを最初に見る', appSource.indexOf('el.onConsent.checked') < appSource.indexOf('startOnline()\n'));
+    check('録音開始時に台帳へ RECORDING 行を載せる', appSource.includes('registerRecordingStart(') && appSource.includes('state: RecordingState.RECORDING'));
+    check('Drive 送信中は二重に送らない', appSource.includes('state.uploading.has(') && appSource.includes('state.uploading.add('));
+    check('リダイレクトへの切替はスマートフォンだけ', appSource.includes('(env.mobile || env.standalone)'));
+    check('復路で断られたら次の録音開始で再び飛ばない', appSource.includes("redirect.resume?.action?.type === 'record'") && appSource.includes('state.authDeclined = true'));
+    check('録音中は画面遷移・再読み込みを止める', appSource.includes('isRecordingActive()') && appSource.includes("addEventListener('beforeunload'"));
+    check('OPFS 不達では台帳を消さない', appSource.includes("error?.name === 'NotFoundError'") && appSource.includes('getRecordingsDir(false)'));
+    check('finalize のタイムアウトがある', recorderSource.includes('FINALIZE_TIMEOUT_MS') && recorderSource.includes('clearFinalizeTimer'));
+    check('AudioContext が running にならなければ開始しない', recorderSource.includes("AUDIO_SUSPENDED") && appSource.includes("error.code === 'AUDIO_SUSPENDED'"));
+    check('CSP に form-action がある', readFileSync(resolve(appRoot, 'index.html'), 'utf8').includes("form-action 'none'"));
     check('Drive 成功後に台帳と OPFS から削除', appSource.includes('pendingStore.remove(entry.recordingId);') && appSource.includes('await deleteRecording(entry.localPath);'));
-    check('Drive 失敗は台帳を failed にして残す', appSource.includes('pendingStore.put(applyUploadFailure(entry'));
+    check('Drive 失敗は台帳を failed にして残す', appSource.includes('pendingStore.put(applyUploadFailure('));
     check('起動時の OPFS 掃除は台帳のファイルを残す', opfsSource.includes('!keep.has(entry.name)') && appSource.includes('cleanupStaleFiles({ keep: pendingStore.keepFileNames() })'));
     check('AudioContext を resume する（iOS の無音録音対策）', recorderSource.includes('await this.audioContext.resume()'));
     check('Wake Lock は録音開始後に取り、確定・失敗で解放', appSource.includes('wakeLock.start()') && appSource.includes('wakeLock.stop()'));

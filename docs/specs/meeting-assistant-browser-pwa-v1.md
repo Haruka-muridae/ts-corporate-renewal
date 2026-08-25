@@ -40,30 +40,35 @@ Safe Area: `viewport-fit=cover` + `env(safe-area-inset-*)` を `.vr-main` の全
 
 録音の確定は「録音停止」ボタン以外でも起きる（90 分上限・中断・空き容量不足・処理遅延・マイク切断）。すべて `Recorder` の `onFinalized` に集約し、次の順で扱う。
 
-1. 確定ファイル（OPFS の `rec-….mp3.part`）を **保存待ち台帳**（`localStorage` の `meeting-assistant-pending`、ネイティブ版の Checkpoint と同じ形）に載せる。音声データやトークンは台帳に入れない。
+0. **録音開始の直後**に「録音中（RECORDING）」の行を台帳へ載せる。録音中にページが落ちても（メモリ不足・クラッシュ・誤操作の再読み込み）、次回起動時にこの行が OPFS の途中ファイル（10 秒ごとに flush 済み）を掃除から守り、「録音が途中で終わっています」として「Driveへ保存」できる。
+1. 確定ファイル（OPFS の `rec-….mp3.part`）で台帳の行を **保存待ち**（`localStorage` の `meeting-assistant-pending`、ネイティブ版の Checkpoint と同じ形）に更新する。音声データやトークンは台帳に入れない。台帳はメモリ上が正で、`localStorage` に書けない環境（プライベートモード・容量超過）でもこの画面を開いている間は一覧に出る（その旨を画面で案内する）。件数の上限は設けない（上限で黙って落とすと録音が消えるため）。
 2. Google 連携済み（トークン有効）なら、そのまま Drive へアップロード → 台帳と OPFS から削除 → 文字起こし・議事録へ。
 3. 未連携なら台帳に残してホームへ戻す。ホームの「未アップロードの録音があります」から **「Driveへ保存」**（利用者の押下＝ポップアップを開ける文脈）で連携してから保存する。失敗した行は「前回の保存に失敗」と表示し「Driveへ再送」になる。「破棄」で端末から削除できる。
 4. 起動時の OPFS 掃除（`cleanupStaleFiles`）は台帳に載っているファイルを残し、それ以外の `.part` だけ消す。台帳にあるのに OPFS に無い行は落とす。
 
 補助:
 
-- **録音開始の押下で先に Google 連携**する（`connectBeforeRecording`）。停止処理のあとでは利用者操作の猶予が切れてポップアップが阻止されるため。断られても録音は始め、そのセッション中は再要求しない。
+- **On-site は録音開始の押下で先に Google 連携**する（`connectBeforeRecording`）。停止処理のあとでは利用者操作の猶予が切れてポップアップが阻止されるため。断られても録音は始め、そのセッション中は再要求しない。
+- **Remote は事前連携しない。** `getDisplayMedia` は利用者操作の猶予（transient activation）を必要とし、先にポップアップを開くとその猶予が消費されて画面共有が拒否されるため。未連携のまま録音した場合は台帳に残り、「Driveへ保存」で回収する（画面にその旨を出す）。
+- 録音中は他画面への移動・タイトルの再読み込みを止め、タブを閉じる操作には確認を出す。停止（finalize）が 30 秒返らなければ失敗として UI を解放する（録音は台帳に残る）。
+- 二重送信防止: 同じ録音の Drive 送信中は「Driveへ保存」を無効にする。
 - **Screen Wake Lock**（`wake-lock.js`）: 録音中は画面の自動消灯を抑える。取得できなくても録音は続ける。画面 OFF 録音を可能にするものではない。
-- **AudioContext の `resume()`**（`recorder/recorder.js`）: iOS Safari で suspended のまま無音録音になるのを防ぐ。
+- **AudioContext の `resume()`**（`recorder/recorder.js`）: iOS Safari で suspended のまま無音録音になるのを防ぐ。`resume()` しても `running` にならなければ開始せず、画面をタップしてからやり直すよう案内する。
 
 ## 4. Google 認証（`oauth.js`）
 
 | 方式 | 使うとき | 仕組み |
 | --- | --- | --- |
 | ポップアップ（既定） | PC / 通常のスマートフォンブラウザ | Google Identity Services のトークンクライアント。起動時に GIS を先読み（`preloadGis`）。 |
-| リダイレクト | standalone PWA、またはポップアップが開けなかったとき（`config.js` の `OAUTH.redirectFallback`） | 同じ画面を `accounts.google.com/o/oauth2/v2/auth`（`response_type=token`）へ遷移させ、戻り URL の fragment からトークンを受け取る。 |
+| リダイレクト | standalone PWA、またはスマートフォンでポップアップが開けなかったとき（`config.js` の `OAUTH.redirectFallback`。PC では従来どおりポップアップ解除を案内し、リダイレクトへは切り替えない） | 同じ画面を `accounts.google.com/o/oauth2/v2/auth`（`response_type=token`）へ遷移させ、戻り URL の fragment からトークンを受け取る。 |
 
 リダイレクト方式の安全策:
 
 - `state`（乱数 16 バイト）を `sessionStorage` に置いて往復を突き合わせる。不一致・往路の記録なし・10 分超過は捨てる。
 - fragment は受け取った直後に `history.replaceState` で URL から消す。トークンはメモリだけ（従来どおり）。
 - 往路に預けるのは再開先（画面名・保存待ち録音の ID）だけ。戻ったら自動で続きを行う。
-- スコープは `drive.file` のみ。client secret / refresh token は使わない。
+- スコープは `drive.file` のみ。client secret / refresh token は使わない。`include_granted_scopes` は送らない（clientId を兄弟アプリと共有しているため、他アプリが将来広いスコープを求めても拾わない）。
+- 受容している点: 暗黙フローの性質上、`#access_token=…` を含む URL が一瞬アドレスバーに載る。fragment はサーバーへも Referer へも送られず、`state` 検証でトークン注入を防いでいる。静的サイト用の Web クライアントでは PKCE 付き code flow を（client secret 無しで）完結できないため、この方式を採る。
 
 ### ユーザー作業（Google Cloud Console）
 
@@ -84,7 +89,10 @@ Safe Area: `viewport-fit=cover` + `env(safe-area-inset-*)` を `.vr-main` の全
 
 ## 6. 実機で確認すること（未実施）
 
-- iPhone Safari / ホーム画面追加 PWA: 録音開始→停止→Drive 保存、リダイレクト認証の往復、Safe Area。
+- **最優先**: iPhone のホーム画面追加 PWA で、Google へのリダイレクト往復が同じ PWA コンテキストへ戻ること（`sessionStorage` が保たれ `OAUTH_STATE_MISMATCH` にならないこと）。戻らない場合はリダイレクト方式の前提が崩れるため、standalone では通常の Safari で開くよう案内する等の代替が要る。
+- iPhone Safari / ホーム画面追加 PWA: 録音開始→停止→Drive 保存、Safe Area。
+- 録音中にタブを落とし、再度開いて「録音が途中で終わっています」から Drive へ保存できること。
+- PC Chrome / Edge: Remote 録音を未連携のまま開始でき、停止後に「Driveへ保存」で回収できること。
 - Android Chrome / PWA: 同上。Wake Lock の効き。
 - PC Chrome / Edge: 90 分上限での自動停止後に Drive 保存されること（従来は失われていた）。
 - 未連携で録音→ホームの「Driveへ保存」→処理画面まで進むこと。

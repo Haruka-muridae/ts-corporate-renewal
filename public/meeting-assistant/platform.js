@@ -68,6 +68,27 @@ export function canOfferRemote({ native = false, mobile = false, canCaptureTab =
 }
 
 /*
+ * OAuth リダイレクト方式の戻り先 URL。今開いている場所そのもの（クエリ・fragment は除く）。
+ * /meeting-assistant/index.html で開いていても /meeting-assistant/ に揃え、
+ * 末尾スラッシュ無しで配信されていても必ず付ける（Google の照合は完全一致）。
+ * Google Cloud Console に登録する値と一致させるため、推測の固定文字列は使わない。
+ * oauth.js（実際の遷移）と errors.js（案内文）の両方がこれを使う。
+ */
+export function redirectUri(loc = globalThis.location) {
+  if (!loc) {
+    return '';
+  }
+
+  let path = String(loc.pathname ?? '/').replace(/index\.html$/i, '');
+
+  if (!path.endsWith('/')) {
+    path += '/';
+  }
+
+  return `${loc.origin}${path}`;
+}
+
+/*
  * OAuth をリダイレクト方式で行うべきか。
  *
  * standalone の PWA ではポップアップが別アプリ（Safari 等）で開き、

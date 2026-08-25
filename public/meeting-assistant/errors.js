@@ -16,6 +16,8 @@
  * 分岐に使うのは code だけにする。
  */
 
+import { redirectUri } from './platform.js';
+
 /* このアプリが投げる唯一の例外。code で分岐し、message は開発者向け。 */
 export class AppError extends Error {
   constructor(code, message = code, cause = undefined) {
@@ -69,9 +71,7 @@ export const ErrorCode = Object.freeze({
  * 推測した固定文字列ではなく、実際に開いているオリジンを出す。
  */
 const ORIGIN = globalThis.location?.origin ?? '（現在のURLのオリジン）';
-const REDIRECT_URI = globalThis.location
-  ? `${globalThis.location.origin}${String(globalThis.location.pathname ?? '/').replace(/index\.html$/i, '')}`
-  : '（このアプリのURL）';
+const REDIRECT_URI = globalThis.location ? redirectUri(globalThis.location) : '（このアプリのURL）';
 
 /*
  * 画面文言。

@@ -52,7 +52,9 @@ export async function cleanupStaleFiles({ keep = new Set() } = {}) {
        * keep に載っている名前は「保存待ち」の確定ファイル（pending-store.js）。
        * Drive へ上げ終わるまで残す。
        */
-      if (entry.kind === 'file' && entry.name.endsWith(PART_SUFFIX) && !keep.has(entry.name)) {
+      const isStalePart = entry.name.endsWith(PART_SUFFIX) && !keep.has(entry.name);
+      const isProbeTmp = entry.name.startsWith('probe-') && entry.name.endsWith('.tmp');
+      if (entry.kind === 'file' && (isStalePart || isProbeTmp)) {
         try {
           await dir.removeEntry(entry.name);
           removed += 1;

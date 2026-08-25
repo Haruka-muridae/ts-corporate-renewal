@@ -11,6 +11,14 @@
  * 台帳に載っていない OPFS のファイルは「異常終了の名残」として起動時に消される
  * （opfs-storage.js の cleanupStaleFiles に keep を渡す）。
  *
+ * 録音開始の時点で「録音中」の行を載せる（createBrowserEntry の state）。
+ * 録音中にページが落ちても、次回起動時に行が残っていれば OPFS の途中ファイル
+ * （10 秒ごとに flush 済み）は掃除されず、Drive へ保存できる。
+ *
+ * localStorage に書けない環境（プライベートウィンドウ・容量超過）でも、
+ * このページを開いている間はメモリ上の一覧で「Driveへ保存」を押せるようにする。
+ * 永続化は常に「できれば」であり、メモリ上の一覧が正。
+ *
  * ここは DOM / Drive / OPFS を触らない。純粋な読み書きだけ。
  * 音声データやトークンは入れない。
  * ------------------------------------------------------------------
@@ -26,8 +34,11 @@ export const PENDING_STORAGE_KEY = 'meeting-assistant-pending';
 export const BROWSER_SOURCE = 'browser';
 export const NATIVE_SOURCE = 'native';
 
-/* 台帳に載せてよい最大件数。古いものから落とす（OPFS の肥大化を防ぐ保険）。 */
-export const MAX_PENDING_ENTRIES = 20;
+/*
+ * 件数の上限は設けない。
+ * 上限で古い行を黙って落とすと、その録音は次回起動の掃除で消える。
+ * 容量は録音開始前の空き容量確認（recorder/capabilities.js）が守る。
+ */
 
 function getStorage(storage) {
   if (storage !== undefined) {
@@ -103,17 +114,19 @@ export function createBrowserEntry({
   personName = '',
   kind = '',
   startedAt,
+  state = RecordingState.SAVED_LOCAL,
 } = {}) {
+  const finalized = state !== RecordingState.RECORDING;
   const base = createCheckpoint({
     recordingId,
     startedAt,
-    state: RecordingState.SAVED_LOCAL,
+    state,
     localPath,
     fileName,
     organization,
     personName,
     kind,
-    driveUploadState: DriveUploadState.PENDING,
+    driveUploadState: finalized ? DriveUploadState.PENDING : DriveUploadState.NONE,
     sizeBytes,
     durationSeconds,
   });
@@ -133,47 +146,59 @@ export function isBrowserEntry(entry) {
 export function createPendingStore(storage) {
   const store = getStorage(storage);
 
+  /* メモリ上の一覧が正。localStorage は「できれば」の永続化。 */
+  let entries = readAll(store);
+  let persisted = true;
+
+  function sync(next) {
+    entries = next;
+    persisted = writeAll(store, next);
+    return persisted;
+  }
+
   return {
+    /* 直近の書き込みが永続化できたか。false なら「この端末では保持できない」と案内する。 */
+    get persisted() {
+      return store !== null && persisted;
+    },
+
     available: store !== null,
 
     list() {
-      return readAll(store);
+      return entries.slice();
     },
 
     get(recordingId) {
-      return readAll(store).find((entry) => entry.recordingId === recordingId) ?? null;
+      return entries.find((entry) => entry.recordingId === recordingId) ?? null;
     },
 
-    /* 同じ recordingId があれば置き換える。新しいものを末尾に置く。 */
+    /*
+     * 同じ recordingId があれば置き換える。新しいものを末尾に置く。
+     * 戻り値は「永続化できたか」。false でもメモリ上には載っている。
+     */
     put(entry) {
       if (!isEntry(entry)) {
         return false;
       }
 
-      const others = readAll(store).filter((item) => item.recordingId !== entry.recordingId);
-      const next = [...others, entry];
-
-      while (next.length > MAX_PENDING_ENTRIES) {
-        next.shift();
-      }
-
-      return writeAll(store, next);
+      const others = entries.filter((item) => item.recordingId !== entry.recordingId);
+      return sync([...others, entry]);
     },
 
     remove(recordingId) {
-      const entries = readAll(store);
       const next = entries.filter((item) => item.recordingId !== recordingId);
 
       if (next.length === entries.length) {
         return false;
       }
 
-      return writeAll(store, next);
+      sync(next);
+      return true;
     },
 
-    /* 起動時の OPFS 掃除で残すファイル名。 */
+    /* 起動時の OPFS 掃除で残すファイル名（録音中の行も含む）。 */
     keepFileNames() {
-      return new Set(readAll(store).filter(isBrowserEntry).map((entry) => entry.localPath));
+      return new Set(entries.filter(isBrowserEntry).map((entry) => entry.localPath));
     },
   };
 }

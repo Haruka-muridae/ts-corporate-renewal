@@ -2,7 +2,7 @@
  * 未アップロード / 未完了録音の表示用。Drive やネイティブ I/O は持たない。
  */
 
-import { DriveUploadState, shouldOfferRetry } from './recording-checkpoint.js';
+import { DriveUploadState, isIncompleteRecording, shouldOfferRetry } from './recording-checkpoint.js';
 
 export function pendingHeading() {
   return '未アップロードの録音があります';
@@ -17,6 +17,19 @@ export function saveButtonLabel(checkpoint) {
   return checkpoint?.driveUploadState === DriveUploadState.FAILED
     ? retryButtonLabel()
     : 'Driveへ保存';
+}
+
+/* 行の補足。未確定（録音中にページが落ちた）行はその旨を出す。 */
+export function pendingStateNote(checkpoint) {
+  if (isIncompleteRecording(checkpoint)) {
+    return '録音が途中で終わっています（停止まで保存された分だけ残っています）';
+  }
+
+  if (checkpoint?.driveUploadState === DriveUploadState.FAILED) {
+    return '前回の保存に失敗';
+  }
+
+  return '';
 }
 
 export function discardButtonLabel() {
