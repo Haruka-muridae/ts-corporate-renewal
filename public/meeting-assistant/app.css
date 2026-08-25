@@ -1119,3 +1119,53 @@ body.ma-no-remote .ma-circle--drive {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-word;
 }
+
+/* Drive の音声選択の確認エリア（選択した音声の直上に出す）。 */
+.ma-confirm {
+  margin: 0 0 0.5rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #c7d2e0;
+  border-radius: 0.5rem;
+  background: #eef4fb;
+}
+
+.ma-confirm__title {
+  margin: 0 0 0.375rem;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.ma-confirm__name {
+  margin: 0 0 0.625rem;
+  font-size: 0.875rem;
+  color: #3a4250;
+  word-break: break-word;
+}
+
+.ma-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* 更新中のボタン（末尾に小さなスピナー）。派手なアニメーションはしない。 */
+.ma-button--busy {
+  position: relative;
+}
+
+.ma-button--busy::after {
+  content: '';
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  margin-left: 0.5em;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ma-spin 0.7s linear infinite;
+}
+
+@keyframes ma-spin {
+  to { transform: rotate(360deg); }
+}

@@ -248,7 +248,7 @@ drive.file スコープの範囲: 見えるのは、このアプリ（同じ GCP
 
 | 種別 | 実行 | 内容 |
 | --- | --- | --- |
-| 単体（純ロジック） | `~/dev/node22/bin/node tests/run.mjs meeting-assistant`（344 件） | モデルと秘密情報、Drive フォルダ、ファイル名、対応種別、Markdown 命名と処理済み判定、Markdown 固定構造、To Do の非推測、Gemini モック、独立入口（HTML の導線・文言）、PiP、ネイティブ分岐の保持、環境判定、OAuth リダイレクト（認可 URL・fragment・state 突き合わせ・古い往復・トークンを保存しない）、保存待ち台帳、**保存前の認証チェックポイント**（有効／残り不足／期限切れ／未連携、ポップアップ阻止と操作猶予なしの切り分け）、**保存先フォルダの自動保証**（Drive API の偽物で: 全部あり→再利用、一部欠け→不足分だけ、全部なし→順に作成、何度実行しても重複しない、保持 ID の検証＝削除・ゴミ箱・移動・改名・別アカウント、作成失敗→OPFS と台帳を保持して再試行）、**保存フローの順序**（削除後は読めない偽 OPFS ＋ fetch 差し替えの Gemini 実コードで「Drive 保存 → Gemini が録音を読める → Markdown 保存 → 最後に OPFS 削除」を検証。旧順序の再現、Gemini / Markdown 失敗時の保持と再処理、二重アップロード無し、1 秒相当でも通る）、Gemini エラー文言、診断ログ、**診断の画面表示**（NETWORK の detail が upload-start / upload-body / generate を区別、機密非表示、再読み込み後は非表示） |
+| 単体（純ロジック） | `~/dev/node22/bin/node tests/run.mjs meeting-assistant`（360 件） | モデルと秘密情報、Drive フォルダ、ファイル名、対応種別、Markdown 命名と処理済み判定、Markdown 固定構造、To Do の非推測、Gemini モック、独立入口（HTML の導線・文言）、PiP、ネイティブ分岐の保持、環境判定、OAuth リダイレクト（認可 URL・fragment・state 突き合わせ・古い往復・トークンを保存しない）、保存待ち台帳、**保存前の認証チェックポイント**（有効／残り不足／期限切れ／未連携、ポップアップ阻止と操作猶予なしの切り分け）、**保存先フォルダの自動保証**（Drive API の偽物で: 全部あり→再利用、一部欠け→不足分だけ、全部なし→順に作成、何度実行しても重複しない、保持 ID の検証＝削除・ゴミ箱・移動・改名・別アカウント、作成失敗→OPFS と台帳を保持して再試行）、**保存フローの順序**（削除後は読めない偽 OPFS ＋ fetch 差し替えの Gemini 実コードで「Drive 保存 → Gemini が録音を読める → Markdown 保存 → 最後に OPFS 削除」を検証。旧順序の再現、Gemini / Markdown 失敗時の保持と再処理、二重アップロード無し、1 秒相当でも通る）、Gemini エラー文言、診断ログ、**診断の画面表示**（NETWORK の detail が upload-start / upload-body / generate を区別、機密非表示、再読み込み後は非表示） |
 | 全体 | `node tests/run.mjs unit`（5503 件）、`node public/apps/tests/run.mjs unit`（659 件）、`npm run typecheck`、eslint | 他アプリへの回帰 |
 | CI | GitHub Actions `tests`（push / pull_request） | 上記スイート |
 | 描画 | Windows Chrome ヘッドレス（PC 1280px、iframe ラッパーでスマートフォン幅 320 / 390 / 412 / 横向き） | 円の配置、Remote 非表示、横はみ出しなし |
@@ -268,6 +268,8 @@ Gemini API の実呼び出しはテストしない（モックのみ）。ただ
 | 議事録生成 | 任意 | Gemini API キー登録後に文字起こし・議事録・Markdown が Drive に保存される |
 
 ## §11 既知の制約
+
+- **Drive 画面 UI テストのケース4/7（Playwright モック未解決）**: 「議事録を作成」の連打で Gemini が二重実行されないこと（ケース7）と 1 件だけ処理が始まること（ケース4）を Gemini 実行完了まで実ブラウザで通す検証は、テストハーネス側の Gemini Files API `upload-body` 偽装が噛み合わず未達。**アプリ本体の不具合ではない。**二重実行防止（`processingFromDrive` フラグ・確認ボタンの `disabled`・処理中は別音声へ切り替えない）は単体テスト 360 件に含めて検証済み。確認 UI から処理へ遷移し確認エリアが消えるところまでは実ブラウザで確認済み。テストを通すことだけを目的としたアプリ本体の変更は行わない。ハーネス修正は未解決事項として残す。
 
 - スマートフォンで画面が消える・他アプリへ切り替えると録音は止まり得る（そこまでの録音は端末に残り、Drive へ保存できる）。
 - Remote 録音は PC の Chrome / Edge のみ（Zoom / Teams はブラウザ版で参加する）。
