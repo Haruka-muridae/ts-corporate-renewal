@@ -5,6 +5,8 @@
  * 端末の録音（OPFS）を消すのは、すべてが終わったあと
  * ------------------------------------------------------------------
  *   録音確定（OPFS に保持）
+ *     → Google 認証を確定（有効で残り時間が十分ならそのまま。足りなければ利用者の押下で更新）
+ *     → 保存先フォルダを保証（検索 → 無い階層だけ作成。drive-folders.js）
  *     → Drive（Potenitas voice）へ音声を保存
  *     → 台帳を UPLOADED（driveFileId 付き）にする
  *     → 台帳を PROCESSING にして Gemini → Markdown → Potenitas record
@@ -23,16 +25,20 @@
  * ------------------------------------------------------------------
  * 失敗したときに録音を失わない
  * ------------------------------------------------------------------
+ *   認証を更新できない … 台帳は変えず、端末の録音は残る。「Driveへ保存」の押下で再開
+ *   保存先を作れない   … UPLOAD_FAILED。端末の録音は残る。「Driveへ再送」
  *   Drive 保存に失敗   … UPLOAD_FAILED。端末の録音は残る。「Driveへ再送」
  *   議事録の処理に失敗 … PROCESS_FAILED。端末の録音も Drive の音声も残る。
  *                        「議事録を作成」で処理だけをやり直す（Drive へは再送しない）
  *   処理の途中で落ちた … PROCESSING のまま残る。次回起動時に同じく「議事録を作成」
  *
  * 依存（deps）:
+ *   ensureAuth    … () => Promise<void>  認証チェックポイント。足りなければ更新（失敗は例外）
+ *   resolveFolder … (auth?) => Promise<string>  保存先（Potenitas voice）の ID を保証する
  *   ledger        … { get, put, remove }（pending-store.js）
  *   loadFile      … (localPath) => Promise<Blob>   OPFS から File を取る
  *   deleteLocal   … (localPath) => Promise<void>   OPFS の録音を消す
- *   uploadToDrive … (blob, entry) => Promise<{ id, name, webViewLink, url }>
+ *   uploadToDrive … (blob, entry, folderId) => Promise<{ id, name, webViewLink, url }>
  *   process       … (driveFile, entry) => Promise<{ completed: boolean }>
  *                    driveFile = { id, name, webViewLink, url, blob }
  *                    completed=false は「失敗ではないが終わっていない」
@@ -52,7 +58,9 @@ import {
 } from './recording-checkpoint.js';
 
 export const SaveStage = Object.freeze({
+  AUTH: 'auth',
   LOAD_LOCAL: 'load-local',
+  FOLDER: 'folder',
   DRIVE_UPLOAD: 'drive-upload',
   PROCESS: 'process',
   CLEANUP: 'cleanup',
@@ -79,6 +87,8 @@ function errorCodeOf(error) {
  */
 export async function saveAndProcessRecording({ entry, file = null }, deps) {
   const {
+    ensureAuth = async () => {},
+    resolveFolder = async () => null,
     ledger,
     loadFile,
     deleteLocal,
@@ -90,6 +100,20 @@ export async function saveAndProcessRecording({ entry, file = null }, deps) {
 
   let current = entry;
   let blob = file;
+
+  /*
+   * 0. Google 認証チェックポイント。
+   * Drive へ上げる前にも、Drive 保存済みの再処理（最後に Markdown を Drive へ保存する）でも要る。
+   * 更新できなければ台帳は変えずに返す（失敗ではなく「押してもらう」段階）。
+   */
+  onStage(SaveStage.AUTH, { recordingId: current.recordingId });
+
+  try {
+    await ensureAuth();
+  } catch (error) {
+    onFailure(SaveStage.AUTH, error, { recordingId: current.recordingId });
+    throw error;
+  }
 
   /* 1. 端末の録音を取る（File は参照。ここでは読まない） */
   onStage(SaveStage.LOAD_LOCAL, { recordingId: current.recordingId });
@@ -132,10 +156,24 @@ export async function saveAndProcessRecording({ entry, file = null }, deps) {
       url: current.driveUrl || null,
     };
   } else {
+    /* 2a. 保存先フォルダを保証する（検索 → 無い階層だけ作成）。失敗しても録音は残す。 */
+    onStage(SaveStage.FOLDER, { recordingId: current.recordingId });
+    let folderId;
+
+    try {
+      folderId = await resolveFolder();
+    } catch (error) {
+      onFailure(SaveStage.FOLDER, error, { recordingId: current.recordingId });
+      current = applyUploadFailure({ ...current, sizeBytes: blob.size }, errorCodeOf(error));
+      ledger.put(current);
+      throw error;
+    }
+
+    /* 2b. Drive へ音声を保存 */
     onStage(SaveStage.DRIVE_UPLOAD, { recordingId: current.recordingId, sizeBytes: blob.size });
 
     try {
-      driveFile = await uploadToDrive(blob, current);
+      driveFile = await uploadToDrive(blob, current, folderId);
     } catch (error) {
       onFailure(SaveStage.DRIVE_UPLOAD, error, { recordingId: current.recordingId });
       current = applyUploadFailure({ ...current, sizeBytes: blob.size }, errorCodeOf(error));

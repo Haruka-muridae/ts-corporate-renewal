@@ -173,14 +173,35 @@ async function findOrCreateFolder(name, parentId, auth) {
   return existing ?? createFolder(name, parentId, auth);
 }
 
-export async function ensureFolderPath(names, auth) {
-  let parentId = 'root';
+/*
+ * 階層を順に「検索 → 無ければ作成」し、各階層の { id, name } を返す。
+ * 途中まで存在していれば、その下の不足分だけを作る。
+ * 同名が複数あれば createdTime が最も古いものを使う（findFolder）。二重に作らない。
+ */
+export async function ensureFolderChain(names, auth, parentId = 'root') {
+  const chain = [];
 
   for (const name of names) {
     parentId = await findOrCreateFolder(name, parentId, auth);
+    chain.push({ id: parentId, name });
   }
 
-  return parentId;
+  return chain;
+}
+
+export async function ensureFolderPath(names, auth) {
+  const chain = await ensureFolderChain(names, auth);
+  return chain.length > 0 ? chain[chain.length - 1].id : 'root';
+}
+
+/*
+ * 保持しているフォルダ ID が今も使えるかを確かめるための取得。
+ * 無い・見えない（404 / 403）は callJson が FOLDER_FORBIDDEN にする。
+ */
+export async function getFolderMetadata(folderId, auth) {
+  const url = new URL(`${GOOGLE_API.driveFiles}/${encodeURIComponent(folderId)}`);
+  url.searchParams.set('fields', 'id,name,mimeType,trashed,parents');
+  return callJson(url.href, auth);
 }
 
 export async function resolveVoiceFolder(auth) {

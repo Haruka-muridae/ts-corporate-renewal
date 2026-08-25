@@ -43,6 +43,8 @@ export const ErrorCode = Object.freeze({
   OAUTH_EXPIRED: 'OAUTH_EXPIRED',
   OAUTH_REDIRECT_FAILED: 'OAUTH_REDIRECT_FAILED',
   OAUTH_STATE_MISMATCH: 'OAUTH_STATE_MISMATCH',
+  /* 利用者の操作なしにはポップアップを開けない（ブロックではない）。ボタンの押下で再開する */
+  OAUTH_USER_ACTION_REQUIRED: 'OAUTH_USER_ACTION_REQUIRED',
 
   /* 端末・マイク（§FR-04） */
   UNSUPPORTED_ENVIRONMENT: 'UNSUPPORTED_ENVIRONMENT',
@@ -65,6 +67,8 @@ export const ErrorCode = Object.freeze({
   NETWORK: 'NETWORK',
   /* Drive 保存済みなのに端末の録音が見つからない（議事録は Drive の一覧から作れる） */
   LOCAL_FILE_MISSING_DRIVE_SAVED: 'LOCAL_FILE_MISSING_DRIVE_SAVED',
+  /* 保存先フォルダの検索・作成に失敗した（録音は端末に残っている） */
+  DRIVE_FOLDER_UNAVAILABLE: 'DRIVE_FOLDER_UNAVAILABLE',
 });
 
 /*
@@ -116,6 +120,8 @@ const GUIDE = Object.freeze({
   [ErrorCode.OAUTH_REDIRECT_FAILED]:
     'Googleとの連携が完了しませんでした。もう一度「連携する」をお試しください。'
     + `Google 側にエラーが出ていた場合は、Google Cloud Console の「承認済みのリダイレクト URI」に ${REDIRECT_URI} を追加してください。`,
+  [ErrorCode.OAUTH_USER_ACTION_REQUIRED]:
+    'Google Drive との連携の更新が必要です。録音は端末に保存されています。ホームの一覧の「Driveへ保存」（または「議事録を作成」）を押すと、連携を更新して保存を続けます。',
   [ErrorCode.OAUTH_STATE_MISMATCH]:
     'Googleからの戻りを確認できませんでした（別の画面で開いた認証結果は使えません）。この画面から改めて「連携する」をお試しください。',
 
@@ -149,6 +155,8 @@ const GUIDE = Object.freeze({
     '保存に失敗しました。録音は残っています。「Google Driveに保存」をもう一度お試しください。',
   [ErrorCode.NETWORK]:
     '通信が中断しました。録音は残っています。接続を確認して、もう一度保存をお試しください。',
+  [ErrorCode.DRIVE_FOLDER_UNAVAILABLE]:
+    'Google Driveの保存先を準備できませんでした。録音は端末に保存されています。Google Driveとの連携を確認して、もう一度お試しください。',
   [ErrorCode.LOCAL_FILE_MISSING_DRIVE_SAVED]:
     '端末に残っていた録音が見つかりませんでした。音声は Google Drive に保存済みなので、「Drive」の一覧から選んで議事録を作成してください。',
 });

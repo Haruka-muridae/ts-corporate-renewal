@@ -746,14 +746,14 @@ try {
 
     check('確定は onFinalized に集約（手動停止以外も保存）', appSource.includes('onFinalized(result)') && appSource.includes('handleFinalizedRecording(') && !appSource.includes('waitForRecorderResult'));
     check('停止理由ごとの案内がある', ['limit', 'interrupted', 'capacity', 'backpressure', 'mic-ended'].every((r) => appSource.includes(`case '${r}':`)));
-    check('未連携なら台帳に残してホームへ（停止後にポップアップを開かない）', appSource.includes('if (hasValidToken()) {') && appSource.includes('goHomeFlat();') && appSource.includes('SAVED_LOCAL_CONNECT'));
-    check('On-site は録音開始の押下で先に Google 連携', appSource.includes("connectBeforeRecording('offline')"));
+    check('停止後は認証チェックポイントを見て、足りなければ台帳に残してホームへ（ポップアップを開かない）', appSource.includes('auth.status === AuthCheck.OK') && appSource.includes('goHomeFlat();') && appSource.includes('SAVED_LOCAL_CONNECT') && appSource.includes('SAVED_LOCAL_RELINK'));
+    check('録音開始時に Google 連携を求めない（録音の必須条件にしない）', !appSource.includes('connectBeforeRecording') && !/startOffline\(\)[\s\S]{0,600}requestAccess\(/.test(appSource));
     check('Remote は事前連携しない（getDisplayMedia の操作猶予を消費しない）', !appSource.includes("connectBeforeRecording('online')"));
     check('Remote は同意チェックを最初に見る', appSource.indexOf('el.onConsent.checked') < appSource.indexOf('startOnline()\n'));
     check('録音開始時に台帳へ RECORDING 行を載せる', appSource.includes('registerRecordingStart(') && appSource.includes('state: RecordingState.RECORDING'));
     check('Drive 送信中は二重に送らない', appSource.includes('state.uploading.has(') && appSource.includes('state.uploading.add('));
     check('リダイレクトへの切替はスマートフォンだけ', appSource.includes('(env.mobile || env.standalone)'));
-    check('復路で断られたら次の録音開始で再び飛ばない', appSource.includes("redirect.resume?.action?.type === 'record'") && appSource.includes('state.authDeclined = true'));
+    check('復路の再開は「保存待ちの録音のアップロード」だけ（録音開始への往復は無い）', appSource.includes("action?.type === 'upload'") && !appSource.includes("type === 'record'") && !appSource.includes('authDeclined'));
     check('録音中は画面遷移・再読み込みを止める', appSource.includes('isRecordingActive()') && appSource.includes("addEventListener('beforeunload'"));
     check('OPFS 不達では台帳を消さない', appSource.includes("error?.name === 'NotFoundError'") && appSource.includes('getRecordingsDir(false)'));
     check('finalize のタイムアウトがある', recorderSource.includes('FINALIZE_TIMEOUT_MS') && recorderSource.includes('clearFinalizeTimer'));
@@ -1038,7 +1038,7 @@ try {
       const { deps } = createDeps({ events, opfs, ledger, gemini });
       const result = await flow.saveAndProcessRecording({ entry }, deps);
       check('1 秒相当の録音でも最低時間で弾かず完了する', result.outcome === flow.SaveOutcome.COMPLETED && events.includes(`gemini:upload-read ${SIZE}`));
-      check('save-flow に録音時間の下限が無い', !/durationSeconds\s*[<>]/.test(flowSource) && !/MIN_(DURATION|SECONDS)/.test(flowSource) && !/MIN_(DURATION|SECONDS)/.test(readFileSync(resolve(appRoot, 'config.js'), 'utf8')));
+      check('save-flow に録音時間の下限が無い', !/durationSeconds\s*[<>]/.test(flowSource) && !/(^|[^A-Z_])MIN_(DURATION|SECONDS)/.test(flowSource) && !/(^|[^A-Z_])MIN_(DURATION|SECONDS)/.test(readFileSync(resolve(appRoot, 'config.js'), 'utf8')));
     }
 
     /* ---- Gemini 失敗: 録音を失わず、Drive へ再送せずにやり直せる ---- */
@@ -1146,6 +1146,46 @@ try {
       check('Drive 保存済みで端末の録音が無ければ、Drive の一覧から作れると案内する', thrown?.code === 'LOCAL_FILE_MISSING_DRIVE_SAVED' && errors.describeAppError(thrown).includes('Drive') && ledger.get(missing.recordingId) === null);
     }
 
+    /* ---- ケース1・2: 認証チェックポイント（有効ならそのまま、期限切れなら保存前に更新） ---- */
+    {
+      const events = [];
+      const opfs = createFakeOpfs(events);
+      opfs.write('rec-auth.mp3.part', 20000);
+      const ledger = createLedger(events);
+      const entry = makeEntry('rec-auth.mp3.part', 20000, 1);
+      ledger.put(entry);
+      const gemini = createFakeGeminiFetch(events);
+      const { deps } = createDeps({ events, opfs, ledger, gemini });
+      let requests = 0;
+      deps.ensureAuth = async () => { events.push('auth:check'); };
+      deps.resolveFolder = async () => { events.push('folder:resolve'); return 'folder-voice'; };
+      const result = await flow.saveAndProcessRecording({ entry }, deps);
+      const idx = (label) => events.findIndex((e) => e.startsWith(label));
+      check('ケース1: 認証が有効 → 再認証せずそのまま保存（認証確認 → 保存先 → Drive の順）', result.outcome === flow.SaveOutcome.COMPLETED && requests === 0 && idx('auth:check') < idx('folder:resolve') && idx('folder:resolve') < idx('drive:upload-read'));
+
+      /* ケース2: 期限切れ → 保存前に連携を更新（ensureAuth が requestAccess 相当を呼ぶ）してから保存 */
+      events.length = 0;
+      opfs.write('rec-auth2.mp3.part', 20000);
+      const entry2 = makeEntry('rec-auth2.mp3.part', 20000, 1);
+      ledger.put(entry2);
+      let tokenValid = false;
+      deps.ensureAuth = async () => { if (!tokenValid) { requests += 1; events.push('auth:request'); tokenValid = true; } };
+      deps.uploadToDrive = async (blob) => { if (!tokenValid) throw new Error('no token'); const buffer = await blob.slice(0, blob.size).arrayBuffer(); events.push(`drive:upload-read ${buffer.byteLength}`); return { id: 'drive-file-2', name: 'x', url: 'u' }; };
+      const result2 = await flow.saveAndProcessRecording({ entry: entry2 }, deps);
+      check('ケース2: 期限切れ → 保存前に Google 連携を更新してから Drive へ保存', result2.outcome === flow.SaveOutcome.COMPLETED && requests === 1 && idx('auth:request') < idx('drive:upload-read'));
+
+      /* 連携を更新できない（押下なし）→ 台帳は変えず、OPFS は残る。押下で再開できる */
+      events.length = 0;
+      opfs.write('rec-auth3.mp3.part', 20000);
+      const entry3 = makeEntry('rec-auth3.mp3.part', 20000, 1);
+      ledger.put(entry3);
+      deps.ensureAuth = async () => { throw new errors.AppError(errors.ErrorCode.OAUTH_USER_ACTION_REQUIRED, 'gis_popup_failed_to_open'); };
+      let thrown = null;
+      try { await flow.saveAndProcessRecording({ entry: entry3 }, deps); } catch (error) { thrown = error; }
+      check('認証を更新できない → OAUTH_USER_ACTION_REQUIRED を返し、台帳は SAVED_LOCAL のまま・OPFS 保持・Drive へ送らない', thrown?.code === 'OAUTH_USER_ACTION_REQUIRED' && ledger.get(entry3.recordingId)?.state === checkpoint.RecordingState.SAVED_LOCAL && opfs.exists('rec-auth3.mp3.part') && !events.some((e) => e.startsWith('drive:upload')));
+      check('Drive 保存済みの再処理でも認証チェックポイントを通る（Markdown 保存に要る）', (() => { const src = flowSource; return src.indexOf('await ensureAuth()') < src.indexOf('isDriveSaved(current)'); })());
+    }
+
     /* ---- 診断ログ: 段階と code / 安全な detail だけ ---- */
     {
       const lines = [];
@@ -1167,6 +1207,293 @@ try {
       check('app.js は診断ログを保存フローと Gemini 段階で使う', appSource.includes('diagnostics.failure(stage, error, info)') && appSource.includes("diagnostics.stage('gemini'") && appSource.includes("diagnostics.stage('markdown-save'"));
       check('APIキーをログに出さない', !/diagnostics\.(stage|failure)\([^)]*apiKey/.test(appSource));
     }
+  }
+
+
+  section('保存前の Google 認証チェックポイント（auth-checkpoint.js / oauth.js）');
+
+  {
+    const cp = await import('../../public/meeting-assistant/auth-checkpoint.js');
+    const appSource = readFileSync(resolve(appRoot, 'app.js'), 'utf8');
+    const oauth = await import('../../public/meeting-assistant/oauth.js');
+    const errors = await import('../../public/meeting-assistant/errors.js');
+    const min = config.SAVE_TOKEN_MIN_SECONDS;
+
+    check('SAVE_TOKEN_MIN_SECONDS は config の一箇所（10 分）', min === 600);
+    check('有効で残りが十分 → そのまま保存', cp.evaluateSaveAuth({ valid: true, remainingSeconds: min + 1, everLinked: true, minSeconds: min }).status === cp.AuthCheck.OK);
+    check('残りがちょうど下限 → そのまま保存', cp.evaluateSaveAuth({ valid: true, remainingSeconds: min, everLinked: true, minSeconds: min }).status === cp.AuthCheck.OK);
+    check('有効だが残りが足りない → 利用者の押下で更新', cp.evaluateSaveAuth({ valid: true, remainingSeconds: min - 1, everLinked: true, minSeconds: min }).status === cp.AuthCheck.INSUFFICIENT);
+    check('一度連携して期限切れ → EXPIRED', cp.evaluateSaveAuth({ valid: false, remainingSeconds: 0, everLinked: true, minSeconds: min }).status === cp.AuthCheck.EXPIRED);
+    check('未連携 → NEVER_LINKED', cp.evaluateSaveAuth({ valid: false, remainingSeconds: 0, everLinked: false, minSeconds: min }).status === cp.AuthCheck.NEVER_LINKED);
+    check('OK 以外は needsUserAction', [cp.AuthCheck.INSUFFICIENT, cp.AuthCheck.EXPIRED, cp.AuthCheck.NEVER_LINKED].every((st) => Object.values(cp.AuthCheck).includes(st)) && cp.evaluateSaveAuth({ valid: false, minSeconds: min }).needsUserAction === true && cp.evaluateSaveAuth({ valid: true, remainingSeconds: 9999, minSeconds: min }).needsUserAction === false);
+
+    /* 90 分録音: 開始直後に取ったトークン（59 分扱い）は停止時点で必ず切れている → 保存前に更新 */
+    check('90 分録音の停止時点（開始 +5400 秒）では残り 0 → 保存前に更新', cp.evaluateSaveAuth({ valid: false, remainingSeconds: 0, everLinked: true, minSeconds: min }).status === cp.AuthCheck.EXPIRED);
+
+    check('tokenState はトークンの値を含まない', (() => { const st = oauth.tokenState(); return typeof st.valid === 'boolean' && typeof st.remainingSeconds === 'number' && typeof st.everLinked === 'boolean' && !('accessToken' in st) && !('token' in st); })());
+
+    /* ポップアップが開かない理由の切り分け: 利用者操作の猶予なし → USER_ACTION_REQUIRED、猶予あり → POPUP_BLOCKED */
+    async function popupFailure(isActive) {
+      const previousGoogle = globalThis.google;
+      const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+      globalThis.google = { accounts: { oauth2: { initTokenClient: (cfg) => ({ requestAccessToken: () => cfg.error_callback({ type: 'popup_failed_to_open' }) }) } } };
+      Object.defineProperty(globalThis, 'navigator', { value: isActive === null ? {} : { userActivation: { isActive } }, configurable: true, writable: true });
+      try {
+        await oauth.requestAccess({});
+        return null;
+      } catch (error) {
+        return error.code;
+      } finally {
+        globalThis.google = previousGoogle;
+        if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator); else delete globalThis.navigator;
+      }
+    }
+    check('操作の猶予なしでポップアップが開かない → OAUTH_USER_ACTION_REQUIRED', await popupFailure(false) === 'OAUTH_USER_ACTION_REQUIRED');
+    check('操作の猶予があるのに開かない → OAUTH_POPUP_BLOCKED（本当のブロック）', await popupFailure(true) === 'OAUTH_POPUP_BLOCKED');
+    check('userActivation が無いブラウザでは従来どおり POPUP_BLOCKED', await popupFailure(null) === 'OAUTH_POPUP_BLOCKED');
+    check('USER_ACTION_REQUIRED の文言はブロック解除ではなく「押して更新」', errors.describeError(new errors.AppError('OAUTH_USER_ACTION_REQUIRED')).includes('連携の更新') && !errors.describeError(new errors.AppError('OAUTH_USER_ACTION_REQUIRED')).includes('ブロック') && errors.describeError(new errors.AppError('OAUTH_POPUP_BLOCKED')).includes('ブロック'));
+    check('保存先を準備できない文言は録音が端末にあることを伝える', errors.describeError(new errors.AppError('DRIVE_FOLDER_UNAVAILABLE')).includes('保存先を準備できませんでした') && errors.describeError(new errors.AppError('DRIVE_FOLDER_UNAVAILABLE')).includes('録音は端末に保存されています'));
+    check('スコープは drive.file のまま（拡大していない）', config.OAUTH.scope === 'https://www.googleapis.com/auth/drive.file' && !/client_secret|clientSecret/.test(readFileSync(resolve(appRoot, 'oauth.js'), 'utf8')));
+    check('app.js: 保存フローの先頭で認証を確定し、連携しなおしで保存先 ID を捨てる', appSource.includes('ensureAuth: () => ensureAuthForSave(resume)') && appSource.includes('folders.forget();'));
+  }
+
+  section('保存先フォルダの自動保証と ID の保持（drive-folders.js / drive.js）');
+
+  {
+    const driveMod = await import('../../public/meeting-assistant/drive.js');
+    const foldersMod = await import('../../public/meeting-assistant/drive-folders.js');
+    const appSource = readFileSync(resolve(appRoot, 'app.js'), 'utf8');
+    const errors = await import('../../public/meeting-assistant/errors.js');
+    const FOLDER = 'application/vnd.google-apps.folder';
+    const PATHS = { voice: config.DRIVE_VOICE_PATH, record: config.DRIVE_RECORD_PATH };
+
+    /* Drive API の偽物（files.list / files.create / files.get だけ）。同名検索は大文字小文字を区別しない。 */
+    function createFakeDrive() {
+      const folders = new Map();
+      let seq = 0;
+      const calls = { list: 0, create: 0, get: 0, created: [] };
+      const options = { failCreate: false, failNetwork: false };
+
+      function add(name, parent, extra = {}) {
+        seq += 1;
+        const id = `f${seq}`;
+        folders.set(id, { id, name, parents: [parent], trashed: false, createdTime: new Date(2026, 7, 23, 0, 0, seq).toISOString(), ...extra });
+        return id;
+      }
+
+      const fetchImpl = async (url, init = {}) => {
+        if (options.failNetwork) throw new TypeError('Failed to fetch');
+        const u = new URL(String(url));
+        const method = init.method ?? 'GET';
+        if (method === 'GET' && u.pathname === '/drive/v3/files') {
+          calls.list += 1;
+          const q = u.searchParams.get('q') ?? '';
+          const name = /name='((?:[^'\\]|\\.)*)'/.exec(q)?.[1].replace(/\\(.)/g, '$1');
+          const parent = /'((?:[^'\\]|\\.)*)' in parents/.exec(q)?.[1];
+          const hits = [...folders.values()].filter((f) => !f.trashed && f.name.toLowerCase() === String(name).toLowerCase() && f.parents.includes(parent)).sort((a, b) => a.createdTime.localeCompare(b.createdTime));
+          return Response.json({ files: hits.map((f) => ({ id: f.id, name: f.name, createdTime: f.createdTime })) });
+        }
+        if (method === 'POST' && u.pathname === '/drive/v3/files') {
+          calls.create += 1;
+          if (options.failCreate) return Response.json({ error: { code: 403, message: 'insufficient permissions', errors: [{ reason: 'insufficientFilePermissions' }] } }, { status: 403 });
+          const body = JSON.parse(init.body);
+          const id = add(body.name, body.parents[0]);
+          calls.created.push(body.name);
+          return Response.json({ id });
+        }
+        const m = /^\/drive\/v3\/files\/([^/]+)$/.exec(u.pathname);
+        if (method === 'GET' && m) {
+          calls.get += 1;
+          const f = folders.get(decodeURIComponent(m[1]));
+          if (!f) return Response.json({ error: { code: 404, message: 'File not found' } }, { status: 404 });
+          return Response.json({ id: f.id, name: f.name, mimeType: FOLDER, trashed: f.trashed, parents: f.parents });
+        }
+        throw new Error(`unexpected ${method} ${u.href}`);
+      };
+
+      return { folders, calls, options, add, fetchImpl, reset() { calls.list = 0; calls.create = 0; calls.get = 0; calls.created = []; } };
+    }
+
+    function memoryStorage() {
+      const data = {};
+      return { getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); }, removeItem: (k) => { delete data[k]; }, data };
+    }
+
+    async function withDrive(drive, fn) {
+      const previous = globalThis.fetch;
+      globalThis.fetch = drive.fetchImpl;
+      try { return await fn(); } finally { globalThis.fetch = previous; }
+    }
+
+    const auth = { accessToken: 'test-token-not-real' };
+    /* 注入した時計。保存のたびに検証させるため、テストでは明示的に進める。 */
+    const clock = { t: 1_000_000, tick(ms = 10_000) { this.t += ms; } };
+    const makeResolver = (storage) => foldersMod.createFolderResolver({ storage, ensureChain: driveMod.ensureFolderChain, getFolder: driveMod.getFolderMetadata, paths: PATHS, now: () => clock.t });
+    const namesUnder = (drive, parentId) => [...drive.folders.values()].filter((f) => f.parents.includes(parentId)).map((f) => f.name);
+
+    /* ケース3: すべて存在 → 既存を再利用し、作成しない */
+    {
+      const drive = createFakeDrive();
+      const sys = drive.add('Potenitas System', 'root');
+      const adm = drive.add('Potenitas Administrator', sys);
+      const meet = drive.add('Potenitas meet', adm);
+      const voice = drive.add('Potenitas Voice', meet); /* 本番と同じく大文字 V（別アプリが作成） */
+      const record = drive.add('Potenitas record', meet);
+      const resolver = makeResolver(memoryStorage());
+      const [v, r] = await withDrive(drive, async () => [await resolver.resolve('voice', auth), await resolver.resolve('record', auth)]);
+      check('ケース3: すべて存在 → 既存フォルダを再利用（大文字小文字の違いも同一視）', v === voice && r === record && drive.calls.create === 0);
+      check('ケース3: 名前での検索は 4 + 1 回（共通階層は 2 回目に検索しない）', drive.calls.list === 5);
+    }
+
+    /* ケース4: 一部だけ存在 → 不足分だけ作成 */
+    {
+      const drive = createFakeDrive();
+      const sys = drive.add('Potenitas System', 'root');
+      const resolver = makeResolver(memoryStorage());
+      const v = await withDrive(drive, () => resolver.resolve('voice', auth));
+      check('ケース4: Potenitas System だけ存在 → Administrator / meet / voice の 3 つだけ作成', drive.calls.create === 3 && drive.calls.created.join('>') === 'Potenitas Administrator>Potenitas meet>Potenitas voice');
+      check('ケース4: 既存の Potenitas System を再利用（root 直下に増えない）', namesUnder(drive, 'root').length === 1 && drive.folders.get(v).parents[0] === [...drive.folders.values()].find((f) => f.name === 'Potenitas meet').id && [...drive.folders.values()].find((f) => f.name === 'Potenitas Administrator').parents[0] === sys);
+      drive.reset();
+      await withDrive(drive, () => resolver.resolve('record', auth));
+      check('ケース4: 続けて record は 1 つだけ作成', drive.calls.create === 1 && drive.calls.created[0] === 'Potenitas record');
+    }
+
+    /* ケース5: すべて無い → 階層を順番に作成 */
+    {
+      const drive = createFakeDrive();
+      const resolver = makeResolver(memoryStorage());
+      await withDrive(drive, () => resolver.resolve('voice', auth));
+      check('ケース5: すべて無い → System → Administrator → meet → voice の順に作成', drive.calls.created.join('>') === 'Potenitas System>Potenitas Administrator>Potenitas meet>Potenitas voice');
+      const chain = ['Potenitas System', 'Potenitas Administrator', 'Potenitas meet', 'Potenitas voice'].map((n) => [...drive.folders.values()].find((f) => f.name === n));
+      check('ケース5: 親子関係が正しい', chain[0].parents[0] === 'root' && chain[1].parents[0] === chain[0].id && chain[2].parents[0] === chain[1].id && chain[3].parents[0] === chain[2].id);
+    }
+
+    /* ケース6: 何度実行しても同名フォルダを重複作成しない（同じ resolver・別 resolver・保持なし） */
+    {
+      const drive = createFakeDrive();
+      const storage = memoryStorage();
+      const first = makeResolver(storage);
+      await withDrive(drive, async () => { await first.resolve('voice', auth); await first.resolve('record', auth); });
+      const createdOnce = drive.calls.create;
+      drive.reset();
+      clock.tick();
+      await withDrive(drive, async () => { await first.resolve('voice', auth); await first.resolve('record', auth); });
+      check('ケース6: 同じ resolver で再実行 → 作成 0・検索 0（保持した ID を検証して使う）', createdOnce === 5 && drive.calls.create === 0 && drive.calls.list === 0);
+      check('ケース6: 保持の検証は files.get（各階層。共通する 3 階層は 1 回）だけ', drive.calls.get === 5);
+      drive.reset();
+      clock.tick();
+      const second = makeResolver(storage);
+      await withDrive(drive, async () => { await second.resolve('voice', auth); await second.resolve('record', auth); });
+      check('ケース6: 別の resolver（再読み込み後）でも localStorage の ID を使い作成しない', drive.calls.create === 0 && drive.calls.list === 0 && second.cachedId('voice') === first.cachedId('voice'));
+      check('ケース6: 検証の省略は数秒だけ（時間が経てば保存前に改めて確認する）', drive.calls.get === 5);
+      drive.reset();
+      clock.tick();
+      const noCache = makeResolver(memoryStorage());
+      await withDrive(drive, async () => { await noCache.resolve('voice', auth); await noCache.resolve('record', auth); });
+      check('ケース6: 保持が無くても名前検索で既存を見つけ、作成しない', drive.calls.create === 0);
+      const allNames = [...drive.folders.values()].map((f) => f.name);
+      check('ケース6: Drive 上の各フォルダは 1 つずつ', new Set(allNames).size === allNames.length && allNames.length === 5);
+      check('保持する内容は ID と名前だけ（トークン・音声を含まない）', !/token|accessToken|blob/i.test(storage.data[foldersMod.FOLDER_CACHE_KEY]));
+    }
+
+    /* 保持した ID が使えなくなったとき: 削除・ゴミ箱・移動・改名・別アカウント */
+    {
+      const drive = createFakeDrive();
+      const storage = memoryStorage();
+      const resolver = makeResolver(storage);
+      const voice = await withDrive(drive, () => resolver.resolve('voice', auth));
+      const meet = drive.folders.get(voice).parents[0];
+
+      drive.folders.delete(voice);
+      drive.reset();
+      clock.tick();
+      const v2 = await withDrive(drive, () => makeResolver(storage).resolve('voice', auth));
+      check('削除された → 検知して voice だけ作りなおす（上位階層は再利用）', v2 !== voice && drive.calls.created.join() === 'Potenitas voice' && drive.folders.get(v2).parents[0] === meet);
+
+      drive.folders.get(v2).trashed = true;
+      drive.reset();
+      clock.tick();
+      const v3 = await withDrive(drive, () => makeResolver(storage).resolve('voice', auth));
+      check('ゴミ箱にある → 検知して作りなおす', v3 !== v2 && drive.calls.created.join() === 'Potenitas voice');
+
+      const elsewhere = drive.add('Elsewhere', 'root');
+      drive.folders.get(v3).parents = [elsewhere];
+      drive.reset();
+      clock.tick();
+      const v4 = await withDrive(drive, () => makeResolver(storage).resolve('voice', auth));
+      check('移動された → 検知して Potenitas meet の下に作りなおす', v4 !== v3 && drive.folders.get(v4).parents[0] === meet);
+
+      drive.folders.get(v4).name = 'Renamed';
+      drive.reset();
+      clock.tick();
+      const v5 = await withDrive(drive, () => makeResolver(storage).resolve('voice', auth));
+      check('改名された → 検知して正しい名前で作りなおす', v5 !== v4 && drive.folders.get(v5).name === 'Potenitas voice');
+
+      /* ゴミ箱に入ったのが上位階層でも、その階層自身の trashed で検知する */
+      drive.folders.get(meet).trashed = true;
+      drive.reset();
+      clock.tick();
+      const v6 = await withDrive(drive, () => makeResolver(storage).resolve('voice', auth));
+      check('上位階層（meet）がゴミ箱 → meet と voice を作りなおす', v6 !== v5 && drive.calls.created.join('>') === 'Potenitas meet>Potenitas voice');
+
+      /* 別アカウント（すべて 404）→ 全階層を解決しなおす */
+      const other = createFakeDrive();
+      other.reset();
+      clock.tick();
+      const v7 = await withDrive(other, () => makeResolver(storage).resolve('voice', auth));
+      check('別アカウントの ID（すべて 404）→ 名前で解決しなおし、無ければ作る', typeof v7 === 'string' && other.calls.create === 4);
+
+      check('forget で保持を捨てる', (() => { const r = makeResolver(storage); r.forget(); return r.cachedId('voice') === null && storage.getItem(foldersMod.FOLDER_CACHE_KEY) === null; })());
+    }
+
+    /* 通信・認証の失敗は「無効」にしない（オフラインで作りなおして重複させない） */
+    {
+      const drive = createFakeDrive();
+      const storage = memoryStorage();
+      await withDrive(drive, () => makeResolver(storage).resolve('voice', auth));
+      drive.options.failNetwork = true;
+      drive.reset();
+      clock.tick();
+      let thrown = null;
+      try { await withDrive(drive, () => makeResolver(storage).resolve('voice', auth)); } catch (error) { thrown = error; }
+      check('検証中の通信失敗は NETWORK として上へ返し、作成しない', thrown?.code === 'NETWORK' && drive.calls.create === 0);
+    }
+
+    /* ケース7: フォルダ作成失敗 → OPFS 保持・台帳保持・再試行可能（save-flow と結合） */
+    {
+      const flow = await import('../../public/meeting-assistant/save-flow.js');
+      const store = await import('../../public/meeting-assistant/pending-store.js');
+      const checkpoint = await import('../../public/meeting-assistant/recording-checkpoint.js');
+      const drive = createFakeDrive();
+      drive.options.failCreate = true;
+      const resolver = makeResolver(memoryStorage());
+      const ledger = store.createPendingStore(memoryStorage());
+      const entry = store.createBrowserEntry({ recordingId: 'rec-folder', fileName: 'x.mp3', localPath: 'x.mp3.part', sizeBytes: 3000, durationSeconds: 1 });
+      ledger.put(entry);
+      let opfsDeleted = false;
+      let uploads = 0;
+      const deps = {
+        ensureAuth: async () => {},
+        resolveFolder: () => withDrive(drive, () => resolver.resolve('voice', auth)),
+        ledger,
+        loadFile: async () => new Blob([new Uint8Array(3000)]),
+        deleteLocal: async () => { opfsDeleted = true; },
+        uploadToDrive: async (blob, current, folderId) => { uploads += 1; return { id: 'dv', name: current.fileName, url: 'u', folderId }; },
+        process: async () => ({ completed: true }),
+      };
+      let thrown = null;
+      try { await flow.saveAndProcessRecording({ entry }, deps); } catch (error) { thrown = error; }
+      const row = ledger.get('rec-folder');
+      check('ケース7: フォルダ作成失敗 → 例外（FOLDER_FORBIDDEN）・Drive へ送らない', thrown instanceof errors.AppError && thrown.code === 'FOLDER_FORBIDDEN' && uploads === 0);
+      check('ケース7: OPFS 録音を保持・台帳を保持（UPLOAD_FAILED で再試行可能）', opfsDeleted === false && row?.state === checkpoint.RecordingState.UPLOAD_FAILED && row.error === 'FOLDER_FORBIDDEN');
+      drive.options.failCreate = false;
+      clock.tick();
+      const retried = await flow.saveAndProcessRecording({ entry: ledger.get('rec-folder') }, deps);
+      check('ケース7: 再試行で保存先を作成して完了（不足分だけ作成）→ 最後に OPFS 削除', retried.outcome === flow.SaveOutcome.COMPLETED && uploads === 1 && opfsDeleted === true && ledger.list().length === 0 && drive.calls.created.length === 4);
+    }
+
+    check('drive.js の検索は「名前・フォルダ・ゴミ箱外・親」で絞り、古い順に 1 件目を使う', (() => { const src = readFileSync(resolve(appRoot, 'drive.js'), 'utf8'); return src.includes("'trashed=false'") && src.includes("in parents") && src.includes("'orderBy', 'createdTime'") && src.includes('files[0].id'); })());
+    check('app.js は毎回名前で全検索せず resolver を通す', appSource.includes("folders.resolve('voice', auth)") && appSource.includes("folders.resolve('record', auth)") && !appSource.includes('resolveVoiceFolder(') && !appSource.includes('resolveRecordFolder('));
   }
 
   section('エラー文言: Gemini の失敗を「処理に失敗しました」に潰さない');

@@ -59,6 +59,8 @@ const REDIRECT_NAVIGATION_TIMEOUT_MS = 20 * 1000;
 /* **この2つを外へ出さないこと。** 参照を返す getter も作らない。 */
 let accessToken = null;
 let expiresAt = 0;
+/* このページで一度でも連携したか。期限切れと未連携で案内を分けるため（forgetToken では消さない）。 */
+let everLinked = false;
 
 let gisPromise = null;
 
@@ -112,6 +114,17 @@ export function tokenRemainingSeconds() {
   return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
 }
 
+/*
+ * 保存前チェックポイント（auth-checkpoint.js）へ渡す状態。トークンの値は含めない。
+ */
+export function tokenState() {
+  return {
+    valid: hasValidToken(),
+    remainingSeconds: tokenRemainingSeconds(),
+    everLinked,
+  };
+}
+
 /* 明示的に捨てる。401 を受けたときと、再連携の前に呼ぶ。 */
 export function forgetToken() {
   accessToken = null;
@@ -120,6 +133,7 @@ export function forgetToken() {
 
 function acceptToken(token, expiresIn) {
   accessToken = token;
+  everLinked = true;
 
   /* 期限は少し手前で切る。境目で 401 を踏まないため。 */
   const lifetime = Number(expiresIn) || 3600;
@@ -143,8 +157,17 @@ function acceptToken(token, expiresIn) {
  * もう片方に当たった利用者が延々と同じ操作を繰り返すことになる。
  * ------------------------------------------------------------------
  */
-function toErrorCode(type) {
+function toErrorCode(type, userActivation = null) {
   if (type === 'popup_failed_to_open') {
+    /*
+     * 利用者の操作（クリック）の直後でなければ、ブラウザはポップアップを開かない。
+     * それは「ブロックを解除して」ではなく「ボタンを押して連携を更新して」と案内すべき失敗。
+     * userActivation が取れない環境（古いブラウザ）では従来どおりブロックとして扱う。
+     */
+    if (userActivation === false) {
+      return ErrorCode.OAUTH_USER_ACTION_REQUIRED;
+    }
+
     return ErrorCode.OAUTH_POPUP_BLOCKED;
   }
 
@@ -154,6 +177,10 @@ function toErrorCode(type) {
 
 async function requestViaPopup(prompt) {
   await loadGis();
+
+  /* 要求を出す時点で利用者操作の猶予があったか。失敗理由の切り分けに使う。 */
+  const activation = globalThis.navigator?.userActivation;
+  const userActivation = typeof activation?.isActive === 'boolean' ? activation.isActive : null;
 
   return new Promise((resolve, reject) => {
     const client = globalThis.google.accounts.oauth2.initTokenClient({
@@ -170,7 +197,7 @@ async function requestViaPopup(prompt) {
         resolve(true);
       },
       error_callback: (error) => {
-        reject(new AppError(toErrorCode(error?.type), `gis_${error?.type ?? 'unknown'}`));
+        reject(new AppError(toErrorCode(error?.type, userActivation), `gis_${error?.type ?? 'unknown'}`));
       },
     });
 

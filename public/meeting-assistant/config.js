@@ -116,6 +116,13 @@ function overrideSeconds(paramName, fallback) {
 }
 
 export const MAX_SECONDS = overrideSeconds('testMaxSeconds', DEFAULT_MAX_SECONDS);
+
+/*
+ * 保存前の Google 認証チェックポイント（auth-checkpoint.js）。
+ * Drive へのアップロード → Gemini → Markdown 保存まで同じトークンで通すため、
+ * 残りがこれ未満なら保存前に連携を更新してもらう。
+ */
+export const SAVE_TOKEN_MIN_SECONDS = 10 * 60;
 export const WARNING_SECONDS = overrideSeconds(
   'testWarningSeconds',
   Math.max(0, MAX_SECONDS - DEFAULT_WARNING_LEAD_SECONDS),
