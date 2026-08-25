@@ -20,7 +20,6 @@ import {
   MP3_MIME,
 } from './config.js';
 import { AppError, ErrorCode } from './errors.js';
-import { withSequence } from './filename.js';
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const CHUNK_BYTES = 8 * 1024 * 1024;
@@ -278,12 +277,6 @@ export async function listRecordMarkdown(auth, folderId) {
   return { folderId: id, files: files.filter(isMarkdownFile) };
 }
 
-export async function getFileMetadata(fileId, auth) {
-  const url = new URL(`${GOOGLE_API.driveFiles}/${encodeURIComponent(fileId)}`);
-  url.searchParams.set('fields', LIST_FIELDS);
-  return callJson(url.href, auth);
-}
-
 export async function downloadFile(fileId, auth, mimeType) {
   const url = new URL(`${GOOGLE_API.driveFiles}/${encodeURIComponent(fileId)}`);
   url.searchParams.set('alt', 'media');
@@ -320,24 +313,6 @@ export async function downloadFile(fileId, auth, mimeType) {
   return blob;
 }
 
-export async function pickAvailableName(desiredName, folderId, auth) {
-  const files = await listFolderFiles(folderId, auth, 'name');
-  const taken = new Set(files.map((file) => String(file.name)));
-
-  if (!taken.has(desiredName)) {
-    return desiredName;
-  }
-
-  for (let sequence = 2; sequence <= 1000; sequence += 1) {
-    const candidate = withSequence(desiredName, sequence);
-
-    if (!taken.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new AppError(ErrorCode.UPLOAD_FAILED, 'no_available_name');
-}
 
 async function createUploadSession({ name, folderId, size, mimeType }, auth) {
   const url = new URL(GOOGLE_API.driveUpload);
@@ -542,17 +517,4 @@ export async function saveMarkdown({ text, fileName, folderId, existingId, signa
     name: result.name ?? fileName,
     url: result.webViewLink ?? (id ? driveFileUrl(id) : null),
   };
-}
-
-export async function fetchAccountEmail(auth) {
-  const url = new URL(`${GOOGLE_API.driveFiles.replace(/\/files$/, '')}/about`);
-  url.searchParams.set('fields', 'user(emailAddress)');
-
-  try {
-    const result = await callJson(url.href, auth);
-    const email = result?.user?.emailAddress;
-    return typeof email === 'string' && email !== '' ? email : null;
-  } catch {
-    return null;
-  }
 }

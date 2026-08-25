@@ -20,7 +20,7 @@
  * ==================================================================
  */
 
-import { LIMITS, TEMPLATES, DEFAULT_TEMPLATE_ID, EVIDENCE_NOT_CONFIRMED, REGENERATE_TARGETS } from './config.js';
+import { LIMITS, TEMPLATES, DEFAULT_TEMPLATE_ID, EVIDENCE_NOT_CONFIRMED } from './config.js';
 
 /* ================================================================
  * (e) 入力検証（要件書 §4-3）
@@ -55,90 +55,6 @@ export function validateTranscriptForGeneration(text, { maxChars = LIMITS.TRANSC
   }
 
   return null;
-}
-
-/* 上限に近づいたことを早めに知らせるための判定（警告のみ。生成は止めない）。 */
-export function isNearTranscriptLimit(text, { warnChars = LIMITS.TRANSCRIPT_WARN_CHARS, maxChars = LIMITS.TRANSCRIPT_MAX_CHARS } = {}) {
-  const length = countChars(text);
-  return length >= warnChars && length <= maxChars;
-}
-
-/*
- * File.size（バイト）だけから、読み込んでも上限超過が確定するかを判定する。
- * UTF-8は1文字あたり最大4バイトのため、上限文字数×4バイトを超えるファイルは
- * 実際に読み込んでも必ず上限超過になる。FileReaderで最後まで読み切ってから
- * validateTranscriptForGeneration に掛けるのではなく、読み込み前にこれで弾く
- * ことで、極端に大きいファイルをそのままDOM/メモリへ展開せずに済む
- * （要件書 §8-4「極端に大きい入力をそのままDOM複製しない」）。
- */
-export function exceedsTranscriptByteLimit(fileSizeBytes, { maxChars = LIMITS.TRANSCRIPT_MAX_CHARS } = {}) {
-  const size = Number(fileSizeBytes);
-
-  if (!Number.isFinite(size) || size < 0) {
-    return false;
-  }
-
-  return size > maxChars * 4;
-}
-
-/* ---------- ファイル読込みの検証 ---------- */
-
-const ALLOWED_FILE_EXTENSIONS = ['.txt', '.md'];
-
-export function isAllowedTranscriptFileName(name) {
-  const value = String(name ?? '').toLowerCase();
-  return ALLOWED_FILE_EXTENSIONS.some((ext) => value.endsWith(ext));
-}
-
-/* ファイル関連のエラー文言。UNSUPPORTED_EXTENSION は §9-2 の表現をそのまま使う。 */
-export const FILE_ERROR = Object.freeze({
-  UNSUPPORTED_EXTENSION: 'ファイルを読み込めませんでした。txtまたはmd形式をご確認ください。',
-  READ_FAILED: 'ファイルを読み込めませんでした。貼り付け入力でお試しください。',
-  BINARY_DETECTED: 'ファイルを読み込めませんでした。テキスト形式のファイルかご確認ください。',
-  ENCODING_INVALID: 'ファイルを正しく読み込めませんでした。UTF-8形式で保存し直してください。',
-});
-
-/*
- * バイナリと判断する簡易ヒューリスティック。
- *
- * 完全な判定は不可能なので、次の2条件のどちらかで「バイナリらしい」とみなす。
- *   - NUL文字を含む（テキストファイルには通常現れない）
- *   - 制御文字（改行・タブ以外）の比率が高い
- * 先頭2000文字だけを見るのは、長大なテキストで走査コストが問題にならないため。
- */
-export function looksBinary(text) {
-  const value = String(text ?? '');
-
-  if (value.includes(String.fromCharCode(0))) {
-    return true;
-  }
-
-  if (value.length === 0) {
-    return false;
-  }
-
-  const sample = value.slice(0, 2000);
-  let controlCount = 0;
-
-  for (const ch of sample) {
-    const code = ch.codePointAt(0) ?? 0;
-
-    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
-      controlCount += 1;
-    }
-  }
-
-  return controlCount / sample.length > 0.05;
-}
-
-/*
- * 文字コードを正しく解釈できていない兆候（U+FFFD = 置換文字）を検出する。
- * TextDecoder('utf-8') は不正なバイト列を既定で U+FFFD に置き換えるため、
- * 読込み後のテキストにこれが含まれていれば「UTF-8として解釈できなかった」
- * とみなせる。
- */
-export function looksMisdecoded(text) {
-  return String(text ?? '').includes('�');
 }
 
 /* ---------- 会議情報の補助 ---------- */
@@ -182,33 +98,6 @@ export function normalizeMeetingInfo(raw) {
     time: asText(meeting.time),
     participants: asTextArray(meeting.participants),
     purpose: asText(meeting.purpose),
-  };
-}
-
-/*
- * 利用者がステップ1で入力した会議情報と、AIが文字起こしから抽出した
- * meeting情報を統合する。
- *
- * **利用者入力を優先する。** 利用者が明示的に入力した値は、原文からの
- * 抽出より確からしい（要件書 §4-4「未入力の項目をAIに推測させない」）。
- * 利用者が空欄のままにした項目だけ、AIが原文から明確に特定できた値
- * （見つからなければ空文字）で補う。
- */
-export function mergeMeetingInfo(userInfo, aiMeeting) {
-  const user = userInfo && typeof userInfo === 'object' ? userInfo : {};
-  const ai = normalizeMeetingInfo(aiMeeting);
-  const userParticipants = Array.isArray(user.participants) ? user.participants : [];
-  const userTitle = asText(user.title);
-  const userDate = asText(user.date);
-  const userTime = asText(user.time);
-  const userPurpose = asText(user.purpose);
-
-  return {
-    title: userTitle !== '' ? userTitle : ai.title,
-    date: userDate !== '' ? userDate : ai.date,
-    time: userTime !== '' ? userTime : ai.time,
-    participants: userParticipants.length > 0 ? userParticipants : ai.participants,
-    purpose: userPurpose !== '' ? userPurpose : ai.purpose,
   };
 }
 
@@ -289,26 +178,6 @@ export function createEmptyMinutes() {
   };
 }
 
-/*
- * 編集画面の「追加」操作用の空要素。evidence は検証済みの形
- * （{ text, confirmed, timestamp }）で揃える。利用者が手で追加した項目は
- * 原文由来ではないため、最初から confirmed: false（根拠を確認できません）
- * とする。
- */
-export function createEmptyTopic() {
-  return { title: '', summary: '', keyPoints: [] };
-}
-
-export function createEmptyDecision() {
-  return { decision: '', evidence: { text: '', confirmed: false, timestamp: undefined, locatable: false } };
-}
-
-export function createEmptyActionItem() {
-  return {
-    task: '', assignee: '', dueDate: '',
-    evidence: { text: '', confirmed: false, timestamp: undefined, locatable: false },
-  };
-}
 
 /* ================================================================
  * (b) evidence のクライアント側照合（要件書 §4-10）
@@ -448,75 +317,6 @@ export function verifyMinutesEvidence(minutes, transcript) {
       ...item,
       evidence: verifyEvidence(item.evidence, transcript),
     })),
-  };
-}
-
-/*
- * 端末内ドラフト（IndexedDB）から読み戻した minutes を検証・正規化する。
- *
- * ドラフトの minutes は normalizeMinutesResponse が扱う「AI応答そのまま」の形
- * ではなく、evidence がすでに検証済みオブジェクト（{ text, confirmed,
- * timestamp, locatable }）に差し替わった後の形である。そのため
- * normalizeMinutesResponse をそのまま再利用すると、evidence を文字列として
- * 扱う asText() が「オブジェクトだから空文字」と誤判定し、根拠情報を消して
- * しまう。IndexedDB の中身は開発者ツール等での改変を含め信頼できない入力
- * （handoff.js の validateHandoffPayload と同じ考え方）のため、専用の
- * 正規化関数で受け直す。
- *
- * トップレベルがオブジェクトでない場合は null を返す（呼び出し側はドラフト
- * を破棄し、§9-2 の文型で案内する）。
- */
-function normalizeStoredEvidence(raw) {
-  const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  const text = asText(value.text);
-  const confirmed = value.confirmed === true && text !== '';
-
-  return {
-    text,
-    confirmed,
-    timestamp: confirmed && typeof value.timestamp === 'string' && value.timestamp !== '' ? value.timestamp : undefined,
-    locatable: confirmed && value.locatable === true,
-  };
-}
-
-function normalizeStoredDecisions(raw) {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-
-  return raw
-    .map((item) => ({ decision: asText(item?.decision), evidence: normalizeStoredEvidence(item?.evidence) }))
-    .filter((item) => item.decision !== '');
-}
-
-function normalizeStoredActionItems(raw) {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-
-  return raw
-    .map((item) => ({
-      task: asText(item?.task),
-      assignee: asText(item?.assignee),
-      dueDate: asText(item?.dueDate),
-      evidence: normalizeStoredEvidence(item?.evidence),
-    }))
-    .filter((item) => item.task !== '');
-}
-
-export function normalizeStoredMinutes(raw) {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return null;
-  }
-
-  return {
-    meeting: normalizeMeetingInfo(raw.meeting),
-    summary: asText(raw.summary),
-    topics: normalizeTopics(raw.topics),
-    decisions: normalizeStoredDecisions(raw.decisions),
-    actionItems: normalizeStoredActionItems(raw.actionItems),
-    openIssues: asTextArray(raw.openIssues),
-    notes: asTextArray(raw.notes),
   };
 }
 
@@ -668,64 +468,3 @@ export function buildMarkdown(minutes, { templateId = DEFAULT_TEMPLATE_ID, inclu
   return blocks.join('\n\n');
 }
 
-/* ================================================================
- * (d) ファイル名生成（要件書 §4-13）
- * ================================================================ */
-
-/* Windows/macOSどちらでも使えない文字と制御文字を安全な文字へ置換する。 */
-const FILENAME_UNSAFE_PATTERN = /[\\/:*?"<>|\x00-\x1f]/g;
-
-function sanitizeForFileName(text) {
-  return String(text ?? '')
-    .replace(FILENAME_UNSAFE_PATTERN, '_')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function formatDateForFileName(now) {
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-/*
- * 既定のファイル名。
- *   会議名あり: YYYY-MM-DD_会議名_議事録.md
- *   会議名なし: YYYY-MM-DD_議事録.md
- * date が YYYY-MM-DD 形式でない場合は、生成時刻（now）から日付を補う
- * （ファイル名には常に日付が要るため。§4-13 は「未入力時」の定めが無いため、
- * 安全側として実装時に補完する判断とする）。
- */
-export function buildMinutesFileName({ date, title, now = new Date() } = {}) {
-  const safeDate = sanitizeForFileName(date);
-  const datePart = /^\d{4}-\d{2}-\d{2}$/.test(safeDate) ? safeDate : formatDateForFileName(now);
-  /* 長すぎるファイル名を避けるため、会議名は先頭60文字までに丸める。 */
-  const safeTitle = sanitizeForFileName(title).slice(0, 60);
-
-  return safeTitle !== '' ? `${datePart}_${safeTitle}_議事録.md` : `${datePart}_議事録.md`;
-}
-
-/* ================================================================
- * 再生成のマージ（要件書 §4-12）
- * ================================================================
- *
- * 「全体」以外は、対象セクションだけを新しい応答へ差し替え、
- * それ以外は現在の（編集済みかもしれない）内容をそのまま保持する。
- * ================================================================ */
-
-export function mergeMinutesSection(current, incoming, target = REGENERATE_TARGETS.ALL) {
-  const base = current ?? createEmptyMinutes();
-  const next = incoming ?? createEmptyMinutes();
-
-  switch (target) {
-    case REGENERATE_TARGETS.ALL:
-      return next;
-    case REGENERATE_TARGETS.SUMMARY:
-      return { ...base, summary: next.summary };
-    case REGENERATE_TARGETS.DECISIONS:
-      return { ...base, decisions: next.decisions };
-    case REGENERATE_TARGETS.ACTION_ITEMS:
-      return { ...base, actionItems: next.actionItems };
-    default:
-      return base;
-  }
-}

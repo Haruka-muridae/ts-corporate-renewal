@@ -904,15 +904,6 @@ body.ma-no-remote .ma-circle--drive {
   }
 }
 
-.ma-nav {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.ma-nav__button {
-  width: 100%;
-}
-
 /* Document Picture-in-Picture 録音コントローラー */
 .ma-pip-page {
   margin: 0;

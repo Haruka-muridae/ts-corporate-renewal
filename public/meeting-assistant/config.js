@@ -52,11 +52,6 @@ export const DRIVE_RECORD_PATH = Object.freeze([
   'Potenitas record',
 ]);
 
-export const DRIVE_NAMES = Object.freeze({
-  voice: DRIVE_VOICE_PATH,
-  record: DRIVE_RECORD_PATH,
-});
-
 export function formatFolderPath(names) {
   return ['マイドライブ', ...names].join(' ＞ ');
 }
@@ -70,10 +65,6 @@ export const DRIVE = Object.freeze({
   listPageSize: 100,
   maxListPages: 10,
 });
-
-export const AUDIO_EXTENSIONS = Object.freeze([
-  '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.webm', '.flac',
-]);
 
 export const AUDIO_MIME_TYPES = Object.freeze([
   'audio/mpeg',
@@ -202,10 +193,6 @@ export const TEMPLATES = Object.freeze({
 });
 
 export const DEFAULT_TEMPLATE_ID = 'standard';
-
-export function isValidTemplateId(id) {
-  return typeof id === 'string' && Object.hasOwn(TEMPLATES, id);
-}
 
 export const REGENERATE_TARGETS = Object.freeze({
   ALL: 'all',
