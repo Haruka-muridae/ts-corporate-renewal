@@ -306,11 +306,3 @@ export function describeAppError(error) {
 
   return '処理に失敗しました。もう一度お試しください。';
 }
-
-/* 進捗の文言（§FR-08）。段階を分けて出す。 */
-export const PROGRESS = Object.freeze({
-  PREPARING: '保存の準備をしています',
-  RESOLVING_FOLDER: '保存先フォルダを確認しています',
-  UPLOADING: 'Google Drive へアップロードしています',
-  FINISHING: '保存を確定しています',
-});
