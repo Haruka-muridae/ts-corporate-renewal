@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meeting Assistant</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="apple-mobile-web-app-title" content="Meeting">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.png" type="image/png" sizes="48x48">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' capacitor://localhost ionic://localhost https://localhost; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' capacitor://localhost ionic://localhost https://localhost https://www.googleapis.com https://generativelanguage.googleapis.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main id="ma-main" class="vr-main">
+  <p id="ma-message" class="vr-message" hidden></p>
+
+  <section id="screen-home" data-screen="home" class="ma-home">
+    <details class="ma-settings" id="home-settings">
+      <summary class="ma-settings-link"><span class="ma-settings-caret ma-settings-caret--closed">▼ 設定 ▼</span><span class="ma-settings-caret ma-settings-caret--open">▲ 設定 ▲</span></summary>
+      <div class="ma-settings-panel">
+        <details class="ma-acc" id="set-google-acc">
+          <summary class="ma-acc__summary">
+            <span class="ma-acc__copy">
+              <span class="ma-acc__title">Google Drive 連携</span>
+              <span class="ma-acc__meta" id="set-google-state">未連携</span>
+            </span>
+            <span class="ma-acc__chev" aria-hidden="true">›</span>
+          </summary>
+          <div class="ma-acc__body">
+            <p class="vr-note">録音と議事録は <span data-voice-path></span> と <span data-record-path></span> に保存します。連携はこの画面を開いている間だけ有効です（約1時間）。</p>
+            <p class="vr-note" id="set-google-redirect-note" hidden>ホーム画面に追加したアプリでは、Google の画面へ移動してからこの画面へ戻ります。</p>
+            <div class="vr-actions">
+              <button type="button" class="ma-button" id="set-google-link">連携する</button>
+              <button type="button" class="ma-button ma-button--ghost" id="set-google-relink" hidden>連携しなおす</button>
+            </div>
+          </div>
+        </details>
+        <details class="ma-acc" id="set-key-acc">
+          <summary class="ma-acc__summary">
+            <span class="ma-acc__copy">
+              <span class="ma-acc__title">Gemini APIキー</span>
+              <span class="ma-acc__meta" id="set-key-state">未設定</span>
+            </span>
+            <span class="ma-acc__chev" aria-hidden="true">›</span>
+          </summary>
+          <div class="ma-acc__body">
+            <p class="vr-note">キーはこの端末だけに保存します。保存済みの値は再表示しません。</p>
+            <label class="vr-field">
+              <span class="vr-field__label">APIキー</span>
+              <input class="vr-input" id="set-key-input" type="password" autocomplete="off" spellcheck="false">
+            </label>
+            <div class="vr-actions">
+              <button type="button" class="ma-button" id="set-key-save">保存</button>
+              <button type="button" class="ma-button ma-button--ghost" id="set-key-remove">削除</button>
+            </div>
+            <p class="vr-note">取得先: <a id="set-key-link" href="https://aistudio.google.com/apikey" rel="noopener noreferrer" target="_blank">Google AI Studio</a></p>
+          </div>
+        </details>
+        <details class="ma-acc" id="set-kind-acc">
+          <summary class="ma-acc__summary">
+            <span class="ma-acc__copy">
+              <span class="ma-acc__title">対応種別</span>
+              <span class="ma-acc__meta" id="set-kind-count">0種類登録済み</span>
+            </span>
+            <span class="ma-acc__chev" aria-hidden="true">›</span>
+          </summary>
+          <div class="ma-acc__body">
+            <ul class="ma-list" id="set-kind-list"></ul>
+            <p class="vr-note" id="set-kind-empty" hidden>登録はありません。未選択のまま録音できます。</p>
+            <label class="vr-field">
+              <span class="vr-field__label">新しい対応種別</span>
+              <input class="vr-input" id="set-kind-input" type="text" maxlength="40" autocomplete="off">
+            </label>
+            <div class="vr-actions">
+              <button type="button" class="ma-button" id="set-kind-add">追加</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </details>
+    <header class="vr-header">
+      <h1 class="vr-title">
+        <button type="button" class="ma-home-title" id="home-reload">Meeting Assistant</button>
+      </h1>
+    </header>
+    <nav class="ma-circles" aria-label="主要操作">
+      <button type="button" class="ma-circle ma-circle--onsite" data-go="offline" aria-label="オフライン録音"><span class="ma-circle__label">On-site</span></button>
+      <button type="button" class="ma-circle ma-circle--remote" data-go="online" aria-label="オンライン録音"><span class="ma-circle__label">Remote</span></button>
+      <button type="button" class="ma-circle ma-circle--drive" data-go="pick" aria-label="Driveから音声を選ぶ"><span class="ma-circle__label">Drive</span></button>
+    </nav>
+    <section id="pending-recordings" class="ma-pending" hidden>
+      <h2 class="ma-pending__title" id="pending-title">未アップロードの録音があります</h2>
+      <p class="vr-note ma-pending__note">端末に残っている録音です。「Driveへ保存」を押すと Google と連携して保存し、議事録の作成へ進みます。</p>
+      <ul class="ma-list" id="pending-list"></ul>
+    </section>
+    <button type="button" class="ma-records-btn" data-go="records">過去の議事録 <span aria-hidden="true">›</span></button>
+    <p class="ma-home-copy">© Meeting Assistant</p>
+  </section>
+
+  <section id="screen-offline" data-screen="offline" class="ma-page ma-page--offline" hidden>
+    <button type="button" class="ma-back" data-go="home">‹ Meeting Assistant</button>
+    <h2 class="ma-screen-title">On-site</h2>
+    <p class="vr-note">録音し、Potenitas voice へ保存します。</p>
+    <p class="vr-warn" id="off-mobile-hint" hidden>録音中は画面を消さず、他のアプリへ切り替えないでください。画面が消えたり切り替えたりすると録音が止まることがあります。止まった場合も、そこまでの録音は端末に残り、Drive へ保存できます。</p>
+    <div class="ma-form">
+    <label class="vr-field">
+      <span class="vr-field__label">所属</span>
+      <input class="vr-input" id="off-org" type="text" autocomplete="organization" placeholder="株式会社Potenitas">
+    </label>
+    <label class="vr-field">
+      <span class="vr-field__label">氏名</span>
+      <input class="vr-input" id="off-person" type="text" autocomplete="name" placeholder="田中 太郎">
+    </label>
+    <label class="vr-field">
+      <span class="vr-field__label">対応種別</span>
+      <select class="vr-input" id="off-kind">
+        <option value="">未選択</option>
+      </select>
+    </label>
+    </div>
+    <div class="ma-record">
+    <div class="vr-indicator" id="off-indicator" data-state="idle">
+      <span class="vr-indicator__dot"></span>
+      <span id="off-indicator-text">待機中</span>
+    </div>
+    <div class="vr-timer">
+      <span class="vr-timer__value" id="off-timer">0:00</span>
+      <span class="vr-timer__limit" id="off-limit"></span>
+    </div>
+    <div class="vr-actions">
+      <button type="button" class="ma-button" id="off-start">録音開始</button>
+      <button type="button" class="ma-button ma-button--ghost" id="off-stop" disabled>録音停止</button>
+      <button type="button" class="ma-button ma-button--ghost" id="off-pip">最前面表示</button>
+    </div>
+    <p class="vr-note" id="off-pip-unsupported" hidden>このブラウザでは最前面表示を利用できません。</p>
+    <p class="vr-note" id="off-status"></p>
+    </div>
+  </section>
+
+  <section id="screen-online" data-screen="online" class="ma-page ma-page--online" hidden>
+    <button type="button" class="ma-back" data-go="home">‹ Meeting Assistant</button>
+    <h2 class="ma-screen-title">Remote</h2>
+    <p class="vr-note">会議タブを選択して録音します。</p>
+    <label class="vr-check" id="on-consent-row">
+      <input type="checkbox" id="on-consent">
+      <span>会話参加者から録音について必要な同意を得ています</span>
+    </label>
+    <p class="vr-warn" id="on-unsupported" hidden>この端末ではタブ音声の取得ができません。パソコンの Chrome または Edge で開いてください。</p>
+    <div class="ma-form">
+    <label class="vr-field">
+      <span class="vr-field__label">所属</span>
+      <input class="vr-input" id="on-org" type="text" autocomplete="organization" placeholder="株式会社Potenitas">
+    </label>
+    <label class="vr-field">
+      <span class="vr-field__label">氏名</span>
+      <input class="vr-input" id="on-person" type="text" autocomplete="name" placeholder="田中 太郎">
+    </label>
+    <label class="vr-field">
+      <span class="vr-field__label">対応種別</span>
+      <select class="vr-input" id="on-kind">
+        <option value="">未選択</option>
+      </select>
+    </label>
+    </div>
+    <div class="ma-record">
+    <div class="vr-indicator" id="on-indicator" data-state="idle">
+      <span class="vr-indicator__dot"></span>
+      <span id="on-indicator-text">待機中</span>
+    </div>
+    <div class="vr-timer">
+      <span class="vr-timer__value" id="on-timer">0:00</span>
+      <span class="vr-timer__limit" id="on-limit"></span>
+    </div>
+    <div class="vr-actions">
+      <button type="button" class="ma-button" id="on-start">録音開始</button>
+      <button type="button" class="ma-button ma-button--ghost" id="on-stop" disabled>録音停止</button>
+      <button type="button" class="ma-button ma-button--ghost" id="on-pip">最前面表示</button>
+    </div>
+    <p class="vr-note" id="on-pip-unsupported" hidden>このブラウザでは最前面表示を利用できません。</p>
+    <p class="ma-remote-tips">※ブラウザ版の会議タブを選んでください。<br>※「タブの音声も共有する」をオンにしてください。</p>
+    <p class="vr-note" id="on-status"></p>
+    </div>
+  </section>
+
+  <section id="screen-pick" data-screen="pick" class="ma-page ma-page--pick" hidden>
+    <button type="button" class="ma-back" data-go="home">‹ Meeting Assistant</button>
+    <h2 class="ma-screen-title">Drive</h2>
+    <p class="vr-note">Potenitas voice の音声ファイルだけを表示します。</p>
+    <div class="vr-actions">
+      <button type="button" class="ma-button" id="pick-refresh">一覧を更新</button>
+      <button type="button" class="ma-button" id="pick-run" disabled>議事録を作成</button>
+    </div>
+    <ul class="ma-list" id="pick-list"></ul>
+    <p class="vr-note" id="pick-empty" hidden>音声ファイルがありません。</p>
+  </section>
+
+  <section id="screen-records" data-screen="records" class="ma-page" hidden>
+    <button type="button" class="ma-back" data-go="home">‹ Meeting Assistant</button>
+    <h2 class="ma-screen-title">過去の議事録</h2>
+    <p class="vr-note"><span data-record-path></span> の Markdown です。</p>
+    <div class="vr-actions">
+      <button type="button" class="ma-button" id="rec-refresh">一覧を更新</button>
+    </div>
+    <ul class="ma-list" id="rec-list"></ul>
+    <p class="vr-note" id="rec-empty" hidden>議事録はまだありません。</p>
+  </section>
+
+  <section id="screen-process" data-screen="process" class="ma-page" hidden>
+    <button type="button" class="ma-back" data-go="home">‹ Meeting Assistant</button>
+    <h2 class="ma-screen-title">処理中</h2>
+    <p class="vr-note" id="proc-file"></p>
+    <ol class="vr-steps" id="proc-steps">
+      <li class="vr-step"><span class="vr-step__label">音声の準備</span><span class="vr-step__state" data-step="audio">待機</span></li>
+      <li class="vr-step"><span class="vr-step__label">文字起こし</span><span class="vr-step__state" data-step="transcribe">待機</span></li>
+      <li class="vr-step"><span class="vr-step__label">To Do / 議事録</span><span class="vr-step__state" data-step="minutes">待機</span></li>
+      <li class="vr-step"><span class="vr-step__label">Markdown 保存</span><span class="vr-step__state" data-step="save">待機</span></li>
+    </ol>
+    <p class="vr-note" id="proc-status"></p>
+  </section>
+
+  <section id="screen-done" data-screen="done" class="ma-page" hidden>
+    <button type="button" class="ma-back" data-go="home">‹ Meeting Assistant</button>
+    <h2 class="ma-screen-title">完了</h2>
+    <p class="vr-message" id="done-text">完了しました。</p>
+    <div class="vr-actions">
+      <a class="ma-button" id="done-open" href="#" rel="noopener noreferrer" target="_blank">Markdown を開く</a>
+    </div>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

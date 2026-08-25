@@ -1,0 +1,21 @@
+{
+  "name": "Meeting Assistant",
+  "short_name": "Meeting",
+  "start_url": "/meeting-assistant/",
+  "scope": "/meeting-assistant/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
+  "icons": [
+    {
+      "src": "/meeting-assistant/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/meeting-assistant/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

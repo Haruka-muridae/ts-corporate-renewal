@@ -1,0 +1,16 @@
+{
+  "appId": "com.potenitas.meetingassistant",
+  "appName": "Meeting Assistant",
+  "webDir": "../../public/meeting-assistant",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "hostname": "localhost"
+  },
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "android": {
+    "webContentsDebuggingEnabled": true
+  }
+}
