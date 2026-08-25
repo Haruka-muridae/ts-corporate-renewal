@@ -7,8 +7,12 @@
  * ------------------------------------------------------------------
  *   PC ブラウザ / スマートフォンブラウザ
  *     Recorder（AudioWorklet → Worker → OPFS）で確定 → 保存待ち台帳（pending-store.js）
- *     → Drive へアップロード → 文字起こし・議事録 → Markdown を Drive へ保存
+ *     → Google 認証チェックポイント（auth-checkpoint.js。足りなければ利用者の押下で更新）
+ *     → 保存先フォルダを保証（drive-folders.js）→ Drive へアップロード
+ *     → 文字起こし・議事録 → Markdown を Drive へ保存
  *     → 全工程の成功を確認してから台帳と OPFS から削除（save-flow.js）
+ *
+ * 録音開始時に Google 連携は求めない（録音の必須条件にしない）。
  *   ネイティブ（Capacitor。現フェーズは停止中だが経路は残す）
  *     NativeRecorder → 端末ファイル → Drive
  *
@@ -27,11 +31,14 @@ import {
   MAX_SECONDS,
   MP3_MIME,
   OAUTH,
+  SAVE_TOKEN_MIN_SECONDS,
   formatFolderPath,
 } from './config.js';
 import { AppError, ErrorCode, describeAppError, describeError } from './errors.js';
 import { diagnostics } from './diagnostics.js';
 import { SaveOutcome, SaveStage, saveAndProcessRecording } from './save-flow.js';
+import { AuthCheck, evaluateSaveAuth } from './auth-checkpoint.js';
+import { createFolderResolver } from './drive-folders.js';
 import { buildRecordingFileName } from './filename.js';
 import {
   consumeRedirectResult,
@@ -41,14 +48,15 @@ import {
   preloadGis,
   requestAccess,
   tokenRemainingSeconds,
+  tokenState,
 } from './oauth.js';
 import {
   downloadFile,
+  ensureFolderChain,
   fileViewUrl,
+  getFolderMetadata,
   listRecordMarkdown,
   listVoiceAudio,
-  resolveRecordFolder,
-  resolveVoiceFolder,
   saveMarkdown,
   uploadResumable,
 } from './drive.js';
@@ -106,6 +114,8 @@ import { Recorder, RecorderState } from './recorder/recorder.js';
 const OVERWRITE_CONFIRM = 'すでに議事録があります。再生成しますか？';
 const REMOTE_PC_ONLY = 'Remote録音はパソコン版で利用できます。';
 const SAVED_LOCAL_CONNECT = '録音を端末に保存しました。「Driveへ保存」を押して Google と連携し、保存してください。';
+const SAVED_LOCAL_RELINK = '録音を端末に保存しました。Google Drive との連携の有効期限が切れているため、「Driveへ保存」を押して連携を更新すると保存が続きます。';
+const SAVED_LOCAL_TOKEN_SHORT = '録音を端末に保存しました。Google Drive との連携の残り時間が短いため、「Driveへ保存」を押して連携を更新してから保存します。';
 const NOT_CONNECTED_RECORDING = 'Google 未連携のまま録音します。停止後に「Driveへ保存」から連携できます。';
 const RECORDING_IN_PROGRESS = '録音中です。先に「録音停止」を押してください。';
 const LEDGER_NOT_PERSISTED = 'この端末では録音の一覧を保存できません（プライベートモード等）。この画面を閉じる前に「Driveへ保存」を押してください。';
@@ -170,8 +180,6 @@ const state = {
   selectedAudio: null,
   voiceFiles: [],
   recordFiles: [],
-  voiceFolderId: null,
-  recordFolderId: null,
   recorder: null,
   mix: null,
   mode: null,
@@ -181,8 +189,6 @@ const state = {
   nativeRecording: null,
   /* Drive へ送信中の recordingId。二重押しで同名ファイルを 2 つ作らない。 */
   uploading: new Set(),
-  /* このセッションで利用者が Google 連携を断った。録音開始のたびに再要求しない。 */
-  authDeclined: false,
 };
 
 const recorderView = {
@@ -192,6 +198,14 @@ const recorderView = {
 
 const pendingStore = createPendingStore();
 const wakeLock = createWakeLockKeeper();
+
+/* 保存先フォルダ（検索 → 無ければ作成）。解決した ID を持ち、保存前に検証する。 */
+const folders = createFolderResolver({
+  storage: (() => { try { return globalThis.localStorage ?? null; } catch { return null; } })(),
+  ensureChain: ensureFolderChain,
+  getFolder: getFolderMetadata,
+  paths: { voice: DRIVE_VOICE_PATH, record: DRIVE_RECORD_PATH },
+});
 
 const pip = createDocumentPip({
   onStop() {
@@ -528,6 +542,29 @@ async function ensureGoogle(resume = null) {
   return { accessToken: currentToken() };
 }
 
+/*
+ * 保存前の Google 認証チェックポイント（§ 保存時に認証を確定する）。
+ * 有効で残り時間が十分ならそのまま。足りなければ連携を更新する（ポップアップ／リダイレクト）。
+ * 利用者の押下の直後に呼ぶこと。押下なしではポップアップが開かず OAUTH_USER_ACTION_REQUIRED になる。
+ */
+function saveAuthCheck() {
+  return evaluateSaveAuth({ ...tokenState(), minSeconds: SAVE_TOKEN_MIN_SECONDS });
+}
+
+async function ensureAuthForSave(resume = null) {
+  if (saveAuthCheck().status === AuthCheck.OK) {
+    return;
+  }
+
+  /* 残りが足りないだけの場合も取り直す（古いトークンを先に捨てる）。 */
+  if (hasValidToken()) {
+    forgetToken();
+  }
+
+  await requestAccess(authOptions(resume));
+  refreshGoogleState();
+}
+
 async function withGoogleRetry(task, resume = null) {
   try {
     return await task(await ensureGoogle(resume));
@@ -631,13 +668,11 @@ function renderRecordList() {
 
 async function refreshDriveLists(resume = null) {
   const result = await withGoogleRetry(async (auth) => {
-    const voice = await listVoiceAudio(auth, state.voiceFolderId);
-    const record = await listRecordMarkdown(auth, state.recordFolderId);
+    const voice = await listVoiceAudio(auth, await folders.resolve('voice', auth));
+    const record = await listRecordMarkdown(auth, await folders.resolve('record', auth));
     return { voice, record };
   }, resume);
 
-  state.voiceFolderId = result.voice.folderId;
-  state.recordFolderId = result.record.folderId;
   state.voiceFiles = result.voice.files;
   state.recordFiles = result.record.files;
 }
@@ -807,13 +842,26 @@ async function handleFinalizedRecording(mode, result) {
   const persisted = pendingStore.put(entry);
   await refreshPendingRecordings();
 
-  if (hasValidToken()) {
+  /*
+   * Google 認証チェックポイント。有効で残り時間が十分なら、そのまま保存へ。
+   * 足りなければ台帳に残してホームへ戻す。停止処理のあとでは利用者操作の猶予が
+   * 切れており、ここでポップアップを開こうとしても阻止されるため、
+   * 「Driveへ保存」の押下（＝猶予のある文脈）で連携を更新してから保存する。
+   */
+  const auth = saveAuthCheck();
+
+  if (auth.status === AuthCheck.OK) {
     await uploadBrowserRecordingAndProcess(entry, { file });
     return;
   }
 
+  const guide = auth.status === AuthCheck.EXPIRED
+    ? SAVED_LOCAL_RELINK
+    : (auth.status === AuthCheck.INSUFFICIENT ? SAVED_LOCAL_TOKEN_SHORT : SAVED_LOCAL_CONNECT);
+
+  diagnostics.stage('auth-checkpoint', { recordingId, status: auth.status });
   goHomeFlat();
-  showMessage(persisted ? SAVED_LOCAL_CONNECT : `${SAVED_LOCAL_CONNECT} ${LEDGER_NOT_PERSISTED}`, !persisted);
+  showMessage(persisted ? guide : `${guide} ${LEDGER_NOT_PERSISTED}`, !persisted);
 }
 
 /*
@@ -883,20 +931,22 @@ async function uploadBrowserRecording(entry, file) {
   let result;
 
   try {
+    const resume = { screen: 'home', action: { type: 'upload', recordingId: entry.recordingId } };
+
     result = await saveAndProcessRecording({ entry, file }, {
+      /* 0. 認証チェックポイント（押下の直後に呼ばれる前提。猶予が無ければ案内して止まる） */
+      ensureAuth: () => ensureAuthForSave(resume),
+      /* 2a. 保存先フォルダ（検索 → 無い階層だけ作成）。ID は保持し、保存前に検証する */
+      resolveFolder: () => withGoogleRetry((auth) => folders.resolve('voice', auth), resume),
       ledger: pendingStore,
       loadFile: getRecordingFile,
       deleteLocal: deleteRecording,
-      uploadToDrive: (blob, current) => withGoogleRetry(async (auth) => {
-        const folderId = state.voiceFolderId ?? await resolveVoiceFolder(auth);
-        state.voiceFolderId = folderId;
-        return uploadResumable({
-          file: blob,
-          name: current.fileName,
-          folderId,
-          mimeType: current.mimeType || blob.type || MP3_MIME,
-        }, auth);
-      }, { screen: 'home', action: { type: 'upload', recordingId: current.recordingId } }),
+      uploadToDrive: (blob, current, folderId) => withGoogleRetry(async (auth) => uploadResumable({
+        file: blob,
+        name: current.fileName,
+        folderId: folderId ?? await folders.resolve('voice', auth),
+        mimeType: current.mimeType || blob.type || MP3_MIME,
+      }, auth), resume),
       process: (driveFile) => {
         setStep('audio', '完了', 'ok');
         /* OPFS の File をそのまま渡す。この時点では OPFS の実体はまだ消していない。 */
@@ -909,11 +959,10 @@ async function uploadBrowserRecording(entry, file) {
       },
     });
   } catch (error) {
-    /* 端末の録音を取れない・空録音・Drive 保存の失敗。台帳は save-flow が更新済み。 */
+    /* 認証の更新・端末の録音の取得・空録音・保存先の準備・Drive 保存の失敗。台帳は save-flow が更新済み。 */
     await refreshPendingRecordings();
     goHomeFlat();
-    const note = failedStage === SaveStage.DRIVE_UPLOAD ? ` ${LOCAL_KEPT_DRIVE_FAILED}` : '';
-    showMessage(`${describeAppError(error)}${note}`, true);
+    showMessage(describeSaveFailure(error, failedStage), true);
     return;
   }
 
@@ -929,6 +978,31 @@ async function uploadBrowserRecording(entry, file) {
    * NOT_COMPLETED … processExistingAudio がホームへ戻して案内済み（APIキー未設定など）。
    *                 台帳は UPLOADED のまま残り、「議事録を作成」で続きができる
    */
+}
+
+/*
+ * 保存フローの失敗を、段階に応じて案内する。
+ *   認証系（OAUTH_*）      … そのコードの案内（「連携しなおす」「押して更新」など）
+ *   保存先フォルダの段階   … 保存先を準備できなかった（録音は端末にある）
+ *   Drive 保存の段階       … 従来の案内 ＋ 録音は端末にある
+ *   それ以外               … コードの案内
+ */
+function describeSaveFailure(error, stage) {
+  const code = error instanceof AppError ? error.code : '';
+
+  if (code.startsWith('OAUTH_')) {
+    return describeAppError(error);
+  }
+
+  if (stage === SaveStage.FOLDER) {
+    return describeError(new AppError(ErrorCode.DRIVE_FOLDER_UNAVAILABLE, code || 'folder_failed'));
+  }
+
+  if (stage === SaveStage.DRIVE_UPLOAD) {
+    return `${describeAppError(error)} ${LOCAL_KEPT_DRIVE_FAILED}`;
+  }
+
+  return describeAppError(error);
 }
 
 async function discardBrowserRecording(entry) {
@@ -1053,8 +1127,7 @@ async function processExistingAudio(file, { skipProcessedCheck = false } = {}) {
   const matching = findMatchingMarkdown(file.name, state.recordFiles);
 
   const saved = await withGoogleRetry(async (auth) => {
-    const folderId = state.recordFolderId ?? await resolveRecordFolder(auth);
-    state.recordFolderId = folderId;
+    const folderId = await folders.resolve('record', auth);
     return saveMarkdown({
       text: result.markdown,
       fileName: markdownName,
@@ -1110,28 +1183,6 @@ function setRecordingMetaDisabled(mode, disabled) {
  * 押下の文脈にあるうちに済ませる。断られても録音は始める（台帳に残る）。
  * リダイレクト方式ではこの時点で Google へ移動し、戻ったあとに改めて押してもらう。
  */
-async function connectBeforeRecording(mode) {
-  if (env.native || hasValidToken() || state.authDeclined) {
-    return;
-  }
-
-  try {
-    await requestAccess(authOptions({ screen: mode, action: { type: 'record' } }));
-    refreshGoogleState();
-  } catch (error) {
-    if (error?.code === ErrorCode.OAUTH_REDIRECT_FAILED) {
-      throw error;
-    }
-
-    /* 利用者が閉じた・断ったときだけ、このセッションでは再要求しない。読み込み失敗等は次回また試す。 */
-    if (error?.code === ErrorCode.OAUTH_POPUP_CLOSED) {
-      state.authDeclined = true;
-    }
-
-    setRecorderUi(mode, { status: NOT_CONNECTED_RECORDING });
-  }
-}
-
 let nativeElapsedTimer = null;
 let nativeVisibilityHandler = null;
 
@@ -1210,7 +1261,12 @@ async function startOffline() {
   state.recorder = attachRecorder('offline');
   await state.recorder.start();
   registerRecordingStart('offline', state.recorder);
-  setRecorderUi('offline', { recording: true, seconds: 0, error: '' });
+  setRecorderUi('offline', {
+    recording: true,
+    seconds: 0,
+    status: saveAuthCheck().status === AuthCheck.OK ? '' : NOT_CONNECTED_RECORDING,
+    error: '',
+  });
   wakeLock.start().catch(() => {});
 }
 
@@ -1271,8 +1327,7 @@ async function stopRecording(mode) {
 
 async function uploadNativeFile(item) {
   const uploaded = await withGoogleRetry(async (auth) => {
-    const folderId = state.voiceFolderId ?? await resolveVoiceFolder(auth);
-    state.voiceFolderId = folderId;
+    const folderId = await folders.resolve('voice', auth);
     return uploadResumable({
       name: item.fileName,
       folderId,
@@ -1485,9 +1540,12 @@ document.addEventListener('click', (event) => {
   navigateTo(go);
 });
 
+/*
+ * 録音開始時に Google 連携は求めない（録音の必須条件にしない）。
+ * 連携の確認・更新は停止後、Drive へ保存する直前のチェックポイントで行う。
+ */
 el.offStart.addEventListener('click', () => {
-  connectBeforeRecording('offline')
-    .then(() => startOffline())
+  startOffline()
     .catch((error) => {
       stopNativeElapsedWatch();
       state.nativeRecording = null;
@@ -1602,7 +1660,9 @@ function linkGoogle({ relink = false } = {}) {
   showMessage('');
 
   if (relink) {
+    /* 別アカウントになるかもしれない。保持している保存先フォルダの ID も捨てる。 */
     forgetToken();
+    folders.forget();
     refreshGoogleState();
   }
 
@@ -1759,11 +1819,6 @@ function boot() {
 
     if (!redirect.ok) {
       showMessage(describeError(new AppError(redirect.code)), true);
-
-      /* 録音開始から飛んで断られた場合、次の「録音開始」で再び Google へ飛ばない。 */
-      if (redirect.resume?.action?.type === 'record') {
-        state.authDeclined = true;
-      }
     }
   }
 
