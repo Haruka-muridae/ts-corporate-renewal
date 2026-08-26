@@ -1772,6 +1772,301 @@ async function run() {
       JSON.stringify(body.items[0].notifications),
     );
     check('終日予定は通知の予定を持たない', body.items[1].allDay === true && body.items[1].notifications.length === 0);
+    check(
+      '上書きが無ければ customTitle/customUrl は空文字',
+      body.items[0].customTitle === '' && body.items[0].customUrl === '',
+      JSON.stringify(body.items[0]),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('上書き — 予定ごとの通知タイトルと URL（§7・§9）');
+
+  {
+    /* resolveOpenUrl: 上書き URL は最優先で source='custom'。 */
+    const event = normalizeEvent(rawEvent({
+      conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/auto' }] },
+    }));
+
+    const custom = resolveOpenUrl(event, { appUrl: APP_URL, overrideUrl: 'https://example.com/custom' });
+
+    check(
+      '★上書き URL は conference より優先され source=custom',
+      custom.url === 'https://example.com/custom' && custom.source === 'custom',
+      JSON.stringify(custom),
+    );
+
+    const jsUrl = resolveOpenUrl(event, { appUrl: APP_URL, overrideUrl: 'javascript:alert(1)' });
+
+    check(
+      '★不正な上書き（javascript:）は無視して従来の優先順位へ',
+      jsUrl.source === 'conference' && jsUrl.url === 'https://meet.google.com/auto',
+      JSON.stringify(jsUrl),
+    );
+
+    check('空の上書きは無視', resolveOpenUrl(event, { appUrl: APP_URL, overrideUrl: '' }).source === 'conference');
+    check('上書き未指定でも従来どおり（後方互換）', resolveOpenUrl(event, { appUrl: APP_URL }).source === 'conference');
+  }
+
+  {
+    /* planNotifications: 上書きでタイトルと URL が変わる。 */
+    const events = [normalizeEvent(rawEvent({
+      id: 'ev-ov',
+      start: { dateTime: new Date(NOW + 10 * MINUTE).toISOString() },
+      conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/auto' }] },
+    }))];
+
+    const both = planNotifications({
+      events,
+      leadMinutes: [10],
+      nowMs: NOW,
+      appUrl: APP_URL,
+      overrides: new Map([['ev-ov', { title: '面談（重要）', url: 'https://example.com/room' }]]),
+    });
+
+    check('★上書きタイトルが通知タイトルになる', both[0].title === '面談（重要）', JSON.stringify(both[0]));
+    check(
+      '★上書き URL が openUrl になり source=custom',
+      both[0].openUrl === 'https://example.com/room' && both[0].urlSource === 'custom',
+      JSON.stringify(both[0]),
+    );
+
+    const titleOnly = planNotifications({
+      events,
+      leadMinutes: [10],
+      nowMs: NOW,
+      appUrl: APP_URL,
+      overrides: new Map([['ev-ov', { title: 'タイトルだけ', url: '' }]]),
+    });
+
+    check(
+      'タイトルだけ上書きなら URL は自動抽出のまま',
+      titleOnly[0].title === 'タイトルだけ' && titleOnly[0].urlSource === 'conference',
+      JSON.stringify(titleOnly[0]),
+    );
+
+    const none = planNotifications({ events, leadMinutes: [10], nowMs: NOW, appUrl: APP_URL });
+
+    check(
+      'overrides 未指定なら従来どおり',
+      none[0].title === '定例会議' && none[0].urlSource === 'conference',
+      JSON.stringify(none[0]),
+    );
+  }
+
+  {
+    /* store.upsertOverride: 解除・pending への反映・sent は触らない。 */
+    const store = createFakeStore({ users: [{ id: 'u1' }] });
+    const iso = new Date(NOW).toISOString();
+
+    await store.insertNotificationIfAbsent({
+      userId: 'u1',
+      eventId: 'ev-ov',
+      eventStart: new Date(NOW + 10 * MINUTE).toISOString(),
+      leadMinutes: 10,
+      notifyAt: new Date(NOW).toISOString(),
+      title: '自動タイトル',
+      openUrl: 'https://meet.google.com/auto',
+      urlSource: 'conference',
+      status: 'pending',
+      nowIso: iso,
+    });
+
+    const saved = await store.upsertOverride('u1', 'ev-ov', { title: '手動タイトル', url: 'https://example.com/x' }, iso);
+
+    check('upsertOverride は保存値を返す', saved.title === '手動タイトル' && saved.url === 'https://example.com/x', JSON.stringify(saved));
+    check('getOverride で読める', (await store.getOverride('u1', 'ev-ov'))?.url === 'https://example.com/x');
+
+    const pending = store._notifications.find((row) => row.eventId === 'ev-ov');
+
+    check(
+      '★pending の通知へ上書きが即時反映される',
+      pending.title === '手動タイトル' && pending.openUrl === 'https://example.com/x' && pending.urlSource === 'custom',
+      JSON.stringify(pending),
+    );
+
+    const listed = await store.listOverrides('u1', ['ev-ov', 'ev-none']);
+
+    check('listOverrides は該当分だけ Map で返す', listed.get('ev-ov')?.url === 'https://example.com/x' && !listed.has('ev-none'), JSON.stringify([...listed]));
+    check('listOverrides の空 eventIds は空 Map', (await store.listOverrides('u1', [])).size === 0);
+
+    const cleared = await store.upsertOverride('u1', 'ev-ov', { title: '', url: '' }, iso);
+
+    check(
+      '★両方空で解除（行削除）',
+      cleared.title === '' && cleared.url === '' && (await store.getOverride('u1', 'ev-ov')) === null,
+      JSON.stringify(cleared),
+    );
+    check('解除では pending 行は触らない（上書きが残る）', pending.title === '手動タイトル' && pending.urlSource === 'custom');
+  }
+
+  {
+    /* upsertOverride は送信済み（sent）の通知を書き換えない。 */
+    const store = createFakeStore({ users: [{ id: 'u1' }] });
+    const iso = new Date(NOW).toISOString();
+
+    await store.insertNotificationIfAbsent({
+      userId: 'u1',
+      eventId: 'ev-sent',
+      eventStart: new Date(NOW).toISOString(),
+      leadMinutes: 10,
+      notifyAt: new Date(NOW).toISOString(),
+      title: '元タイトル',
+      openUrl: 'https://meet.google.com/orig',
+      urlSource: 'conference',
+      status: 'sent',
+      nowIso: iso,
+    });
+
+    await store.upsertOverride('u1', 'ev-sent', { title: '新タイトル', url: 'https://example.com/y' }, iso);
+
+    const row = store._notifications.find((item) => item.eventId === 'ev-sent');
+
+    check('★送信済みの通知は上書きで変えない', row.title === '元タイトル' && row.openUrl === 'https://meet.google.com/orig', JSON.stringify(row));
+  }
+
+  {
+    /* GET /api/events: 上書き設定後、customTitle/customUrl と openUrl(custom) を反映。 */
+    const cookie = await makeSessionCookie('u1');
+
+    const store = createFakeStore({
+      users: [{ id: 'u1', leadMinutes: [10] }],
+      tokens: [{
+        userId: 'u1',
+        refreshTokenEnc,
+        accessTokenEnc: await encryptString(encryptionKey, 'at-cached'),
+        accessTokenExpiresAt: new Date(NOW + HOUR).toISOString(),
+      }],
+      overrides: [{ userId: 'u1', eventId: 'ev-list', title: '上書き文', url: 'https://example.com/ov' }],
+    });
+
+    const env = {
+      APP_ORIGIN: 'https://tsam-ai.com',
+      APP_BASE_PATH: '/push-assistant',
+      SESSION_SECRET: sessionSecret,
+      TOKEN_ENCRYPTION_KEY: base64UrlEncode(new Uint8Array(32).fill(3)),
+      GOOGLE_CLIENT_ID: 'client-123',
+      GOOGLE_CLIENT_SECRET: 'secret',
+      __STORE: store,
+      __NOW_MS: NOW,
+      __FETCH: createFetch([{
+        match: 'calendar/v3',
+        handler: () => jsonResponse({
+          items: [
+            rawEvent({
+              id: 'ev-list',
+              start: { dateTime: new Date(NOW + 2 * HOUR).toISOString() },
+              end: { dateTime: new Date(NOW + 3 * HOUR).toISOString() },
+              conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/list' }] },
+            }),
+          ],
+        }),
+      }]),
+    };
+
+    const response = await worker.fetch(
+      new Request('https://tsam-ai.com/push-assistant/api/events', { headers: { Cookie: `pa_session=${cookie}` } }),
+      env,
+    );
+    const body = await response.json();
+
+    check(
+      '★GET /api/events は customTitle/customUrl を返す',
+      body.items[0].customTitle === '上書き文' && body.items[0].customUrl === 'https://example.com/ov',
+      JSON.stringify(body.items[0]),
+    );
+    check(
+      '★openUrl/urlSource が上書き反映（custom、conference を上書き）',
+      body.items[0].openUrl === 'https://example.com/ov' && body.items[0].urlSource === 'custom',
+      JSON.stringify(body.items[0]),
+    );
+  }
+
+  {
+    /* PUT /api/events/override（フロントとの契約: 保存後の override を返す）。 */
+    const cookie = await makeSessionCookie('u1');
+    const store = createFakeStore({ users: [{ id: 'u1' }] });
+
+    const env = {
+      APP_ORIGIN: 'https://tsam-ai.com',
+      APP_BASE_PATH: '/push-assistant',
+      SESSION_SECRET: sessionSecret,
+      __STORE: store,
+      __NOW_MS: NOW,
+    };
+
+    const put = (body, headers) => worker.fetch(
+      new Request('https://tsam-ai.com/push-assistant/api/events/override', {
+        method: 'PUT',
+        headers: { Origin: 'https://tsam-ai.com', Cookie: `pa_session=${cookie}`, 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+      }),
+      env,
+    );
+
+    const good = await put({ eventId: 'ev1', title: '  こんにちは  ', url: 'https://example.com/a' });
+    const goodBody = await good.json();
+
+    check(
+      '正常保存: 200 で trim 済みの保存値を返す',
+      good.status === 200 && goodBody.override.eventId === 'ev1'
+        && goodBody.override.title === 'こんにちは' && goodBody.override.url === 'https://example.com/a',
+      JSON.stringify(goodBody),
+    );
+    check('store に反映される', (await store.getOverride('u1', 'ev1'))?.url === 'https://example.com/a');
+
+    check('eventId 欠落は 400', (await put({ title: 'x' })).status === 400);
+    check('eventId が空文字は 400', (await put({ eventId: '   ', title: 'x' })).status === 400);
+    check('★javascript: URL は 400', (await put({ eventId: 'ev1', url: 'javascript:alert(1)' })).status === 400);
+    check('ftp: URL も 400', (await put({ eventId: 'ev1', url: 'ftp://example.com/x' })).status === 400);
+
+    const cleared = await put({ eventId: 'ev1', title: '', url: '' });
+    const clearedBody = await cleared.json();
+
+    check(
+      '両方空で解除（title/url は空、行は消える）',
+      clearedBody.override.title === '' && clearedBody.override.url === ''
+        && (await store.getOverride('u1', 'ev1')) === null,
+      JSON.stringify(clearedBody),
+    );
+
+    const unauth = await worker.fetch(
+      new Request('https://tsam-ai.com/push-assistant/api/events/override', {
+        method: 'PUT',
+        headers: { Origin: 'https://tsam-ai.com', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'ev1' }),
+      }),
+      env,
+    );
+
+    check('未ログインは 401', unauth.status === 401, String(unauth.status));
+
+    const badOrigin = await worker.fetch(
+      new Request('https://tsam-ai.com/push-assistant/api/events/override', {
+        method: 'PUT',
+        headers: { Origin: 'https://evil.example', Cookie: `pa_session=${cookie}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'ev1' }),
+      }),
+      env,
+    );
+
+    check('Origin 不一致は 403', badOrigin.status === 403, String(badOrigin.status));
+  }
+
+  {
+    /* deleteUserData（接続解除）で event_overrides も消える。 */
+    const store = createFakeStore({
+      users: [{ id: 'u1' }, { id: 'u2' }],
+      overrides: [
+        { userId: 'u1', eventId: 'ev-a', title: 'A', url: 'https://example.com/a' },
+        { userId: 'u2', eventId: 'ev-b', title: 'B', url: 'https://example.com/b' },
+      ],
+    });
+
+    await store.deleteUserData('u1');
+
+    check('★解除した利用者の上書きは消える', (await store.getOverride('u1', 'ev-a')) === null);
+    check('他利用者の上書きは残る', (await store.getOverride('u2', 'ev-b'))?.title === 'B');
   }
 
   {

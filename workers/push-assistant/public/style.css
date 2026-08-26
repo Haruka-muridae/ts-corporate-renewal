@@ -271,6 +271,72 @@ ul {
   color: var(--pa-color-navy);
 }
 
+/* ---------- 予定ごとの上書き（通知の文章・URL） ---------- */
+
+.pa-event__override {
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--pa-color-border);
+  padding-top: 0.4rem;
+}
+
+.pa-event__override-toggle {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--pa-color-navy);
+  font-size: 0.9rem;
+  font-weight: 600;
+  list-style: none;
+}
+
+/* 三角マーカーを自前で置く（WebKit の既定マーカーは消す）。 */
+.pa-event__override-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.pa-event__override-toggle::before {
+  content: "＋";
+  margin-right: 0.4rem;
+  font-weight: 700;
+}
+
+.pa-event__override[open] > .pa-event__override-toggle::before {
+  content: "−";
+}
+
+.pa-event__override-body {
+  padding: 0.2rem 0 0.2rem;
+}
+
+.pa-event__override-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--pa-color-border);
+  border-radius: 6px;
+  font-size: 1rem;
+  background: var(--pa-color-bg);
+  color: var(--pa-color-text);
+}
+
+.pa-event__override-input::placeholder {
+  color: var(--pa-color-text-muted);
+}
+
+.pa-event__override-msg {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+}
+
+.pa-event__override-msg[data-kind="success"] {
+  color: #1f7a33;
+}
+
+.pa-event__override-msg[data-kind="error"] {
+  color: #b3261e;
+}
+
 /* ---------- フォーカス可視性・アニメーション ---------- */
 
 a:focus-visible,

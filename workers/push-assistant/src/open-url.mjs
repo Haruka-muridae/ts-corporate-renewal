@@ -199,6 +199,10 @@ export function extractUrls(text) {
 /**
  * 開く URL を 1 本に決める（仕様書 §9 の優先順位）。
  *
+ * 0. overrideUrl（利用者が予定ごとに手動指定した行き先）… **最優先**。
+ *    http/https（isAllowedUrl）を満たすときだけ採り、source は 'custom'。
+ *    利用者が明示した意図なので自動抽出より優先する。無効・未指定なら無視して
+ *    従来の優先順位へ落ちる（javascript: 等を入れられても通知は止めない）。
  * 1. conference（Meet 等）… 会議に入るのが目的なので最優先
  * 2. description 内の最初の URL … 主催者が書いた行き先
  * 3. location が URL … 会議室名のこともあるので URL のときだけ
@@ -206,7 +210,11 @@ export function extractUrls(text) {
  * 5. appUrl … ここまで全滅することは無い（htmlLink は必ず来る）が、
  *    「開く先が無い通知」を作らないための最後の受け皿
  */
-export function resolveOpenUrl(event, { appUrl }) {
+export function resolveOpenUrl(event, { appUrl, overrideUrl } = {}) {
+  if (isAllowedUrl(overrideUrl)) {
+    return { url: String(overrideUrl).trim(), source: 'custom' };
+  }
+
   const candidates = [
     ['conference', event?.conferenceUrl],
     ...(Array.isArray(event?.urls) ? event.urls.map((url) => ['description', url]) : []),

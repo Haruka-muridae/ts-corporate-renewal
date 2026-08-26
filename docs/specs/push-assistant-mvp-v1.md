@@ -234,6 +234,25 @@ CREATE INDEX idx_notifications_due ON notifications(status, notify_at);
 CREATE INDEX idx_notifications_user ON notifications(user_id, created_at DESC);
 ```
 
+`workers/push-assistant/migrations/0002_event_overrides.sql`（予定ごとの手動上書き）
+
+```sql
+CREATE TABLE event_overrides (
+  user_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  custom_title TEXT NOT NULL DEFAULT '',   -- 空 = 予定タイトルを使う
+  custom_url TEXT NOT NULL DEFAULT '',      -- 空 = 自動抽出を使う（http/https のみ保存）
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, event_id)
+);
+```
+
+利用者が「次回の予定」一覧で予定ごとに設定する上書き。`custom_title` が空でなければ
+通知タイトルをそれに差し替え、`custom_url` が http/https なら開く先を最優先で採る（§9）。
+両方空なら行を消す（＝上書き解除）。`0001` と同じく **ON DELETE CASCADE は当てにせず**、
+接続解除では `store.deleteUserData` がこの表も明示的に DELETE する。
+**`0001` は本番適用済みなので編集せず、`0002` を追加で当てる**（本番投入は README §5）。
+
 ## 7. HTTP API
 
 すべて `/push-assistant/api/` 配下。応答は JSON（`Cache-Control: no-store`）。
@@ -249,7 +268,8 @@ CREATE INDEX idx_notifications_user ON notifications(user_id, created_at DESC);
 | `POST /api/auth/disconnect` | 要 | Google のトークン失効（`https://oauth2.googleapis.com/revoke`、失敗しても続行）→ 利用者の全行を削除 → Cookie 削除 |
 | `GET /api/me` | 不要 | `{ ok, loggedIn, user: {email} \| null, calendarConnected, tokenInvalid, settings: {notifyEnabled, leadMinutes}, vapidPublicKey, subscriptionCount, leadOptions: [{value:10,label:'10分前'},{value:0,label:'開始時刻'}] }`。`VAPID_PUBLIC_KEY` が未設定でも **500 にせず `vapidPublicKey: ''` を返す**（ここで落とすと画面が何も描けなくなる。画面側は空文字を「通知を有効にできない」として扱う） |
 | `PUT /api/settings` | 要 | body `{ notifyEnabled: bool, leadMinutes: number[] }`。`leadMinutes` は `LEAD_OPTIONS` の値のみ、1〜5 個、重複不可。成功時は**保存後の値**を `{ ok:true, settings: { notifyEnabled, leadMinutes } }` で返す |
-| `GET /api/events` | 要 | 今後 24 時間・最大 20 件。成功時 `{ ok:true, items: [ { id, title, start, end, allDay, openUrl, urlSource, notifications: [{leadMinutes, notifyAt, status}] } ] }`（配列のキー名は `items`。`status` は `notifications` 表にあればその値、無ければ `'planned'`。終日予定の `notifications` は空配列）。Calendar API 失敗時は `{ ok:false, error:{code:'CALENDAR_ERROR'} }` を **200 ではなく 502** で返し、画面は他の部分を描画し続ける |
+| `GET /api/events` | 要 | 今後 24 時間・最大 20 件。成功時 `{ ok:true, items: [ { id, title, start, end, allDay, openUrl, urlSource, customTitle, customUrl, notifications: [{leadMinutes, notifyAt, status}] } ] }`（配列のキー名は `items`。`status` は `notifications` 表にあればその値、無ければ `'planned'`。終日予定の `notifications` は空配列）。`customTitle`/`customUrl` は予定ごとの上書き（§9）の現在値（未設定なら空文字）。`openUrl`/`urlSource` は上書きを反映した値（上書き URL があれば `urlSource='custom'`）を返し、実際に届く通知と一致させる。Calendar API 失敗時は `{ ok:false, error:{code:'CALENDAR_ERROR'} }` を **200 ではなく 502** で返し、画面は他の部分を描画し続ける |
+| `PUT /api/events/override` | 要 | body `{ eventId: string, title?: string, url?: string }`。`eventId` 必須（空なら `INVALID_REQUEST`）。`title` は文字列（空可、内部で前後空白除去・120 文字上限）。`url` は空文字 or http/https（`isAllowedUrl` で検証。`javascript:`/`data:`/`ftp:`/認証情報付き/制御文字/2048 超は `INVALID_REQUEST`）。`title`・`url` が両方空なら上書きを解除する。成功時 `{ ok:true, override: { eventId, title, url } }`（保存後の値。解除時は `title:''`・`url:''`）。状態を変えるので `Origin` 照合の対象（§5） |
 | `POST /api/subscriptions` | 要 | body `{ subscription: PushSubscriptionJSON, userAgent? }`。`endpoint` は https のみ。同じ利用者の再登録は upsert。**別ユーザーが同じ endpoint を送ってきた場合は、旧行を削除して新規挿入し（履歴を引き継がない）、`log('warn','SUBSCRIPTION_REASSIGNED','from=<旧 user_id> to=<新 user_id>')` を残す**（端末の使い回しは許すが、無言で他人の購読を奪えないようにする。endpoint はログに書かない）。成功時 `{ ok:true, subscriptionCount }` |
 | `DELETE /api/subscriptions` | 要 | body `{ endpoint }`。自分の購読だけ削除。成功時 `{ ok:true, subscriptionCount }`（POST と同じ形） |
 | `POST /api/push/test` | 要 | 自分の全購読へテスト通知（URL は `/push-assistant/`）。結果 `{ ok:true, sent, failed }` |
@@ -280,9 +300,11 @@ STUCK_SENDING_MS    = 5 * 60 * 1000    // 'sending' のまま取り残された�
 ### 8-2. 判定（`src/schedule.mjs`、純関数）
 
 ```
-planNotifications({ events, leadMinutes, nowMs, appUrl })
+planNotifications({ events, leadMinutes, nowMs, appUrl, overrides })
   → [{ eventId, eventStart, leadMinutes, notifyAtMs, title, openUrl, urlSource, due: 'due'|'future'|'stale' }]
 ```
+
+`overrides` は `Map<eventId, { title, url }>`（省略時は空 Map ＝従来動作）。§9 の上書きを反映する。
 
 - 終日予定（`allDay`）と `cancelled` は対象外。
 - `notifyAtMs = startMs - lead*60*1000`。
@@ -346,18 +368,40 @@ sendWebPush({ subscription, payload, vapid, fetchImpl, ttlSec, urgency }) → { 
 `data.url` が無い／`http(s)` でない場合は `registration.scope` を開く（SW 側でも再検証）。
 `pushsubscriptionchange` → 再購読して `POST /api/subscriptions`。
 
+### 8-7. 上書きと、作成済み通知への反映（§7・§9）
+
+利用者が予定ごとに通知タイトル・URL を上書きすると（`PUT /api/events/override`）、
+`store.upsertOverride` が `event_overrides` を更新し、**さらにその予定の `notifications` のうち
+`status='pending'`（まだ送っていない）行の `title`／`open_url`／`url_source` を上書き後の値へ
+即座に UPDATE する**（`custom_title` があれば `title`、`custom_url` があれば `open_url` と
+`url_source='custom'`）。すでに `pending` として作られた通知と画面の設定が食い違わないようにするため。
+
+- **`sent`／`sending`／`skipped`／`failed` の行は触らない。** 送信済み・送信中の内容を後から書き換えない。
+- **解除（`title`・`url` が両方空）のときは `pending` 行を触らない。** 自動抽出値へ戻すには予定本体
+  （conference/description 等）が要り、`upsertOverride` はそれを持たない。次に due になる分から
+  `tick` が `listOverrides` で空を得て自動抽出で作り直すため、以後の通知は自然に元へ戻る。
+  作成済みの `pending` 行には解除前の上書きが残るが、送信前の 1 件に留まる。
+
 ## 9. 開く URL の決定（`src/open-url.mjs`、純関数）
 
 ```
-resolveOpenUrl(event, { appUrl }) → { url, source }
+resolveOpenUrl(event, { appUrl, overrideUrl }) → { url, source }
 ```
 
 優先順位（要件どおり）:
+0. `overrideUrl`（利用者が予定ごとに手動設定した URL、§7 の `custom_url`）→ `source: 'custom'`。
+   **最優先。** `isAllowedUrl` を満たす http/https のときだけ採る。無効（`javascript:` 等）・
+   未指定なら**その候補を捨てて**下の自動抽出へ落ちる（通知そのものは止めない）。
 1. `conferenceUrl`（`conferenceData.entryPoints[type==='video'].uri`、無ければ `hangoutLink`）→ `source: 'conference'`
 2. `description` 内の最初の URL → `'description'`
 3. `location` が URL → `'location'`
 4. `htmlLink`（Google カレンダーの予定ページ）→ `'calendar'`
 5. `appUrl`（`https://tsam-ai.com/push-assistant/`）→ `'app'`
+
+通知タイトルも予定ごとに上書きできる（§7 の `custom_title`）。`planNotifications` は
+`custom_title` が空でなければそれを（`MAX_TITLE_LENGTH` で切って）タイトルにし、空なら予定タイトルを使う。
+`custom_url` は `resolveOpenUrl` の `overrideUrl` として渡す。**上書きは通知を作る前に確定する**ので、
+`tick` が `store.listOverrides` で引いて `planNotifications` に渡し、以後 due になる行へ自動で反映される。
 
 `isAllowedUrl(text)`: `new URL()` で解釈でき、`protocol` が `http:` / `https:`、
 `username`/`password` が空、長さ 2048 以下、制御文字を含まない。これ以外は**その候補を捨てて次へ**。
@@ -445,3 +489,6 @@ resolveOpenUrl(event, { appUrl }) → { url, source }
 - **Durable Objects alarm による秒精度スケジュール**: 精度は上がるが構成要素が増える。MVP は毎分 Cron で足りる。
 - **KV による送信済み管理**: 一意制約が無く、履歴一覧も作りづらい。
 - **既存 notifier-gate へのエンドポイント追加**: ライセンスゲート前提の別サービスであり、稼働中の判定 API に Calendar 読み取りとトークン保管を混ぜると境界が崩れる。
+- **通知の上書きを別画面（設定ページ）にする**: 「どの予定を上書きするのか」を選ぶ一覧が別途要り、予定一覧と二重管理になる。上書きは常に「その予定」に対する操作なので、**予定一覧の各カードにインラインで**畳んで置くほうが対象が自明で、往復も少ない。`<details>` で既定は畳んでおき、普段は邪魔しない。
+- **上書き URL を自由入力させず、抽出候補（conference/description/…）からの選択だけにする**: 安全側だが、「主催者が書いていない別の資料を開きたい」という要件を満たせない。代わりに **入力は許すが `isAllowedUrl`（http/https のみ、`javascript:`/`data:`/認証情報付き/制御文字/2048 超を拒否）で必ず検証**し、`url_source='custom'` として履歴にも出所を残す。
+- **上書きで既存の全通知行を書き換える**: `sent`/`sending` まで書き換えると「送った通知の内容が後から変わる」不整合が出る。`pending` の行だけに反映し、解除時は触らない（§8-7）。

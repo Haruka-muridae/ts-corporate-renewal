@@ -27,8 +27,19 @@ import { resolveOpenUrl } from './open-url.mjs';
  *   'stale'  … 遅れすぎ。履歴に skipped として残すだけで送らない
  *
  * 終日予定と、開始時刻が読めない予定は対象外（配列に入れない）。
+ *
+ * ------------------------------------------------------------------
+ * overrides（予定ごとの手動上書き。仕様書 §7・§9）
+ * ------------------------------------------------------------------
+ * `overrides` は Map<eventId, { title, url }>。利用者が予定ごとに
+ * 「通知に表示する文章」と「タップで開く URL」を上書きしたもの。
+ *   - title が空でなければ通知タイトルをそれに差し替える（MAX_TITLE_LENGTH で切る）
+ *   - url が http/https なら開く先を最優先で採る（resolveOpenUrl の source='custom'）
+ * 未指定（既定の空 Map）なら従来どおり。これにより、通知を作る **前** に
+ * 上書きが確定するので、tick が作る due な行にも自動で反映される。
+ * ------------------------------------------------------------------
  */
-export function planNotifications({ events, leadMinutes, nowMs, appUrl }) {
+export function planNotifications({ events, leadMinutes, nowMs, appUrl, overrides = new Map() }) {
   const leads = normalizeLeads(leadMinutes);
   const plans = [];
 
@@ -43,8 +54,16 @@ export function planNotifications({ events, leadMinutes, nowMs, appUrl }) {
       continue;
     }
 
+    const override = overrides?.get?.(event.id) ?? null;
+    const customTitle = String(override?.title ?? '');
+
     /* 開く URL は予定ごとに 1 回だけ決める（lead が複数でも行き先は同じ）。 */
-    const opened = resolveOpenUrl(event, { appUrl });
+    const opened = resolveOpenUrl(event, { appUrl, overrideUrl: override?.url });
+
+    /* 上書きタイトルが空でなければ差し替える。空なら従来どおり予定タイトル。 */
+    const title = customTitle !== ''
+      ? customTitle.slice(0, MAX_TITLE_LENGTH)
+      : String(event.title ?? '').slice(0, MAX_TITLE_LENGTH);
 
     for (const lead of leads) {
       const notifyAtMs = startMs - lead * 60 * 1000;
@@ -54,7 +73,7 @@ export function planNotifications({ events, leadMinutes, nowMs, appUrl }) {
         eventStart: new Date(startMs).toISOString(),
         leadMinutes: lead,
         notifyAtMs,
-        title: String(event.title ?? '').slice(0, MAX_TITLE_LENGTH),
+        title,
         openUrl: opened.url,
         urlSource: opened.source,
         due: classify(notifyAtMs, nowMs),

@@ -28,13 +28,15 @@ import { notificationKey } from '../../workers/push-assistant/src/store.mjs';
 /**
  * インメモリ store を作る。
  *
- * @param {{ users?: object[], tokens?: object[], subscriptions?: object[] }} seed
+ * @param {{ users?: object[], tokens?: object[], subscriptions?: object[], overrides?: object[] }} seed
  */
 export function createFakeStore(seed = {}) {
   const users = new Map();
   const tokens = new Map();
   const subscriptions = [];
   const notifications = [];
+  /* 予定ごとの上書き。キーは `${userId} ${eventId}`。 */
+  const overrides = new Map();
 
   let nextSubscriptionId = 1;
   let nextNotificationId = 1;
@@ -64,6 +66,13 @@ export function createFakeStore(seed = {}) {
     });
   }
 
+  for (const override of seed.overrides ?? []) {
+    overrides.set(`${override.userId} ${override.eventId}`, {
+      title: override.title ?? '',
+      url: override.url ?? '',
+    });
+  }
+
   for (const subscription of seed.subscriptions ?? []) {
     subscriptions.push({
       id: nextSubscriptionId,
@@ -86,6 +95,7 @@ export function createFakeStore(seed = {}) {
     _tokens: tokens,
     _subscriptions: subscriptions,
     _notifications: notifications,
+    _overrides: overrides,
 
     async upsertUser({ id, email, nowIso }) {
       const existing = users.get(id);
@@ -188,6 +198,13 @@ export function createFakeStore(seed = {}) {
       for (let i = notifications.length - 1; i >= 0; i -= 1) {
         if (notifications[i].userId === userId) {
           notifications.splice(i, 1);
+        }
+      }
+
+      /* 本物の store と同じく event_overrides もこの利用者ぶん消す。 */
+      for (const key of [...overrides.keys()]) {
+        if (key.startsWith(`${userId} `)) {
+          overrides.delete(key);
         }
       }
     },
@@ -462,6 +479,65 @@ export function createFakeStore(seed = {}) {
       }
 
       return out;
+    },
+
+    /* ---------------- 予定ごとの上書き ---------------- */
+
+    async listOverrides(userId, eventIds) {
+      const ids = new Set(
+        (eventIds ?? []).filter((id) => typeof id === 'string' && id !== ''),
+      );
+
+      const map = new Map();
+
+      for (const id of ids) {
+        const found = overrides.get(`${userId} ${id}`);
+
+        if (found) {
+          map.set(id, { title: found.title, url: found.url });
+        }
+      }
+
+      return map;
+    },
+
+    async getOverride(userId, eventId) {
+      const found = overrides.get(`${userId} ${eventId}`);
+
+      return found ? { title: found.title, url: found.url } : null;
+    },
+
+    async upsertOverride(userId, eventId, { title, url }, nowIso) {
+      const cleanTitle = String(title ?? '');
+      const cleanUrl = String(url ?? '');
+      const key = `${userId} ${eventId}`;
+
+      if (cleanTitle === '' && cleanUrl === '') {
+        overrides.delete(key);
+        return { title: '', url: '' };
+      }
+
+      overrides.set(key, { title: cleanTitle, url: cleanUrl });
+
+      /* 本物の SQL と同じ: pending の通知だけへ即時反映する。 */
+      for (const row of notifications) {
+        if (row.userId !== userId || row.eventId !== eventId || row.status !== 'pending') {
+          continue;
+        }
+
+        if (cleanTitle !== '') {
+          row.title = cleanTitle;
+          row.updatedAt = nowIso;
+        }
+
+        if (cleanUrl !== '') {
+          row.openUrl = cleanUrl;
+          row.urlSource = 'custom';
+          row.updatedAt = nowIso;
+        }
+      }
+
+      return { title: cleanTitle, url: cleanUrl };
     },
   };
 

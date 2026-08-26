@@ -35,6 +35,7 @@ import {
   MAX_BODY_BYTES,
   MAX_EVENTS_RESPONSE,
   MAX_LEAD_SELECTION,
+  MAX_TITLE_LENGTH,
   NOTIFICATION_HISTORY_LIMIT,
   OAUTH_COOKIE,
   OAUTH_MAX_AGE_SEC,
@@ -65,7 +66,7 @@ import { buildSetCookie, importSigningKey, parseCookies, signValue, verifyValue 
 import { buildAuthUrl, exchangeCode, parseIdToken, revokeToken } from './google-oauth.mjs';
 import { ensureAccessToken } from './access-token.mjs';
 import { listUpcomingEvents } from './calendar.mjs';
-import { resolveOpenUrl } from './open-url.mjs';
+import { isAllowedUrl, resolveOpenUrl } from './open-url.mjs';
 import { planNotifications } from './schedule.mjs';
 import { notificationKey } from './store.mjs';
 import { importVapidPrivateKey, normalizeBase64Url } from './vapid.mjs';
@@ -156,6 +157,10 @@ export async function handleApi({ request, url, path, env, store, nowMs, fetchIm
 
     if (route === '/api/events' && method === 'GET') {
       return await handleEvents({ request, env, store, nowMs, fetchImpl, log });
+    }
+
+    if (route === '/api/events/override' && method === 'PUT') {
+      return await handleEventOverride({ request, env, store, nowMs });
     }
 
     if (route === '/api/subscriptions' && method === 'POST') {
@@ -732,11 +737,19 @@ async function handleEvents({ request, env, store, nowMs, fetchImpl, log }) {
   const events = calendar.events.slice(0, MAX_EVENTS_RESPONSE);
   const home = appUrl(env);
 
+  /*
+   * 予定ごとの手動上書き（仕様書 §7・§9）。1 回の問い合わせでまとめて引き、
+   * 通知の計画（planNotifications）と、画面に返す各予定の表示の両方へ反映する。
+   * 画面の openUrl/urlSource を実際に届く通知と一致させるため。
+   */
+  const overrides = await store.listOverrides(session.sub, events.map((event) => event.id));
+
   const plans = planNotifications({
     events,
     leadMinutes: user.leadMinutes,
     nowMs,
     appUrl: home,
+    overrides,
   });
 
   /* 通知の現状を 1 回の問い合わせでまとめて引く。 */
@@ -765,12 +778,15 @@ async function handleEvents({ request, env, store, nowMs, fetchImpl, log }) {
   }
 
   const items = events.map((event) => {
+    const override = overrides.get(event.id) ?? { title: '', url: '' };
+
     /*
      * 開く URL は resolveOpenUrl を直接呼ぶ。planNotifications の結果からは
      * 取れない（**終日予定はそもそも予定表に載らない**）が、画面には
      * 終日予定も出すため。判定規則は同じ関数なので食い違わない。
+     * overrideUrl を渡すので、上書きがあれば source='custom' になる。
      */
-    const resolved = resolveOpenUrl(event, { appUrl: home });
+    const resolved = resolveOpenUrl(event, { appUrl: home, overrideUrl: override.url });
 
     return {
       id: event.id,
@@ -780,11 +796,81 @@ async function handleEvents({ request, env, store, nowMs, fetchImpl, log }) {
       allDay: event.allDay,
       openUrl: resolved.url,
       urlSource: resolved.source,
+      /* 入力欄の初期値（上書きしていなければ空文字）。 */
+      customTitle: override.title ?? '',
+      customUrl: override.url ?? '',
       notifications: event.allDay ? [] : (plansByEvent.get(event.id) ?? []),
     };
   });
 
   return ok({ items });
+}
+
+/**
+ * 予定ごとの上書きを保存する（仕様書 §7 の PUT /api/events/override）。
+ *
+ * ------------------------------------------------------------------
+ * 入力の検証はここで完結させる
+ * ------------------------------------------------------------------
+ * store には検証済みの値だけを渡す。**url は空文字 or http/https のみ。**
+ * isAllowedUrl（open-url.mjs）が javascript:/data:/ftp:/認証情報付き/制御文字/
+ * 2048 超をすべて弾く。ここを通さないと、通知に載る行き先を利用者が
+ * 自由に指定できてしまう（URL 決定の source='custom' は最優先なので、
+ * ここが最後の関門になる）。title は空可・前後空白除去・MAX_TITLE_LENGTH で切る。
+ * ------------------------------------------------------------------
+ */
+async function handleEventOverride({ request, env, store, nowMs }) {
+  const session = await requireSession({ request, env, nowMs });
+
+  if (!session) {
+    return fail(ERRORS.UNAUTHORIZED);
+  }
+
+  if (!store) {
+    return fail(ERRORS.NOT_CONFIGURED);
+  }
+
+  const body = await readJsonBody(request);
+
+  if (!body || typeof body.eventId !== 'string' || body.eventId.trim() === '') {
+    return fail(ERRORS.INVALID_REQUEST);
+  }
+
+  const eventId = body.eventId.trim();
+
+  /* title は省略可（空 = 予定タイトルを使う）。文字列以外は拒否。 */
+  let title = '';
+
+  if (body.title !== undefined && body.title !== null) {
+    if (typeof body.title !== 'string') {
+      return fail(ERRORS.INVALID_REQUEST);
+    }
+
+    title = body.title.trim().slice(0, MAX_TITLE_LENGTH);
+  }
+
+  /* url は省略可（空 = 自動抽出）。空でなければ http/https のみ通す。 */
+  let url = '';
+
+  if (body.url !== undefined && body.url !== null) {
+    if (typeof body.url !== 'string') {
+      return fail(ERRORS.INVALID_REQUEST);
+    }
+
+    const trimmed = body.url.trim();
+
+    if (trimmed !== '') {
+      if (!isAllowedUrl(trimmed)) {
+        return fail(ERRORS.INVALID_REQUEST);
+      }
+
+      url = trimmed;
+    }
+  }
+
+  const saved = await store.upsertOverride(session.sub, eventId, { title, url }, new Date(nowMs).toISOString());
+
+  return ok({ override: { eventId, title: saved.title, url: saved.url } });
 }
 
 /* ================= 購読 ================= */

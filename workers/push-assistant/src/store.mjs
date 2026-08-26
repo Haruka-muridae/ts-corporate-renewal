@@ -227,6 +227,7 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
      */
     async deleteUserData(userId) {
       await db.batch([
+        db.prepare('DELETE FROM event_overrides WHERE user_id = ?').bind(userId),
         db.prepare('DELETE FROM notifications WHERE user_id = ?').bind(userId),
         db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').bind(userId),
         db.prepare('DELETE FROM google_tokens WHERE user_id = ?').bind(userId),
@@ -601,6 +602,128 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
       }
 
       return out;
+    },
+
+    /* ---------------- 予定ごとの上書き（仕様書 §6・§7・§9） ---------------- */
+
+    /**
+     * 複数予定の上書きをまとめて引く。
+     *
+     * findNotificationStatuses と同じ流儀で、event_id を IN 句の
+     * プレースホルダで渡す（3 倍にならないので D1 の上限に余裕がある）。
+     * 戻り値は Map<eventId, { title, url }>。eventIds が空なら空 Map。
+     */
+    async listOverrides(userId, eventIds) {
+      const ids = Array.from(
+        new Set((eventIds ?? []).filter((id) => typeof id === 'string' && id !== '')),
+      );
+
+      const map = new Map();
+
+      if (ids.length === 0) {
+        return map;
+      }
+
+      const placeholders = ids.map(() => '?').join(',');
+
+      const result = await db
+        .prepare(
+          `SELECT event_id, custom_title, custom_url FROM event_overrides
+            WHERE user_id = ? AND event_id IN (${placeholders})`,
+        )
+        .bind(userId, ...ids)
+        .all();
+
+      for (const row of result?.results ?? []) {
+        map.set(row.event_id, { title: row.custom_title ?? '', url: row.custom_url ?? '' });
+      }
+
+      return map;
+    },
+
+    async getOverride(userId, eventId) {
+      const row = await db
+        .prepare('SELECT custom_title, custom_url FROM event_overrides WHERE user_id = ? AND event_id = ?')
+        .bind(userId, eventId)
+        .first();
+
+      return row ? { title: row.custom_title ?? '', url: row.custom_url ?? '' } : null;
+    },
+
+    /**
+     * 上書きを保存する（無ければ作り、あれば更新する）。
+     *
+     * ------------------------------------------------------------------
+     * 両方空なら解除（行を消す）
+     * ------------------------------------------------------------------
+     * custom_title と custom_url が両方空文字なら、その予定は
+     * 「上書きなし」に戻る。空文字の行を残しても意味は同じだが、
+     * 「行が無い＝自動抽出」と一意に読めるほうが後から追いやすい。
+     *
+     * ------------------------------------------------------------------
+     * まだ送っていない通知（pending）へ即時反映する
+     * ------------------------------------------------------------------
+     * 通知の行は due になった tick で初めて作られる（仕様書 §8-4）。
+     * だが「10 分前」の通知が **すでに pending として作られた後**に
+     * 利用者が文章や URL を直す場合がある。その pending 行を放置すると、
+     * 画面では新しい設定なのに届く通知だけ古い、という食い違いが出る。
+     * そこで、custom_title があれば title を、custom_url があれば
+     * open_url と url_source='custom' を、pending の行へ即座に反映する。
+     *
+     * **解除（両方空）のときは pending 行を触らない。** 自動抽出値へ戻すには
+     * 予定本体（conference/description 等）が要り、ここには無い。次に
+     * due になる分から planNotifications が自動抽出で作り直す（tick が
+     * listOverrides で空を得るため）。すでに作られた pending 行は
+     * 上書きが載ったまま残るが、害は「解除前の上書きで 1 回届く」程度で、
+     * 送信済みでもないので実運用上は次の予定から正しく戻る。
+     * ------------------------------------------------------------------
+     */
+    async upsertOverride(userId, eventId, { title, url }, nowIso) {
+      const cleanTitle = String(title ?? '');
+      const cleanUrl = String(url ?? '');
+
+      if (cleanTitle === '' && cleanUrl === '') {
+        await db
+          .prepare('DELETE FROM event_overrides WHERE user_id = ? AND event_id = ?')
+          .bind(userId, eventId)
+          .run();
+
+        return { title: '', url: '' };
+      }
+
+      await db
+        .prepare(
+          `INSERT INTO event_overrides (user_id, event_id, custom_title, custom_url, updated_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(user_id, event_id) DO UPDATE SET
+             custom_title = excluded.custom_title,
+             custom_url = excluded.custom_url,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(userId, eventId, cleanTitle, cleanUrl, nowIso)
+        .run();
+
+      if (cleanTitle !== '') {
+        await db
+          .prepare(
+            `UPDATE notifications SET title = ?, updated_at = ?
+              WHERE user_id = ? AND event_id = ? AND status = 'pending'`,
+          )
+          .bind(cleanTitle, nowIso, userId, eventId)
+          .run();
+      }
+
+      if (cleanUrl !== '') {
+        await db
+          .prepare(
+            `UPDATE notifications SET open_url = ?, url_source = 'custom', updated_at = ?
+              WHERE user_id = ? AND event_id = ? AND status = 'pending'`,
+          )
+          .bind(cleanUrl, nowIso, userId, eventId)
+          .run();
+      }
+
+      return { title: cleanTitle, url: cleanUrl };
     },
   };
 }
