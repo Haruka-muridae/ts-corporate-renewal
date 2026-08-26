@@ -188,10 +188,9 @@ node workers/push-assistant/scripts/check-vapid-keys.mjs
 
 5. **`wrangler.jsonc` の `GOOGLE_CLIENT_ID` を確認する（埋め済み）**
 
-   録音アプリ（`public/production-app/voice-recorder/config.js`）と**同じ**
-   Web アプリ型クライアントの ID を入れてある（公開値）。**新しい OAuth クライアントは作らない**（仕様書 §4-1）。
-   両者の一致は `tests/unit/push-assistant.mjs` が読み比べて固定している。
-   クライアントを変えるときは 3 か所（録音アプリ・Meeting Assistant・ここ）を同時に変える。
+   **Push Assistant 専用の Web アプリ型クライアント**の ID を入れてある（公開値、`58460017181-…`）。
+   2026-08-26 に録音アプリ共有クライアントから専用へ切り替えた（仕様書 §4-1、レビュー指摘 1）。
+   録音アプリ・Meeting Assistant とは**別 ID**であることを `tests/unit/push-assistant.mjs` が固定している。
 
    **併せて \`ALLOWED_EMAILS\` を確認する。** 利用を許可するアドレス（カンマ区切り）で、
    既定は \`architect@potenitas.com\` の 1 件。
@@ -203,13 +202,14 @@ node workers/push-assistant/scripts/check-vapid-keys.mjs
    > 「全員許可」へ倒さないための既定であり、緩めないこと。
    > 未確認のアドレス（Google の \`email_verified\` が false）も拒否する。
 
-6. **Google Cloud Console 側の設定**（この 2 つを忘れると、ログインの最後で必ず失敗する）
+6. **Google Cloud Console 側の設定**（専用クライアント `58460017181-…` に対して行う。忘れるとログインの最後で必ず失敗する）
 
-   - 対象の OAuth クライアントの「承認済みのリダイレクト URI」へ
-     `https://tsam-ai.com/push-assistant/api/auth/callback` を**追加**する
-     （既存のものは消さない。録音アプリが使っている）
-   - OAuth 同意画面のスコープへ
-     `https://www.googleapis.com/auth/calendar.events.readonly` を追加する
+   - このクライアントは**「ウェブ アプリケーション」タイプ**であること（でないとリダイレクト URI を登録できない）
+   - 「承認済みのリダイレクト URI」へ `https://tsam-ai.com/push-assistant/api/auth/callback` を**追加**する
+     （末尾スラッシュなし・`https`。Worker が送る値と 1 文字も違ってはいけない）
+   - このクライアントのシークレットを `GOOGLE_CLIENT_SECRET`（secret）に登録する（§5-4、ファイル経由の bulk 登録が確実）
+   - このクライアントが属するプロジェクトの OAuth 同意画面のスコープへ
+     `https://www.googleapis.com/auth/calendar.events.readonly` を追加する（テスト状態ならテストユーザーに利用者を追加）
    - **同意画面を「本番」状態にする。** 「テスト」のままだと
      リフレッシュトークンが 7 日で失効し、毎週の再接続が要る（§8）
 

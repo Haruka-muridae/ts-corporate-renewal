@@ -106,8 +106,11 @@ Free プランでもアカウントあたり 5 個まで使える（既存 Worke
 | 設定作業 | 既存クライアントへリダイレクト URI を 1 件追加＋そのクライアントシークレットを Worker へ登録 | クライアント作成＋リダイレクト URI＋シークレット登録。`GOOGLE_CLIENT_ID` を差し替え、`tests/unit/push-assistant.mjs` の「録音アプリと同一 ID」の固定を外す |
 | リスク | シークレットが漏れた場合、同じクライアントを使う既存アプリのなりすましに使われうる（implicit フローのアプリは元々シークレットを使わないため、影響は「Push Assistant と同じ code flow を偽装できる」範囲） | 影響が Push Assistant に閉じる |
 
-**判断**: v1 は共有のまま出せる（コード変更は不要）。専用クライアントに切り替える場合も `GOOGLE_CLIENT_ID` の差し替えとテスト 1 か所の変更だけで済むよう、コード側はクライアント ID を設定値としてのみ扱っている。
-どちらにするかは本番投入前に運営者が決める（`workers/push-assistant/README.md` §5-6）。
+**判断（2026-08-26 決定）**: 運営者が **Push Assistant 専用の Web クライアント**（`58460017181-…`）を使うことを選択した。
+`GOOGLE_CLIENT_ID`（vars）と `GOOGLE_CLIENT_SECRET`（secret）を専用クライアントのものにし、
+そのクライアントに `https://tsam-ai.com/push-assistant/api/auth/callback` を登録する。
+これにより既存アプリ（録音アプリ等）と calendar スコープを共有しない。
+`tests/unit/push-assistant.mjs` は「録音アプリ・Meeting Assistant とは別 ID である」ことを固定する。
 
 #### 同意画面の公開ステータス
 

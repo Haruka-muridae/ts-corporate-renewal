@@ -124,13 +124,14 @@
 		/* 公開パスの接頭辞。Route・OAuth リダイレクト URI・Cookie の Path の元。 */
 		"APP_BASE_PATH": "/push-assistant",
 		/*
-		 * 流用する Web アプリ型 OAuth クライアントの ID（公開値。仕様書 §4-1）。
-		 * **public/production-app/voice-recorder/config.js と同じ値にすること。**
-		 * 新しいクライアントは作らない。Google Cloud Console 側で
-		 * https://tsam-ai.com/push-assistant/api/auth/callback を
-		 * 「承認済みのリダイレクト URI」へ追加する。
+		 * Push Assistant 専用の Web アプリ型 OAuth クライアントの ID（公開値。仕様書 §4-1）。
+		 * 2026-08-26 に録音アプリ共有（603018562548-j2he…）から専用クライアントへ切り替えた。
+		 * 既存アプリとスコープ（calendar.events.readonly）を共有しないためで、
+		 * レビュー指摘 1 への対応。Google Cloud Console 側でこのクライアントの
+		 * 「承認済みのリダイレクト URI」へ https://tsam-ai.com/push-assistant/api/auth/callback を追加し、
+		 * クライアントシークレットを GOOGLE_CLIENT_SECRET（secret）に登録する。
 		 */
-		"GOOGLE_CLIENT_ID": "603018562548-j2he1aeo96p2igqfk65gaevj55pdaikc.apps.googleusercontent.com",
+		"GOOGLE_CLIENT_ID": "58460017181-uh22uufpok3aipu12uupfgno1ph0r2o9.apps.googleusercontent.com",
 		/*
 		 * 利用を許可するメールアドレス（カンマ区切り）。
 		 *

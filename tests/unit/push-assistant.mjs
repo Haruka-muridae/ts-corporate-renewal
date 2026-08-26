@@ -2505,13 +2505,15 @@ async function run() {
   }
 
   /* ================================================================ */
-  section('OAuth クライアント ID は録音アプリと同一（仕様書 §4-1）');
+  section('OAuth クライアント ID は Push Assistant 専用（仕様書 §4-1）');
   /* ================================================================ */
   {
     /*
-     * interview-recorder のテストと同じ発想。ID がずれると、Google Cloud
-     * Console 側で追加したリダイレクト URI が別クライアントのものになり、
-     * ログインの最後で必ず失敗する。読み比べて固定しておく。
+     * 2026-08-26 に録音アプリ共有クライアントから**専用クライアント**へ切り替えた
+     * （レビュー指摘 1: 既存アプリと calendar スコープを共有しない）。
+     * ここでは (1) TODO のままでない (2) Web クライアント ID の形式である
+     * (3) **録音アプリ・Meeting Assistant とは別の ID である**ことを固定する。
+     * 専用に保つのが目的なので、他アプリと同一に戻ったら気づけるようにする。
      */
     const { readFileSync } = await import('node:fs');
     const { fileURLToPath } = await import('node:url');
@@ -2526,8 +2528,9 @@ async function run() {
     const meetingId = pick(read('public/meeting-assistant/config.js'));
 
     check('wrangler.jsonc にクライアント ID がある（TODO のままではない）', wranglerId !== '', wranglerId);
-    check('録音アプリの config.js と同じ ID', wranglerId === recorderId, `${wranglerId} / ${recorderId}`);
-    check('Meeting Assistant の config.js とも同じ ID', wranglerId === meetingId, `${wranglerId} / ${meetingId}`);
+    check('Web クライアント ID の形式である', /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(wranglerId), wranglerId);
+    check('録音アプリとは別の専用 ID である', wranglerId !== recorderId, `${wranglerId} / ${recorderId}`);
+    check('Meeting Assistant とも別の専用 ID である', wranglerId !== meetingId, `${wranglerId} / ${meetingId}`);
   }
 
   finish();
