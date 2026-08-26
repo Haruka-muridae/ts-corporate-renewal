@@ -203,16 +203,24 @@ export function extractUrls(text) {
  *    http/https（isAllowedUrl）を満たすときだけ採り、source は 'custom'。
  *    利用者が明示した意図なので自動抽出より優先する。無効・未指定なら無視して
  *    従来の優先順位へ落ちる（javascript: 等を入れられても通知は止めない）。
- * 1. conference（Meet 等）… 会議に入るのが目的なので最優先
- * 2. description 内の最初の URL … 主催者が書いた行き先
- * 3. location が URL … 会議室名のこともあるので URL のときだけ
- * 4. htmlLink … 少なくとも予定は開ける
- * 5. appUrl … ここまで全滅することは無い（htmlLink は必ず来る）が、
+ * 1. globalUrl（利用者が全予定共通で指定した「タップで開く URL」、notify_url）…
+ *    override の **次**。http/https（isAllowedUrl）を満たすときだけ採り、source は 'global'。
+ *    予定ごとの上書きが無いときに、conference 等の自動抽出より先に採る。
+ *    無効・未指定なら無視して従来の優先順位へ落ちる。
+ * 2. conference（Meet 等）… 会議に入るのが目的なので自動抽出の先頭
+ * 3. description 内の最初の URL … 主催者が書いた行き先
+ * 4. location が URL … 会議室名のこともあるので URL のときだけ
+ * 5. htmlLink … 少なくとも予定は開ける
+ * 6. appUrl … ここまで全滅することは無い（htmlLink は必ず来る）が、
  *    「開く先が無い通知」を作らないための最後の受け皿
  */
-export function resolveOpenUrl(event, { appUrl, overrideUrl } = {}) {
+export function resolveOpenUrl(event, { appUrl, overrideUrl, globalUrl } = {}) {
   if (isAllowedUrl(overrideUrl)) {
     return { url: String(overrideUrl).trim(), source: 'custom' };
+  }
+
+  if (isAllowedUrl(globalUrl)) {
+    return { url: String(globalUrl).trim(), source: 'global' };
   }
 
   const candidates = [

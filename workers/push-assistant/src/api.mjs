@@ -570,7 +570,7 @@ async function handleMe({ request, env, store, nowMs, log }) {
     user: null,
     calendarConnected: false,
     tokenInvalid: false,
-    settings: { notifyEnabled: true, leadMinutes: DEFAULT_LEAD_MINUTES, notifyTitle: '', notifyBody: '' },
+    settings: { notifyEnabled: true, leadMinutes: DEFAULT_LEAD_MINUTES, notifyTitle: '', notifyBody: '', notifyUrl: '' },
     vapidPublicKey,
     subscriptionCount: 0,
     leadOptions: LEAD_OPTIONS,
@@ -616,6 +616,7 @@ async function handleMe({ request, env, store, nowMs, log }) {
       leadMinutes: user.leadMinutes,
       notifyTitle: user.notifyTitle ?? '',
       notifyBody: user.notifyBody ?? '',
+      notifyUrl: user.notifyUrl ?? '',
     },
     subscriptionCount: await store.countActiveSubscriptions(session.sub),
   });
@@ -687,6 +688,26 @@ async function handleSettings({ request, env, store, nowMs }) {
     settings.notifyBody = body.notifyBody.slice(0, MAX_NOTIFY_BODY_LENGTH);
   }
 
+  /*
+   * 全予定共通の「タップで開く URL」（notify_url、§9）。**空文字 or http/https のみ。**
+   * ここが最後の関門になる（source='global' は override の次に最優先で採られるため、
+   * javascript:/data:/ftp:/認証情報付き/制御文字/2048 超を isAllowedUrl で弾く）。
+   * テンプレートと同じく、送られたときだけ設定に載せ、省略時は既存値を保つ（後方互換）。
+   */
+  if (body.notifyUrl !== undefined) {
+    if (typeof body.notifyUrl !== 'string') {
+      return fail(ERRORS.INVALID_REQUEST);
+    }
+
+    const trimmedUrl = body.notifyUrl.trim();
+
+    if (trimmedUrl !== '' && !isAllowedUrl(trimmedUrl)) {
+      return fail(ERRORS.INVALID_REQUEST);
+    }
+
+    settings.notifyUrl = trimmedUrl;
+  }
+
   await store.updateSettings(session.sub, settings, new Date(nowMs).toISOString());
 
   /*
@@ -701,6 +722,7 @@ async function handleSettings({ request, env, store, nowMs }) {
       leadMinutes: user?.leadMinutes ?? leadMinutes,
       notifyTitle: user?.notifyTitle ?? '',
       notifyBody: user?.notifyBody ?? '',
+      notifyUrl: user?.notifyUrl ?? '',
     },
   });
 }
@@ -785,12 +807,16 @@ async function handleEvents({ request, env, store, nowMs, fetchImpl, log }) {
    */
   const overrides = await store.listOverrides(session.sub, events.map((event) => event.id));
 
+  /* 全予定共通の「タップで開く URL」（notify_url、§9）。空なら自動抽出へ落ちる。 */
+  const globalUrl = String(user.notifyUrl ?? '');
+
   const plans = planNotifications({
     events,
     leadMinutes: user.leadMinutes,
     nowMs,
     appUrl: home,
     overrides,
+    globalUrl,
   });
 
   /* 通知の現状を 1 回の問い合わせでまとめて引く。 */
@@ -825,9 +851,10 @@ async function handleEvents({ request, env, store, nowMs, fetchImpl, log }) {
      * 開く URL は resolveOpenUrl を直接呼ぶ。planNotifications の結果からは
      * 取れない（**終日予定はそもそも予定表に載らない**）が、画面には
      * 終日予定も出すため。判定規則は同じ関数なので食い違わない。
-     * overrideUrl を渡すので、上書きがあれば source='custom' になる。
+     * overrideUrl / globalUrl を渡すので、上書きがあれば source='custom'、
+     * notify_url があれば source='global' になる（§9）。
      */
-    const resolved = resolveOpenUrl(event, { appUrl: home, overrideUrl: override.url });
+    const resolved = resolveOpenUrl(event, { appUrl: home, overrideUrl: override.url, globalUrl });
 
     return {
       id: event.id,
@@ -1032,28 +1059,31 @@ async function handlePushTest({ request, env, store, nowMs, fetchImpl, log }) {
   const home = appUrl(env);
 
   /*
-   * テスト通知にも実通知と同じテンプレートを当て、問いかけ・本文の
-   * プレビューになるようにする（仕様書 §8）。テンプレート未設定
-   * （title/body ともに空）なら、従来の固定文言のまま。
+   * テスト通知は、利用者の設定した「通知タイトル」（notify_title）と
+   * 「タップで開く URL」（notify_url）のプレビューにする（画面の 2 欄。§15）。
+   *
+   * - タイトル: notify_title があればそれ（renderNotification で trim・120 文字切り）。
+   *   無ければ従来の固定文言 'Push Assistant'。
+   * - 本文: 通知本文は既定固定（§8-8）。テスト通知では notify_body を使わないので、
+   *   分かりやすい固定文のままにする（renderNotification へ渡す body は空文字）。
+   * - タップ先: notify_url が http/https ならそれ、空・不正なら従来どおりアプリの URL。
    */
   const user = await store.getUser(session.sub);
-  const template = {
-    title: String(user?.notifyTitle ?? ''),
-    body: String(user?.notifyBody ?? ''),
-  };
+  const notifyTitle = String(user?.notifyTitle ?? '');
+  const notifyUrl = String(user?.notifyUrl ?? '');
+  const tapUrl = isAllowedUrl(notifyUrl) ? notifyUrl : home;
 
   let title = 'Push Assistant';
-  let body = 'テスト通知です。タップするとアプリが開きます。';
+  const body = 'テスト通知です。タップするとアプリが開きます。';
 
-  if (template.title !== '' || template.body !== '') {
-    /* 「10 分前」相当のプレビュー。{time} は現在時刻から 10 分後の JST。 */
+  if (notifyTitle.trim() !== '') {
+    /* body は空文字を渡す＝既定本文（§8-8）。ここでは title のプレビューだけ採る。 */
     const rendered = renderNotification({
-      template,
-      event: { title: 'テスト通知', url: home, startMs: nowMs + 10 * 60 * 1000, leadMinutes: 10 },
+      template: { title: notifyTitle, body: '' },
+      event: { title: 'テスト通知', url: tapUrl, startMs: nowMs + 10 * 60 * 1000, leadMinutes: 10 },
     });
 
     title = rendered.title;
-    body = rendered.body;
   }
 
   const payload = {
@@ -1061,7 +1091,7 @@ async function handlePushTest({ request, env, store, nowMs, fetchImpl, log }) {
     kind: 'test',
     title,
     body,
-    url: home,
+    url: tapUrl,
     tag: 'pa:test',
   };
 

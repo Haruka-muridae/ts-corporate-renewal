@@ -7,30 +7,26 @@
  * この画面がすること
  * ==================================================================
  *   1. GET ./api/me で状態を読み、Google Calendar 接続・通知設定を出す
- *   2. この端末を Web Push に登録する（許可 → Service Worker 登録 → 購読）
- *   3. 直近の予定と通知履歴を出す
+ *   2. 通知設定（通知タイトル・タップで開く URL・タイミング）を保存する
+ *   3. この端末を Web Push に登録する（許可 → Service Worker 登録 → 購読）
  *
  * 通知そのものを出すのは Service Worker（sw.js）である。
+ *
+ * ==================================================================
+ * 画面の簡素化（仕様書 §15）
+ * ==================================================================
+ * 利用者要望により、通知設定は「通知タイトル」「タップで開く URL」の 2 欄だけに
+ * した。本文テンプレート（notify_body）・予定一覧・通知履歴・予定ごとの上書き UI は
+ * 撤去してある。**GET /api/events・/api/notifications・PUT /api/events/override は
+ * サーバー側に残っているが、この画面からは呼ばない。**
  * ==================================================================
  *
  * ==================================================================
  * XSS（docs/specs/push-assistant-mvp-v1.md §10）
  * ==================================================================
  * innerHTML は一切使わない。DOM は createElement と textContent だけで組む。
- * href に外部由来の値を入れるのは http(s) のときだけ（isHttpUrl）。
  * ==================================================================
  */
-
-/* ---------- ステータス文言 ---------- */
-
-const NOTIFICATION_STATUS_LABEL = {
-  planned: '予定',
-  pending: '待機',
-  sending: '送信中',
-  sent: '送信済み',
-  failed: '失敗',
-  skipped: '見送り',
-};
 
 /* /api/*（コールバックのエラー遷移含む）が返しうるエラーコード（§7）。
  * 未知のコードはフォールバック文言にする。 */
@@ -70,7 +66,7 @@ let state = {
   user: null,
   calendarConnected: false,
   tokenInvalid: false,
-  settings: { notifyEnabled: true, leadMinutes: [10], notifyTitle: '', notifyBody: '' },
+  settings: { notifyEnabled: true, leadMinutes: [10], notifyTitle: '', notifyUrl: '' },
   vapidPublicKey: '',
   subscriptionCount: 0,
   leadOptions: [],
@@ -98,45 +94,6 @@ function isHttpUrl(text) {
   } catch {
     return false;
   }
-}
-
-/** 予定・通知履歴に載せる URL 表示。テキストは常に出し、href は http(s) のときだけ付ける。 */
-function buildUrlNode(text) {
-  const a = document.createElement('a');
-
-  a.textContent = String(text ?? '');
-
-  if (isHttpUrl(text)) {
-    a.href = text;
-  }
-
-  return a;
-}
-
-/** 端末ローカル時刻。当日でなければ日付も付ける。 */
-function formatWhen(iso, now = new Date()) {
-  const date = new Date(iso);
-
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const time = new Intl.DateTimeFormat('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
-  const sameDay = date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth()
-    && date.getDate() === now.getDate();
-
-  if (sameDay) {
-    return time;
-  }
-
-  const md = new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(date);
-
-  return `${md} ${time}`;
-}
-
-function statusLabel(status) {
-  return NOTIFICATION_STATUS_LABEL[status] ?? String(status ?? '');
 }
 
 /* ---------- API 呼び出し ---------- */
@@ -186,8 +143,6 @@ function handleApiFailure({ networkError, payload }, fallbackMessage) {
     state.tokenInvalid = false;
     renderCalendarSection();
     renderSettingsSection();
-    renderEventsList([]);
-    renderHistoryList([]);
   }
 
   const message = payload?.error?.message || ERROR_MESSAGES[code] || fallbackMessage;
@@ -278,17 +233,25 @@ function renderSettingsSection() {
 
   el('pa-notify-enabled').checked = state.settings.notifyEnabled !== false;
 
-  /* 通知テンプレート（グローバル）。 */
+  /* 通知タイトルと、全予定共通の「タップで開く URL」（グローバル。§8-8・§9）。 */
   el('pa-notify-title').value = String(state.settings.notifyTitle ?? '');
-  el('pa-notify-body').value = String(state.settings.notifyBody ?? '');
+  el('pa-notify-url').value = String(state.settings.notifyUrl ?? '');
 }
 
 async function saveSettings() {
+  const notifyUrl = el('pa-notify-url').value.trim();
+
+  /* サーバー側の検証が本体だが、UX のため空でない不正 URL は先に弾く。 */
+  if (notifyUrl !== '' && !isHttpUrl(notifyUrl)) {
+    setMessage('http:// か https:// で始まる URL を入れてください。', 'error');
+    return;
+  }
+
   const body = {
     notifyEnabled: el('pa-notify-enabled').checked,
     leadMinutes: [Number(el('pa-lead').value)],
     notifyTitle: el('pa-notify-title').value,
-    notifyBody: el('pa-notify-body').value,
+    notifyUrl,
   };
 
   const result = await apiFetch('./api/settings', { method: 'PUT', body });
@@ -315,7 +278,6 @@ async function disconnectCalendar() {
 
   setMessage('Google Calendar との接続を解除しました。', 'success');
   await loadMe();
-  await refreshLists();
 }
 
 /* ---------- 通知許可・購読 ---------- */
@@ -473,255 +435,6 @@ async function sendTestPush() {
   setMessage(`テスト通知を送りました（成功 ${sent} 件・失敗 ${failed} 件）。`, failed > 0 && sent === 0 ? 'error' : 'success');
 }
 
-/* ---------- 次回の予定 ---------- */
-
-function renderEventsList(items) {
-  const list = el('pa-events-list');
-  const empty = el('pa-events-empty');
-
-  list.textContent = '';
-
-  if (!Array.isArray(items) || items.length === 0) {
-    empty.hidden = false;
-    return;
-  }
-
-  empty.hidden = true;
-
-  for (const item of items) {
-    const li = document.createElement('li');
-    li.className = 'pa-event';
-
-    const when = document.createElement('p');
-    when.className = 'pa-event__when';
-    when.textContent = `${formatWhen(item.start)}　${item.title ?? ''}`;
-    li.appendChild(when);
-
-    if (Array.isArray(item.notifications) && item.notifications.length > 0) {
-      const notifyList = document.createElement('ul');
-      notifyList.className = 'pa-event__notify-list';
-
-      for (const notification of item.notifications) {
-        const notifyItem = document.createElement('li');
-        notifyItem.textContent = `通知予定 ${formatWhen(notification.notifyAt)}（${statusLabel(notification.status)}）`;
-        notifyList.appendChild(notifyItem);
-      }
-
-      li.appendChild(notifyList);
-    }
-
-    const urlPara = document.createElement('p');
-    urlPara.className = 'pa-event__url';
-    urlPara.appendChild(buildUrlNode(item.openUrl));
-    li.appendChild(urlPara);
-
-    /*
-     * 通知対象（allDay=false）の予定にだけ上書き欄を出す。終日予定は
-     * 通知の対象外（§8-2）なので、文章もタイミングも効かない。出しても
-     * 混乱するだけなので MVP では出さない（設計判断）。
-     */
-    if (item.allDay !== true) {
-      li.appendChild(buildOverrideEditor(item));
-    }
-
-    list.appendChild(li);
-  }
-}
-
-/**
- * 予定ごとの「通知に表示する文章」「タップで開く URL」の上書き欄。
- *
- * innerHTML は使わず createElement と textContent/value だけで組む（§10）。
- * label は input を包んで関連付ける（グローバル id を作らず衝突を避ける）。
- * 折りたたみは <details>/<summary>（JS 不要・prefers-reduced-motion に従う）。
- */
-function buildOverrideEditor(item) {
-  const details = document.createElement('details');
-  details.className = 'pa-event__override';
-
-  const summary = document.createElement('summary');
-  summary.className = 'pa-event__override-toggle';
-  summary.textContent = '通知の文章とリンクを設定';
-  details.appendChild(summary);
-
-  const bodyBox = document.createElement('div');
-  bodyBox.className = 'pa-event__override-body';
-
-  /* 通知に表示する文章。 */
-  const titleField = document.createElement('label');
-  titleField.className = 'pa-field';
-
-  const titleLabel = document.createElement('span');
-  titleLabel.textContent = '通知に表示する文章';
-  titleField.appendChild(titleLabel);
-
-  const titleInput = document.createElement('input');
-  titleInput.type = 'text';
-  titleInput.className = 'pa-event__override-input';
-  titleInput.maxLength = 120;
-  titleInput.value = String(item.customTitle ?? '');
-  /* 未入力なら予定タイトルが使われることを見せる。 */
-  titleInput.placeholder = String(item.title ?? '');
-  titleField.appendChild(titleInput);
-  bodyBox.appendChild(titleField);
-
-  /* タップで開く URL。 */
-  const urlField = document.createElement('label');
-  urlField.className = 'pa-field';
-
-  const urlLabel = document.createElement('span');
-  urlLabel.textContent = 'タップで開く URL';
-  urlField.appendChild(urlLabel);
-
-  const urlInput = document.createElement('input');
-  urlInput.type = 'text';
-  urlInput.className = 'pa-event__override-input';
-  urlInput.inputMode = 'url';
-  urlInput.value = String(item.customUrl ?? '');
-  /* 未入力なら自動で決まる現在の行き先を見せる。 */
-  urlInput.placeholder = `自動: ${String(item.openUrl ?? '')}`;
-  urlField.appendChild(urlInput);
-  bodyBox.appendChild(urlField);
-
-  const actions = document.createElement('p');
-  actions.className = 'pa-actions';
-
-  const saveButton = document.createElement('button');
-  saveButton.type = 'button';
-  saveButton.className = 'pa-button';
-  saveButton.textContent = '保存';
-  actions.appendChild(saveButton);
-  bodyBox.appendChild(actions);
-
-  const msg = document.createElement('p');
-  msg.className = 'pa-event__override-msg';
-  msg.setAttribute('role', 'status');
-  msg.hidden = true;
-  bodyBox.appendChild(msg);
-
-  saveButton.addEventListener('click', async () => {
-    saveButton.disabled = true;
-
-    try {
-      await saveEventOverride({ eventId: item.id, titleInput, urlInput, msg });
-    } catch {
-      setOverrideMessage(msg, '保存できませんでした。', 'error');
-    } finally {
-      saveButton.disabled = false;
-    }
-  });
-
-  details.appendChild(bodyBox);
-
-  return details;
-}
-
-function setOverrideMessage(msg, text, kind) {
-  msg.textContent = text;
-  msg.dataset.kind = kind;
-  msg.hidden = text === '';
-}
-
-/**
- * 上書きを保存する。成功したら一覧を引き直して、実際に通知へ載る
- * openUrl/urlSource（サーバーが再計算した値）を画面へ反映する。
- */
-async function saveEventOverride({ eventId, titleInput, urlInput, msg }) {
-  const title = titleInput.value.trim();
-  const url = urlInput.value.trim();
-
-  /* サーバー側の検証が本体だが、UX のため空でない不正 URL は先に弾く。 */
-  if (url !== '' && !isHttpUrl(url)) {
-    setOverrideMessage(msg, 'http:// か https:// で始まる URL を入れてください。', 'error');
-    return;
-  }
-
-  const result = await apiFetch('./api/events/override', {
-    method: 'PUT',
-    body: { eventId, title, url },
-  });
-
-  if (result.networkError || !result.payload || result.payload.ok !== true) {
-    /* UNAUTHORIZED なら未ログイン表示へ戻る（handleApiFailure が面倒を見る）。 */
-    handleApiFailure(result, '設定を保存できませんでした。');
-    return;
-  }
-
-  setMessage('通知の設定を保存しました。', 'success');
-  await loadEvents();
-}
-
-async function loadEvents() {
-  if (!state.loggedIn || !state.calendarConnected || state.tokenInvalid) {
-    renderEventsList([]);
-    return;
-  }
-
-  const result = await apiFetch('./api/events');
-
-  if (result.networkError || !result.payload || result.payload.ok !== true) {
-    renderEventsList([]);
-    /* CALENDAR_ERROR は 200 ではなく 502 で返る（§7）。画面の他の部分は描画し続ける。 */
-    handleApiFailure(result, ERROR_MESSAGES.CALENDAR_ERROR);
-    return;
-  }
-
-  renderEventsList(result.payload.items ?? []);
-}
-
-/* ---------- 通知履歴 ---------- */
-
-function renderHistoryList(items) {
-  const list = el('pa-history-list');
-  const empty = el('pa-history-empty');
-
-  list.textContent = '';
-
-  if (!Array.isArray(items) || items.length === 0) {
-    empty.hidden = false;
-    return;
-  }
-
-  empty.hidden = true;
-
-  for (const item of items) {
-    const li = document.createElement('li');
-    li.className = 'pa-history-item';
-
-    const when = document.createElement('p');
-    when.className = 'pa-history-item__when';
-    when.textContent = `${formatWhen(item.notifyAt)}　${item.title ?? ''}　${statusLabel(item.status)}`;
-    li.appendChild(when);
-
-    const urlPara = document.createElement('p');
-    urlPara.className = 'pa-history-item__url';
-    urlPara.appendChild(buildUrlNode(item.openUrl));
-    li.appendChild(urlPara);
-
-    list.appendChild(li);
-  }
-}
-
-async function loadHistory() {
-  if (!state.loggedIn) {
-    renderHistoryList([]);
-    return;
-  }
-
-  const result = await apiFetch('./api/notifications');
-
-  if (result.networkError || !result.payload || result.payload.ok !== true) {
-    renderHistoryList([]);
-    return;
-  }
-
-  renderHistoryList(result.payload.items ?? []);
-}
-
-async function refreshLists() {
-  await Promise.all([loadEvents(), loadHistory()]);
-}
-
 /* ---------- 起動 ---------- */
 
 async function loadMe() {
@@ -739,7 +452,7 @@ async function loadMe() {
     user: payload.user ?? null,
     calendarConnected: payload.calendarConnected === true,
     tokenInvalid: payload.tokenInvalid === true,
-    settings: payload.settings ?? { notifyEnabled: true, leadMinutes: [10], notifyTitle: '', notifyBody: '' },
+    settings: payload.settings ?? { notifyEnabled: true, leadMinutes: [10], notifyTitle: '', notifyUrl: '' },
     vapidPublicKey: payload.vapidPublicKey ?? '',
     subscriptionCount: Number(payload.subscriptionCount ?? 0),
     leadOptions: Array.isArray(payload.leadOptions) ? payload.leadOptions : [],
@@ -793,7 +506,6 @@ async function main() {
 
   await loadMe();
   await renderPermissionSection();
-  await refreshLists();
 }
 
 main().catch((error) => {

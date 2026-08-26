@@ -66,6 +66,8 @@ function toUser(row, defaultLeadMinutes) {
     /* 通知テンプレート（グローバル。migration 0003）。空 = 未設定＝従来どおり。 */
     notifyTitle: row.notify_title ?? '',
     notifyBody: row.notify_body ?? '',
+    /* 全予定共通の「タップで開く URL」（migration 0004）。空 = 従来の自動抽出。 */
+    notifyUrl: row.notify_url ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -146,8 +148,9 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
      * 省略（undefined）なら列に触れない＝既存値を保つ。空文字は「消す」意図
      * なので、文字列であればそのまま '' を書く。これで、テンプレートを送らない
      * 旧クライアントの PUT でもテンプレートを空に潰さない（後方互換）。
+     * notifyUrl（migration 0004）も同じ流儀で扱う。
      */
-    async updateSettings(userId, { notifyEnabled, leadMinutes, notifyTitle, notifyBody }, nowIso) {
+    async updateSettings(userId, { notifyEnabled, leadMinutes, notifyTitle, notifyBody, notifyUrl }, nowIso) {
       const sets = ['notify_enabled = ?', 'lead_minutes = ?'];
       const binds = [notifyEnabled ? 1 : 0, JSON.stringify(leadMinutes)];
 
@@ -159,6 +162,11 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
       if (typeof notifyBody === 'string') {
         sets.push('notify_body = ?');
         binds.push(notifyBody);
+      }
+
+      if (typeof notifyUrl === 'string') {
+        sets.push('notify_url = ?');
+        binds.push(notifyUrl);
       }
 
       sets.push('updated_at = ?');
@@ -418,7 +426,8 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
       const result = await db
         .prepare(
           `SELECT u.id AS id, u.lead_minutes AS lead_minutes,
-                  u.notify_title AS notify_title, u.notify_body AS notify_body
+                  u.notify_title AS notify_title, u.notify_body AS notify_body,
+                  u.notify_url AS notify_url
              FROM users u
              JOIN google_tokens t ON t.user_id = u.id
             WHERE u.notify_enabled = 1
@@ -439,6 +448,8 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
         /* tick が通知テンプレートを引くために載せる（仕様書 §8）。 */
         notifyTitle: row.notify_title ?? '',
         notifyBody: row.notify_body ?? '',
+        /* tick が globalUrl（タップ先）を決めるために載せる（仕様書 §9）。 */
+        notifyUrl: row.notify_url ?? '',
       }));
     },
 

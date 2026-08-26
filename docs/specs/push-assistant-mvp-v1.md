@@ -267,6 +267,21 @@ ALTER TABLE users ADD COLUMN notify_body  TEXT NOT NULL DEFAULT '';  -- 本文�
 `NOT NULL DEFAULT ''` なので既存行にも安全に足せる。**`0001`/`0002` は本番適用済みなので
 編集せず、`0003` を追加で当てる**。
 
+`workers/push-assistant/migrations/0004_notify_url.sql`（全予定共通のタップ URL）
+
+```sql
+ALTER TABLE users ADD COLUMN notify_url TEXT NOT NULL DEFAULT '';  -- 全予定共通の「タップで開く URL」。空 = 従来の自動抽出
+```
+
+画面の簡素化（§15）に伴い追加した列。利用者が入力するのは `notify_title`（通知タイトル）と
+`notify_url`（タップで開く URL）の 2 つだけになる。`notify_url` は `resolveOpenUrl` の
+`globalUrl` として渡され、予定ごとの上書き（`event_overrides.custom_url`）の**次**、
+conference/description 等の自動抽出より**先**に採られる（§9。`url_source='global'`）。空なら
+従来どおり自動抽出へ落ちる。http/https のみ保存する（`isAllowedUrl` で検証）。
+`notify_body`（本文テンプレート）は列・置換ロジックとも残すが、画面から入力欄を撤去したため
+**通知本文は常に既定文に固定**する（§8-8）。`NOT NULL DEFAULT ''` なので既存行にも安全に足せる。
+**`0001`〜`0003` は本番適用済みなので編集せず、`0004` を追加で当てる**。
+
 ## 7. HTTP API
 
 すべて `/push-assistant/api/` 配下。応答は JSON（`Cache-Control: no-store`）。
@@ -280,14 +295,14 @@ ALTER TABLE users ADD COLUMN notify_body  TEXT NOT NULL DEFAULT '';  -- 本文�
 | `GET /api/auth/callback?code&state` | 不要 | コード交換 → `users`/`google_tokens` を upsert → `pa_session` 発行 → `/push-assistant/` へ 302。失敗時は `/push-assistant/?error=<code>` へ 302 |
 | `POST /api/auth/logout` | 要 | Cookie 削除のみ（データは残す） |
 | `POST /api/auth/disconnect` | 要 | Google のトークン失効（`https://oauth2.googleapis.com/revoke`、失敗しても続行）→ 利用者の全行を削除 → Cookie 削除 |
-| `GET /api/me` | 不要 | `{ ok, loggedIn, user: {email} \| null, calendarConnected, tokenInvalid, settings: {notifyEnabled, leadMinutes, notifyTitle, notifyBody}, vapidPublicKey, subscriptionCount, leadOptions: [{value:10,label:'10分前'},{value:0,label:'開始時刻'}] }`。`notifyTitle`/`notifyBody` は通知テンプレート（§8。未設定なら空文字）。`VAPID_PUBLIC_KEY` が未設定でも **500 にせず `vapidPublicKey: ''` を返す**（ここで落とすと画面が何も描けなくなる。画面側は空文字を「通知を有効にできない」として扱う） |
-| `PUT /api/settings` | 要 | body `{ notifyEnabled: bool, leadMinutes: number[], notifyTitle?: string, notifyBody?: string }`。`leadMinutes` は `LEAD_OPTIONS` の値のみ、1〜5 個、重複不可。`notifyTitle`/`notifyBody` は通知テンプレート（§8）で、**送られたときだけ更新し、省略時は既存値を保つ**（旧クライアントとの後方互換）。文字列でなければ `INVALID_REQUEST`。`notifyTitle` は前後空白除去のうえ 120 文字、`notifyBody` は 500 文字で**切り詰める**（超過はエラーにしない）。空文字は「テンプレート解除」。成功時は**保存後の値**を `{ ok:true, settings: { notifyEnabled, leadMinutes, notifyTitle, notifyBody } }` で返す |
-| `GET /api/events` | 要 | 今後 24 時間・最大 20 件。成功時 `{ ok:true, items: [ { id, title, start, end, allDay, openUrl, urlSource, customTitle, customUrl, notifications: [{leadMinutes, notifyAt, status}] } ] }`（配列のキー名は `items`。`status` は `notifications` 表にあればその値、無ければ `'planned'`。終日予定の `notifications` は空配列）。`customTitle`/`customUrl` は予定ごとの上書き（§9）の現在値（未設定なら空文字）。`openUrl`/`urlSource` は上書きを反映した値（上書き URL があれば `urlSource='custom'`）を返し、実際に届く通知と一致させる。Calendar API 失敗時は `{ ok:false, error:{code:'CALENDAR_ERROR'} }` を **200 ではなく 502** で返し、画面は他の部分を描画し続ける |
+| `GET /api/me` | 不要 | `{ ok, loggedIn, user: {email} \| null, calendarConnected, tokenInvalid, settings: {notifyEnabled, leadMinutes, notifyTitle, notifyBody, notifyUrl}, vapidPublicKey, subscriptionCount, leadOptions: [{value:10,label:'10分前'},{value:0,label:'開始時刻'}] }`。`notifyTitle` は通知タイトル、`notifyUrl` は全予定共通のタップ URL（§8-8・§9。未設定なら空文字）。`notifyBody`（本文テンプレート）は後方互換で載せ続けるが、画面は使わない。`VAPID_PUBLIC_KEY` が未設定でも **500 にせず `vapidPublicKey: ''` を返す**（ここで落とすと画面が何も描けなくなる。画面側は空文字を「通知を有効にできない」として扱う） |
+| `PUT /api/settings` | 要 | body `{ notifyEnabled: bool, leadMinutes: number[], notifyTitle?: string, notifyUrl?: string, notifyBody?: string }`。`leadMinutes` は `LEAD_OPTIONS` の値のみ、1〜5 個、重複不可。`notifyTitle`/`notifyUrl`/`notifyBody` は**送られたときだけ更新し、省略時は既存値を保つ**（後方互換）。文字列でなければ `INVALID_REQUEST`。`notifyTitle` は前後空白除去のうえ 120 文字で切り詰め、空文字は解除。`notifyUrl` は前後空白除去のうえ **空文字 or http/https のみ**（`isAllowedUrl` で検証。`javascript:`/`data:`/`ftp:`/認証情報付き/制御文字/2048 超は `INVALID_REQUEST`）、空文字は解除。`notifyBody` は 500 文字で切り詰め（旧クライアント互換。UI からは来ない）。成功時は**保存後の値**を `{ ok:true, settings: { notifyEnabled, leadMinutes, notifyTitle, notifyBody, notifyUrl } }` で返す |
+| `GET /api/events` | 要（**API は残すが現行画面からは呼ばない**、§15） | 今後 24 時間・最大 20 件。成功時 `{ ok:true, items: [ { id, title, start, end, allDay, openUrl, urlSource, customTitle, customUrl, notifications: [{leadMinutes, notifyAt, status}] } ] }`（配列のキー名は `items`。`status` は `notifications` 表にあればその値、無ければ `'planned'`。終日予定の `notifications` は空配列）。`customTitle`/`customUrl` は予定ごとの上書き（§9）の現在値（未設定なら空文字）。`openUrl`/`urlSource` は上書き・`notify_url` を反映した値（上書き URL があれば `urlSource='custom'`、無く `notify_url` があれば `'global'`）を返し、実際に届く通知と一致させる。Calendar API 失敗時は `{ ok:false, error:{code:'CALENDAR_ERROR'} }` を **200 ではなく 502** で返す |
 | `PUT /api/events/override` | 要 | body `{ eventId: string, title?: string, url?: string }`。`eventId` 必須（空なら `INVALID_REQUEST`）。`title` は文字列（空可、内部で前後空白除去・120 文字上限）。`url` は空文字 or http/https（`isAllowedUrl` で検証。`javascript:`/`data:`/`ftp:`/認証情報付き/制御文字/2048 超は `INVALID_REQUEST`）。`title`・`url` が両方空なら上書きを解除する。成功時 `{ ok:true, override: { eventId, title, url } }`（保存後の値。解除時は `title:''`・`url:''`）。状態を変えるので `Origin` 照合の対象（§5） |
 | `POST /api/subscriptions` | 要 | body `{ subscription: PushSubscriptionJSON, userAgent? }`。`endpoint` は https のみ。同じ利用者の再登録は upsert。**別ユーザーが同じ endpoint を送ってきた場合は、旧行を削除して新規挿入し（履歴を引き継がない）、`log('warn','SUBSCRIPTION_REASSIGNED','from=<旧 user_id> to=<新 user_id>')` を残す**（端末の使い回しは許すが、無言で他人の購読を奪えないようにする。endpoint はログに書かない）。成功時 `{ ok:true, subscriptionCount }` |
 | `DELETE /api/subscriptions` | 要 | body `{ endpoint }`。自分の購読だけ削除。成功時 `{ ok:true, subscriptionCount }`（POST と同じ形） |
-| `POST /api/push/test` | 要 | 自分の全購読へテスト通知（URL は `/push-assistant/`）。結果 `{ ok:true, sent, failed }` |
-| `GET /api/notifications` | 要 | 直近 50 件 `{ items: [{ id, title, notifyAt, leadMinutes, status, openUrl, urlSource, sentAt, attempts, lastError }] }` |
+| `POST /api/push/test` | 要 | 自分の全購読へテスト通知。タップ先は `notify_url`（未設定なら `/push-assistant/`）。タイトルは `notify_title`（未設定なら `Push Assistant`）、本文は固定文言（`notify_body` は使わない）。結果 `{ ok:true, sent, failed }` |
+| `GET /api/notifications` | 要（**API は残すが現行画面からは呼ばない**、§15） | 直近 50 件 `{ items: [{ id, title, notifyAt, leadMinutes, status, openUrl, urlSource, sentAt, attempts, lastError }] }` |
 
 エラーコード: `UNAUTHORIZED`(401) / `FORBIDDEN_ORIGIN`(403) / `INVALID_REQUEST`(400) /
 `NOT_CONNECTED`(409, Google 未接続) / `TOKEN_INVALID`(409, 再接続が必要) /
@@ -314,11 +329,13 @@ STUCK_SENDING_MS    = 5 * 60 * 1000    // 'sending' のまま取り残された�
 ### 8-2. 判定（`src/schedule.mjs`、純関数）
 
 ```
-planNotifications({ events, leadMinutes, nowMs, appUrl, overrides })
+planNotifications({ events, leadMinutes, nowMs, appUrl, overrides, globalUrl })
   → [{ eventId, eventStart, leadMinutes, notifyAtMs, title, openUrl, urlSource, due: 'due'|'future'|'stale' }]
 ```
 
 `overrides` は `Map<eventId, { title, url }>`（省略時は空 Map ＝従来動作）。§9 の上書きを反映する。
+`globalUrl` は全予定共通のタップ URL（`users.notify_url`。省略時は空文字）。§9 のとおり
+override の次・自動抽出より先に採る。
 
 - 終日予定（`allDay`）と `cancelled` は対象外。
 - `notifyAtMs = startMs - lead*60*1000`。
@@ -405,9 +422,13 @@ sendWebPush({ subscription, payload, vapid, fetchImpl, ttlSec, urgency }) → { 
 
 - **title**: `notify_title` が非空ならそれ（前後空白除去・`MAX_TITLE_LENGTH`＝120 で切る）。
   空なら `event.title`（＝予定名。`event_overrides.custom_title` があればそれが反映済み）。
-- **body**: `notify_body` が非空なら、プレースホルダを単純置換（`String.replaceAll`）して
-  `MAX_NOTIFY_BODY_LENGTH`＝500 で切る。空なら従来の既定文（「HH:MM 開始（あと N 分）」）。
-  - `{url}` → 開く URL（`notifications.open_url`。上書き URL があればそれ）
+- **body**: **画面の簡素化（§15）で本文テンプレートの入力欄を撤去したため、通知本文は常に
+  既定文（「HH:MM 開始（あと N 分）」、lead=0 は「HH:MM 開始」）に固定する。** 実装上は
+  tick・`POST /api/push/test` が `renderNotification` へ渡す `template.body` を常に空文字にする。
+  `notify_body` 列と下の置換ロジック（`{url}`/`{title}`/`{time}` の単純置換）は DB 後方互換・
+  将来用に残すが、呼び出し側が使わないため既存利用者の `notify_body` に値が残っていても
+  通知本文には出ない。
+  - `{url}` → 開く URL（`notifications.open_url`。上書き・`notify_url` があればそれ）
   - `{title}` → 予定名（`notifications.title`）
   - `{time}` → 開始時刻の JST `HH:MM`（読めない時刻は空文字）
   - 未知の `{xxx}` はそのまま残す。
@@ -415,24 +436,27 @@ sendWebPush({ subscription, payload, vapid, fetchImpl, ttlSec, urgency }) → { 
   tick が `store.listOverrides` で引いて `template.title` を空にして `renderNotification` へ渡し、
   上書きタイトル（＝`event.title`）を採らせる。本文テンプレートは常に当たり、`{url}` には
   上書き後の URL が入る。`notify_title` が未設定なら、どのみち `event.title` を使うので上書きの引き直しはしない。
-- テスト通知は `event.title='テスト通知'`・`event.url=appUrl`・開始 10 分後相当で描く。
-  テンプレート未設定（両方空）なら従来の固定文言のまま。
+- テスト通知（`POST /api/push/test`）: タイトルは `notify_title`（未設定なら固定 `Push Assistant`）、
+  タップ先は `notify_url`（http/https なら採り、空・不正ならアプリ URL）、本文は固定文言
+  （「テスト通知です。タップするとアプリが開きます。」。`notify_body` は使わない）。
 
 ## 9. 開く URL の決定（`src/open-url.mjs`、純関数）
 
 ```
-resolveOpenUrl(event, { appUrl, overrideUrl }) → { url, source }
+resolveOpenUrl(event, { appUrl, overrideUrl, globalUrl }) → { url, source }
 ```
 
 優先順位（要件どおり）:
 0. `overrideUrl`（利用者が予定ごとに手動設定した URL、§7 の `custom_url`）→ `source: 'custom'`。
    **最優先。** `isAllowedUrl` を満たす http/https のときだけ採る。無効（`javascript:` 等）・
-   未指定なら**その候補を捨てて**下の自動抽出へ落ちる（通知そのものは止めない）。
-1. `conferenceUrl`（`conferenceData.entryPoints[type==='video'].uri`、無ければ `hangoutLink`）→ `source: 'conference'`
-2. `description` 内の最初の URL → `'description'`
-3. `location` が URL → `'location'`
-4. `htmlLink`（Google カレンダーの予定ページ）→ `'calendar'`
-5. `appUrl`（`https://tsam-ai.com/push-assistant/`）→ `'app'`
+   未指定なら**その候補を捨てて**次へ落ちる（通知そのものは止めない）。
+1. `globalUrl`（利用者が全予定共通で設定したタップ URL、§6 の `notify_url`）→ `source: 'global'`。
+   override の**次**に最優先。`isAllowedUrl` を満たすときだけ採り、無効・未指定なら下の自動抽出へ落ちる。
+2. `conferenceUrl`（`conferenceData.entryPoints[type==='video'].uri`、無ければ `hangoutLink`）→ `source: 'conference'`
+3. `description` 内の最初の URL → `'description'`
+4. `location` が URL → `'location'`
+5. `htmlLink`（Google カレンダーの予定ページ）→ `'calendar'`
+6. `appUrl`（`https://tsam-ai.com/push-assistant/`）→ `'app'`
 
 通知タイトルも予定ごとに上書きできる（§7 の `custom_title`）。`planNotifications` は
 `custom_title` が空でなければそれを（`MAX_TITLE_LENGTH` で切って）タイトルにし、空なら予定タイトルを使う。
@@ -530,3 +554,8 @@ resolveOpenUrl(event, { appUrl, overrideUrl }) → { url, source }
 - **上書きで既存の全通知行を書き換える**: `sent`/`sending` まで書き換えると「送った通知の内容が後から変わる」不整合が出る。`pending` の行だけに反映し、解除時は触らない（§8-7）。
 - **通知の文言を予定ごとに設定させる（テンプレートを持たない）**: 利用者の要望は「どの予定の通知でも問いかけは同じにして URL を表示したい。予定それぞれを設定したいわけではない」だった。予定ごと入力を基本にすると、毎回の予定に同じ文言を書かせることになり手間が要件と逆行する。そこで **利用者ごとに 1 つのグローバルなテンプレート**（`notify_title`／`notify_body`、§8-8）を基本に据え、`event_overrides` は「個別に変えたい予定だけ」の例外として残し、テンプレートより優先させた。これで通常は一度設定すれば全予定に効き、特別な予定だけ上書きできる。
 - **本文テンプレートに任意の式やスクリプトを許す**: `{url}`/`{title}`/`{time}` の**固定した 3 つのプレースホルダの単純置換**に限る。任意評価は不要な攻撃面を増やし、通知本文は SW 側で `showNotification` の `body`（テキスト）に入るだけで実行文脈が無いにせよ、置換規則を最小に保つほうが将来の取り違えが少ない。未知の `{xxx}` は素通しして表示する（利用者の書き間違いを黙って消さない）。
+
+- **画面を「通知タイトル」＋「タップで開く URL」の 2 欄に簡素化（2026-08-27 決定）**: 利用者の要望で、通知設定を最小の 2 入力（`notify_title`／`notify_url`。migration 0004）に絞り、**本文テンプレート（`notify_body`）の入力欄・`{url}{title}{time}` の説明・「次回の予定」一覧・「通知履歴」・予定ごとの上書き UI を画面から撤去した**。判断の理由:
+  - 本文は毎回同じで良いという要望なので、本文は既定文（「HH:MM 開始（あと N 分）」）に固定し、迷う要素を無くす。全予定共通のタップ先だけ `notify_url` で指定できれば要件（「通知タップで目的の URL を開く」）を満たす。`notify_url` は override の次・自動抽出より先に採る（§9 の `source='global'`）。
+  - **API・DB・純関数のロジックは残置**する。`GET /api/events`・`GET /api/notifications`・`PUT /api/events/override`・`notify_body`・`event_overrides` は削除せず、画面が呼ばなくなるだけにした。撤去より残置を選んだのは、(1) 予定ごとの上書き（`custom_url`/`custom_title`）と本文テンプレートは将来 UI を戻す余地があり、消すと migration・テスト・型を巻き戻す手戻りが大きい、(2) これらは本番適用済みの列・稼働中の判定経路であり、消す変更のほうが回帰リスクが高い、ため。撤去したのは UI（HTML/JS）に限る。
+  - 採らなかった案: **API/DB も同時に撤去して完全に削る** … 画面と一致して読みやすくなるが、上記の手戻り・回帰リスクに見合わない。UI だけ落とし、サーバ側は後方互換（`notify_body` は送られても壊さない、`notify_url` 省略時は既存維持）で受ける方針にした。

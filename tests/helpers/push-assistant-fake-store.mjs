@@ -50,6 +50,8 @@ export function createFakeStore(seed = {}) {
       /* 通知テンプレート（migration 0003）。既定は未設定（空）。 */
       notifyTitle: user.notifyTitle ?? '',
       notifyBody: user.notifyBody ?? '',
+      /* 全予定共通の「タップで開く URL」（migration 0004）。既定は空。 */
+      notifyUrl: user.notifyUrl ?? '',
       lastTickAt: user.lastTickAt ?? null,
       createdAt: user.createdAt ?? '2026-08-26T00:00:00.000Z',
       updatedAt: user.updatedAt ?? '2026-08-26T00:00:00.000Z',
@@ -116,6 +118,7 @@ export function createFakeStore(seed = {}) {
         leadMinutes: [10],
         notifyTitle: '',
         notifyBody: '',
+        notifyUrl: '',
         lastTickAt: null,
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -128,7 +131,7 @@ export function createFakeStore(seed = {}) {
       return found ? { ...found, leadMinutes: [...found.leadMinutes] } : null;
     },
 
-    async updateSettings(userId, { notifyEnabled, leadMinutes, notifyTitle, notifyBody }, nowIso) {
+    async updateSettings(userId, { notifyEnabled, leadMinutes, notifyTitle, notifyBody, notifyUrl }, nowIso) {
       const user = users.get(userId);
 
       if (!user) {
@@ -145,6 +148,10 @@ export function createFakeStore(seed = {}) {
 
       if (typeof notifyBody === 'string') {
         user.notifyBody = notifyBody;
+      }
+
+      if (typeof notifyUrl === 'string') {
+        user.notifyUrl = notifyUrl;
       }
 
       user.updatedAt = nowIso;
@@ -338,6 +345,7 @@ export function createFakeStore(seed = {}) {
           leadMinutes: [...user.leadMinutes],
           notifyTitle: user.notifyTitle ?? '',
           notifyBody: user.notifyBody ?? '',
+          notifyUrl: user.notifyUrl ?? '',
           lastTickAt: user.lastTickAt,
         });
       }
@@ -359,6 +367,7 @@ export function createFakeStore(seed = {}) {
         leadMinutes: row.leadMinutes,
         notifyTitle: row.notifyTitle,
         notifyBody: row.notifyBody,
+        notifyUrl: row.notifyUrl,
       }));
     },
 

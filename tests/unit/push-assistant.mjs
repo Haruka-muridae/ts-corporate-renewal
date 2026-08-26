@@ -962,6 +962,7 @@ async function run() {
         leadMinutes: user.leadMinutes ?? [10],
         notifyTitle: user.notifyTitle ?? '',
         notifyBody: user.notifyBody ?? '',
+        notifyUrl: user.notifyUrl ?? '',
       });
       seedTokens.push({
         userId: user.id,
@@ -1826,6 +1827,102 @@ async function run() {
   }
 
   {
+    /* globalUrl（notify_url）: override の次に最優先。conference より先。 */
+    const event = normalizeEvent(rawEvent({
+      conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/auto' }] },
+    }));
+
+    const global = resolveOpenUrl(event, { appUrl: APP_URL, globalUrl: 'https://example.com/global' });
+
+    check(
+      '★globalUrl は conference より優先され source=global',
+      global.url === 'https://example.com/global' && global.source === 'global',
+      JSON.stringify(global),
+    );
+
+    const overrideWins = resolveOpenUrl(event, {
+      appUrl: APP_URL,
+      overrideUrl: 'https://example.com/custom',
+      globalUrl: 'https://example.com/global',
+    });
+
+    check(
+      '★override は globalUrl より優先（custom）',
+      overrideWins.url === 'https://example.com/custom' && overrideWins.source === 'custom',
+      JSON.stringify(overrideWins),
+    );
+
+    const badGlobal = resolveOpenUrl(event, { appUrl: APP_URL, globalUrl: 'javascript:alert(1)' });
+
+    check(
+      '★不正な globalUrl は無視して従来の自動抽出へ',
+      badGlobal.source === 'conference' && badGlobal.url === 'https://meet.google.com/auto',
+      JSON.stringify(badGlobal),
+    );
+
+    check(
+      '空の globalUrl は無視（従来どおり）',
+      resolveOpenUrl(event, { appUrl: APP_URL, globalUrl: '' }).source === 'conference',
+    );
+
+    /* 候補が全滅していても globalUrl があれば app には落ちない。 */
+    const onlyGlobal = resolveOpenUrl(
+      { urls: [], htmlLink: '' },
+      { appUrl: APP_URL, globalUrl: 'https://example.com/g' },
+    );
+
+    check('候補が全滅でも globalUrl を採る', onlyGlobal.source === 'global' && onlyGlobal.url === 'https://example.com/g');
+  }
+
+  {
+    /* planNotifications: globalUrl 指定で全予定の openUrl が globalUrl・source='global'。 */
+    const events = [normalizeEvent(rawEvent({
+      id: 'ev-g1',
+      start: { dateTime: new Date(NOW + 10 * MINUTE).toISOString() },
+      conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/auto' }] },
+    }))];
+
+    const withGlobal = planNotifications({
+      events,
+      leadMinutes: [10],
+      nowMs: NOW,
+      appUrl: APP_URL,
+      globalUrl: 'https://example.com/global',
+    });
+
+    check(
+      '★planNotifications: globalUrl が全予定の openUrl になり source=global',
+      withGlobal[0].openUrl === 'https://example.com/global' && withGlobal[0].urlSource === 'global',
+      JSON.stringify(withGlobal[0]),
+    );
+
+    /* override があれば globalUrl より override 優先。 */
+    const overrideOverGlobal = planNotifications({
+      events,
+      leadMinutes: [10],
+      nowMs: NOW,
+      appUrl: APP_URL,
+      globalUrl: 'https://example.com/global',
+      overrides: new Map([['ev-g1', { title: '', url: 'https://example.com/room' }]]),
+    });
+
+    check(
+      '★planNotifications: override は globalUrl より優先（custom）',
+      overrideOverGlobal[0].openUrl === 'https://example.com/room' && overrideOverGlobal[0].urlSource === 'custom',
+      JSON.stringify(overrideOverGlobal[0]),
+    );
+
+    /* globalUrl 空なら従来の自動抽出。 */
+    const noGlobal = planNotifications({ events, leadMinutes: [10], nowMs: NOW, appUrl: APP_URL, globalUrl: '' });
+
+    check(
+      'globalUrl 空なら従来どおり conference',
+      noGlobal[0].urlSource === 'conference',
+      JSON.stringify(noGlobal[0]),
+    );
+  }
+
+  {
     /* planNotifications: 上書きでタイトルと URL が変わる。 */
     const events = [normalizeEvent(rawEvent({
       id: 'ev-ov',
@@ -2119,6 +2216,41 @@ async function run() {
     check('重複した lead は 400', (await put({ notifyEnabled: true, leadMinutes: [10, 10] })).status === 400);
     check('空の配列は 400', (await put({ notifyEnabled: true, leadMinutes: [] })).status === 400);
     check('notifyEnabled が真偽値でなければ 400', (await put({ notifyEnabled: 'yes', leadMinutes: [10] })).status === 400);
+
+    /* notify_url（タップで開く URL、§9）。空 or http/https のみ保存。 */
+    const savedUrl = await (await put({
+      notifyEnabled: true,
+      leadMinutes: [10],
+      notifyUrl: 'https://example.com/global',
+    })).json();
+
+    check('★notifyUrl を保存して返す', savedUrl.settings.notifyUrl === 'https://example.com/global', JSON.stringify(savedUrl.settings));
+    check('store に notifyUrl が反映される', store._users.get('u1').notifyUrl === 'https://example.com/global', JSON.stringify(store._users.get('u1')));
+
+    /* 省略時は既存値を保つ（後方互換）。 */
+    const keptUrl = await (await put({ notifyEnabled: true, leadMinutes: [0] })).json();
+    check('★notifyUrl を省略しても既存値を保つ', keptUrl.settings.notifyUrl === 'https://example.com/global', JSON.stringify(keptUrl.settings));
+
+    /* 空文字で消せる。 */
+    const clearedUrl = await (await put({ notifyEnabled: true, leadMinutes: [10], notifyUrl: '' })).json();
+    check('★空文字で notifyUrl を消せる', clearedUrl.settings.notifyUrl === '', JSON.stringify(clearedUrl.settings));
+
+    /* javascript: は 400（isAllowedUrl が最後の関門。§9）。 */
+    check('★javascript: の notifyUrl は 400', (await put({ notifyEnabled: true, leadMinutes: [10], notifyUrl: 'javascript:alert(1)' })).status === 400);
+    check('ftp: の notifyUrl も 400', (await put({ notifyEnabled: true, leadMinutes: [10], notifyUrl: 'ftp://example.com/x' })).status === 400);
+    check('相対 URL の notifyUrl は 400', (await put({ notifyEnabled: true, leadMinutes: [10], notifyUrl: '/push-assistant/' })).status === 400);
+    check('notifyUrl が文字列でなければ 400', (await put({ notifyEnabled: true, leadMinutes: [10], notifyUrl: 123 })).status === 400);
+
+    /* /api/me にも notifyUrl が載る。 */
+    await put({ notifyEnabled: true, leadMinutes: [10], notifyUrl: 'https://example.com/me' });
+
+    const meAfter = await worker.fetch(
+      new Request('https://tsam-ai.com/push-assistant/api/me', { headers: { Cookie: `pa_session=${cookie}` } }),
+      env,
+    );
+    const meAfterBody = await meAfter.json();
+
+    check('★/api/me に notifyUrl が載る', meAfterBody.settings.notifyUrl === 'https://example.com/me', JSON.stringify(meAfterBody.settings));
   }
 
   {
@@ -2982,13 +3114,16 @@ async function run() {
   }
 
   /* ---------------------------------------------------------------- */
-  section('通知テンプレート — runTick で通知に反映（§8）');
+  section('通知タイトル・タップ URL — runTick で通知に反映（§8-8・§9）');
   /* ================================================================ */
   {
     /* 復号のための道具は上の Web Push 節で用意した decryptWebPush / subscriptionKeys を使う。 */
     const readPayload = async (body) => JSON.parse((await decryptWebPush(body)).plaintext);
 
-    /* A: テンプレートが実通知の title / body に反映される。 */
+    /*
+     * A: notify_title はタイトルに反映される。**本文は常に既定（時刻）**で、
+     * notify_body を設定していても本文には出ない（画面の簡素化。§15）。
+     */
     const world = createTickWorld({
       users: [{ id: 'u1', leadMinutes: [10], notifyTitle: '会議のお知らせ', notifyBody: '{time} 開始。{title} → {url}' }],
       calendarByUser: {
@@ -3002,17 +3137,17 @@ async function run() {
     });
 
     const res = await runTick(tickArgs(world, NOW));
-    check('テンプレ: 1 件送る', res.sent === 1, JSON.stringify(res));
+    check('タイトル: 1 件送る', res.sent === 1, JSON.stringify(res));
 
     const payload = await readPayload(world.pushBodies[0]);
-    check('テンプレ: タイトルは notify_title', payload.title === '会議のお知らせ', payload.title);
+    check('タイトルは notify_title', payload.title === '会議のお知らせ', payload.title);
     check(
-      'テンプレ: 本文の {time}{title}{url} が置換される',
-      payload.body === '18:10 開始。定例会議 → https://meet.google.com/xyz',
+      '★本文は既定（時刻）。notify_body を設定していても本文には出ない',
+      payload.body === '18:10 開始（あと10分）',
       payload.body,
     );
 
-    /* B: event_overrides はテンプレートより優先（override.title > notify_title、override.url が {url}）。 */
+    /* B: event_overrides はテンプレートタイトルより優先（override.title > notify_title、override.url がタップ先）。 */
     const world2 = createTickWorld({
       users: [{ id: 'u1', leadMinutes: [10], notifyTitle: 'グローバル問いかけ', notifyBody: '{title} / {url}' }],
       calendarByUser: {
@@ -3026,10 +3161,10 @@ async function run() {
 
     const payload2 = await readPayload(world2.pushBodies[0]);
     check('上書きタイトルはテンプレより優先（override.title > notify_title）', payload2.title === '個別タイトル', payload2.title);
-    check('本文の {url} には上書き URL が入る', payload2.body === '個別タイトル / https://example.com/custom', payload2.body);
-    check('タップ先 URL も上書き URL', payload2.url === 'https://example.com/custom', payload2.url);
+    check('本文は既定（notify_body は出ない）', payload2.body === '18:10 開始（あと10分）', payload2.body);
+    check('タップ先 URL は上書き URL', payload2.url === 'https://example.com/custom', payload2.url);
 
-    /* C: notify_title だけ空 → タイトルは予定名、本文はテンプレート。 */
+    /* C: notify_title 空 → タイトルは予定名。本文は既定。 */
     const world3 = createTickWorld({
       users: [{ id: 'u1', leadMinutes: [0], notifyTitle: '', notifyBody: 'まもなく: {title}' }],
       calendarByUser: {
@@ -3040,9 +3175,9 @@ async function run() {
     await runTick(tickArgs(world3, NOW));
     const payload3 = await readPayload(world3.pushBodies[0]);
     check('notify_title 空なら予定名がタイトル', payload3.title === '朝会', payload3.title);
-    check('notify_body だけ設定でも本文はテンプレ', payload3.body === 'まもなく: 朝会', payload3.body);
+    check('notify_body だけ設定でも本文は既定（lead=0）', payload3.body === '18:00 開始', payload3.body);
 
-    /* D: テンプレート未設定なら従来どおり（回帰）。 */
+    /* D: 未設定なら従来どおり（回帰）。 */
     const world4 = createTickWorld({
       users: [{ id: 'u1', leadMinutes: [10] }],
       calendarByUser: {
@@ -3052,12 +3187,48 @@ async function run() {
 
     await runTick(tickArgs(world4, NOW));
     const payload4 = await readPayload(world4.pushBodies[0]);
-    check('テンプレ未設定なら従来のタイトル（予定名）', payload4.title === '会議', payload4.title);
-    check('テンプレ未設定なら従来の既定本文', payload4.body === '18:10 開始（あと10分）', payload4.body);
+    check('未設定なら従来のタイトル（予定名）', payload4.title === '会議', payload4.title);
+    check('未設定なら従来の既定本文', payload4.body === '18:10 開始（あと10分）', payload4.body);
+
+    /*
+     * E: notify_url（globalUrl）→ 全予定のタップ先が notify_url（source='global'）。
+     * conference があっても notify_url が勝つ。
+     */
+    const world5 = createTickWorld({
+      users: [{ id: 'u1', leadMinutes: [10], notifyUrl: 'https://example.com/global' }],
+      calendarByUser: {
+        u1: [rawEvent({
+          id: 'ev-gu',
+          summary: '定例会議',
+          start: { dateTime: new Date(NOW + 10 * MINUTE).toISOString() },
+          conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/xyz' }] },
+        })],
+      },
+    });
+
+    await runTick(tickArgs(world5, NOW));
+    const payload5 = await readPayload(world5.pushBodies[0]);
+    check('★notify_url があればタップ先は notify_url（conference より優先）', payload5.url === 'https://example.com/global', payload5.url);
+
+    const rows5 = await world5.store.listNotifications('u1', 10);
+    check('★notify_url の url_source は global', rows5[0].urlSource === 'global', JSON.stringify(rows5[0]));
+
+    /* F: override があれば notify_url より override 優先。 */
+    const world6 = createTickWorld({
+      users: [{ id: 'u1', leadMinutes: [10], notifyUrl: 'https://example.com/global' }],
+      calendarByUser: {
+        u1: [rawEvent({ id: 'ev-guo', summary: '面談', start: { dateTime: new Date(NOW + 10 * MINUTE).toISOString() } })],
+      },
+      overrides: [{ userId: 'u1', eventId: 'ev-guo', title: '', url: 'https://example.com/room' }],
+    });
+
+    await runTick(tickArgs(world6, NOW));
+    const payload6 = await readPayload(world6.pushBodies[0]);
+    check('★override は notify_url より優先（タップ先は override URL）', payload6.url === 'https://example.com/room', payload6.url);
   }
 
   /* ---------------------------------------------------------------- */
-  section('通知テンプレート — テスト通知（handlePushTest）');
+  section('通知タイトル・タップ URL — テスト通知（handlePushTest）');
   /* ================================================================ */
   {
     const readPayload = async (body) => JSON.parse((await decryptWebPush(body)).plaintext);
@@ -3098,22 +3269,25 @@ async function run() {
       return { response, sentBodies };
     }
 
-    const withTemplate = await pushTest({ notifyTitle: 'テストの問いかけ', notifyBody: '本文: {title} {url}' });
-    check('テスト通知: 送信は 200', withTemplate.response.status === 200, String(withTemplate.response.status));
+    /* notify_title があればタイトルに反映。タップ先は notify_url。本文は固定文言。 */
+    const withTitle = await pushTest({
+      notifyTitle: 'テストの問いかけ',
+      notifyUrl: 'https://example.com/global',
+      notifyBody: '本文: {title} {url}',
+    });
+    check('テスト通知: 送信は 200', withTitle.response.status === 200, String(withTitle.response.status));
 
-    const p = await readPayload(withTemplate.sentBodies[0]);
-    check('テスト通知にもテンプレのタイトルが載る', p.title === 'テストの問いかけ', p.title);
-    check(
-      'テスト通知の本文もテンプレで、{url} はアプリ URL',
-      p.body === '本文: テスト通知 https://tsam-ai.com/push-assistant/',
-      p.body,
-    );
+    const p = await readPayload(withTitle.sentBodies[0]);
+    check('テスト通知にも notify_title が載る', p.title === 'テストの問いかけ', p.title);
+    check('★テスト通知のタップ先は notify_url', p.url === 'https://example.com/global', p.url);
+    check('★notify_body を設定してもテスト通知の本文には出ない（固定文言）', p.body === 'テスト通知です。タップするとアプリが開きます。', p.body);
 
-    /* テンプレート未設定なら従来の固定文言のまま。 */
+    /* 未設定なら従来の固定文言・アプリ URL。 */
     const plain = await pushTest({});
     const p2 = await readPayload(plain.sentBodies[0]);
-    check('テンプレ未設定のテスト通知は固定タイトル', p2.title === 'Push Assistant', p2.title);
-    check('テンプレ未設定のテスト通知は固定本文', p2.body === 'テスト通知です。タップするとアプリが開きます。', p2.body);
+    check('未設定のテスト通知は固定タイトル', p2.title === 'Push Assistant', p2.title);
+    check('未設定のテスト通知は固定本文', p2.body === 'テスト通知です。タップするとアプリが開きます。', p2.body);
+    check('未設定のテスト通知のタップ先はアプリ URL', p2.url === 'https://tsam-ai.com/push-assistant/', p2.url);
   }
 
   finish();

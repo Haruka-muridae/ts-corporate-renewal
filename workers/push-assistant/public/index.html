@@ -84,40 +84,28 @@
         <select id="pa-lead"></select>
       </p>
 
-      <fieldset class="pa-fieldset">
-        <legend>通知の文章（テンプレート）</legend>
-        <p class="pa-note pa-note--tight">
-          どの予定の通知でも同じ文章を使います。予定ごとに変えたいときは、
-          「次回の予定」で個別に上書きできます（そちらが優先されます）。
-        </p>
+      <p class="pa-field">
+        <label for="pa-notify-title">通知タイトル</label>
+        <input
+          type="text"
+          id="pa-notify-title"
+          class="pa-input"
+          maxlength="120"
+          placeholder="オンライン予定のお知らせ（空欄なら予定名）"
+        >
+      </p>
 
-        <p class="pa-field">
-          <label for="pa-notify-title">通知タイトル（問いかけ）</label>
-          <input
-            type="text"
-            id="pa-notify-title"
-            class="pa-input"
-            maxlength="120"
-            placeholder="オンライン予定のお知らせ（空欄なら予定名）"
-          >
-        </p>
-
-        <p class="pa-field">
-          <label for="pa-notify-body">本文</label>
-          <textarea
-            id="pa-notify-body"
-            class="pa-input pa-textarea"
-            rows="3"
-            maxlength="500"
-            placeholder="{time} 開始。参加はこちら → {url}"
-            aria-describedby="pa-notify-body-help"
-          ></textarea>
-          <span id="pa-notify-body-help" class="pa-hint">
-            <code>{url}</code> でURL、<code>{title}</code> で予定名、<code>{time}</code> で開始時刻（例 18:00）を挿入できます。
-            空欄なら「18:00 開始（あと10分）」のような既定の文面になります。
-          </span>
-        </p>
-      </fieldset>
+      <p class="pa-field">
+        <label for="pa-notify-url">タップで開く URL</label>
+        <input
+          type="url"
+          id="pa-notify-url"
+          class="pa-input"
+          inputmode="url"
+          maxlength="2048"
+          placeholder="https://…（空欄なら予定の Meet 等を自動で開く）"
+        >
+      </p>
 
       <p class="pa-actions">
         <button type="button" id="pa-save-settings" class="pa-button">設定を保存する</button>
@@ -136,18 +124,6 @@
         <button type="button" id="pa-request-permission" class="pa-button">通知を許可する</button>
         <button type="button" id="pa-test-push" class="pa-button pa-button--ghost">テスト通知を送る</button>
       </p>
-    </section>
-
-    <section class="pa-panel" aria-labelledby="pa-events-heading">
-      <h2 id="pa-events-heading">次回の予定</h2>
-      <p id="pa-events-empty" class="pa-note" hidden>今後24時間の予定はありません。</p>
-      <ul id="pa-events-list" class="pa-list"></ul>
-    </section>
-
-    <section class="pa-panel" aria-labelledby="pa-history-heading">
-      <h2 id="pa-history-heading">通知履歴</h2>
-      <p id="pa-history-empty" class="pa-note" hidden>通知履歴はありません。</p>
-      <ul id="pa-history-list" class="pa-list"></ul>
     </section>
 
   </div>
