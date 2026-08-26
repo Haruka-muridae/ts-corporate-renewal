@@ -181,5 +181,15 @@ export const MAX_URL_LENGTH = 2048;
 /** 通知に載せるタイトルの上限。push の本文は 4KB 弱しか入らない。 */
 export const MAX_TITLE_LENGTH = 120;
 
+/**
+ * 通知テンプレート本文（notify_body）の上限（仕様書 §6・§8）。
+ *
+ * push の本文全体は 4KB 弱（MAX_PLAINTEXT_BYTES=3993）しか入らない。
+ * タイトル・URL・JSON の枠も同じ枠を分け合うので、本文テンプレートは
+ * 500 文字で切る。`{url}` 等を展開した **後** に切るため、展開結果が
+ * 長くても暗号化前に必ずこの長さ以下になる。
+ */
+export const MAX_NOTIFY_BODY_LENGTH = 500;
+
 /** 予定の説明から拾う URL の本数。1 件目しか使わないが、画面のために少し多めに持つ。 */
 export const MAX_EXTRACTED_URLS = 5;

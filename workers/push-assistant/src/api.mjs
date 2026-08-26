@@ -35,6 +35,7 @@ import {
   MAX_BODY_BYTES,
   MAX_EVENTS_RESPONSE,
   MAX_LEAD_SELECTION,
+  MAX_NOTIFY_BODY_LENGTH,
   MAX_TITLE_LENGTH,
   NOTIFICATION_HISTORY_LIMIT,
   OAUTH_COOKIE,
@@ -68,6 +69,7 @@ import { ensureAccessToken } from './access-token.mjs';
 import { listUpcomingEvents } from './calendar.mjs';
 import { isAllowedUrl, resolveOpenUrl } from './open-url.mjs';
 import { planNotifications } from './schedule.mjs';
+import { renderNotification } from './template.mjs';
 import { notificationKey } from './store.mjs';
 import { importVapidPrivateKey, normalizeBase64Url } from './vapid.mjs';
 import { sendWebPush } from './webpush.mjs';
@@ -568,7 +570,7 @@ async function handleMe({ request, env, store, nowMs, log }) {
     user: null,
     calendarConnected: false,
     tokenInvalid: false,
-    settings: { notifyEnabled: true, leadMinutes: DEFAULT_LEAD_MINUTES },
+    settings: { notifyEnabled: true, leadMinutes: DEFAULT_LEAD_MINUTES, notifyTitle: '', notifyBody: '' },
     vapidPublicKey,
     subscriptionCount: 0,
     leadOptions: LEAD_OPTIONS,
@@ -609,7 +611,12 @@ async function handleMe({ request, env, store, nowMs, log }) {
     user: { email: user.email || session.email },
     calendarConnected: Boolean(tokens) && !tokens.invalidAt,
     tokenInvalid: Boolean(tokens?.invalidAt),
-    settings: { notifyEnabled: user.notifyEnabled, leadMinutes: user.leadMinutes },
+    settings: {
+      notifyEnabled: user.notifyEnabled,
+      leadMinutes: user.leadMinutes,
+      notifyTitle: user.notifyTitle ?? '',
+      notifyBody: user.notifyBody ?? '',
+    },
     subscriptionCount: await store.countActiveSubscriptions(session.sub),
   });
 }
@@ -658,10 +665,44 @@ async function handleSettings({ request, env, store, nowMs }) {
 
   const settings = { notifyEnabled: body.notifyEnabled, leadMinutes };
 
+  /*
+   * 通知テンプレート（グローバル。仕様書 §8）。**省略しても壊れない**：
+   * 文字列で来たときだけ設定に載せ、store.updateSettings が列を更新する。
+   * 未指定なら既存値を保つ。長すぎる入力は 400 にせず切り詰める
+   * （利用者の操作をエラーで止めるより、収まる範囲で保存するほうが親切）。
+   */
+  if (body.notifyTitle !== undefined) {
+    if (typeof body.notifyTitle !== 'string') {
+      return fail(ERRORS.INVALID_REQUEST);
+    }
+
+    settings.notifyTitle = body.notifyTitle.trim().slice(0, MAX_TITLE_LENGTH);
+  }
+
+  if (body.notifyBody !== undefined) {
+    if (typeof body.notifyBody !== 'string') {
+      return fail(ERRORS.INVALID_REQUEST);
+    }
+
+    settings.notifyBody = body.notifyBody.slice(0, MAX_NOTIFY_BODY_LENGTH);
+  }
+
   await store.updateSettings(session.sub, settings, new Date(nowMs).toISOString());
 
-  /* 保存後の値を返す（画面はこれで自分の状態を上書きする）。 */
-  return ok({ settings });
+  /*
+   * 保存後の値を返す（画面はこれで自分の状態を上書きする）。テンプレートは
+   * 省略時に既存値を保つので、保存後の行を読み直して確定値を返す。
+   */
+  const user = await store.getUser(session.sub);
+
+  return ok({
+    settings: {
+      notifyEnabled: user?.notifyEnabled ?? settings.notifyEnabled,
+      leadMinutes: user?.leadMinutes ?? leadMinutes,
+      notifyTitle: user?.notifyTitle ?? '',
+      notifyBody: user?.notifyBody ?? '',
+    },
+  });
 }
 
 /* ================= 予定 ================= */
@@ -990,11 +1031,36 @@ async function handlePushTest({ request, env, store, nowMs, fetchImpl, log }) {
   const nowIso = new Date(nowMs).toISOString();
   const home = appUrl(env);
 
+  /*
+   * テスト通知にも実通知と同じテンプレートを当て、問いかけ・本文の
+   * プレビューになるようにする（仕様書 §8）。テンプレート未設定
+   * （title/body ともに空）なら、従来の固定文言のまま。
+   */
+  const user = await store.getUser(session.sub);
+  const template = {
+    title: String(user?.notifyTitle ?? ''),
+    body: String(user?.notifyBody ?? ''),
+  };
+
+  let title = 'Push Assistant';
+  let body = 'テスト通知です。タップするとアプリが開きます。';
+
+  if (template.title !== '' || template.body !== '') {
+    /* 「10 分前」相当のプレビュー。{time} は現在時刻から 10 分後の JST。 */
+    const rendered = renderNotification({
+      template,
+      event: { title: 'テスト通知', url: home, startMs: nowMs + 10 * 60 * 1000, leadMinutes: 10 },
+    });
+
+    title = rendered.title;
+    body = rendered.body;
+  }
+
   const payload = {
     v: 1,
     kind: 'test',
-    title: 'Push Assistant',
-    body: 'テスト通知です。タップするとアプリが開きます。',
+    title,
+    body,
     url: home,
     tag: 'pa:test',
   };

@@ -36,6 +36,7 @@ import {
 import { ensureAccessToken } from './access-token.mjs';
 import { listUpcomingEvents } from './calendar.mjs';
 import { planNotifications } from './schedule.mjs';
+import { renderNotification } from './template.mjs';
 import { sendWebPush } from './webpush.mjs';
 
 /** 何もしない log（呼び出し側が渡さなかったとき用）。 */
@@ -238,11 +239,57 @@ async function runForUser({
 
   /* ---- 5. 送信 ---- */
 
+  /*
+   * 通知テンプレート（グローバル。仕様書 §8）。title/body ともに空なら従来どおり。
+   * listActiveUsers が notify_title/notify_body を載せて返す（下の store）。
+   */
+  const template = {
+    title: String(user.notifyTitle ?? ''),
+    body: String(user.notifyBody ?? ''),
+  };
+
+  /*
+   * ------------------------------------------------------------------
+   * event_overrides は通知テンプレートより優先（仕様書 §8-7）
+   * ------------------------------------------------------------------
+   * 上書きタイトルがある予定では、グローバルなテンプレートタイトル（問いかけ）
+   * ではなく上書きタイトルを出す。notifications.title は行の作成時に
+   * 上書きが反映済みなので、その予定については template.title を空にして渡し、
+   * event.title（＝上書き後のタイトル）を採らせる。
+   *
+   * テンプレートタイトルが未設定なら、どのみち event.title を使うので
+   * 上書きの引き直しは要らない（無駄な D1 アクセスを避ける）。
+   * 上書き URL は notifications.open_url に反映済みで、本文の `{url}` にも
+   * そのまま入る。
+   * ------------------------------------------------------------------
+   */
+  const overrideTitles = template.title !== ''
+    ? await store.listOverrides(user.id, claimed.map((notification) => notification.eventId))
+    : new Map();
+
   for (const notification of claimed) {
+    const override = overrideTitles.get?.(notification.eventId) ?? null;
+    const hasOverrideTitle = Boolean(override && String(override.title ?? '') !== '');
+
+    const rendered = renderNotification({
+      template: {
+        title: hasOverrideTitle ? '' : template.title,
+        body: template.body,
+      },
+      event: {
+        title: notification.title,
+        url: notification.openUrl,
+        startMs: Date.parse(notification.eventStart),
+        leadMinutes: notification.leadMinutes,
+      },
+    });
+
     const outcome = await deliver({
       store,
       subscriptions,
       notification,
+      title: rendered.title,
+      body: rendered.body,
       vapid,
       nowMs,
       nowIso,
@@ -290,7 +337,7 @@ async function runForUser({
  * うち 1 台が壊れた購読でも、通知そのものは届いている。全滅したときだけ
  * 再試行の対象にする。
  */
-async function deliver({ store, subscriptions, notification, vapid, nowMs, nowIso, fetchImpl }) {
+async function deliver({ store, subscriptions, notification, title, body, vapid, nowMs, nowIso, fetchImpl }) {
   if (subscriptions.length === 0) {
     return { sent: false, retryable: false, reason: 'NO_SUBSCRIPTION' };
   }
@@ -298,8 +345,9 @@ async function deliver({ store, subscriptions, notification, vapid, nowMs, nowIs
   const payload = {
     v: 1,
     kind: 'event',
-    title: notification.title,
-    body: buildBody(notification),
+    /* タイトル・本文は renderNotification（template.mjs）で作って渡される。 */
+    title,
+    body,
     url: notification.openUrl,
     /* 同じ通知を OS 側でも重ねない（仕様書 §8-5）。 */
     tag: `pa:${notification.eventId}:${notification.leadMinutes}`,
@@ -331,37 +379,6 @@ async function deliver({ store, subscriptions, notification, vapid, nowMs, nowIs
   }
 
   return { sent, retryable, reason };
-}
-
-/**
- * 通知の本文。
- *
- * ------------------------------------------------------------------
- * Intl を使わずに JST を出す
- * ------------------------------------------------------------------
- * Worker の時計は UTC。`toLocaleString('ja-JP', { timeZone })` は
- * ランタイムの ICU に依存し、テスト環境（Node のビルドオプション）で
- * 挙動が変わりうる。日本標準時は夏時間が無く UTC+9 で固定なので、
- * 9 時間足して UTC として読むだけで正しい。
- *
- * **利用者のタイムゾーンを持っていないので、JST 決め打ちである。**
- * 海外在住の利用者には合わない（README §8 の既知の制限）。
- * ------------------------------------------------------------------
- */
-function buildBody(notification) {
-  const startMs = Date.parse(notification.eventStart);
-
-  if (!Number.isFinite(startMs)) {
-    return notification.leadMinutes > 0 ? `まもなく開始（${notification.leadMinutes}分前）` : 'まもなく開始';
-  }
-
-  const jst = new Date(startMs + 9 * 60 * 60 * 1000);
-  const hh = String(jst.getUTCHours()).padStart(2, '0');
-  const mm = String(jst.getUTCMinutes()).padStart(2, '0');
-
-  return notification.leadMinutes > 0
-    ? `${hh}:${mm} 開始（あと${notification.leadMinutes}分）`
-    : `${hh}:${mm} 開始`;
 }
 
 function formatSummary(summary) {

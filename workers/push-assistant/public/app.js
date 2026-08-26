@@ -70,7 +70,7 @@ let state = {
   user: null,
   calendarConnected: false,
   tokenInvalid: false,
-  settings: { notifyEnabled: true, leadMinutes: [10] },
+  settings: { notifyEnabled: true, leadMinutes: [10], notifyTitle: '', notifyBody: '' },
   vapidPublicKey: '',
   subscriptionCount: 0,
   leadOptions: [],
@@ -277,12 +277,18 @@ function renderSettingsSection() {
   }
 
   el('pa-notify-enabled').checked = state.settings.notifyEnabled !== false;
+
+  /* 通知テンプレート（グローバル）。 */
+  el('pa-notify-title').value = String(state.settings.notifyTitle ?? '');
+  el('pa-notify-body').value = String(state.settings.notifyBody ?? '');
 }
 
 async function saveSettings() {
   const body = {
     notifyEnabled: el('pa-notify-enabled').checked,
     leadMinutes: [Number(el('pa-lead').value)],
+    notifyTitle: el('pa-notify-title').value,
+    notifyBody: el('pa-notify-body').value,
   };
 
   const result = await apiFetch('./api/settings', { method: 'PUT', body });
@@ -733,7 +739,7 @@ async function loadMe() {
     user: payload.user ?? null,
     calendarConnected: payload.calendarConnected === true,
     tokenInvalid: payload.tokenInvalid === true,
-    settings: payload.settings ?? { notifyEnabled: true, leadMinutes: [10] },
+    settings: payload.settings ?? { notifyEnabled: true, leadMinutes: [10], notifyTitle: '', notifyBody: '' },
     vapidPublicKey: payload.vapidPublicKey ?? '',
     subscriptionCount: Number(payload.subscriptionCount ?? 0),
     leadOptions: Array.isArray(payload.leadOptions) ? payload.leadOptions : [],
