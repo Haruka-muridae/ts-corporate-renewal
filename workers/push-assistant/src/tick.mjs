@@ -175,11 +175,24 @@ async function runForUser({
 
   /* ---- 3. 通知の予定表 → 行の作成 ---- */
 
+  /*
+   * 予定ごとの手動上書き（仕様書 §7・§9）を先に引く。
+   * **行を作る前に上書きを確定させる。** これが無いと、利用者が通知の
+   * 前に文章や URL を直しても、due になったときに作られる行は自動抽出の
+   * ままになり、上書きが効かない（画面と実際の通知が食い違う）。
+   * 上書きが無い予定は空 Map になり、従来どおり自動抽出で作られる。
+   */
+  const overrides = await store.listOverrides(
+    user.id,
+    calendar.events.map((event) => event.id),
+  );
+
   const plans = planNotifications({
     events: calendar.events,
     leadMinutes: user.leadMinutes,
     nowMs,
     appUrl,
+    overrides,
   });
 
   for (const plan of plans) {

@@ -509,8 +509,140 @@ function renderEventsList(items) {
     urlPara.appendChild(buildUrlNode(item.openUrl));
     li.appendChild(urlPara);
 
+    /*
+     * 通知対象（allDay=false）の予定にだけ上書き欄を出す。終日予定は
+     * 通知の対象外（§8-2）なので、文章もタイミングも効かない。出しても
+     * 混乱するだけなので MVP では出さない（設計判断）。
+     */
+    if (item.allDay !== true) {
+      li.appendChild(buildOverrideEditor(item));
+    }
+
     list.appendChild(li);
   }
+}
+
+/**
+ * 予定ごとの「通知に表示する文章」「タップで開く URL」の上書き欄。
+ *
+ * innerHTML は使わず createElement と textContent/value だけで組む（§10）。
+ * label は input を包んで関連付ける（グローバル id を作らず衝突を避ける）。
+ * 折りたたみは <details>/<summary>（JS 不要・prefers-reduced-motion に従う）。
+ */
+function buildOverrideEditor(item) {
+  const details = document.createElement('details');
+  details.className = 'pa-event__override';
+
+  const summary = document.createElement('summary');
+  summary.className = 'pa-event__override-toggle';
+  summary.textContent = '通知の文章とリンクを設定';
+  details.appendChild(summary);
+
+  const bodyBox = document.createElement('div');
+  bodyBox.className = 'pa-event__override-body';
+
+  /* 通知に表示する文章。 */
+  const titleField = document.createElement('label');
+  titleField.className = 'pa-field';
+
+  const titleLabel = document.createElement('span');
+  titleLabel.textContent = '通知に表示する文章';
+  titleField.appendChild(titleLabel);
+
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'pa-event__override-input';
+  titleInput.maxLength = 120;
+  titleInput.value = String(item.customTitle ?? '');
+  /* 未入力なら予定タイトルが使われることを見せる。 */
+  titleInput.placeholder = String(item.title ?? '');
+  titleField.appendChild(titleInput);
+  bodyBox.appendChild(titleField);
+
+  /* タップで開く URL。 */
+  const urlField = document.createElement('label');
+  urlField.className = 'pa-field';
+
+  const urlLabel = document.createElement('span');
+  urlLabel.textContent = 'タップで開く URL';
+  urlField.appendChild(urlLabel);
+
+  const urlInput = document.createElement('input');
+  urlInput.type = 'text';
+  urlInput.className = 'pa-event__override-input';
+  urlInput.inputMode = 'url';
+  urlInput.value = String(item.customUrl ?? '');
+  /* 未入力なら自動で決まる現在の行き先を見せる。 */
+  urlInput.placeholder = `自動: ${String(item.openUrl ?? '')}`;
+  urlField.appendChild(urlInput);
+  bodyBox.appendChild(urlField);
+
+  const actions = document.createElement('p');
+  actions.className = 'pa-actions';
+
+  const saveButton = document.createElement('button');
+  saveButton.type = 'button';
+  saveButton.className = 'pa-button';
+  saveButton.textContent = '保存';
+  actions.appendChild(saveButton);
+  bodyBox.appendChild(actions);
+
+  const msg = document.createElement('p');
+  msg.className = 'pa-event__override-msg';
+  msg.setAttribute('role', 'status');
+  msg.hidden = true;
+  bodyBox.appendChild(msg);
+
+  saveButton.addEventListener('click', async () => {
+    saveButton.disabled = true;
+
+    try {
+      await saveEventOverride({ eventId: item.id, titleInput, urlInput, msg });
+    } catch {
+      setOverrideMessage(msg, '保存できませんでした。', 'error');
+    } finally {
+      saveButton.disabled = false;
+    }
+  });
+
+  details.appendChild(bodyBox);
+
+  return details;
+}
+
+function setOverrideMessage(msg, text, kind) {
+  msg.textContent = text;
+  msg.dataset.kind = kind;
+  msg.hidden = text === '';
+}
+
+/**
+ * 上書きを保存する。成功したら一覧を引き直して、実際に通知へ載る
+ * openUrl/urlSource（サーバーが再計算した値）を画面へ反映する。
+ */
+async function saveEventOverride({ eventId, titleInput, urlInput, msg }) {
+  const title = titleInput.value.trim();
+  const url = urlInput.value.trim();
+
+  /* サーバー側の検証が本体だが、UX のため空でない不正 URL は先に弾く。 */
+  if (url !== '' && !isHttpUrl(url)) {
+    setOverrideMessage(msg, 'http:// か https:// で始まる URL を入れてください。', 'error');
+    return;
+  }
+
+  const result = await apiFetch('./api/events/override', {
+    method: 'PUT',
+    body: { eventId, title, url },
+  });
+
+  if (result.networkError || !result.payload || result.payload.ok !== true) {
+    /* UNAUTHORIZED なら未ログイン表示へ戻る（handleApiFailure が面倒を見る）。 */
+    handleApiFailure(result, '設定を保存できませんでした。');
+    return;
+  }
+
+  setMessage('通知の設定を保存しました。', 'success');
+  await loadEvents();
 }
 
 async function loadEvents() {
