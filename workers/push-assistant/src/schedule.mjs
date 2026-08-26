@@ -38,8 +38,14 @@ import { resolveOpenUrl } from './open-url.mjs';
  * 未指定（既定の空 Map）なら従来どおり。これにより、通知を作る **前** に
  * 上書きが確定するので、tick が作る due な行にも自動で反映される。
  * ------------------------------------------------------------------
+ * globalUrl（全予定共通の「タップで開く URL」、notify_url。仕様書 §8-8・§9）
+ * ------------------------------------------------------------------
+ * `globalUrl` は利用者が全予定に一律で指定したタップ先。予定ごとの上書きが
+ * 無いとき、conference 等の自動抽出より **先** に採る（resolveOpenUrl の
+ * source='global'）。空・不正なら無視して従来の自動抽出へ落ちる。
+ * ------------------------------------------------------------------
  */
-export function planNotifications({ events, leadMinutes, nowMs, appUrl, overrides = new Map() }) {
+export function planNotifications({ events, leadMinutes, nowMs, appUrl, overrides = new Map(), globalUrl = '' }) {
   const leads = normalizeLeads(leadMinutes);
   const plans = [];
 
@@ -58,7 +64,7 @@ export function planNotifications({ events, leadMinutes, nowMs, appUrl, override
     const customTitle = String(override?.title ?? '');
 
     /* 開く URL は予定ごとに 1 回だけ決める（lead が複数でも行き先は同じ）。 */
-    const opened = resolveOpenUrl(event, { appUrl, overrideUrl: override?.url });
+    const opened = resolveOpenUrl(event, { appUrl, overrideUrl: override?.url, globalUrl });
 
     /* 上書きタイトルが空でなければ差し替える。空なら従来どおり予定タイトル。 */
     const title = customTitle !== ''

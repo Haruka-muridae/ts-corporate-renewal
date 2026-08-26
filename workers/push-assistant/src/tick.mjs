@@ -194,6 +194,8 @@ async function runForUser({
     nowMs,
     appUrl,
     overrides,
+    /* 全予定共通の「タップで開く URL」（notify_url、仕様書 §9）。空なら自動抽出。 */
+    globalUrl: String(user.notifyUrl ?? ''),
   });
 
   for (const plan of plans) {
@@ -240,12 +242,17 @@ async function runForUser({
   /* ---- 5. 送信 ---- */
 
   /*
-   * 通知テンプレート（グローバル。仕様書 §8）。title/body ともに空なら従来どおり。
-   * listActiveUsers が notify_title/notify_body を載せて返す（下の store）。
+   * 通知テンプレート（グローバル。仕様書 §8）。title は notify_title を使う
+   * （空なら予定名。§8-8）。
+   *
+   * **body は常に空文字を渡す＝既定本文（「HH:MM 開始（あと N 分）」）に固定する。**
+   * 画面の簡素化（§15）で本文テンプレートの入力欄を撤去したため、既存利用者の
+   * notify_body に値が残っていても通知本文には出さない。notify_body 列と
+   * renderNotification の置換ロジックは DB 後方互換・将来用に残すが、ここでは使わない。
    */
   const template = {
     title: String(user.notifyTitle ?? ''),
-    body: String(user.notifyBody ?? ''),
+    body: '',
   };
 
   /*
