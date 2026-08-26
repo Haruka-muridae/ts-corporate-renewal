@@ -1,0 +1,317 @@
+/*
+ * Push Assistant の画面。
+ *
+ * ADR-1（docs/specs/push-assistant-mvp-v1.md §3-1）により、この Worker は
+ * 本体サイト（ts-corporate-renewal）の配信物に依存しない独立アプリである。
+ * そのため public/css/style.css は読み込まず、この1枚で完結させる
+ * （色は本体サイトの配色（navy/gold）に寄せたが、値の共有はしていない）。
+ *
+ * 320px から確認する（モバイル優先）。768px 以上で余白を広げるだけで、
+ * レイアウトの骨格そのものは変えない（幅ごとの分岐を増やさない）。
+ */
+
+:root {
+  --pa-color-navy: #0f2747;
+  --pa-color-navy-dark: #091a30;
+  --pa-color-text: #20242a;
+  --pa-color-text-muted: #55606e;
+  --pa-color-border: #dde1e6;
+  --pa-color-bg: #ffffff;
+  --pa-color-bg-sub: #f4f6f9;
+  --pa-color-success-bg: #eaf6ec;
+  --pa-color-error-bg: #fdecec;
+  --pa-radius: 8px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+h1,
+h2,
+p,
+ul,
+li,
+fieldset {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--pa-color-bg-sub);
+  color: var(--pa-color-text);
+  font-family: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+ul {
+  list-style: none;
+}
+
+/* ---------- スキップリンク ---------- */
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  z-index: 10;
+  background: var(--pa-color-navy);
+  color: #fff;
+  padding: 0.6rem 1rem;
+  border-radius: 0 0 6px 0;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+/* ---------- 全体の骨格 ---------- */
+
+.pa-main {
+  display: block;
+  width: 100%;
+}
+
+.pa-shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+
+.pa-header h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.5rem;
+  color: var(--pa-color-navy);
+}
+
+.pa-lede {
+  color: var(--pa-color-text-muted);
+  margin: 0 0 1.25rem;
+}
+
+/* ---------- メッセージ ---------- */
+
+.pa-message {
+  border-radius: var(--pa-radius);
+  padding: 0.7rem 0.9rem;
+  margin: 0 0 1.25rem;
+  background: var(--pa-color-bg);
+  border: 1px solid var(--pa-color-border);
+}
+
+.pa-message[data-kind="success"] {
+  background: var(--pa-color-success-bg);
+  border-color: #bfe3c6;
+}
+
+.pa-message[data-kind="error"] {
+  background: var(--pa-color-error-bg);
+  border-color: #f3c2c2;
+}
+
+/* ---------- パネル ---------- */
+
+.pa-panel {
+  background: var(--pa-color-bg);
+  border: 1px solid var(--pa-color-border);
+  border-radius: var(--pa-radius);
+  padding: 1rem;
+}
+
+.pa-panel + .pa-panel {
+  margin-top: 1rem;
+}
+
+.pa-panel h2 {
+  font-size: 1.05rem;
+  border-bottom: 1px solid var(--pa-color-border);
+  padding-bottom: 0.4rem;
+  margin: 0 0 0.7rem;
+  color: var(--pa-color-navy);
+}
+
+.pa-status {
+  margin: 0 0 0.7rem;
+}
+
+.pa-note {
+  background: var(--pa-color-bg-sub);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  margin: 0.6rem 0;
+}
+
+/* ---------- フォーム ---------- */
+
+.pa-field {
+  margin: 0.7rem 0;
+}
+
+.pa-field label {
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+.pa-field--check label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  min-height: 44px;
+}
+
+.pa-field--check input {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+#pa-lead {
+  width: 100%;
+  max-width: 260px;
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--pa-color-border);
+  border-radius: 6px;
+  font-size: 1rem;
+  background: var(--pa-color-bg);
+  color: var(--pa-color-text);
+}
+
+/* ---------- ボタン ---------- */
+
+.pa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.9rem 0 0;
+}
+
+.pa-button {
+  display: inline-block;
+  min-height: 44px;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid var(--pa-color-navy);
+  border-radius: 6px;
+  background: var(--pa-color-navy);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.pa-button:hover {
+  background: var(--pa-color-navy-dark);
+  border-color: var(--pa-color-navy-dark);
+}
+
+.pa-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pa-button--ghost {
+  background: transparent;
+  color: var(--pa-color-navy);
+}
+
+.pa-button--ghost:hover {
+  background: var(--pa-color-bg-sub);
+}
+
+/* ---------- 一覧（予定・通知履歴） ---------- */
+
+.pa-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.pa-event,
+.pa-history-item {
+  border: 1px solid var(--pa-color-border);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+}
+
+.pa-event__when,
+.pa-history-item__when {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.pa-event__notify-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+  color: var(--pa-color-text-muted);
+  font-size: 0.9rem;
+}
+
+.pa-event__notify-list li {
+  margin: 0.2rem 0;
+}
+
+.pa-event__url,
+.pa-history-item__url {
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.pa-event__url a,
+.pa-history-item__url a {
+  color: var(--pa-color-navy);
+}
+
+/* ---------- フォーカス可視性・アニメーション ---------- */
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--pa-color-navy);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-button {
+    transition: none;
+  }
+}
+
+/* ---------- レスポンシブ（768px 以上は余白を広げるだけ） ---------- */
+
+@media (min-width: 768px) {
+  .pa-shell {
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  .pa-header h1 {
+    font-size: 1.75rem;
+  }
+
+  .pa-panel {
+    padding: 1.25rem 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .pa-shell {
+    max-width: 720px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .pa-shell {
+    max-width: 780px;
+    padding-top: 2.5rem;
+  }
+}
