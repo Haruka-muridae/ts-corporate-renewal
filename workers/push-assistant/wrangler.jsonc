@@ -15,12 +15,12 @@
  * ------------------------------------------------------------------
  *
  * ------------------------------------------------------------------
- * デプロイ前に必ず埋めるもの
+ * d1_databases.database_id について
  * ------------------------------------------------------------------
- * 下の d1_databases.database_id が "<TODO...>" のままだと
- * **deploy は失敗する。** 運用者が次のコマンドで作り、出力された id を貼る。
- *
- *   wrangler d1 create push_assistant
+ * 2026-08-26 に運用者が `wrangler d1 create push_assistant` で作成した
+ * 本番データベース（region APAC）の id を記入済み。id は秘密値ではないが、
+ * **別のデータベースへ付け替えると通知履歴と購読が全部見えなくなる**ので
+ * 変えないこと。作り直す場合は README.md §5 の手順を最初から通す。
  *
  * 手順の全体は workers/push-assistant/README.md §5。
  * ------------------------------------------------------------------
@@ -89,7 +89,7 @@
 		{
 			"binding": "DB",
 			"database_name": "push_assistant",
-			"database_id": "<TODO: wrangler d1 create push_assistant の出力を貼る>",
+			"database_id": "24925ea1-3fc3-48cb-91b3-2e7e3d6f881d",
 			"migrations_dir": "migrations"
 		}
 	],

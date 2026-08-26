@@ -143,15 +143,15 @@ node workers/push-assistant/scripts/check-vapid-keys.mjs
 
 前提: `wrangler` はリポジトリの devDependencies に入っている。追加インストールは不要。
 
-1. **D1 データベースを作る**
+1. **D1 データベースを作る（2026-08-26 に作成済み）**
 
    ```powershell
    npx wrangler d1 create push_assistant --config workers/push-assistant/wrangler.jsonc
    ```
 
-   出力された `database_id` を [wrangler.jsonc](wrangler.jsonc) の
-   `"<TODO: wrangler d1 create push_assistant の出力を貼る>"` へ貼る。
-   **貼るまで deploy は失敗する。**
+   出力された `database_id` を [wrangler.jsonc](wrangler.jsonc) の `d1_databases[0].database_id` へ貼る
+   （公開値なのでコミットしてよい）。本番用は 2026-08-26 に作成し記入済み（region APAC）。
+   **作り直すと通知履歴と購読が消える**ので、通常はこの手順を再実行しない。
 
 2. **スキーマを流す**
 
