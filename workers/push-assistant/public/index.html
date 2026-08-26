@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Push Assistant</title>
+
+<!-- ログインが要る画面。索引させる意味がない。 -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#0f2747">
+<meta name="apple-mobile-web-app-title" content="Push">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+
+<!--
+  ==================================================================
+  Content-Security-Policy（docs/specs/push-assistant-mvp-v1.md §10）
+  ==================================================================
+  **frame-ancestors は <meta> では効かない。** CSP の仕様上、
+  frame-ancestors / report-uri / sandbox は HTTP ヘッダ専用の指令であり、
+  meta に書いても無視される。クリックジャッキングを実際に止めているのは
+  Worker が全応答へ付ける
+    Content-Security-Policy: frame-ancestors 'none'
+    X-Frame-Options: DENY
+  のほう（workers/push-assistant/src/http.mjs の SECURITY_HEADERS）。
+  **ヘッダ側が本体である。** 下の meta に frame-ancestors を残してあるのは
+  無害であることと、方針を読み取れるようにするためで、消しても挙動は変わらない。
+  connect-src は 'self' だけでよい。ブラウザは Google と直接話さない
+  （OAuth もカレンダー取得も Worker がサーバー側で行う。§4-2）。
+  inline script/style は禁止のため、style 属性・onclick は使わない。
+  ==================================================================
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main-content">本文へスキップ</a>
+
+<main id="main-content" class="pa-main" tabindex="-1">
+  <div class="pa-shell">
+
+    <header class="pa-header">
+      <h1>Push Assistant</h1>
+      <p class="pa-lede">
+        Google カレンダーの予定を、開始前の指定したタイミングで通知します。
+        通知をタップすると、予定の URL がそのまま開きます。
+      </p>
+    </header>
+
+    <p id="pa-message" class="pa-message" role="status" hidden></p>
+
+    <section class="pa-panel" aria-labelledby="pa-calendar-heading">
+      <h2 id="pa-calendar-heading">Google Calendar</h2>
+      <p class="pa-status">
+        状態: <strong id="pa-calendar-state">確認中…</strong>
+      </p>
+      <p class="pa-actions">
+        <a id="pa-connect" class="pa-button" href="./api/auth/start" hidden>接続する</a>
+        <button type="button" id="pa-disconnect" class="pa-button pa-button--ghost" hidden>切断</button>
+      </p>
+    </section>
+
+    <section id="pa-settings-panel" class="pa-panel" aria-labelledby="pa-settings-heading" hidden>
+      <h2 id="pa-settings-heading">通知</h2>
+
+      <p class="pa-field pa-field--check">
+        <label>
+          <input type="checkbox" id="pa-notify-enabled">
+          通知を受け取る
+        </label>
+      </p>
+
+      <p class="pa-field">
+        <label for="pa-lead">通知タイミング</label>
+        <select id="pa-lead"></select>
+      </p>
+
+      <p class="pa-actions">
+        <button type="button" id="pa-save-settings" class="pa-button">設定を保存する</button>
+      </p>
+    </section>
+
+    <section class="pa-panel" aria-labelledby="pa-permission-heading">
+      <h2 id="pa-permission-heading">通知許可</h2>
+      <p class="pa-status">
+        状態: <strong id="pa-permission-state">確認中…</strong>
+      </p>
+      <p id="pa-ios-note" class="pa-note" hidden>
+        この端末で通知を受け取るには、ホーム画面に追加してから開いてください。
+      </p>
+      <p class="pa-actions">
+        <button type="button" id="pa-request-permission" class="pa-button">通知を許可する</button>
+        <button type="button" id="pa-test-push" class="pa-button pa-button--ghost">テスト通知を送る</button>
+      </p>
+    </section>
+
+    <section class="pa-panel" aria-labelledby="pa-events-heading">
+      <h2 id="pa-events-heading">次回の予定</h2>
+      <p id="pa-events-empty" class="pa-note" hidden>今後24時間の予定はありません。</p>
+      <ul id="pa-events-list" class="pa-list"></ul>
+    </section>
+
+    <section class="pa-panel" aria-labelledby="pa-history-heading">
+      <h2 id="pa-history-heading">通知履歴</h2>
+      <p id="pa-history-empty" class="pa-note" hidden>通知履歴はありません。</p>
+      <ul id="pa-history-list" class="pa-list"></ul>
+    </section>
+
+  </div>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

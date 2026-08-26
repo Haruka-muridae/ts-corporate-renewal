@@ -1,0 +1,163 @@
+/*
+ * push-assistant（カレンダー予定の Web Push 通知）の Workers 設定。
+ *
+ * ------------------------------------------------------------------
+ * リポジトリ直下の wrangler.jsonc とは別サービス
+ * ------------------------------------------------------------------
+ * 直下のものは tsam-ai.com 全体を配信する OpenNext の Worker
+ * （name: ts-corporate-renewal）。こちらは /push-assistant/ だけを
+ * 受け持つ独立したサービスで、デプロイも別に行う。
+ *
+ *   wrangler deploy --config workers/push-assistant/wrangler.jsonc
+ *   （npm run deploy:push-assistant と同じ）
+ *
+ * **`npm run deploy` はこの Worker を更新しない。** 逆もまた同じ。
+ * ------------------------------------------------------------------
+ *
+ * ------------------------------------------------------------------
+ * デプロイ前に必ず埋めるもの
+ * ------------------------------------------------------------------
+ * 下の d1_databases.database_id が "<TODO...>" のままだと
+ * **deploy は失敗する。** 運用者が次のコマンドで作り、出力された id を貼る。
+ *
+ *   wrangler d1 create push_assistant
+ *
+ * 手順の全体は workers/push-assistant/README.md §5。
+ * ------------------------------------------------------------------
+ */
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "push-assistant",
+	"account_id": "4a71eb14d3889124d4afedd48c1458d8",
+	"main": "src/index.mjs",
+	/* 直下の Worker・notifier-gate と同じ日付にそろえてある（実績のある値を使う）。 */
+	"compatibility_date": "2026-08-05",
+	/*
+	 * nodejs_compat は付けない。ECDH / HKDF / AES-GCM / ES256 はすべて
+	 * WebCrypto（crypto.subtle）で書いてあり、Node の API を使っていない。
+	 * 外部ライブラリも入れていないので、bundle は src/ だけで完結する。
+	 */
+
+	/*
+	 * 公開先は本番ドメインのパス（仕様書 §3-1）。
+	 *
+	 *   https://tsam-ai.com/push-assistant/
+	 *
+	 * **workers.dev は使わない。** OAuth のリダイレクト URI と
+	 * Service Worker の scope を本番 URL にそろえる必要があり、
+	 * 2 つのオリジンから同じアプリが見えると Cookie と CSP が複雑化する。
+	 *
+	 * 同じホストをメイン Worker（Custom Domain）と共有できるのは、
+	 * Cloudflare が**パス Route を Custom Domain より先に評価する**ため。
+	 * developers.cloudflare.com/workers/configuration/routing/custom-domains/
+	 * の「Interaction with Routes」。
+	 */
+	"workers_dev": false,
+	"routes": [
+		{
+			"pattern": "tsam-ai.com/push-assistant/*",
+			"zone_name": "tsam-ai.com"
+		}
+	],
+
+	/*
+	 * 毎分の Cron（仕様書 §3-4）。
+	 *
+	 * 「ブラウザを閉じていても通知」はこれでしか成立しない。
+	 * Free プランでもアカウントあたり 5 個まで使え、既存の Worker は
+	 * Cron を 1 つも使っていない。
+	 *
+	 * ローカルで動かすには `wrangler dev --test-scheduled` と
+	 * `curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"`（README §6）。
+	 */
+	"triggers": {
+		"crons": ["* * * * *"]
+	},
+
+	/*
+	 * 利用者・トークン・購読・通知履歴（仕様書 §6）。
+	 *
+	 * **database_id は運用者が埋める。** 作成コマンド:
+	 *   wrangler d1 create push_assistant --config workers/push-assistant/wrangler.jsonc
+	 * 出力された database_id をここへ貼る。**貼るまで deploy は失敗する。**
+	 *
+	 * スキーマの適用は別のコマンド（deploy では走らない）:
+	 *   wrangler d1 migrations apply push_assistant --remote \
+	 *     --config workers/push-assistant/wrangler.jsonc
+	 */
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "push_assistant",
+			"database_id": "<TODO: wrangler d1 create push_assistant の出力を貼る>",
+			"migrations_dir": "migrations"
+		}
+	],
+
+	/*
+	 * 画面（public/）の配信。
+	 *
+	 * **run_worker_first: true。** 全リクエストが先に Worker の fetch を通る。
+	 * こうしないと `/push-assistant/` の接頭辞を剥がせない
+	 * （assets の中身は `/index.html` であって `/push-assistant/index.html`
+	 * ではない）。代わりに、fetch が落ちると画面ごと出なくなる
+	 * ＝ src/index.mjs の fetch は必ず Response を返す作りにしてある。
+	 *
+	 * html_handling は既定（"auto-trailing-slash"）のまま。
+	 */
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"run_worker_first": true
+	},
+
+	/*
+	 * 平文の環境変数（仕様書 §11）。**秘密は入れない。**
+	 * GOOGLE_CLIENT_SECRET / VAPID_* / SESSION_SECRET / TOKEN_ENCRYPTION_KEY は
+	 * `wrangler secret put` で登録する（README §5）。
+	 *
+	 * wrangler deploy は、この設定に無い平文の環境変数を Worker から削除する。
+	 */
+	"vars": {
+		/* 画面と API のオリジン。POST/PUT/DELETE の Origin 照合の相手でもある。 */
+		"APP_ORIGIN": "https://tsam-ai.com",
+		/* 公開パスの接頭辞。Route・OAuth リダイレクト URI・Cookie の Path の元。 */
+		"APP_BASE_PATH": "/push-assistant",
+		/*
+		 * 流用する Web アプリ型 OAuth クライアントの ID（公開値。仕様書 §4-1）。
+		 * **public/production-app/voice-recorder/config.js と同じ値にすること。**
+		 * 新しいクライアントは作らない。Google Cloud Console 側で
+		 * https://tsam-ai.com/push-assistant/api/auth/callback を
+		 * 「承認済みのリダイレクト URI」へ追加する。
+		 */
+		"GOOGLE_CLIENT_ID": "603018562548-j2he1aeo96p2igqfk65gaevj55pdaikc.apps.googleusercontent.com",
+		/*
+		 * 利用を許可するメールアドレス（カンマ区切り）。
+		 *
+		 * **この Worker は公開パスに置かれており、URL を知っていれば
+		 * 誰でも Google ログインへ進める。** 許可リストが無いと、
+		 * 見知らぬ他人のカレンダーを読み、そのリフレッシュトークンを
+		 * こちらの D1 に抱えることになる。
+		 *
+		 * **空にすると誰も接続できない（deny by default）。**
+		 * 設定漏れを「全員許可」へ倒さないための既定である。
+		 *
+		 * 運営者のアドレスは公開値（ルートの wrangler.jsonc の MAIL_FROM と同じ扱い）。
+		 * 利用者を増やすときはここへ追記して deploy する。
+		 */
+		"ALLOWED_EMAILS": "architect@potenitas.com",
+		/* VAPID の sub（RFC 8292 の連絡先 URI）。 */
+		"VAPID_SUBJECT": "https://tsam-ai.com/push-assistant/"
+	},
+
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"invocation_logs": true,
+			"persist": true
+		}
+	}
+}

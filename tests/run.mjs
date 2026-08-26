@@ -77,6 +77,8 @@ const SUITES = [
   { name: 'meeting-assistant', file: 'unit/meeting-assistant.mjs', kind: 'unit' },
   { name: 'interview-recorder', file: 'unit/interview-recorder.mjs', kind: 'unit' },
   { name: 'contact-message', file: 'unit/contact-message.mjs', kind: 'unit' },
+  { name: 'push-assistant', file: 'unit/push-assistant.mjs', kind: 'unit' },
+  { name: 'push-assistant-sw', file: 'unit/push-assistant-sw.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
   { name: 'browser:card-mail', file: 'browser/card-mail.mjs', kind: 'browser' },
 ];
