@@ -34,6 +34,8 @@ import {
   LEAD_OPTIONS,
   MAX_ATTEMPTS,
   MAX_BODY_BYTES,
+  MAX_NOTIFY_BODY_LENGTH,
+  MAX_TITLE_LENGTH,
   MAX_USERS_PER_TICK,
   STALE_PENDING_MS,
   STUCK_SENDING_MS,
@@ -68,6 +70,11 @@ import {
   resolveOpenUrl,
 } from '../../workers/push-assistant/src/open-url.mjs';
 import { planNotifications } from '../../workers/push-assistant/src/schedule.mjs';
+import {
+  buildDefaultBody,
+  formatJstTime,
+  renderNotification,
+} from '../../workers/push-assistant/src/template.mjs';
 import {
   MAX_PLAINTEXT_BYTES,
   buildVapidAuthorization,
@@ -943,13 +950,19 @@ async function run() {
    * calendarItems … 利用者 ID ごとに返す予定（配列 or {status} で失敗）
    * pushResponses … push endpoint ごとに順に返す状態コード
    */
-  function createTickWorld({ users, calendarByUser, pushPlan }) {
+  function createTickWorld({ users, calendarByUser, pushPlan, overrides }) {
     const seedUsers = [];
     const seedTokens = [];
     const seedSubscriptions = [];
 
     for (const user of users) {
-      seedUsers.push({ id: user.id, email: `${user.id}@example.com`, leadMinutes: user.leadMinutes ?? [10] });
+      seedUsers.push({
+        id: user.id,
+        email: `${user.id}@example.com`,
+        leadMinutes: user.leadMinutes ?? [10],
+        notifyTitle: user.notifyTitle ?? '',
+        notifyBody: user.notifyBody ?? '',
+      });
       seedTokens.push({
         userId: user.id,
         refreshTokenEnc,
@@ -968,9 +981,11 @@ async function run() {
       users: seedUsers,
       tokens: seedTokens,
       subscriptions: seedSubscriptions,
+      overrides: overrides ?? [],
     });
 
     const pushCalls = [];
+    const pushBodies = [];
 
     const fetchImpl = createFetch([
       {
@@ -996,8 +1011,10 @@ async function run() {
       },
       {
         match: 'fcm.googleapis.com/fcm/send/',
-        handler: ({ url }) => {
+        handler: ({ url, options }) => {
           pushCalls.push(url);
+          /* 暗号化済みの本文。テンプレート試験はこれを復号して中身を確かめる。 */
+          pushBodies.push(options?.body ?? null);
 
           const status = typeof pushPlan === 'function' ? pushPlan(url, pushCalls.length) : 201;
 
@@ -1006,7 +1023,7 @@ async function run() {
       },
     ]);
 
-    return { store, fetchImpl, pushCalls };
+    return { store, fetchImpl, pushCalls, pushBodies };
   }
 
   function tickArgs(world, nowMs) {
@@ -2826,6 +2843,277 @@ async function run() {
     check('Web クライアント ID の形式である', /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(wranglerId), wranglerId);
     check('録音アプリとは別の専用 ID である', wranglerId !== recorderId, `${wranglerId} / ${recorderId}`);
     check('Meeting Assistant とも別の専用 ID である', wranglerId !== meetingId, `${wranglerId} / ${meetingId}`);
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('通知テンプレート — renderNotification（純関数。仕様書 §8）');
+  /* ================================================================ */
+  {
+    /* NOW = 2026-08-26 09:00 UTC = 18:00 JST。10 分前通知の予定。 */
+    const evt = {
+      title: '定例会議',
+      url: 'https://meet.google.com/abc',
+      startMs: NOW,
+      leadMinutes: 10,
+    };
+
+    const withTitle = renderNotification({ template: { title: 'オンライン予定です', body: '' }, event: evt });
+    check('template.title 非空ならそれをタイトルにする', withTitle.title === 'オンライン予定です', withTitle.title);
+
+    const emptyTitle = renderNotification({ template: { title: '', body: '' }, event: evt });
+    check('template.title 空なら event.title を使う', emptyTitle.title === '定例会議', emptyTitle.title);
+
+    const trimmed = renderNotification({ template: { title: '  問いかけ  ', body: '' }, event: evt });
+    check('template.title は前後の空白を除去する', trimmed.title === '問いかけ', JSON.stringify(trimmed.title));
+
+    check('template.body 空なら既定文（HH:MM 開始（あと N 分））', emptyTitle.body === '18:00 開始（あと10分）', emptyTitle.body);
+
+    const replaced = renderNotification({
+      template: { title: '', body: '{time} に {title}。リンク: {url}' },
+      event: evt,
+    });
+    check(
+      '{time}{title}{url} を置換する',
+      replaced.body === '18:00 に 定例会議。リンク: https://meet.google.com/abc',
+      replaced.body,
+    );
+
+    const lead0 = renderNotification({ template: { title: '', body: '' }, event: { ...evt, leadMinutes: 0 } });
+    check('lead=0 の既定文は「HH:MM 開始」', lead0.body === '18:00 開始', lead0.body);
+
+    const badTime = renderNotification({ template: { title: '', body: '開始は「{time}」' }, event: { ...evt, startMs: NaN } });
+    check('無効な時刻の {time} は空文字', badTime.body === '開始は「」', badTime.body);
+
+    const unknown = renderNotification({ template: { title: '', body: '{title} / {unknown}' }, event: evt });
+    check('未知の {xxx} はそのまま残す', unknown.body === '定例会議 / {unknown}', unknown.body);
+
+    const longTitle = renderNotification({ template: { title: 'あ'.repeat(200), body: '' }, event: evt });
+    check('タイトルは MAX_TITLE_LENGTH で切る', longTitle.title.length === MAX_TITLE_LENGTH, String(longTitle.title.length));
+
+    const longBody = renderNotification({ template: { title: '', body: '{url}'.repeat(200) }, event: evt });
+    check('本文は置換後に MAX_NOTIFY_BODY_LENGTH で切る', longBody.body.length === MAX_NOTIFY_BODY_LENGTH, String(longBody.body.length));
+
+    check('formatJstTime: 09:00 UTC は JST 18:00', formatJstTime(NOW) === '18:00', formatJstTime(NOW));
+    check('formatJstTime: 無効な時刻は空文字', formatJstTime(NaN) === '', formatJstTime(NaN));
+    check(
+      'buildDefaultBody: 時刻不明・lead>0 は「まもなく開始（N分前）」',
+      buildDefaultBody({ startMs: NaN, leadMinutes: 10 }) === 'まもなく開始（10分前）',
+      buildDefaultBody({ startMs: NaN, leadMinutes: 10 }),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('通知テンプレート — PUT /api/settings と /api/me');
+  /* ================================================================ */
+  {
+    const cookie = await makeSessionCookie('u1');
+    const store = createFakeStore({ users: [{ id: 'u1' }] });
+
+    const env = {
+      APP_ORIGIN: 'https://tsam-ai.com',
+      APP_BASE_PATH: '/push-assistant',
+      SESSION_SECRET: sessionSecret,
+      __STORE: store,
+      __NOW_MS: NOW,
+    };
+
+    const put = (payload) => worker.fetch(
+      new Request('https://tsam-ai.com/push-assistant/api/settings', {
+        method: 'PUT',
+        headers: { Origin: 'https://tsam-ai.com', Cookie: `pa_session=${cookie}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      env,
+    );
+
+    const me = () => worker.fetch(
+      new Request('https://tsam-ai.com/push-assistant/api/me', { headers: { Cookie: `pa_session=${cookie}` } }),
+      env,
+    );
+
+    const saved = await (await put({
+      notifyEnabled: true,
+      leadMinutes: [10],
+      notifyTitle: '  問いかけ  ',
+      notifyBody: '{time} 開始 → {url}',
+    })).json();
+
+    check('テンプレートを保存して返す（title は trim）', saved.settings.notifyTitle === '問いかけ', JSON.stringify(saved.settings));
+    check('本文テンプレートを返す', saved.settings.notifyBody === '{time} 開始 → {url}', JSON.stringify(saved.settings));
+    check(
+      'store に反映される',
+      store._users.get('u1').notifyTitle === '問いかけ' && store._users.get('u1').notifyBody === '{time} 開始 → {url}',
+      JSON.stringify(store._users.get('u1')),
+    );
+
+    const meBody = await (await me()).json();
+    check(
+      '/api/me にテンプレートが載る',
+      meBody.settings.notifyTitle === '問いかけ' && meBody.settings.notifyBody === '{time} 開始 → {url}',
+      JSON.stringify(meBody.settings),
+    );
+
+    /* 省略したら既存値を保つ（後方互換）。 */
+    const kept = await (await put({ notifyEnabled: true, leadMinutes: [0] })).json();
+    check(
+      'テンプレートを省いても既存値を保つ（後方互換）',
+      kept.settings.notifyTitle === '問いかけ' && kept.settings.notifyBody === '{time} 開始 → {url}',
+      JSON.stringify(kept.settings),
+    );
+    check('省略時も leadMinutes は更新される', JSON.stringify(kept.settings.leadMinutes) === '[0]', JSON.stringify(kept.settings));
+
+    /* 空文字で消せる。 */
+    const cleared = await (await put({ notifyEnabled: true, leadMinutes: [10], notifyTitle: '', notifyBody: '' })).json();
+    check('空文字を送るとテンプレートを消せる', cleared.settings.notifyTitle === '' && cleared.settings.notifyBody === '', JSON.stringify(cleared.settings));
+
+    /* 上限は 400 ではなく切り詰め。 */
+    const clipped = await (await put({
+      notifyEnabled: true,
+      leadMinutes: [10],
+      notifyTitle: 'あ'.repeat(200),
+      notifyBody: 'x'.repeat(800),
+    })).json();
+    check('長いタイトルは 120 文字に切り詰める', clipped.settings.notifyTitle.length === MAX_TITLE_LENGTH, String(clipped.settings.notifyTitle.length));
+    check('長い本文は 500 文字に切り詰める', clipped.settings.notifyBody.length === MAX_NOTIFY_BODY_LENGTH, String(clipped.settings.notifyBody.length));
+
+    /* 文字列でなければ 400（レビュー: 型を素通ししない）。 */
+    check('notifyTitle が文字列でなければ 400', (await put({ notifyEnabled: true, leadMinutes: [10], notifyTitle: 123 })).status === 400);
+    check('notifyBody が文字列でなければ 400', (await put({ notifyEnabled: true, leadMinutes: [10], notifyBody: {} })).status === 400);
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('通知テンプレート — runTick で通知に反映（§8）');
+  /* ================================================================ */
+  {
+    /* 復号のための道具は上の Web Push 節で用意した decryptWebPush / subscriptionKeys を使う。 */
+    const readPayload = async (body) => JSON.parse((await decryptWebPush(body)).plaintext);
+
+    /* A: テンプレートが実通知の title / body に反映される。 */
+    const world = createTickWorld({
+      users: [{ id: 'u1', leadMinutes: [10], notifyTitle: '会議のお知らせ', notifyBody: '{time} 開始。{title} → {url}' }],
+      calendarByUser: {
+        u1: [rawEvent({
+          id: 'ev-t',
+          summary: '定例会議',
+          start: { dateTime: new Date(NOW + 10 * MINUTE).toISOString() },
+          conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/xyz' }] },
+        })],
+      },
+    });
+
+    const res = await runTick(tickArgs(world, NOW));
+    check('テンプレ: 1 件送る', res.sent === 1, JSON.stringify(res));
+
+    const payload = await readPayload(world.pushBodies[0]);
+    check('テンプレ: タイトルは notify_title', payload.title === '会議のお知らせ', payload.title);
+    check(
+      'テンプレ: 本文の {time}{title}{url} が置換される',
+      payload.body === '18:10 開始。定例会議 → https://meet.google.com/xyz',
+      payload.body,
+    );
+
+    /* B: event_overrides はテンプレートより優先（override.title > notify_title、override.url が {url}）。 */
+    const world2 = createTickWorld({
+      users: [{ id: 'u1', leadMinutes: [10], notifyTitle: 'グローバル問いかけ', notifyBody: '{title} / {url}' }],
+      calendarByUser: {
+        u1: [rawEvent({ id: 'ev-ov', summary: '素の予定名', start: { dateTime: new Date(NOW + 10 * MINUTE).toISOString() } })],
+      },
+      overrides: [{ userId: 'u1', eventId: 'ev-ov', title: '個別タイトル', url: 'https://example.com/custom' }],
+    });
+
+    const res2 = await runTick(tickArgs(world2, NOW));
+    check('上書き併用: 1 件送る', res2.sent === 1, JSON.stringify(res2));
+
+    const payload2 = await readPayload(world2.pushBodies[0]);
+    check('上書きタイトルはテンプレより優先（override.title > notify_title）', payload2.title === '個別タイトル', payload2.title);
+    check('本文の {url} には上書き URL が入る', payload2.body === '個別タイトル / https://example.com/custom', payload2.body);
+    check('タップ先 URL も上書き URL', payload2.url === 'https://example.com/custom', payload2.url);
+
+    /* C: notify_title だけ空 → タイトルは予定名、本文はテンプレート。 */
+    const world3 = createTickWorld({
+      users: [{ id: 'u1', leadMinutes: [0], notifyTitle: '', notifyBody: 'まもなく: {title}' }],
+      calendarByUser: {
+        u1: [rawEvent({ id: 'ev-b', summary: '朝会', start: { dateTime: new Date(NOW).toISOString() } })],
+      },
+    });
+
+    await runTick(tickArgs(world3, NOW));
+    const payload3 = await readPayload(world3.pushBodies[0]);
+    check('notify_title 空なら予定名がタイトル', payload3.title === '朝会', payload3.title);
+    check('notify_body だけ設定でも本文はテンプレ', payload3.body === 'まもなく: 朝会', payload3.body);
+
+    /* D: テンプレート未設定なら従来どおり（回帰）。 */
+    const world4 = createTickWorld({
+      users: [{ id: 'u1', leadMinutes: [10] }],
+      calendarByUser: {
+        u1: [rawEvent({ id: 'ev-def', summary: '会議', start: { dateTime: new Date(NOW + 10 * MINUTE).toISOString() } })],
+      },
+    });
+
+    await runTick(tickArgs(world4, NOW));
+    const payload4 = await readPayload(world4.pushBodies[0]);
+    check('テンプレ未設定なら従来のタイトル（予定名）', payload4.title === '会議', payload4.title);
+    check('テンプレ未設定なら従来の既定本文', payload4.body === '18:10 開始（あと10分）', payload4.body);
+  }
+
+  /* ---------------------------------------------------------------- */
+  section('通知テンプレート — テスト通知（handlePushTest）');
+  /* ================================================================ */
+  {
+    const readPayload = async (body) => JSON.parse((await decryptWebPush(body)).plaintext);
+
+    async function pushTest(seedUser) {
+      const cookie = await makeSessionCookie('u1');
+      const store = createFakeStore({
+        users: [{ id: 'u1', ...seedUser }],
+        tokens: [{ userId: 'u1', refreshTokenEnc }],
+        subscriptions: [{ userId: 'u1', endpoint: 'https://fcm.googleapis.com/fcm/send/u1', ...subscriptionKeys }],
+      });
+
+      const sentBodies = [];
+
+      const env = {
+        APP_ORIGIN: 'https://tsam-ai.com',
+        APP_BASE_PATH: '/push-assistant',
+        SESSION_SECRET: sessionSecret,
+        VAPID_PRIVATE_KEY: vapidPkcs8,
+        VAPID_PUBLIC_KEY: vapid.publicKey,
+        VAPID_SUBJECT: APP_URL,
+        __STORE: store,
+        __NOW_MS: NOW,
+        __FETCH: async (url, options) => {
+          sentBodies.push(options?.body ?? null);
+          return new Response(null, { status: 201 });
+        },
+      };
+
+      const response = await worker.fetch(
+        new Request('https://tsam-ai.com/push-assistant/api/push/test', {
+          method: 'POST',
+          headers: { Origin: 'https://tsam-ai.com', Cookie: `pa_session=${cookie}` },
+        }),
+        env,
+      );
+
+      return { response, sentBodies };
+    }
+
+    const withTemplate = await pushTest({ notifyTitle: 'テストの問いかけ', notifyBody: '本文: {title} {url}' });
+    check('テスト通知: 送信は 200', withTemplate.response.status === 200, String(withTemplate.response.status));
+
+    const p = await readPayload(withTemplate.sentBodies[0]);
+    check('テスト通知にもテンプレのタイトルが載る', p.title === 'テストの問いかけ', p.title);
+    check(
+      'テスト通知の本文もテンプレで、{url} はアプリ URL',
+      p.body === '本文: テスト通知 https://tsam-ai.com/push-assistant/',
+      p.body,
+    );
+
+    /* テンプレート未設定なら従来の固定文言のまま。 */
+    const plain = await pushTest({});
+    const p2 = await readPayload(plain.sentBodies[0]);
+    check('テンプレ未設定のテスト通知は固定タイトル', p2.title === 'Push Assistant', p2.title);
+    check('テンプレ未設定のテスト通知は固定本文', p2.body === 'テスト通知です。タップするとアプリが開きます。', p2.body);
   }
 
   finish();

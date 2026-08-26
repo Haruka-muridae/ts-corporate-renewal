@@ -253,6 +253,20 @@ CREATE TABLE event_overrides (
 接続解除では `store.deleteUserData` がこの表も明示的に DELETE する。
 **`0001` は本番適用済みなので編集せず、`0002` を追加で当てる**（本番投入は README §5）。
 
+`workers/push-assistant/migrations/0003_notify_template.sql`（通知テンプレート）
+
+```sql
+ALTER TABLE users ADD COLUMN notify_title TEXT NOT NULL DEFAULT '';  -- 全予定共通の通知タイトル（問いかけ）。空 = 予定名/上書きを使う
+ALTER TABLE users ADD COLUMN notify_body  TEXT NOT NULL DEFAULT '';  -- 本文テンプレート。{url}{title}{time} を置換。空 = 既定文
+```
+
+利用者ごとに **1 つだけ**持つグローバルな通知テンプレート（§8）。予定ごとではなく
+全予定の通知に一律適用する。`notify_title` が空なら従来どおり予定名（または
+`event_overrides.custom_title`）を、`notify_body` が空なら既定文（「HH:MM 開始（あと N 分）」）を使う。
+`event_overrides`（予定ごとの上書き）はこのテンプレートより優先する（§8-7）。
+`NOT NULL DEFAULT ''` なので既存行にも安全に足せる。**`0001`/`0002` は本番適用済みなので
+編集せず、`0003` を追加で当てる**。
+
 ## 7. HTTP API
 
 すべて `/push-assistant/api/` 配下。応答は JSON（`Cache-Control: no-store`）。
@@ -266,8 +280,8 @@ CREATE TABLE event_overrides (
 | `GET /api/auth/callback?code&state` | 不要 | コード交換 → `users`/`google_tokens` を upsert → `pa_session` 発行 → `/push-assistant/` へ 302。失敗時は `/push-assistant/?error=<code>` へ 302 |
 | `POST /api/auth/logout` | 要 | Cookie 削除のみ（データは残す） |
 | `POST /api/auth/disconnect` | 要 | Google のトークン失効（`https://oauth2.googleapis.com/revoke`、失敗しても続行）→ 利用者の全行を削除 → Cookie 削除 |
-| `GET /api/me` | 不要 | `{ ok, loggedIn, user: {email} \| null, calendarConnected, tokenInvalid, settings: {notifyEnabled, leadMinutes}, vapidPublicKey, subscriptionCount, leadOptions: [{value:10,label:'10分前'},{value:0,label:'開始時刻'}] }`。`VAPID_PUBLIC_KEY` が未設定でも **500 にせず `vapidPublicKey: ''` を返す**（ここで落とすと画面が何も描けなくなる。画面側は空文字を「通知を有効にできない」として扱う） |
-| `PUT /api/settings` | 要 | body `{ notifyEnabled: bool, leadMinutes: number[] }`。`leadMinutes` は `LEAD_OPTIONS` の値のみ、1〜5 個、重複不可。成功時は**保存後の値**を `{ ok:true, settings: { notifyEnabled, leadMinutes } }` で返す |
+| `GET /api/me` | 不要 | `{ ok, loggedIn, user: {email} \| null, calendarConnected, tokenInvalid, settings: {notifyEnabled, leadMinutes, notifyTitle, notifyBody}, vapidPublicKey, subscriptionCount, leadOptions: [{value:10,label:'10分前'},{value:0,label:'開始時刻'}] }`。`notifyTitle`/`notifyBody` は通知テンプレート（§8。未設定なら空文字）。`VAPID_PUBLIC_KEY` が未設定でも **500 にせず `vapidPublicKey: ''` を返す**（ここで落とすと画面が何も描けなくなる。画面側は空文字を「通知を有効にできない」として扱う） |
+| `PUT /api/settings` | 要 | body `{ notifyEnabled: bool, leadMinutes: number[], notifyTitle?: string, notifyBody?: string }`。`leadMinutes` は `LEAD_OPTIONS` の値のみ、1〜5 個、重複不可。`notifyTitle`/`notifyBody` は通知テンプレート（§8）で、**送られたときだけ更新し、省略時は既存値を保つ**（旧クライアントとの後方互換）。文字列でなければ `INVALID_REQUEST`。`notifyTitle` は前後空白除去のうえ 120 文字、`notifyBody` は 500 文字で**切り詰める**（超過はエラーにしない）。空文字は「テンプレート解除」。成功時は**保存後の値**を `{ ok:true, settings: { notifyEnabled, leadMinutes, notifyTitle, notifyBody } }` で返す |
 | `GET /api/events` | 要 | 今後 24 時間・最大 20 件。成功時 `{ ok:true, items: [ { id, title, start, end, allDay, openUrl, urlSource, customTitle, customUrl, notifications: [{leadMinutes, notifyAt, status}] } ] }`（配列のキー名は `items`。`status` は `notifications` 表にあればその値、無ければ `'planned'`。終日予定の `notifications` は空配列）。`customTitle`/`customUrl` は予定ごとの上書き（§9）の現在値（未設定なら空文字）。`openUrl`/`urlSource` は上書きを反映した値（上書き URL があれば `urlSource='custom'`）を返し、実際に届く通知と一致させる。Calendar API 失敗時は `{ ok:false, error:{code:'CALENDAR_ERROR'} }` を **200 ではなく 502** で返し、画面は他の部分を描画し続ける |
 | `PUT /api/events/override` | 要 | body `{ eventId: string, title?: string, url?: string }`。`eventId` 必須（空なら `INVALID_REQUEST`）。`title` は文字列（空可、内部で前後空白除去・120 文字上限）。`url` は空文字 or http/https（`isAllowedUrl` で検証。`javascript:`/`data:`/`ftp:`/認証情報付き/制御文字/2048 超は `INVALID_REQUEST`）。`title`・`url` が両方空なら上書きを解除する。成功時 `{ ok:true, override: { eventId, title, url } }`（保存後の値。解除時は `title:''`・`url:''`）。状態を変えるので `Origin` 照合の対象（§5） |
 | `POST /api/subscriptions` | 要 | body `{ subscription: PushSubscriptionJSON, userAgent? }`。`endpoint` は https のみ。同じ利用者の再登録は upsert。**別ユーザーが同じ endpoint を送ってきた場合は、旧行を削除して新規挿入し（履歴を引き継がない）、`log('warn','SUBSCRIPTION_REASSIGNED','from=<旧 user_id> to=<新 user_id>')` を残す**（端末の使い回しは許すが、無言で他人の購読を奪えないようにする。endpoint はログに書かない）。成功時 `{ ok:true, subscriptionCount }` |
@@ -382,6 +396,28 @@ sendWebPush({ subscription, payload, vapid, fetchImpl, ttlSec, urgency }) → { 
   `tick` が `listOverrides` で空を得て自動抽出で作り直すため、以後の通知は自然に元へ戻る。
   作成済みの `pending` 行には解除前の上書きが残るが、送信前の 1 件に留まる。
 
+### 8-8. 通知テンプレート（グローバル。`src/template.mjs`）
+
+利用者ごとに **1 つだけ**持つ通知テンプレート（`users.notify_title`／`notify_body`、§6）。
+予定ごとではなく、その利用者の**全予定の通知に一律適用**する（要望: 問いかけは共通にして URL を表示したい）。
+純関数 `renderNotification({ template, event }) → { title, body }` が tick（実通知）と
+`POST /api/push/test`（テスト通知のプレビュー）で共用する。
+
+- **title**: `notify_title` が非空ならそれ（前後空白除去・`MAX_TITLE_LENGTH`＝120 で切る）。
+  空なら `event.title`（＝予定名。`event_overrides.custom_title` があればそれが反映済み）。
+- **body**: `notify_body` が非空なら、プレースホルダを単純置換（`String.replaceAll`）して
+  `MAX_NOTIFY_BODY_LENGTH`＝500 で切る。空なら従来の既定文（「HH:MM 開始（あと N 分）」）。
+  - `{url}` → 開く URL（`notifications.open_url`。上書き URL があればそれ）
+  - `{title}` → 予定名（`notifications.title`）
+  - `{time}` → 開始時刻の JST `HH:MM`（読めない時刻は空文字）
+  - 未知の `{xxx}` はそのまま残す。
+- **`event_overrides` はテンプレートより優先**（§8-7）。上書きタイトルがある予定では、
+  tick が `store.listOverrides` で引いて `template.title` を空にして `renderNotification` へ渡し、
+  上書きタイトル（＝`event.title`）を採らせる。本文テンプレートは常に当たり、`{url}` には
+  上書き後の URL が入る。`notify_title` が未設定なら、どのみち `event.title` を使うので上書きの引き直しはしない。
+- テスト通知は `event.title='テスト通知'`・`event.url=appUrl`・開始 10 分後相当で描く。
+  テンプレート未設定（両方空）なら従来の固定文言のまま。
+
 ## 9. 開く URL の決定（`src/open-url.mjs`、純関数）
 
 ```
@@ -492,3 +528,5 @@ resolveOpenUrl(event, { appUrl, overrideUrl }) → { url, source }
 - **通知の上書きを別画面（設定ページ）にする**: 「どの予定を上書きするのか」を選ぶ一覧が別途要り、予定一覧と二重管理になる。上書きは常に「その予定」に対する操作なので、**予定一覧の各カードにインラインで**畳んで置くほうが対象が自明で、往復も少ない。`<details>` で既定は畳んでおき、普段は邪魔しない。
 - **上書き URL を自由入力させず、抽出候補（conference/description/…）からの選択だけにする**: 安全側だが、「主催者が書いていない別の資料を開きたい」という要件を満たせない。代わりに **入力は許すが `isAllowedUrl`（http/https のみ、`javascript:`/`data:`/認証情報付き/制御文字/2048 超を拒否）で必ず検証**し、`url_source='custom'` として履歴にも出所を残す。
 - **上書きで既存の全通知行を書き換える**: `sent`/`sending` まで書き換えると「送った通知の内容が後から変わる」不整合が出る。`pending` の行だけに反映し、解除時は触らない（§8-7）。
+- **通知の文言を予定ごとに設定させる（テンプレートを持たない）**: 利用者の要望は「どの予定の通知でも問いかけは同じにして URL を表示したい。予定それぞれを設定したいわけではない」だった。予定ごと入力を基本にすると、毎回の予定に同じ文言を書かせることになり手間が要件と逆行する。そこで **利用者ごとに 1 つのグローバルなテンプレート**（`notify_title`／`notify_body`、§8-8）を基本に据え、`event_overrides` は「個別に変えたい予定だけ」の例外として残し、テンプレートより優先させた。これで通常は一度設定すれば全予定に効き、特別な予定だけ上書きできる。
+- **本文テンプレートに任意の式やスクリプトを許す**: `{url}`/`{title}`/`{time}` の**固定した 3 つのプレースホルダの単純置換**に限る。任意評価は不要な攻撃面を増やし、通知本文は SW 側で `showNotification` の `body`（テキスト）に入るだけで実行文脈が無いにせよ、置換規則を最小に保つほうが将来の取り違えが少ない。未知の `{xxx}` は素通しして表示する（利用者の書き間違いを黙って消さない）。

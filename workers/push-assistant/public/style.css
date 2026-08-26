@@ -182,6 +182,63 @@ ul {
   color: var(--pa-color-text);
 }
 
+/* 通知テンプレートの入力欄。 */
+.pa-fieldset {
+  margin: 1rem 0 0;
+  padding: 0.6rem 0.9rem 0.9rem;
+  border: 1px solid var(--pa-color-border);
+  border-radius: 8px;
+}
+
+.pa-fieldset legend {
+  padding: 0 0.4rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.pa-note--tight {
+  margin: 0.2rem 0 0.6rem;
+  font-size: 0.85rem;
+}
+
+.pa-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--pa-color-border);
+  border-radius: 6px;
+  font-size: 1rem;
+  background: var(--pa-color-bg);
+  color: var(--pa-color-text);
+  box-sizing: border-box;
+}
+
+.pa-input::placeholder {
+  color: var(--pa-color-text-muted);
+}
+
+.pa-textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+  line-height: 1.5;
+  font-family: inherit;
+}
+
+.pa-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--pa-color-text-muted);
+  line-height: 1.6;
+}
+
+.pa-hint code {
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  background: var(--pa-color-bg-sub);
+  font-size: 0.85em;
+}
+
 /* ---------- ボタン ---------- */
 
 .pa-actions {

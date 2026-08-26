@@ -47,6 +47,9 @@ export function createFakeStore(seed = {}) {
       email: user.email ?? '',
       notifyEnabled: user.notifyEnabled ?? true,
       leadMinutes: user.leadMinutes ?? [10],
+      /* 通知テンプレート（migration 0003）。既定は未設定（空）。 */
+      notifyTitle: user.notifyTitle ?? '',
+      notifyBody: user.notifyBody ?? '',
       lastTickAt: user.lastTickAt ?? null,
       createdAt: user.createdAt ?? '2026-08-26T00:00:00.000Z',
       updatedAt: user.updatedAt ?? '2026-08-26T00:00:00.000Z',
@@ -111,6 +114,8 @@ export function createFakeStore(seed = {}) {
         email,
         notifyEnabled: true,
         leadMinutes: [10],
+        notifyTitle: '',
+        notifyBody: '',
         lastTickAt: null,
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -123,7 +128,7 @@ export function createFakeStore(seed = {}) {
       return found ? { ...found, leadMinutes: [...found.leadMinutes] } : null;
     },
 
-    async updateSettings(userId, { notifyEnabled, leadMinutes }, nowIso) {
+    async updateSettings(userId, { notifyEnabled, leadMinutes, notifyTitle, notifyBody }, nowIso) {
       const user = users.get(userId);
 
       if (!user) {
@@ -132,6 +137,16 @@ export function createFakeStore(seed = {}) {
 
       user.notifyEnabled = notifyEnabled;
       user.leadMinutes = [...leadMinutes];
+
+      /* 本物の SQL と同じく、文字列で来たときだけ更新（省略なら既存値を保つ）。 */
+      if (typeof notifyTitle === 'string') {
+        user.notifyTitle = notifyTitle;
+      }
+
+      if (typeof notifyBody === 'string') {
+        user.notifyBody = notifyBody;
+      }
+
       user.updatedAt = nowIso;
     },
 
@@ -318,7 +333,13 @@ export function createFakeStore(seed = {}) {
           continue;
         }
 
-        out.push({ id: user.id, leadMinutes: [...user.leadMinutes], lastTickAt: user.lastTickAt });
+        out.push({
+          id: user.id,
+          leadMinutes: [...user.leadMinutes],
+          notifyTitle: user.notifyTitle ?? '',
+          notifyBody: user.notifyBody ?? '',
+          lastTickAt: user.lastTickAt,
+        });
       }
 
       /* 本物の SQL と同じ: COALESCE(last_tick_at, '') ASC, id ASC。 */
@@ -333,7 +354,12 @@ export function createFakeStore(seed = {}) {
         return a.id < b.id ? -1 : 1;
       });
 
-      return out.slice(0, limit).map((row) => ({ id: row.id, leadMinutes: row.leadMinutes }));
+      return out.slice(0, limit).map((row) => ({
+        id: row.id,
+        leadMinutes: row.leadMinutes,
+        notifyTitle: row.notifyTitle,
+        notifyBody: row.notifyBody,
+      }));
     },
 
     async touchUserTick(userId, nowIso) {

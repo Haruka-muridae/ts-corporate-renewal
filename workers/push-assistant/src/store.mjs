@@ -63,6 +63,9 @@ function toUser(row, defaultLeadMinutes) {
     email: row.email ?? '',
     notifyEnabled: Number(row.notify_enabled) === 1,
     leadMinutes: parseLeadMinutes(row.lead_minutes, defaultLeadMinutes),
+    /* 通知テンプレート（グローバル。migration 0003）。空 = 未設定＝従来どおり。 */
+    notifyTitle: row.notify_title ?? '',
+    notifyBody: row.notify_body ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -136,10 +139,34 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
       return toUser(row, defaultLeadMinutes);
     },
 
-    async updateSettings(userId, { notifyEnabled, leadMinutes }, nowIso) {
+    /*
+     * 通知設定の保存。
+     *
+     * notifyTitle / notifyBody は **文字列で渡されたときだけ** 更新する。
+     * 省略（undefined）なら列に触れない＝既存値を保つ。空文字は「消す」意図
+     * なので、文字列であればそのまま '' を書く。これで、テンプレートを送らない
+     * 旧クライアントの PUT でもテンプレートを空に潰さない（後方互換）。
+     */
+    async updateSettings(userId, { notifyEnabled, leadMinutes, notifyTitle, notifyBody }, nowIso) {
+      const sets = ['notify_enabled = ?', 'lead_minutes = ?'];
+      const binds = [notifyEnabled ? 1 : 0, JSON.stringify(leadMinutes)];
+
+      if (typeof notifyTitle === 'string') {
+        sets.push('notify_title = ?');
+        binds.push(notifyTitle);
+      }
+
+      if (typeof notifyBody === 'string') {
+        sets.push('notify_body = ?');
+        binds.push(notifyBody);
+      }
+
+      sets.push('updated_at = ?');
+      binds.push(nowIso, userId);
+
       await db
-        .prepare('UPDATE users SET notify_enabled = ?, lead_minutes = ?, updated_at = ? WHERE id = ?')
-        .bind(notifyEnabled ? 1 : 0, JSON.stringify(leadMinutes), nowIso, userId)
+        .prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`)
+        .bind(...binds)
         .run();
     },
 
@@ -390,7 +417,8 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
     async listActiveUsers(limit) {
       const result = await db
         .prepare(
-          `SELECT u.id AS id, u.lead_minutes AS lead_minutes
+          `SELECT u.id AS id, u.lead_minutes AS lead_minutes,
+                  u.notify_title AS notify_title, u.notify_body AS notify_body
              FROM users u
              JOIN google_tokens t ON t.user_id = u.id
             WHERE u.notify_enabled = 1
@@ -408,6 +436,9 @@ export function createD1Store(db, { defaultLeadMinutes = [10] } = {}) {
       return (result?.results ?? []).map((row) => ({
         id: row.id,
         leadMinutes: parseLeadMinutes(row.lead_minutes, defaultLeadMinutes),
+        /* tick が通知テンプレートを引くために載せる（仕様書 §8）。 */
+        notifyTitle: row.notify_title ?? '',
+        notifyBody: row.notify_body ?? '',
       }));
     },
 
