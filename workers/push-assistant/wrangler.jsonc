@@ -70,8 +70,12 @@
 	 * ローカルで動かすには `wrangler dev --test-scheduled` と
 	 * `curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"`（README §6）。
 	 */
+	/*
+	 * 2026-09-10 所有者決定: 未利用（全表 0 行）のため cron トリガーだけを外す（Worker 本体・コード・D1 は維持）。
+	 * Workers Free の cron 上限 5/アカウントを Marketing MVP の定期分析に充てるため。再開時は ["* * * * *"] に戻す。
+	 */
 	"triggers": {
-		"crons": ["* * * * *"]
+		"crons": []
 	},
 
 	/*
