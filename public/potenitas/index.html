@@ -149,7 +149,7 @@
       display:flex;
       align-items:center;
       width:100%;
-      padding:15px 20px 15px 48px;
+      padding:15px 20px;
       border:1px solid var(--border);
       border-radius:10px;
       background:var(--surface);
@@ -160,60 +160,6 @@
     }
     .ask:hover{border-color:var(--border-strong);background:#eceef1;}
     .ask span{opacity:.75;}
-    .ask-icon-btn{
-      position:absolute;
-      left:6px;
-      top:50%;
-      transform:translateY(-50%);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      width:36px;
-      height:36px;
-      border:none;
-      border-radius:8px;
-      background:none;
-      color:var(--muted);
-      cursor:pointer;
-      z-index:2;
-      transition:background-color .15s ease, color .15s ease;
-    }
-    .ask-icon-btn:hover{background:#e2e5e9;color:var(--text);}
-    .ask-icon{
-      width:16px;
-      height:16px;
-      opacity:.85;
-    }
-    .ask .cycle{
-      transition:opacity .3s ease;
-    }
-    .ask .cycle.is-fading{opacity:0;}
-    .suggest{
-      position:absolute;
-      top:calc(100% + 8px);
-      left:0;
-      right:0;
-      padding:8px;
-      border:1px solid var(--border);
-      border-radius:12px;
-      background:var(--bg);
-      box-shadow:0 8px 24px rgba(30,41,59,.10);
-      text-align:left;
-      z-index:50;
-    }
-    .suggest[hidden]{display:none;}
-    .suggest a{
-      display:block;
-      padding:10px 14px;
-      border-radius:8px;
-      font-size:14px;
-      letter-spacing:.02em;
-      color:var(--text);
-    }
-    .suggest a:hover{background:var(--surface);}
-    @media (prefers-reduced-motion: no-preference){
-      .suggest:not([hidden]){animation:menuIn .18s ease-out;}
-    }
 
     /* 専門領域：人＝深緑、IT・AI＝空色 */
     .fields{
@@ -268,16 +214,9 @@
     <p class="tagline rise">可能性を、仕組みにする。</p>
 
     <div class="ask-wrap rise-late" id="askWrap">
-      <button class="ask-icon-btn" id="askIconBtn" type="button" aria-expanded="false" aria-controls="askSuggest" aria-label="相談テーマの一覧を表示">
-        <svg class="ask-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <circle cx="11" cy="11" r="7"></circle>
-          <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
-        </svg>
-      </button>
-      <a class="ask" id="askLink" href="mailto:architect@potenitas.com?subject=%E3%81%94%E7%9B%B8%E8%AB%87%EF%BC%88POTENITAS%EF%BC%89">
-        <span class="cycle" id="askCycle" aria-hidden="true">コスパ最強のアプリを使ってみよう</span>
+      <a class="ask" id="askLink" href="mailto:architect@potenitas.com?subject=%E3%81%94%E7%9B%B8%E8%AB%87%EF%BC%88POTENITAS%EF%BC%89" aria-label="メールで相談する">
+        <span>準備中</span>
       </a>
-      <nav class="suggest" id="askSuggest" aria-label="相談テーマ一覧" hidden></nav>
     </div>
 
     <p class="fields rise-late">
@@ -313,82 +252,6 @@
           btn.focus();
         }
       });
-    })();
-
-    (function(){
-      const MAIL_BASE = "mailto:architect@potenitas.com?subject=";
-      function mailHref(text){
-        return MAIL_BASE + encodeURIComponent("ご相談（POTENITAS）：" + text);
-      }
-      // href が指定された文言はそのURLへ、未指定はご相談メールへ
-      const messages = [
-        { text: "コスパ最強のアプリを使ってみよう", href: "https://tsam-ai.com/login/index.html" },
-        { text: "交流会で一歩を踏み出そう",         href: "https://tsam-ai.com/event/index.html" },
-        { text: "AIスキルを身につけよう",           href: "/labs/personal-ai-training/" },
-        { text: "AI人材を育成しよう",               href: "/labs/ai-corporate-training/" },
-        { text: "AIが安全に働ける環境をつくろう",   href: "/secure-ai-agent/" },
-        { text: "AI責任者を外注しよう" },
-        { text: "AI時代のキャリアを考えよう" }
-      ];
-      function hrefOf(m){ return m.href || mailHref(m.text); }
-
-      // 文言のサイクル表示（表示中の文言に合わせて窓のリンク先も切り替え）
-      const el = document.getElementById("askCycle");
-      const askLink = document.getElementById("askLink");
-      function applyMessage(m){
-        el.textContent = m.text;
-        if(askLink){
-          askLink.href = hrefOf(m);
-          askLink.setAttribute("aria-label", m.href ? m.text : "メールで相談する：" + m.text);
-        }
-      }
-      if(el){
-        let i = 0;
-        applyMessage(messages[0]);
-        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        setInterval(function(){
-          i = (i + 1) % messages.length;
-          if(reduceMotion){
-            applyMessage(messages[i]);
-          }else{
-            el.classList.add("is-fading");
-            setTimeout(function(){
-              applyMessage(messages[i]);
-              el.classList.remove("is-fading");
-            }, 300);
-          }
-        }, 5000);
-      }
-
-      // 虫めがね：相談テーマの一覧を開閉
-      const wrap = document.getElementById("askWrap");
-      const iconBtn = document.getElementById("askIconBtn");
-      const panel = document.getElementById("askSuggest");
-      if(wrap && iconBtn && panel){
-        messages.forEach(function(m){
-          const a = document.createElement("a");
-          a.href = hrefOf(m);
-          a.textContent = m.text;
-          panel.appendChild(a);
-        });
-        function setOpen(open){
-          panel.hidden = !open;
-          iconBtn.setAttribute("aria-expanded", String(open));
-          iconBtn.setAttribute("aria-label", open ? "相談テーマの一覧を閉じる" : "相談テーマの一覧を表示");
-        }
-        iconBtn.addEventListener("click", function(){
-          setOpen(panel.hidden);
-        });
-        document.addEventListener("click", function(e){
-          if(!panel.hidden && !wrap.contains(e.target)) setOpen(false);
-        });
-        document.addEventListener("keydown", function(e){
-          if(e.key === "Escape" && !panel.hidden){
-            setOpen(false);
-            iconBtn.focus();
-          }
-        });
-      }
     })();
   </script>
 </body>
