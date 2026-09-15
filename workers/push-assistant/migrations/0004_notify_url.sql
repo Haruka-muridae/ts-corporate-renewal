@@ -1,0 +1,22 @@
+-- Push Assistant: 全予定共通の「タップで開く URL」（仕様書 §6・§8・§9）。
+--
+-- 適用:
+--   wrangler d1 migrations apply push_assistant --local  --config workers/push-assistant/wrangler.jsonc
+--   wrangler d1 migrations apply push_assistant --remote --config workers/push-assistant/wrangler.jsonc
+--
+-- 0001 / 0002 / 0003 は本番適用済みなので編集しない。この 0004 を追加で当てる。
+--
+-- ------------------------------------------------------------------
+-- 何を持つか
+-- ------------------------------------------------------------------
+-- 画面の簡素化（§15）に伴い、利用者が入力するのは
+--   notify_title … 全予定共通の通知タイトル（migration 0003。空 = 予定名）
+--   notify_url   … 全予定共通の「タップで開く URL」（この列。空 = 従来の自動抽出）
+-- の 2 つだけになる。notify_url は resolveOpenUrl の globalUrl として渡され、
+-- 予定ごとの上書き（event_overrides.custom_url）の **次**、conference/description 等の
+-- 自動抽出より **先** に採られる（§9）。空なら従来どおり自動抽出へ落ちる。
+-- http/https のみ保存する（api.mjs handleSettings が isAllowedUrl で検証）。
+--
+-- NOT NULL DEFAULT '' なので、既存行にも安全に列が足せる（空 = 未設定）。
+
+ALTER TABLE users ADD COLUMN notify_url TEXT NOT NULL DEFAULT '';
