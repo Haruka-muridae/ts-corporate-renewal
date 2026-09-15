@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#166534">
+  <script>document.documentElement.className += " opening";</script>
   <title>POTENITAS | 可能性を、仕組みにする。</title>
   <meta name="description" content="POTENITAS（ポテニタス）は、認知心理学・教育と、業務効率化・AI・ITを軸にしたブランドです。TSアセットマネジメント合同会社（TSAM）が提供しています。">
   <link rel="icon" href="/potenitas/favicon.ico" sizes="any">
@@ -25,6 +26,16 @@
       --border-strong:#cbd5e1;
       --text:#1e293b;
       --muted:#64748b;
+      /* オープニング演出中の 9 単語の色（深緑→水色の階調） */
+      --op-1:#14532d;
+      --op-2:#15603a;
+      --op-3:#166534;
+      --op-4:#1a7040;
+      --op-5:#1f7a48;
+      --op-6:#0369a1;
+      --op-7:#0284c7;
+      --op-8:#1c9fe0;
+      --op-9:#38bdf8;
       --font-en:"Inter","Helvetica Neue",Arial,sans-serif;
       --font-ja:"Noto Sans JP","Hiragino Sans",Meiryo,system-ui,sans-serif;
     }
@@ -124,6 +135,50 @@
     .wordmark .p1{color:var(--green);}
     .wordmark .p2{color:var(--sky);}
 
+    /* オープニング演出：.ch は常に通常フローの最終位置（POTENITAS の横並び）にある。
+       .rest を absolute にすることで単語の長さが .ch のフロー幅に影響しない。 */
+    .wordmark .ch{
+      position:relative;
+      display:inline-block;
+      transform-origin:left top;
+      transition:color .8s ease;
+    }
+    /* 1 文字ずつ inline-block にするとフォントのカーニングが効かなくなるため、
+       失われる分（Inter 800 の OT / TA / AS ペア）を em で打ち消し、字間を現状と同一に保つ */
+    .wordmark .ch:nth-child(3){margin-left:-.0356em;}
+    .wordmark .ch:nth-child(8){margin-left:-.0951em;}
+    .wordmark .ch:nth-child(9){margin-left:-.0238em;}
+    .wordmark .rest{
+      position:absolute;
+      left:100%;
+      top:0;
+      white-space:nowrap;
+      opacity:0;
+      pointer-events:none;
+    }
+    .opening .menu,
+    .opening .company,
+    .opening .tagline,
+    .opening .ask-wrap,
+    .opening .fields,
+    .opening footer{opacity:0;}
+    .opening .menu{pointer-events:none;}
+    .menu,.company,.tagline,.ask-wrap,.fields,footer{transition:opacity .6s ease;}
+    .opening .wordmark{animation:none;}
+    /* rise 系の animation-fill-mode:both は opacity:0 の宣言より優先されるため、演出中は止める */
+    .opening .rise,
+    .opening .rise-late{animation:none;}
+    .opening .wordmark .ch{will-change:transform;}
+    .opening .wordmark .ch:nth-child(1){color:var(--op-1);}
+    .opening .wordmark .ch:nth-child(2){color:var(--op-2);}
+    .opening .wordmark .ch:nth-child(3){color:var(--op-3);}
+    .opening .wordmark .ch:nth-child(4){color:var(--op-4);}
+    .opening .wordmark .ch:nth-child(5){color:var(--op-5);}
+    .opening .wordmark .ch:nth-child(6){color:var(--op-6);}
+    .opening .wordmark .ch:nth-child(7){color:var(--op-7);}
+    .opening .wordmark .ch:nth-child(8){color:var(--op-8);}
+    .opening .wordmark .ch:nth-child(9){color:var(--op-9);}
+
     .company{
       margin-top:8px;
       font-size:12px;
@@ -208,7 +263,7 @@
   </div>
 
   <main>
-    <h1 class="wordmark rise"><span class="p1">POTEN</span><span class="p2">ITAS</span></h1>
+    <h1 class="wordmark rise" id="wordmark" aria-label="POTENITAS"><span class="ch p1" data-word="Potential"><span class="ini">P</span><span class="rest" aria-hidden="true"></span></span><span class="ch p1" data-word="Our"><span class="ini">O</span><span class="rest" aria-hidden="true"></span></span><span class="ch p1" data-word="Transform"><span class="ini">T</span><span class="rest" aria-hidden="true"></span></span><span class="ch p1" data-word="Engineering"><span class="ini">E</span><span class="rest" aria-hidden="true"></span></span><span class="ch p1" data-word="Nexus"><span class="ini">N</span><span class="rest" aria-hidden="true"></span></span><span class="ch p2" data-word="Innovation"><span class="ini">I</span><span class="rest" aria-hidden="true"></span></span><span class="ch p2" data-word="Teaching"><span class="ini">T</span><span class="rest" aria-hidden="true"></span></span><span class="ch p2" data-word="Architect"><span class="ini">A</span><span class="rest" aria-hidden="true"></span></span><span class="ch p2" data-word="Synergy"><span class="ini">S</span><span class="rest" aria-hidden="true"></span></span></h1>
     <p class="company rise"><a class="ext" href="https://tsam-ai.com/" target="_blank" rel="noopener">TSアセットマネジメント合同会社</a></p>
 
     <p class="tagline rise">可能性を、仕組みにする。</p>
@@ -252,6 +307,125 @@
           btn.focus();
         }
       });
+    })();
+
+    // オープニング演出：既存ロゴ（.ch）そのものを FLIP で動かす
+    (function(){
+      var html = document.documentElement;
+      if(html.className.indexOf("opening") === -1) return;
+
+      var h1 = document.getElementById("wordmark");
+      var chars = h1 ? Array.prototype.slice.call(h1.querySelectorAll(".ch")) : [];
+
+      var TYPE_MS = 28, WORD_GAP_MS = 80, HOLD_MS = 420, FADE_MS = 350, MOVE_MS = 900, STAGGER_MS = 25;
+
+      function shouldPlayOpening(){ return true; }
+      function finishOpening(){ html.classList.remove("opening"); }
+      function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+      function rest(el){ return el.querySelector(".rest"); }
+
+      // 最長単語の幅を実測する（決め打ちの数値を使わない）
+      function measureMaxWordWidth(px){
+        var probe = document.createElement("span");
+        probe.style.cssText = "position:fixed;left:-9999px;top:0;visibility:hidden;white-space:nowrap;" +
+          "font-family:var(--font-en);font-weight:800;letter-spacing:.01em;line-height:1.1;";
+        probe.style.fontSize = px + "px";
+        document.body.appendChild(probe);
+        var max = 0;
+        for(var i=0;i<chars.length;i++){
+          probe.textContent = chars[i].getAttribute("data-word");
+          max = Math.max(max, probe.offsetWidth);
+        }
+        document.body.removeChild(probe);
+        return max;
+      }
+
+      function playOpening(){
+        // 演出が rise を引き継ぐ（.opening を外した瞬間にロゴが再度 rise しないように）
+        h1.classList.remove("rise");
+
+        var opSize = Math.min(34, Math.max(20, window.innerWidth * 0.06));
+        var lineH = Math.min(opSize * 1.6, (window.innerHeight * 0.82) / 9);
+        var maxW = measureMaxWordWidth(opSize);
+        var blockLeft = Math.max(16, (window.innerWidth - maxW) / 2);
+        var blockTop = (window.innerHeight - lineH * 9) / 2;
+        var scale = opSize / parseFloat(getComputedStyle(h1).fontSize);
+
+        // First/Last：.ch の通常フロー位置（＝ POTENITAS の最終位置）を実測
+        var rects = chars.map(function(el){ return el.getBoundingClientRect(); });
+
+        // Invert：transition なしで縦並びへ飛ばす
+        chars.forEach(function(el, i){
+          el.style.transition = "none";
+          el.style.willChange = "transform";
+          el.style.transform = "translate(" + (blockLeft - rects[i].left) + "px," +
+            (blockTop + lineH * i - rects[i].top) + "px) scale(" + scale + ")";
+          rest(el).style.opacity = "1";
+        });
+        void h1.offsetWidth; // 強制リフロー
+        chars.forEach(function(el){ el.style.transition = ""; });
+
+        // タイピング → 静止 → 頭文字だけ残す → POTENITAS へ再配置
+        var seq = Promise.resolve();
+        chars.forEach(function(el){
+          var word = el.getAttribute("data-word");
+          for(var j=1;j<word.length;j++){
+            (function(text){
+              seq = seq.then(function(){ rest(el).textContent = text; return wait(TYPE_MS); });
+            })(word.slice(1, j+1));
+          }
+          seq = seq.then(function(){ return wait(WORD_GAP_MS); });
+        });
+
+        return seq.then(function(){
+          return wait(HOLD_MS);
+        }).then(function(){
+          chars.forEach(function(el){
+            var r = rest(el);
+            r.style.transition = "opacity .35s ease";
+            r.style.opacity = "0";
+          });
+          return wait(FADE_MS);
+        }).then(function(){
+          // Play：transform を空に戻す → 既存ロゴの位置・サイズへそのまま収束する。
+          // 左から 25ms ずつ遅らせて上から順に流れ込ませ、色だけは移動中に最終色へ変える。
+          chars.forEach(function(el, i){
+            el.style.transition = "transform .9s cubic-bezier(.22,.61,.36,1) " + (i * STAGGER_MS) +
+              "ms, color .8s ease";
+            el.style.willChange = "transform";
+            el.style.color = el.classList.contains("p2") ? "var(--sky)" : "var(--green)";
+            el.style.transform = "";
+          });
+          return wait(MOVE_MS + STAGGER_MS * (chars.length - 1));
+        }).then(function(){
+          // ロゴが定位置へ到達してから、既存要素をフェードインさせる
+          finishOpening();
+          chars.forEach(function(el){
+            el.removeAttribute("style");
+            var r = rest(el);
+            r.removeAttribute("style");
+            r.textContent = "";
+          });
+        });
+      }
+
+      if(!h1 || chars.length !== 9 || !shouldPlayOpening()){ finishOpening(); return; }
+
+      // reduced motion：長い演出をせず、最終形を 400ms 見せて終わり
+      if(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+        setTimeout(finishOpening, 400);
+        return;
+      }
+
+      // Web フォントが後から効くと実測位置がずれるため fonts.ready を待つ（1.5 秒でタイムアウト）
+      var started = false;
+      var start = function(){ if(started) return; started = true; playOpening(); };
+      if(document.fonts && document.fonts.ready && document.fonts.ready.then){
+        document.fonts.ready.then(start);
+        setTimeout(start, 1500);
+      } else {
+        start();
+      }
     })();
   </script>
 </body>
