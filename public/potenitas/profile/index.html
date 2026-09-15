@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>主催者について | Potenitas</title>
-<meta name="description" content="Potenitas主催 / Chief AI Officer(CAIO)Yuki Saitoのプロフィール。AI・生成AIの設計、実装、業務導入を専門とし、認知心理学、教育、IT、業務設計を横断して、人と組織の可能性を仕組みにする活動をしています。">
+<meta name="description" content="TSアセットマネジメント合同会社 執行役員 / Potenitas 主催 齋藤悠貴のプロフィール。AI・生成AIの設計、実装、業務導入を専門とし、認知心理学、教育、IT、業務設計を横断して、人と組織の可能性を仕組みにする活動をしています。">
 
 <link rel="canonical" href="https://tsam-ai.com/potenitas/profile/">
 
@@ -12,7 +12,7 @@
 <meta property="og:type" content="profile">
 <meta property="og:url" content="https://tsam-ai.com/potenitas/profile/">
 <meta property="og:title" content="主催者について | Potenitas">
-<meta property="og:description" content="Potenitas主催 / Chief AI Officer(CAIO)Yuki Saitoのプロフィール。AI・生成AIの設計、実装、業務導入を専門とし、認知心理学、教育、IT、業務設計を横断して、人と組織の可能性を仕組みにする活動をしています。">
+<meta property="og:description" content="TSアセットマネジメント合同会社 執行役員 / Potenitas 主催 齋藤悠貴のプロフィール。AI・生成AIの設計、実装、業務導入を専門とし、認知心理学、教育、IT、業務設計を横断して、人と組織の可能性を仕組みにする活動をしています。">
 <meta property="og:locale" content="ja_JP">
 <!-- TODO: このページ用のOGP画像が用意できたら og:image を追加する -->
 <meta name="twitter:card" content="summary_large_image">
@@ -160,8 +160,8 @@ p + p{margin-top:1.6em;}
 
 /* ---------- timeline accordion ---------- */
 .timeline{list-style:none;}
-details.tl{border-bottom:1px dashed var(--line);}
-details.tl:first-of-type{border-top:1px dashed var(--line);}
+.tl{border-bottom:1px dashed var(--line);}
+.timeline > .tl:first-child{border-top:1px dashed var(--line);}
 details.tl > summary{
   list-style:none;
   cursor:pointer;
@@ -175,7 +175,8 @@ details.tl > summary::-webkit-details-marker{display:none;}
   font-size:1.1rem;font-weight:600;
   color:var(--ai-deep);
   letter-spacing:.06em;
-  width:64px;flex-shrink:0;
+  width:112px;flex-shrink:0;
+  white-space:nowrap;
 }
 .tl-head{
   flex:1;
@@ -186,13 +187,26 @@ details.tl > summary::-webkit-details-marker{display:none;}
 details.tl[open] .tl-head{display:none;}
 details.tl > summary:hover .tl-year{color:var(--ai);}
 .tl-body{
-  padding:0 4px 24px 84px;
+  padding:0 4px 24px 132px;
   font-size:.95rem;color:var(--ink);
 }
 .tl-body p + p{margin-top:.8em;}
+.tl-flat{
+  display:flex;align-items:center;gap:20px;
+  padding:18px 4px;
+}
+.tl-flat .tl-head{color:var(--ink);}
 @media(max-width:560px){
   .tl-body{padding-left:4px;}
   .tl-head{display:none;}
+  .tl-flat{flex-wrap:wrap;gap:4px 20px;}
+  .tl-flat .tl-head{
+    display:block;
+    flex-basis:100%;
+    white-space:normal;
+    overflow:visible;
+    text-overflow:clip;
+  }
 }
 
 /* ---------- list of questions ---------- */
@@ -206,6 +220,28 @@ details.tl > summary:hover .tl-year{color:var(--ai);}
   content:"";
   position:absolute;left:0;top:1.15em;
   width:8px;height:1px;background:var(--ai);
+}
+
+/* ---------- chips (得意分野 / 趣味・好きなもの / 特技) ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin:2px 0 8px;}
+.chip{
+  display:inline-block;
+  padding:.45em 1.1em;
+  border:1px solid var(--line);
+  border-radius:999px;
+  font-size:.9rem;
+  color:var(--ink-soft);
+  background:var(--paper);
+  letter-spacing:.04em;
+}
+
+/* ---------- services ---------- */
+.svc + .svc{margin-top:36px;}
+.svc-title{
+  font-family:"Shippori Mincho",serif;
+  font-size:1.05rem;font-weight:600;
+  color:var(--ai-deep);
+  margin-bottom:.7em;
 }
 
 /* ---------- closing ---------- */
@@ -256,14 +292,14 @@ footer{
 <div class="hero">
   <div class="hero-main">
     <p class="hero-eyebrow">PROFILE</p>
-    <h1 class="hero-name serif">Yuki Saito</h1>
-    <p class="hero-name-en">SAITO YUKI</p>
+    <h1 class="hero-name serif">齋藤 悠貴</h1>
+    <p class="hero-name-en">YUKI SAITO</p>
     <div class="hero-titles">
-      <strong>Potenitas 主催 / Chief AI Officer（CAIO）</strong><br>
-      TSアセットマネジメント合同会社 執行役員
+      <strong>TSアセットマネジメント合同会社 執行役員</strong><br>
+      Potenitas 主催
     </div>
     <p class="hero-lead">
-      AI・生成AIの設計、実装、業務導入を専門領域とし、認知心理学、教育、IT、業務設計を横断して活動しています。
+      あなたの困ったを可能性にします。
     </p>
   </div>
   <div class="hero-tate">可能性を、仕組みにする。</div>
@@ -290,6 +326,54 @@ footer{
 <details class="sec">
   <summary>
     <span class="num">02</span>
+    <h2>得意分野</h2>
+    <span class="chev"></span>
+  </summary>
+  <div class="sec-body">
+    <div class="chips">
+      <span class="chip">教育</span>
+      <span class="chip">システム構築</span>
+      <span class="chip">システム実装</span>
+    </div>
+  </div>
+</details>
+
+<details class="sec">
+  <summary>
+    <span class="num">03</span>
+    <h2>趣味・好きなもの</h2>
+    <span class="chev"></span>
+  </summary>
+  <div class="sec-body">
+    <div class="chips">
+      <span class="chip">格闘技</span>
+      <span class="chip">特撮</span>
+      <span class="chip">青春ブタ野郎</span>
+      <span class="chip">小説</span>
+      <span class="chip">学習</span>
+      <span class="chip">睡眠</span>
+      <span class="chip">交流会</span>
+    </div>
+  </div>
+</details>
+
+<details class="sec">
+  <summary>
+    <span class="num">04</span>
+    <h2>特技</h2>
+    <span class="chev"></span>
+  </summary>
+  <div class="sec-body">
+    <div class="chips">
+      <span class="chip">メタ認知</span>
+      <span class="chip">恋愛相談</span>
+    </div>
+  </div>
+</details>
+
+<details class="sec">
+  <summary>
+    <span class="num">05</span>
     <h2>略歴</h2>
     <span class="chev"></span>
   </summary>
@@ -298,63 +382,261 @@ footer{
 
       <details class="tl">
         <summary>
-          <span class="tl-year">2005</span>
-          <span class="tl-head">空手教室に通い始める</span>
+          <span class="tl-year">2026年9月</span>
+          <span class="tl-head">自社SaaSシステムの開発</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
-          <p>空手教室に通い始める。長期間にわたり稽古を続け、後に指導する側としても空手に携わる。</p>
+          <p>統合環境システムを構築</p>
+          <p>↓実装機能一覧↓</p>
+          <p>Mail機能、Call機能、ミーティングハブ、自動返信機能、Finance記録機能、OCR導入、MCP構築、外部API連携ハブ、予定通知、ナレーション機能、名簿管理、ログイン機能、階層分け機能、プロファイル作成機能、簡易HP作成機能、QR作成機能etc…</p>
         </div>
       </details>
 
       <details class="tl">
         <summary>
-          <span class="tl-year">2010</span>
-          <span class="tl-head">Pythonとの出会い</span>
+          <span class="tl-year">2026年8月</span>
+          <span class="tl-head">自社システムの初期構築を行う</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
-          <p>Pythonに触れ、プログラミングの世界を知る。</p>
+          <p>コンテキスト回収を目的としたアプリ開発</p>
+          <p>録音機能の実装、議事録機能の実装、名刺記録機能の実装、自動投稿機能の実装、簡易動画作成機能の実装、カレンダー通知機能の実装</p>
+        </div>
+      </details>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2026年8月</span>
+        <span class="tl-head"><a href="https://tsam-ai.com/" target="_blank" rel="noopener">自社HPの開発</a></span>
+      </div>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2026年8月</span>
+        <span class="tl-head"><a href="https://tsam-ai.com/potenitas/" target="_blank" rel="noopener">自己ブランドHPの設計</a></span>
+      </div>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2026年7月</span>
+        <span class="tl-head">自社ブランドのPotenitasを立ち上げる</span>
+      </div>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2026年5月</span>
+        <span class="tl-head">自社システムの要件定義書を作成</span>
+      </div>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2025年4月</span>
+          <span class="tl-head">人事管理システムを構築</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>Google Workspace、Google Cloud Console、Java Script、CSS、GASなどの技術スタックを使用</p>
         </div>
       </details>
 
       <details class="tl">
         <summary>
-          <span class="tl-year">2011</span>
-          <span class="tl-head">AIの学習と実装を開始</span>
+          <span class="tl-year">2024年11月</span>
+          <span class="tl-head">現場を踏まえた生成AIの導入</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
-          <p>AIについて本格的に学び始め、AI技術の学習と実装に取り組む。以降、技術の変化を追いながら、AIを継続的な専門領域の一つとして学ぶ。</p>
+          <p>生成AIを実際の業務へ導入する取り組みを本格化。</p>
+          <p>Gemini APIを活用し、面談記録や学習データなどから、生徒ごとに最適化した学習方針資料を生成する仕組みや、対話内容から必要な情報を抽出・構造化する仕組みを開発・導入する。</p>
+          <p>現場から出てくる抽象的な要望を、AIが扱えるデータ構造や処理ロジックへ変換し、プロンプト設計や資料生成ロジックの構築まで担当。</p>
+        </div>
+      </details>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2024年9月</span>
+        <span class="tl-head">ディープラーニングを用いた解析をサポート</span>
+      </div>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2024年8月</span>
+          <span class="tl-head">営業の教育を行う</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>スタートアップ企業の社員に教育した</p>
         </div>
       </details>
 
       <details class="tl">
         <summary>
-          <span class="tl-year">2012</span>
-          <span class="tl-head">認知心理学への関心</span>
+          <span class="tl-year">2024年1月</span>
+          <span class="tl-head">教育現場における業務改革を推進</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
-          <p>心理学という分野を知り、認知心理学に関心を持つ。AIという「知能を技術から考える領域」と並行して、人間の認知や意思決定について考えるようになる。</p>
+          <p>紙やアナログ管理が残っていた教室運営業務について、業務プロセスを整理・可視化し、勤怠管理・授業管理システムの比較検討、要件定義、導入、マニュアル作成、現場へのオンボーディングまで担当。</p>
         </div>
       </details>
 
       <details class="tl">
         <summary>
-          <span class="tl-year">2013</span>
-          <span class="tl-head">100人規模のコミュニティ運営</span>
+          <span class="tl-year">2023年6月</span>
+          <span class="tl-head">個別指導塾の教室運営に従事</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
-          <p>仮面ライダーをテーマとしたコミュニティを立ち上げ、100人規模のグループを運営。個人の興味から始まった活動を、複数の人が参加するコミュニティへ発展させる経験をする。</p>
+          <p>学習指導に加え、生徒・保護者へのカウンセリングやコーチング、講師のマネジメントなどを担当する。</p>
+          <p>認知科学の考え方を指導設計へ取り入れ、生徒の特性や認知負荷、行動特性を考慮した教育環境づくりを行う。</p>
+          <p>担当教室では高校志願校合格率89％などの実績を記録。</p>
         </div>
       </details>
 
       <details class="tl">
         <summary>
-          <span class="tl-year">2014</span>
-          <span class="tl-head">情報セキュリティの基本を学ぶ</span>
+          <span class="tl-year">2022年9月</span>
+          <span class="tl-head">正規雇用にて、システムコンサルとして活動開始</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>会員制ビジネス事業者向け基幹システムの導入支援に携わる。</p>
+          <p>顧客独自の複雑な組織構造や報酬制度を整理し、システム要件へ落とし込む業務を経験。</p>
+          <p>パッケージの標準機能では対応できない要件については、新規APIの要件定義、基本設計、テスト、導入まで一連の工程に携わる。</p>
+          <p>基幹システムと連携する会員向けWebサイト・マイページの設計やUI改善を担当。複雑な報酬体系や会員情報を、利用者が理解しやすい形で提示するための情報設計やワイヤーフレーム作成などに携わる。</p>
+          <p>インボイス制度施行に伴うシステム対応では、制度上の要件を整理し、基幹システムの計算ロジックからWebフロントの表示・入力フローまでの対応に携わる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2022年</span>
+          <span class="tl-head">担当生徒の点数が100%向上</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>全科目を対応</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2021年6月</span>
+          <span class="tl-head">非正規雇用にて、エンジニアとして活動開始</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>ITプロジェクトへ参画し、エンジニアリングの実務に携わる。</p>
+          <p>C、Java、Pythonを用いたWebサービス向けAPIテストを担当。</p>
+          <p>各言語の仕様を確認しながらAPIの挙動やレスポンスを検証し、不具合の報告や品質確認を行う。</p>
+          <p>Pythonを用いた取得データのクレンジング・整形・構造化にも携わる。</p>
+          <p>農業IoT向けドローン開発では、実証実験環境の整備やAPIテストにも携わり、ソフトウェアだけで完結しない、現実の環境を含めた技術検証を経験する。</p>
+          <p>自治体への導入を想定したAPIの品質評価に携わる。</p>
+          <p>テストの実施にとどまらず、検出した仕様上の問題に対する改善案の提示や、小規模な機能変更における要件定義まで担当。</p>
+        </div>
+      </details>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2021年3月</span>
+        <span class="tl-head">個別指導塾の講師を始める</span>
+      </div>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2020年3月</span>
+          <span class="tl-head">空手講師を始める</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>幼稚園児から大人までの指導経験を得る</p>
+        </div>
+      </details>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2019年8月</span>
+        <span class="tl-head">AWSを用いて環境を構築</span>
+      </div>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2019年7月</span>
+        <span class="tl-head">与えられたタスクのコーディング対応</span>
+      </div>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2019年3月</span>
+        <span class="tl-head">C言語の基本文法を全てマスター</span>
+      </div>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2018年7月</span>
+        <span class="tl-head">LaTeXやLinux周りを習得</span>
+      </div>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2018年6月</span>
+        <span class="tl-head">サークルを設立。並行して四つのサークルを運営保守</span>
+      </div>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2018年3月</span>
+          <span class="tl-head">執行役員に就任</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>TSアセットマネジメント合同会社にて就任</p>
+        </div>
+      </details>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2017年</span>
+        <span class="tl-head">情報を集積したAIの要件定義書を作成</span>
+      </div>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2016年6月</span>
+          <span class="tl-head">小説の執筆を始める</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>技術とは異なる側面から、人の感情や行動、物語について考えるようになる。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2016年</span>
+          <span class="tl-head">ライブラリを使用したアプリを制作</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>Beautiful Soup、NumPy、scikit-learnなどを使用</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2015年8月</span>
+          <span class="tl-head">不動産投資の補助を行う</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>相続税路線価などの情報を調査しながら、収益性を考慮した物件調査に携わる。データや条件を整理し、投資対象を判断する経験を積む。</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2015年</span>
+          <span class="tl-head">ゲームのログイン画面を制作</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p>PythonとHTML、CSSなどを使用</p>
+        </div>
+      </details>
+
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2014年</span>
+          <span class="tl-head">情報セキュリティの見方を学ぶ</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
@@ -362,149 +644,57 @@ footer{
         </div>
       </details>
 
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2015</span>
-          <span class="tl-head">不動産投資業務に携わる</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>不動産投資に関する業務の手伝いを開始。相続税路線価などの情報を調査しながら、収益性を考慮した物件調査に携わる。データや条件を整理し、投資対象を判断する経験を積む。</p>
-        </div>
-      </details>
+      <div class="tl tl-flat">
+        <span class="tl-year">2013年</span>
+        <span class="tl-head">認知心理学に出会う</span>
+      </div>
 
       <details class="tl">
         <summary>
-          <span class="tl-year">2016</span>
-          <span class="tl-head">小説の執筆を始める</span>
+          <span class="tl-year">2013年</span>
+          <span class="tl-head">仮面ライダーをテーマとしたコミュニティを立ち上げる</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
-          <p>小説の執筆を始める。技術とは異なる側面から、人の感情や行動、物語について考えるようになる。</p>
+          <p>中高生から50代までの、100人規模のグループを運営</p>
         </div>
       </details>
 
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2017</span>
-          <span class="tl-head">浪人生活</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>浪人生活を送る。</p>
-        </div>
-      </details>
+      <div class="tl tl-flat">
+        <span class="tl-year">2012年</span>
+        <span class="tl-head">心理学に出会う</span>
+      </div>
+
+      <div class="tl tl-flat">
+        <span class="tl-year">2012年</span>
+        <span class="tl-head">MP4→MP3の変換アプリを制作</span>
+      </div>
 
       <details class="tl">
         <summary>
-          <span class="tl-year">2018</span>
-          <span class="tl-head">サークル設立 / 執行役員に就任</span>
+          <span class="tl-year">2011年</span>
+          <span class="tl-head">Pythonのライブラリに触れる</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
-          <p>大学でサークルを設立。並行して、合計4つのサークル運営に携わる。</p>
-          <p>同年、TSアセットマネジメント合同会社の執行役員に就任。不動産管理業務にも携わる。</p>
+          <p>Beautiful Soup、NumPy、scikit-learnなど</p>
         </div>
       </details>
 
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2019</span>
-          <span class="tl-head">AI開発・実験 / AWS環境構築</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>AIの開発・実験に関する業務に携わる。AWSの環境構築も経験し、AIだけではなく、それを動かすITインフラについても実践的に学ぶ。</p>
-          <p>並行して、空手講師としての活動を開始。</p>
-        </div>
-      </details>
+      <div class="tl tl-flat">
+        <span class="tl-year">2010年</span>
+        <span class="tl-head">プログラミングの世界を知る</span>
+      </div>
 
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2020</span>
-          <span class="tl-head">塾講師としての活動を開始</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>塾講師としての活動を開始。担当した生徒全員の成績向上を経験し、人によって理解の仕方や行動のきっかけが異なることを、教育現場で改めて認識する。</p>
-          <p>同年、情報商材を購入したことをきっかけに、その仕組みや内容を技術的に検証。販売時の説明と実際の内容に大きな乖離があると判断した経験から、情報をそのまま受け入れるのではなく、可能な限り自ら構造や根拠を確認し、信頼性を判断する姿勢を強く意識するようになる。</p>
-        </div>
-      </details>
+      <div class="tl tl-flat">
+        <span class="tl-year">2009年</span>
+        <span class="tl-head">AIに出会う</span>
+      </div>
 
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2021</span>
-          <span class="tl-head">エンジニアリング実務へ参画</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>ITプロジェクトへ参画し、エンジニアリングの実務に携わる。C、Java、Pythonを用いたWebサービス向けAPIテストを担当。各言語の仕様を確認しながらAPIの挙動やレスポンスを検証し、不具合の報告や品質確認を行う。また、Pythonを用いた取得データのクレンジング・整形・構造化にも携わる。</p>
-          <p>農業IoT向けドローン開発では、実証実験環境の整備やAPIテストにも携わり、ソフトウェアだけで完結しない、現実の環境を含めた技術検証を経験する。</p>
-        </div>
-      </details>
-
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2022</span>
-          <span class="tl-head">要件定義・基幹システム導入支援</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>自治体への導入を想定したAPIの品質評価に携わる。テストの実施にとどまらず、検出した仕様上の問題に対する改善案の提示や、小規模な機能変更における要件定義まで担当。</p>
-          <p>その後、会員制ビジネス事業者向け基幹システムの導入支援に携わる。顧客独自の複雑な組織構造や報酬制度を整理し、システム要件へ落とし込む業務を経験。パッケージの標準機能では対応できない要件については、新規APIの要件定義、基本設計、テスト、導入まで一連の工程に携わる。</p>
-          <p>この時期から、単にコードやシステムを見るだけでなく、「現場の要望をどのように技術要件へ変換するか」を仕事の一部として扱うようになる。</p>
-        </div>
-      </details>
-
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2023</span>
-          <span class="tl-head">UI設計 / 個別指導塾の教室運営</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>基幹システムと連携する会員向けWebサイト・マイページの設計やUI改善を担当。複雑な報酬体系や会員情報を、利用者が理解しやすい形で提示するための情報設計やワイヤーフレーム作成などに携わる。</p>
-          <p>インボイス制度施行に伴うシステム対応では、制度上の要件を整理し、基幹システムの計算ロジックからWebフロントの表示・入力フローまでの対応に携わる。</p>
-          <p>6月からは個別指導塾の教室運営に従事。学習指導に加え、生徒・保護者へのカウンセリングやコーチング、講師のマネジメントなどを担当する。認知科学の考え方を指導設計へ取り入れ、生徒の特性や認知負荷、行動特性を考慮した教育環境づくりを行う。担当教室では高校志願校合格率89％などの実績を記録している。</p>
-          <p>AIを「人間の代わり」として考えるだけではなく、人間の認知や行動を理解したうえで使う必要性を強く意識するようになる。</p>
-        </div>
-      </details>
-
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2024</span>
-          <span class="tl-head">教育現場のBPR / 生成AI導入を本格化</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>教育現場における業務改革を推進。紙やアナログ管理が残っていた教室運営業務について、業務プロセスを整理・可視化し、勤怠管理・授業管理システムの比較検討、要件定義、導入、マニュアル作成、現場へのオンボーディングまで担当。ITツールを導入するだけではなく、実際に現場で使われ続ける状態まで含めたBPRに取り組む。</p>
-          <p>11月からは、生成AIを実際の業務へ導入する取り組みを本格化。Gemini APIを活用し、面談記録や学習データなどから、生徒ごとに最適化した学習方針資料を生成する仕組みや、対話内容から必要な情報を抽出・構造化する仕組みを開発・導入する。現場から出てくる抽象的な要望を、AIが扱えるデータ構造や処理ロジックへ変換し、プロンプト設計や資料生成ロジックの構築まで担当。</p>
-        </div>
-      </details>
-
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2025</span>
-          <span class="tl-head">AIを前提とした業務設計へ</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>教育現場の運営と並行して、生成AIを実際の業務プロセスへ組み込む取り組みを継続。業務分析からAI導入要件の策定、プロンプトエンジニアリング、試験運用、出力品質の評価、フィードバックに基づく改善まで、一連のAI導入工程に携わる。</p>
-          <p>単発でAIを使用するのではなく、既存業務のどこにAIを配置し、どの情報を入力し、どのような形式で出力し、人間がどこで判断するのかという、AIを前提とした業務設計を行うようになる。</p>
-        </div>
-      </details>
-
-      <details class="tl">
-        <summary>
-          <span class="tl-year">2026</span>
-          <span class="tl-head">Potenitas 主催 / CAIOとして活動</span>
-          <span class="chev"></span>
-        </summary>
-        <div class="tl-body">
-          <p>これまで取り組んできたAI、エンジニアリング、業務改善、認知心理学、教育の経験を横断し、Potenitas 主催 / Chief AI Officer（CAIO）として活動。</p>
-          <p>AIを単に導入するのではなく、人間の認知や組織の業務プロセスまで含めて設計し、実際に利用される仕組みとして実装することを専門領域とする。</p>
-        </div>
-      </details>
+      <div class="tl tl-flat">
+        <span class="tl-year">2005年</span>
+        <span class="tl-head">空手教室に通い始める</span>
+      </div>
 
     </div>
   </div>
@@ -512,7 +702,32 @@ footer{
 
 <details class="sec">
   <summary>
-    <span class="num">03</span>
+    <span class="num">06</span>
+    <h2>SERVICES</h2>
+    <span class="chev"></span>
+  </summary>
+  <div class="sec-body">
+    <div class="svc">
+      <h3 class="svc-title">AI個別パーソナルレッスン</h3>
+      <p>完全個別カリキュラムのパーソナルレッスン</p>
+      <p>小学校〜高校までの5教科、AIの初歩的な理解から使用方法、システムを用いた業務改善方法、セキュリティ、コストカットなど。</p>
+    </div>
+    <div class="svc">
+      <h3 class="svc-title">BtoC向け、自社SaaSシステムの販売</h3>
+      <p>AI完全連携型のアプリ</p>
+      <p>これ一つで業務は全て対応可能</p>
+    </div>
+    <div class="svc">
+      <h3 class="svc-title">BtoB向け、自社SaaSシステムの販売</h3>
+      <p>AI完全連携型のアプリ</p>
+      <p>これ一つで業務は全て対応可能</p>
+    </div>
+  </div>
+</details>
+
+<details class="sec">
+  <summary>
+    <span class="num">07</span>
     <h2>AIに対する考え方</h2>
     <span class="chev"></span>
   </summary>
@@ -532,7 +747,7 @@ footer{
 
 <details class="sec">
   <summary>
-    <span class="num">04</span>
+    <span class="num">08</span>
     <h2>Potenitasについて</h2>
     <span class="chev"></span>
   </summary>
