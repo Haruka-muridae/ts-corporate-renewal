@@ -166,6 +166,7 @@ details.tl > summary{
   list-style:none;
   cursor:pointer;
   display:flex;align-items:center;gap:20px;
+  justify-content:space-between;
   padding:18px 4px;
   user-select:none;
 }
@@ -178,35 +179,18 @@ details.tl > summary::-webkit-details-marker{display:none;}
   width:112px;flex-shrink:0;
   white-space:nowrap;
 }
-.tl-head{
-  flex:1;
-  font-size:.9rem;color:var(--ink-soft);
-  line-height:1.7;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
-details.tl[open] .tl-head{display:none;}
 details.tl > summary:hover .tl-year{color:var(--ai);}
 .tl-body{
   padding:0 4px 24px 132px;
   font-size:.95rem;color:var(--ink);
 }
 .tl-body p + p{margin-top:.8em;}
-.tl-flat{
-  display:flex;align-items:center;gap:20px;
-  padding:18px 4px;
+.tl-title{
+  font-weight:700;
+  color:var(--ink);
 }
-.tl-flat .tl-head{color:var(--ink);}
 @media(max-width:560px){
   .tl-body{padding-left:4px;}
-  .tl-head{display:none;}
-  .tl-flat{flex-wrap:wrap;gap:4px 20px;}
-  .tl-flat .tl-head{
-    display:block;
-    flex-basis:100%;
-    white-space:normal;
-    overflow:visible;
-    text-overflow:clip;
-  }
 }
 
 /* ---------- list of questions ---------- */
@@ -383,10 +367,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2026年9月</span>
-          <span class="tl-head">自社SaaSシステムの開発</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">自社SaaSシステムの開発</p>
           <p>統合環境システムを構築</p>
           <p>↓実装機能一覧↓</p>
           <p>Mail機能、Call機能、ミーティングハブ、自動返信機能、Finance記録機能、OCR導入、MCP構築、外部API連携ハブ、予定通知、ナレーション機能、名簿管理、ログイン機能、階層分け機能、プロファイル作成機能、簡易HP作成機能、QR作成機能etc…</p>
@@ -396,42 +380,62 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2026年8月</span>
-          <span class="tl-head">自社システムの初期構築を行う</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">自社システムの初期構築を行う</p>
           <p>コンテキスト回収を目的としたアプリ開発</p>
           <p>録音機能の実装、議事録機能の実装、名刺記録機能の実装、自動投稿機能の実装、簡易動画作成機能の実装、カレンダー通知機能の実装</p>
         </div>
       </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2026年8月</span>
-        <span class="tl-head"><a href="https://tsam-ai.com/" target="_blank" rel="noopener">自社HPの開発</a></span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2026年8月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title"><a href="https://tsam-ai.com/" target="_blank" rel="noopener">自社HPの開発</a></p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2026年8月</span>
-        <span class="tl-head"><a href="https://tsam-ai.com/potenitas/" target="_blank" rel="noopener">自己ブランドHPの設計</a></span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2026年8月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title"><a href="https://tsam-ai.com/potenitas/" target="_blank" rel="noopener">自己ブランドHPの設計</a></p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2026年7月</span>
-        <span class="tl-head">自社ブランドのPotenitasを立ち上げる</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2026年7月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">自社ブランドのPotenitasを立ち上げる</p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2026年5月</span>
-        <span class="tl-head">自社システムの要件定義書を作成</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2026年5月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">自社システムの要件定義書を作成</p>
+        </div>
+      </details>
 
       <details class="tl">
         <summary>
           <span class="tl-year">2025年4月</span>
-          <span class="tl-head">人事管理システムを構築</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">人事管理システムを構築</p>
           <p>Google Workspace、Google Cloud Console、Java Script、CSS、GASなどの技術スタックを使用</p>
         </div>
       </details>
@@ -439,28 +443,33 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2024年11月</span>
-          <span class="tl-head">現場を踏まえた生成AIの導入</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">現場を踏まえた生成AIの導入</p>
           <p>生成AIを実際の業務へ導入する取り組みを本格化。</p>
           <p>Gemini APIを活用し、面談記録や学習データなどから、生徒ごとに最適化した学習方針資料を生成する仕組みや、対話内容から必要な情報を抽出・構造化する仕組みを開発・導入する。</p>
           <p>現場から出てくる抽象的な要望を、AIが扱えるデータ構造や処理ロジックへ変換し、プロンプト設計や資料生成ロジックの構築まで担当。</p>
         </div>
       </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2024年9月</span>
-        <span class="tl-head">ディープラーニングを用いた解析をサポート</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2024年9月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">ディープラーニングを用いた解析をサポート</p>
+        </div>
+      </details>
 
       <details class="tl">
         <summary>
           <span class="tl-year">2024年8月</span>
-          <span class="tl-head">営業の教育を行う</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">営業の教育を行う</p>
           <p>スタートアップ企業の社員に教育した</p>
         </div>
       </details>
@@ -468,10 +477,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2024年1月</span>
-          <span class="tl-head">教育現場における業務改革を推進</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">教育現場における業務改革を推進</p>
           <p>紙やアナログ管理が残っていた教室運営業務について、業務プロセスを整理・可視化し、勤怠管理・授業管理システムの比較検討、要件定義、導入、マニュアル作成、現場へのオンボーディングまで担当。</p>
         </div>
       </details>
@@ -479,10 +488,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2023年6月</span>
-          <span class="tl-head">個別指導塾の教室運営に従事</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">個別指導塾の教室運営に従事</p>
           <p>学習指導に加え、生徒・保護者へのカウンセリングやコーチング、講師のマネジメントなどを担当する。</p>
           <p>認知科学の考え方を指導設計へ取り入れ、生徒の特性や認知負荷、行動特性を考慮した教育環境づくりを行う。</p>
           <p>担当教室では高校志願校合格率89％などの実績を記録。</p>
@@ -492,10 +501,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2022年9月</span>
-          <span class="tl-head">正規雇用にて、システムコンサルとして活動開始</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">正規雇用にて、システムコンサルとして活動開始</p>
           <p>会員制ビジネス事業者向け基幹システムの導入支援に携わる。</p>
           <p>顧客独自の複雑な組織構造や報酬制度を整理し、システム要件へ落とし込む業務を経験。</p>
           <p>パッケージの標準機能では対応できない要件については、新規APIの要件定義、基本設計、テスト、導入まで一連の工程に携わる。</p>
@@ -507,10 +516,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2022年</span>
-          <span class="tl-head">担当生徒の点数が100%向上</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">担当生徒の点数が100%向上</p>
           <p>全科目を対応</p>
         </div>
       </details>
@@ -518,10 +527,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2021年6月</span>
-          <span class="tl-head">非正規雇用にて、エンジニアとして活動開始</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">非正規雇用にて、エンジニアとして活動開始</p>
           <p>ITプロジェクトへ参画し、エンジニアリングの実務に携わる。</p>
           <p>C、Java、Pythonを用いたWebサービス向けAPIテストを担当。</p>
           <p>各言語の仕様を確認しながらAPIの挙動やレスポンスを検証し、不具合の報告や品質確認を行う。</p>
@@ -532,70 +541,105 @@ footer{
         </div>
       </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2021年3月</span>
-        <span class="tl-head">個別指導塾の講師を始める</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2021年3月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">個別指導塾の講師を始める</p>
+        </div>
+      </details>
 
       <details class="tl">
         <summary>
           <span class="tl-year">2020年3月</span>
-          <span class="tl-head">空手講師を始める</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">空手講師を始める</p>
           <p>幼稚園児から大人までの指導経験を得る</p>
         </div>
       </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2019年8月</span>
-        <span class="tl-head">AWSを用いて環境を構築</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2019年8月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">AWSを用いて環境を構築</p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2019年7月</span>
-        <span class="tl-head">与えられたタスクのコーディング対応</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2019年7月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">与えられたタスクのコーディング対応</p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2019年3月</span>
-        <span class="tl-head">C言語の基本文法を全てマスター</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2019年3月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">C言語の基本文法を全てマスター</p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2018年7月</span>
-        <span class="tl-head">LaTeXやLinux周りを習得</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2018年7月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">LaTeXやLinux周りを習得</p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2018年6月</span>
-        <span class="tl-head">サークルを設立。並行して四つのサークルを運営保守</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2018年6月</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">サークルを設立。並行して四つのサークルを運営保守</p>
+        </div>
+      </details>
 
       <details class="tl">
         <summary>
           <span class="tl-year">2018年3月</span>
-          <span class="tl-head">執行役員に就任</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">執行役員に就任</p>
           <p>TSアセットマネジメント合同会社にて就任</p>
         </div>
       </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2017年</span>
-        <span class="tl-head">情報を集積したAIの要件定義書を作成</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2017年</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">情報を集積したAIの要件定義書を作成</p>
+        </div>
+      </details>
 
       <details class="tl">
         <summary>
           <span class="tl-year">2016年6月</span>
-          <span class="tl-head">小説の執筆を始める</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">小説の執筆を始める</p>
           <p>技術とは異なる側面から、人の感情や行動、物語について考えるようになる。</p>
         </div>
       </details>
@@ -603,10 +647,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2016年</span>
-          <span class="tl-head">ライブラリを使用したアプリを制作</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">ライブラリを使用したアプリを制作</p>
           <p>Beautiful Soup、NumPy、scikit-learnなどを使用</p>
         </div>
       </details>
@@ -614,10 +658,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2015年8月</span>
-          <span class="tl-head">不動産投資の補助を行う</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">不動産投資の補助を行う</p>
           <p>相続税路線価などの情報を調査しながら、収益性を考慮した物件調査に携わる。データや条件を整理し、投資対象を判断する経験を積む。</p>
         </div>
       </details>
@@ -625,10 +669,10 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2015年</span>
-          <span class="tl-head">ゲームのログイン画面を制作</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">ゲームのログイン画面を制作</p>
           <p>PythonとHTML、CSSなどを使用</p>
         </div>
       </details>
@@ -636,66 +680,95 @@ footer{
       <details class="tl">
         <summary>
           <span class="tl-year">2014年</span>
-          <span class="tl-head">情報セキュリティの見方を学ぶ</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">情報セキュリティの見方を学ぶ</p>
           <p>父の仕事を通じて、情報セキュリティ要件の基本を学ぶ。システムは「動けばよい」のではなく、安全性や運用まで考えて設計する必要があることを知る。</p>
         </div>
       </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2013年</span>
-        <span class="tl-head">認知心理学に出会う</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2013年</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">認知心理学に出会う</p>
+        </div>
+      </details>
 
       <details class="tl">
         <summary>
           <span class="tl-year">2013年</span>
-          <span class="tl-head">仮面ライダーをテーマとしたコミュニティを立ち上げる</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">仮面ライダーをテーマとしたコミュニティを立ち上げる</p>
           <p>中高生から50代までの、100人規模のグループを運営</p>
         </div>
       </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2012年</span>
-        <span class="tl-head">心理学に出会う</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2012年</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">心理学に出会う</p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2012年</span>
-        <span class="tl-head">MP4→MP3の変換アプリを制作</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2012年</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">MP4→MP3の変換アプリを制作</p>
+        </div>
+      </details>
 
       <details class="tl">
         <summary>
           <span class="tl-year">2011年</span>
-          <span class="tl-head">Pythonのライブラリに触れる</span>
           <span class="chev"></span>
         </summary>
         <div class="tl-body">
+          <p class="tl-title">Pythonのライブラリに触れる</p>
           <p>Beautiful Soup、NumPy、scikit-learnなど</p>
         </div>
       </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2010年</span>
-        <span class="tl-head">プログラミングの世界を知る</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2010年</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">プログラミングの世界を知る</p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2009年</span>
-        <span class="tl-head">AIに出会う</span>
-      </div>
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2009年</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">AIに出会う</p>
+        </div>
+      </details>
 
-      <div class="tl tl-flat">
-        <span class="tl-year">2005年</span>
-        <span class="tl-head">空手教室に通い始める</span>
-      </div>
-
+      <details class="tl">
+        <summary>
+          <span class="tl-year">2005年</span>
+          <span class="chev"></span>
+        </summary>
+        <div class="tl-body">
+          <p class="tl-title">空手教室に通い始める</p>
+        </div>
+      </details>
     </div>
   </div>
 </details>
