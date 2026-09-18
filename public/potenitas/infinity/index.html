@@ -39,8 +39,8 @@
       /* 文字位置（PC）：背景の中央の ∞・時計・人物を隠さないよう左〜中央左（仕様 §13）。
          指定画像は ∞ と時計が画面中央、人物が下中央の縦長構図なので、
          タイトルは常に 2 行（POTENITAS / INFINITY）にして左 1/3 の列に収め、∞ の左端（約 30%）に届かせない。 */
-      --copy-left:7vw;
-      --copy-max:min(36%, 620px);
+      --copy-left:5vw;
+      --copy-max:min(34%, 560px);
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     /* 演出中もスクロールできること（仕様 §21）。html/body に overflow:hidden を付けない。 */
@@ -124,7 +124,8 @@
     .hero-title{
       font-family:var(--font-en);
       font-weight:600;
-      font-size:clamp(40px, 4.4vw, 80px);
+      /* 1440px で約 55px、1920px で上限 72px。POTENITAS の右端が ∞ の左端（幅の約 29%）に届かない大きさ */
+      font-size:clamp(40px, 3.8vw, 72px);
       line-height:1.05;
       letter-spacing:.08em;
       text-transform:uppercase;
@@ -215,7 +216,7 @@
     @media (max-width: 767px){
       :root{--copy-left:20px;--copy-max:100%;}
       .hero{align-items:flex-start;}
-      .hero-copy{padding-top:18vh;padding-top:18svh;padding-right:20px;}
+      .hero-copy{padding-top:14vh;padding-top:14svh;padding-right:20px;}
       .hero-title{font-size:clamp(36px, 10vw, 72px);letter-spacing:.06em;}
       .hero-lead{font-size:clamp(16px, 4vw, 28px);letter-spacing:.1em;}
       /* 縦長画面では画像の左右が切れ、∞ と人物が中央に残る。上部だけが空くので文字は上寄せ。 */
