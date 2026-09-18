@@ -1,0 +1,1294 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0f1a">
+  <!-- JS が動く環境でだけ演出用の初期状態（文字非表示）を有効にする。
+       JS 無効なら ignite クラスが付かず、背景・タイトル・サブコピーが最初から見える。 -->
+  <script>document.documentElement.className += " ignite";</script>
+  <title>POTENITAS INFINITY | 人の可能性を、無限に。</title>
+  <meta name="description" content="POTENITAS INFINITY（ポテニタス インフィニティ）は、仕事・組織運営・情報管理・AI活用・コミュニケーション・自動化を一つの環境へ統合し、人が本来持っている可能性を最大限に引き出すことを目指した統合型ソフトウェアプラットフォームです。人の可能性を、無限に。">
+  <link rel="canonical" href="https://tsam-ai.com/potenitas/infinity/">
+  <!-- TODO: OGP 画像（1200×630）は未確定。用意でき次第 og:image を追加する。 -->
+  <link rel="icon" href="/potenitas/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/potenitas/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/potenitas/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/potenitas/apple-touch-icon.png">
+  <!-- 背景画像を最優先で取りに行く（仕様 §18: 演出開始前に背景が読み込まれていること）。
+       TODO: hero.jpg は指示書で指定された POTENITAS INFINITY の画像。この階層に置く。 -->
+  <link rel="preload" as="image" href="/potenitas/infinity/hero.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- 英字は高級感と可読性を持つセリフ（Cormorant Garamond）、日本語は明朝（Noto Serif JP）で世界観を揃える（仕様 §15）。
+       極端な SF フォントは使わない。本文の長い日本語だけは読みやすさを優先して細めのゴシック（Noto Sans JP）。 -->
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Serif+JP:wght@300;400&family=Noto+Sans+JP:wght@300;500&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0b0f1a;
+      --text:#f3efe6;
+      --muted:#a9a49a;
+      --border:rgba(243,239,230,.14);
+      --font-en:"Cormorant Garamond","Times New Roman",serif;
+      --font-ja:"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif;
+      --font-sans:"Noto Sans JP","Hiragino Sans",Meiryo,system-ui,sans-serif;
+      /* 最終状態の文字色：白＋わずかな金（仕様 §10） */
+      --title-final:#fff6e3;
+      /* 形成中の強い発光（仕様 §5）と、最終状態の弱い発光（§10） */
+      --glow-strong:0 0 6px #ffffff, 0 0 12px #ffd27a, 0 0 24px #ff8a00, 0 0 48px rgba(255,80,0,.8);
+      --glow-weak:0 0 2px rgba(255,255,255,.35), 0 0 14px rgba(255,210,122,.28);
+      /* 文字位置（PC）：背景の中央の ∞・時計・人物を隠さないよう左〜中央左（仕様 §13）。
+         指定画像は ∞ と時計が画面中央、人物が下中央の縦長構図なので、
+         タイトルは常に 2 行（POTENITAS / INFINITY）にして左 1/3 の列に収め、∞ の左端（約 30%）に届かせない。 */
+      --copy-left:5vw;
+      --copy-max:min(34%, 560px);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    /* 演出中もスクロールできること（仕様 §21）。html/body に overflow:hidden を付けない。 */
+    body{
+      min-height:100vh;
+      min-height:100svh;
+      font-family:var(--font-ja);
+      font-size:16px;
+      line-height:1.8;
+      color:var(--text);
+      background:var(--bg);
+      -webkit-font-smoothing:antialiased;
+    }
+    a{color:inherit;text-decoration:none;}
+    :focus-visible{outline:2px solid #ffd27a;outline-offset:3px;border-radius:6px;}
+
+    /* ------------------------------------------------------------
+       ファーストビュー。レイヤー順: 背景 < 光・炎（canvas） < 文字（仕様 §3）
+       ------------------------------------------------------------ */
+    .hero{
+      position:relative;
+      min-height:100vh;
+      min-height:100svh;
+      display:flex;
+      align-items:center;
+      overflow:hidden; /* 画面外へ流れた火の粉で横スクロールが発生しないように（ページ自体は縦に普通に流れる） */
+      isolation:isolate;
+    }
+    .hero-background{
+      position:absolute;
+      inset:0;
+      z-index:1;
+      /* 画像が無い・読めない間のフォールバック（深い夜色＋中央の淡い光）。画像が乗れば見えない。 */
+      background-color:#0b0f1a;
+      background-image:
+        radial-gradient(60% 50% at 55% 50%, rgba(255,140,40,.10), transparent 70%),
+        linear-gradient(180deg,#0e1424 0%,#0b0f1a 100%);
+    }
+    .hero.is-loaded .hero-background{
+      background-image:url("/potenitas/infinity/hero.jpg");
+      background-size:cover;
+      /* 画像は縦長（約 0.9:1）なので横長の画面では上下が切れる。中央よりやや下を見せ、
+         ∞（画像の高さ約 40% の位置）と人物（約 75〜85%）の両方を残す。上端のアイコンは切れてよい。 */
+      background-position:center 62%;
+      background-repeat:no-repeat;
+    }
+    /* 文字の可読性のために左側だけ薄く落とす。中央から右（∞・人物）は触らない（仕様 §13・§21）。 */
+    .hero-background::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(90deg, rgba(5,8,20,.55) 0%, rgba(5,8,20,.28) 34%, rgba(5,8,20,0) 58%);
+    }
+    .fire-particles{
+      position:absolute;
+      inset:0;
+      z-index:2;
+      width:100%;
+      height:100%;
+      pointer-events:none;
+    }
+    .hero-copy{
+      position:relative;
+      z-index:3;
+      padding:0 24px 0 var(--copy-left);
+      max-width:var(--copy-max);
+    }
+    /* 0〜0.4 秒：文字の位置にごく弱いオレンジの光が生まれる（仕様 §4） */
+    .hero-glow{
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:140%;
+      height:220%;
+      transform:translate(-50%,-50%);
+      background:radial-gradient(closest-side, rgba(255,150,40,.16), rgba(255,90,0,.06) 45%, transparent 75%);
+      opacity:0;
+      pointer-events:none;
+      z-index:-1;
+    }
+    .hero-title{
+      font-family:var(--font-en);
+      font-weight:600;
+      /* 1440px で約 55px、1920px で上限 72px。POTENITAS の右端が ∞ の左端（幅の約 29%）に届かない大きさ */
+      font-size:clamp(40px, 3.8vw, 72px);
+      line-height:1.05;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:var(--title-final);
+      user-select:none;
+    }
+    .hero-title .w{display:block;white-space:nowrap;}
+    .hero-title .ch{display:inline-block;}
+    .hero-lead{
+      margin-top:clamp(16px, 2.2vw, 28px);
+      font-size:clamp(18px, 1.6vw, 26px);
+      font-weight:300;
+      letter-spacing:.14em;
+      line-height:1.7;
+      color:var(--text);
+      text-shadow:0 0 10px rgba(255,210,122,.18);
+    }
+
+    /* ------------------------------------------------------------
+       演出の初期状態（JS が動くときだけ）。
+       文字は透明・ぼかし。canvas とクラスで段階を進める。
+       ------------------------------------------------------------ */
+    .ignite .hero-title .ch{
+      opacity:0;
+      filter:blur(10px);
+      text-shadow:var(--glow-strong);
+      transition:text-shadow 1.6s ease;
+    }
+    .ignite .hero-lead{
+      opacity:0;
+      transform:translateY(12px);
+      filter:blur(6px);
+    }
+    .ignite .hero.is-playing .hero-title .ch{
+      /* 赤橙の炎 → 金 → 白〜淡い金（仕様 §5）。開始時刻 --d は JS が文字ごとに与える。 */
+      animation:ignite 450ms cubic-bezier(.2,.7,.3,1) both;
+      animation-delay:var(--d, 800ms);
+      will-change:opacity, filter;
+    }
+    /* タイトル完成後は発光を弱め、通常の読みやすい文字だけを残す（仕様 §10） */
+    .ignite .hero.is-settled .hero-title .ch{text-shadow:var(--glow-weak);}
+    .ignite .hero.is-done .hero-title .ch{will-change:auto;}
+    .ignite .hero.is-playing .hero-glow{animation:glow 3.2s ease-in-out both;}
+    .ignite .hero.is-playing .hero-lead{
+      /* タイトル完成の 0.4 秒後に、柔らかな発光とともに現れる（仕様 §11） */
+      animation:leadIn 1s ease-out 2400ms both;
+    }
+    @keyframes ignite{
+      0%  {opacity:0;filter:blur(10px);color:#ff6200;}
+      40% {opacity:1;filter:blur(4px);color:#ff9d32;}
+      70% {opacity:1;filter:blur(1px);color:#ffd27a;}
+      100%{opacity:1;filter:blur(0);color:var(--title-final);}
+    }
+    @keyframes glow{
+      0%  {opacity:0;}
+      12% {opacity:1;}   /* 0.4 秒で弱い光が立つ */
+      62% {opacity:1;}   /* 完成（2.0 秒）まで保つ */
+      100%{opacity:0;}   /* 3.2 秒で消える */
+    }
+    @keyframes leadIn{
+      from{opacity:0;transform:translateY(12px);filter:blur(6px);}
+      to  {opacity:1;transform:none;filter:blur(0);}
+    }
+
+    /* 炎なしのフェードイン：reduced-motion（仕様 §19）と、canvas が使えない環境 */
+    .ignite .hero.is-static .hero-title .ch{
+      opacity:1;
+      filter:none;
+      text-shadow:var(--glow-weak);
+      transition:none;
+    }
+    .ignite .hero.is-static .hero-title,
+    .ignite .hero.is-static .hero-lead{
+      opacity:1;
+      transform:none;
+      filter:none;
+      animation:fadeIn .9s ease-out both;
+    }
+    .ignite .hero.is-static .hero-lead{animation-delay:.3s;}
+    @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+    @media (prefers-reduced-motion: reduce){
+      .ignite .hero .hero-title .ch,
+      .ignite .hero .hero-lead,
+      .ignite .hero .hero-glow{animation:none !important;transition:none !important;}
+    }
+
+    /* スマートフォン：タイトルは 2 行のまま、横にはみ出さない大きさにする（仕様 §14） */
+    @media (max-width: 767px){
+      :root{--copy-left:20px;--copy-max:100%;}
+      .hero{align-items:flex-start;}
+      .hero-copy{padding-top:14vh;padding-top:14svh;padding-right:20px;}
+      .hero-title{font-size:clamp(36px, 10vw, 72px);letter-spacing:.06em;}
+      .hero-lead{font-size:clamp(16px, 4vw, 28px);letter-spacing:.1em;}
+      /* 縦長画面では画像の左右が切れ、∞ と人物が中央に残る。上部だけが空くので文字は上寄せ。 */
+      .hero.is-loaded .hero-background{background-position:center;}
+      .hero-background::after{
+        background:linear-gradient(180deg, rgba(5,8,20,.5) 0%, rgba(5,8,20,.2) 40%, rgba(5,8,20,0) 62%);
+      }
+    }
+
+    /* ------------------------------------------------------------
+       ヒーロー末尾のスクロール合図。演出が終わってから（is-done / is-static）だけ出す
+       ------------------------------------------------------------ */
+    .hero-scroll{
+      position:absolute;
+      left:50%;
+      bottom:max(20px, env(safe-area-inset-bottom, 0px));
+      transform:translateX(-50%);
+      z-index:3;
+      font-family:var(--font-en);
+      font-size:12px;
+      letter-spacing:.32em;
+      text-transform:uppercase;
+      color:rgba(243,239,230,.7);
+      text-decoration:none;
+      opacity:0;
+      transition:opacity 1s ease;
+    }
+    .hero-scroll::after{
+      content:"";
+      display:block;
+      width:1px;
+      height:28px;
+      margin:10px auto 0;
+      background:linear-gradient(180deg, rgba(255,210,122,.9), transparent);
+    }
+    .hero.is-done .hero-scroll,
+    .hero.is-static .hero-scroll,
+    html:not(.ignite) .hero-scroll{opacity:1;}
+
+    /* ------------------------------------------------------------
+       LP 本文。ヒーローの夜色を引き継ぎ、金は見出しの目印と強調だけに使う。
+       本文の日本語は読みやすさを優先して細めのゴシック（仕様 §15 の範囲内）
+       ------------------------------------------------------------ */
+    .lp{
+      --gold:#e6c27a;
+      --gold-soft:rgba(230,194,122,.16);
+      --blue:#8fb8ff;
+      --surface:rgba(255,255,255,.035);
+      --line:rgba(243,239,230,.12);
+      font-family:var(--font-sans);
+      font-weight:300;
+      font-size:16px;
+      line-height:2;
+      background:
+        radial-gradient(90% 40% at 50% 0%, rgba(120,140,255,.08), transparent 70%),
+        var(--bg);
+    }
+    .lp strong{font-weight:500;color:#fff;}
+    .lp em{font-style:normal;font-weight:500;color:var(--gold);}
+    .section{
+      padding-block:clamp(72px, 10vw, 128px);
+      padding-inline:clamp(20px, 6vw, 96px);
+    }
+    .section + .section{border-top:1px solid var(--line);}
+    .inner{max-width:1040px;margin-inline:auto;}
+    .eyebrow{
+      font-family:var(--font-en);
+      font-size:13px;
+      font-weight:600;
+      letter-spacing:.28em;
+      text-transform:uppercase;
+      color:var(--gold);
+    }
+    /* 日本語の見出しでも英字ラベルが混ざるため、eyebrow は英数字を大文字化しない場合がある */
+    .eyebrow:lang(ja){text-transform:none;letter-spacing:.18em;font-family:var(--font-ja);font-weight:400;}
+    .lp h2{
+      margin-top:14px;
+      font-family:var(--font-ja);
+      font-weight:400;
+      font-size:clamp(24px, 3.2vw, 38px);
+      line-height:1.5;
+      letter-spacing:.04em;
+      text-wrap:balance;
+      color:#fff;
+    }
+    .lp h3{
+      margin-top:32px;
+      font-family:var(--font-ja);
+      font-weight:500;
+      font-size:clamp(17px, 1.5vw, 20px);
+      line-height:1.6;
+      letter-spacing:.04em;
+      color:#fff;
+    }
+    .lp h3.en{font-family:var(--font-en);font-weight:600;font-size:28px;letter-spacing:.14em;margin-top:0;}
+    .lp h3:first-child{margin-top:0;}
+    .lead{
+      margin-top:28px;
+      max-width:40em;
+      font-size:clamp(16px, 1.25vw, 18px);
+      line-height:2.1;
+    }
+    .lead + .lead{margin-top:16px;}
+    .body{margin-top:20px;max-width:40em;}
+    .lp .card p + p,.lp .card p + ul,.lp .card ul + p{margin-top:12px;}
+    .pc{display:none;}
+    @media (min-width: 768px){.pc{display:inline;}}
+
+    /* 用途 → ツールの対応表 */
+    .pairs{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+      gap:0 40px;
+      margin-top:28px;
+      max-width:760px;
+    }
+    .pairs div{
+      display:grid;
+      grid-template-columns:9em 1fr;
+      gap:12px;
+      padding:10px 0;
+      border-bottom:1px solid var(--line);
+    }
+    .pairs dt{color:var(--muted);font-size:14px;}
+    .pairs dd{color:#fff;}
+    .voices{
+      list-style:none;
+      margin-top:36px;
+      display:grid;
+      gap:8px;
+      max-width:40em;
+      font-family:var(--font-ja);
+      font-size:clamp(16px, 1.4vw, 19px);
+      color:#fff;
+    }
+    .quote{
+      margin-block:36px;
+      padding-left:24px;
+      border-left:2px solid var(--gold);
+      max-width:36em;
+      font-family:var(--font-ja);
+      font-size:clamp(18px, 2vw, 26px);
+      line-height:1.8;
+      color:#fff;
+    }
+    .quote p + p{margin-top:14px;}
+    .quote-line{
+      margin-top:36px;
+      font-family:var(--font-ja);
+      font-size:clamp(18px, 2vw, 24px);
+      line-height:1.8;
+      color:#fff;
+    }
+    .emph{
+      margin-top:16px;
+      font-family:var(--font-ja);
+      font-size:clamp(17px, 1.6vw, 21px);
+      color:var(--gold);
+    }
+
+    /* 並べるもの */
+    .grid-2,.grid-3{
+      display:grid;
+      gap:24px;
+      margin-top:36px;
+    }
+    .grid-2{grid-template-columns:repeat(auto-fit, minmax(min(100%, 300px), 1fr));}
+    .grid-3{grid-template-columns:repeat(auto-fit, minmax(min(100%, 240px), 1fr));}
+    .grid-2.tight{gap:0 40px;margin-top:8px;}
+    .grid-2 > div > .body:first-child{margin-top:0;}
+    .card{
+      padding:28px;
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:14px;
+    }
+    .card.wide{margin-top:24px;}
+    .card h3 + p{margin-top:12px;}
+    .card-note{font-size:13px;color:var(--muted);margin-top:8px;}
+    .chips{
+      list-style:none;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:14px;
+    }
+    .chips li{
+      padding:4px 14px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      font-size:14px;
+      line-height:1.8;
+      color:#fff;
+      background:rgba(255,255,255,.02);
+    }
+    .plain{list-style:none;margin-top:12px;display:grid;gap:4px;}
+    .plain.ticks li{padding-left:22px;position:relative;}
+    .plain.ticks li::before{
+      content:"";
+      position:absolute;
+      left:0;
+      top:.95em;
+      width:10px;
+      height:1px;
+      background:var(--gold);
+    }
+    .arrows{list-style:none;margin-top:12px;display:grid;gap:4px;color:#fff;}
+
+    /* 中心コンセプト */
+    .concept{
+      margin-top:48px;
+      padding:clamp(28px, 4vw, 48px);
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:linear-gradient(135deg, var(--gold-soft), transparent 60%), var(--surface);
+    }
+    .concept-label{font-size:13px;letter-spacing:.18em;color:var(--muted);}
+    .concept-copy{
+      margin-top:8px;
+      font-family:var(--font-ja);
+      font-size:clamp(28px, 4vw, 44px);
+      letter-spacing:.06em;
+      line-height:1.4;
+      color:#fff;
+      text-shadow:var(--glow-weak);
+    }
+
+    /* 時計型の図。--r は幅に連動して縮む（仕様の「縮尺を変更して同じ思想の UI を維持」） */
+    .clock-figure{
+      --size:min(100%, 520px);
+      --r:calc(min(88vw, 520px) * 0.41);
+      position:relative;
+      width:var(--size);
+      aspect-ratio:1;
+      margin:48px auto 0;
+    }
+    .clock-ring{
+      position:absolute;
+      inset:8%;
+      border-radius:50%;
+      border:1px solid rgba(143,184,255,.35);
+      box-shadow:0 0 60px rgba(143,184,255,.12) inset, 0 0 40px rgba(143,184,255,.08);
+      /* 時計の目盛（12 本）。conic-gradient で 30 度ごとに細い線を作る */
+      background:repeating-conic-gradient(from -0.6deg, rgba(243,239,230,.35) 0 1.2deg, transparent 1.2deg 30deg);
+      /* 目盛だけを残す環状マスク。radial-gradient の既定（farthest-corner）だと 74% が枠外になるので closest-side を明示する */
+      -webkit-mask:radial-gradient(circle closest-side, transparent 0 84%, #000 84.5%);
+      mask:radial-gradient(circle closest-side, transparent 0 84%, #000 84.5%);
+    }
+    .clock-center{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      display:grid;
+      justify-items:center;
+      gap:2px;
+      color:#fff;
+    }
+    .clock-inf{
+      font-family:var(--font-en);
+      font-size:clamp(40px, 9vw, 64px);
+      line-height:1;
+      color:var(--blue);
+      text-shadow:0 0 18px rgba(143,184,255,.6);
+    }
+    .clock-you{font-family:var(--font-ja);font-size:clamp(16px, 3vw, 20px);letter-spacing:.3em;margin-left:.3em;}
+    .clock-items{list-style:none;position:absolute;inset:0;}
+    .clock-items li{
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:clamp(48px, 12vw, 66px);
+      aspect-ratio:1;
+      transform:translate(-50%,-50%) rotate(calc(var(--i) * 30deg)) translateY(calc(var(--r) * -1)) rotate(calc(var(--i) * -30deg));
+      display:grid;
+      place-items:center;
+      border-radius:50%;
+      border:1px solid rgba(243,239,230,.28);
+      background:rgba(11,15,26,.85);
+      box-shadow:0 0 18px rgba(143,184,255,.15);
+      font-family:var(--font-ja);
+      font-size:clamp(11px, 2.6vw, 14px);
+      font-weight:500;
+      letter-spacing:.04em;
+      color:#fff;
+    }
+
+    /* 12 領域の折りたたみ。native の details を使い、JS に頼らない */
+    .areas{
+      margin-top:36px;
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+      gap:0 40px;
+      border-top:1px solid var(--line);
+    }
+    .area{border-bottom:1px solid var(--line);}
+    .area summary{
+      display:grid;
+      grid-template-columns:4.5em 1fr auto;
+      align-items:baseline;
+      gap:12px;
+      padding:18px 0;
+      cursor:pointer;
+      list-style:none;
+    }
+    .area summary::-webkit-details-marker{display:none;}
+    .area summary::after{
+      content:"+";
+      font-family:var(--font-en);
+      font-size:22px;
+      line-height:1;
+      color:var(--gold);
+      transition:transform .2s ease;
+    }
+    .area[open] summary::after{transform:rotate(45deg);}
+    .area-name{font-family:var(--font-ja);font-size:18px;font-weight:500;color:#fff;}
+    .area-sub{font-size:14px;color:var(--muted);}
+    .area-body{padding:0 0 22px 4.5em;max-width:40em;}
+    .area-body .chips{margin-top:0;}
+    .area-body p{margin-top:12px;}
+    @media (max-width: 479px){
+      .area summary{grid-template-columns:1fr auto;}
+      .area-name{grid-row:1;grid-column:1;}
+      .area summary::after{grid-row:1;grid-column:2;}
+      .area-sub{grid-row:2;grid-column:1 / -1;}
+      .area-body{padding-left:0;}
+    }
+
+    /* 工程図（縦のレール） */
+    .flow{
+      list-style:none;
+      counter-reset:step;
+      margin-top:20px;
+      position:relative;
+      padding-left:36px;
+      display:grid;
+      gap:12px;
+      max-width:32em;
+    }
+    .flow::before{
+      content:"";
+      position:absolute;
+      left:9px;
+      top:14px;
+      bottom:14px;
+      width:1px;
+      background:linear-gradient(180deg, var(--gold), rgba(230,194,122,.25));
+    }
+    .flow li{position:relative;color:#fff;}
+    .flow li::before{
+      content:"";
+      position:absolute;
+      left:-31px;
+      top:.85em;
+      width:9px;
+      height:9px;
+      border-radius:50%;
+      background:var(--bg);
+      border:1px solid var(--gold);
+    }
+    .flow li:last-child::before{background:var(--gold);}
+    .flow.compact{gap:6px;}
+
+    /* 階層図 */
+    .tree{list-style:none;margin-top:20px;display:grid;gap:0;max-width:32em;}
+    .tree li{
+      position:relative;
+      padding:12px 16px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:var(--surface);
+      color:#fff;
+      font-weight:500;
+    }
+    .tree li + li{margin-top:22px;margin-left:24px;}
+    .tree li + li::before{
+      content:"";
+      position:absolute;
+      left:18px;
+      top:-23px;
+      height:22px;
+      width:1px;
+      background:var(--gold);
+    }
+    .tree-note{display:block;font-size:13px;font-weight:300;color:var(--muted);}
+
+    /* 人物を軸にした図 */
+    .hub{
+      margin-top:40px;
+      padding:clamp(24px, 4vw, 40px);
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:var(--surface);
+      display:grid;
+      gap:20px;
+      justify-items:center;
+      text-align:center;
+    }
+    .hub-center{display:grid;gap:2px;}
+    .hub-label{
+      font-family:var(--font-ja);
+      font-size:clamp(24px, 3vw, 32px);
+      letter-spacing:.2em;
+      margin-left:.2em;
+      color:#fff;
+      text-shadow:var(--glow-weak);
+    }
+    .hub-sub{font-size:13px;color:var(--muted);}
+    .hub-items{
+      list-style:none;
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:center;
+      gap:8px;
+      max-width:560px;
+    }
+    .hub-items li{
+      padding:4px 14px;
+      border:1px solid rgba(230,194,122,.4);
+      border-radius:999px;
+      font-size:14px;
+      color:#fff;
+    }
+
+    /* 比較 */
+    .compare{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+      gap:24px;
+      margin-top:36px;
+    }
+    .compare-col{
+      padding:28px;
+      border:1px solid var(--line);
+      border-radius:14px;
+    }
+    .compare-col.is-us{border-color:rgba(230,194,122,.5);background:linear-gradient(160deg, var(--gold-soft), transparent 60%);}
+    .compare-col h3 + p{margin-top:12px;}
+
+    .values{
+      list-style:none;
+      margin-top:40px;
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+      gap:10px 40px;
+      font-family:var(--font-ja);
+      font-size:clamp(16px, 1.3vw, 18px);
+      color:#fff;
+    }
+    .values li{padding:10px 0;border-bottom:1px solid var(--line);}
+
+    /* 開発の循環 */
+    .loop{
+      list-style:none;
+      counter-reset:cyc;
+      margin-top:36px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      align-items:stretch;
+    }
+    .loop li{
+      counter-increment:cyc;
+      flex:1 1 160px;
+      padding:18px 20px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:var(--surface);
+      color:#fff;
+      font-weight:500;
+      position:relative;
+    }
+    .loop li::before{
+      content:counter(cyc, decimal-leading-zero);
+      display:block;
+      margin-bottom:6px;
+      font-family:var(--font-en);
+      font-size:13px;
+      letter-spacing:.2em;
+      color:var(--gold);
+    }
+    .loop li:last-child::after{
+      content:"↻";
+      position:absolute;
+      right:14px;
+      top:12px;
+      font-size:20px;
+      color:var(--gold);
+    }
+
+    /* 締め */
+    .closing{
+      background:
+        radial-gradient(70% 60% at 50% 100%, rgba(230,194,122,.10), transparent 70%),
+        var(--bg);
+    }
+    .manifesto{
+      margin-top:56px;
+      padding-top:40px;
+      border-top:1px solid var(--line);
+      display:grid;
+      gap:10px;
+      font-family:var(--font-ja);
+      font-size:clamp(17px, 1.7vw, 22px);
+      line-height:1.9;
+      color:#fff;
+    }
+    .manifesto-title{
+      font-family:var(--font-en);
+      font-weight:600;
+      font-size:clamp(22px, 2.6vw, 32px);
+      letter-spacing:.14em;
+      text-transform:uppercase;
+      color:var(--title-final);
+      margin-bottom:12px;
+    }
+    .manifesto-tagline{
+      margin-top:24px;
+      font-size:clamp(28px, 4.4vw, 48px);
+      letter-spacing:.06em;
+      line-height:1.4;
+      color:var(--title-final);
+      text-shadow:var(--glow-weak);
+    }
+    .contact{
+      margin-top:48px;
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      gap:16px 28px;
+    }
+    .btn{
+      display:inline-block;
+      padding:14px 30px;
+      border:1px solid var(--gold);
+      border-radius:999px;
+      font-family:var(--font-ja);
+      font-size:15px;
+      letter-spacing:.08em;
+      color:#fff;
+      transition:background-color .2s ease, color .2s ease;
+    }
+    .btn:hover{background:var(--gold);color:var(--bg);}
+    .contact .sub{font-size:14px;color:var(--muted);}
+
+    footer{
+      border-top:1px solid var(--border);
+      padding:16px 24px 20px;
+      font-size:12px;
+      color:var(--muted);
+      text-align:center;
+    }
+    .ext:hover{color:var(--text);text-decoration:underline;text-underline-offset:4px;}
+  </style>
+</head>
+<body>
+
+  <main>
+    <!-- data-hero-image: JS が事前読込して、読み込み完了後にだけ演出を始める（仕様 §18） -->
+    <section class="hero" id="hero" data-hero-image="/potenitas/infinity/hero.jpg" aria-label="POTENITAS INFINITY">
+      <div class="hero-background" aria-hidden="true"></div>
+      <canvas class="fire-particles" aria-hidden="true"></canvas>
+      <div class="hero-copy">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <!-- 1 文字ずつ span にするのは形成の遅延を文字ごとに変えるため。読み上げは aria-label に一本化する。 -->
+        <h1 class="hero-title" aria-label="POTENITAS INFINITY"><span class="w" aria-hidden="true"><span class="ch">P</span><span class="ch">O</span><span class="ch">T</span><span class="ch">E</span><span class="ch">N</span><span class="ch">I</span><span class="ch">T</span><span class="ch">A</span><span class="ch">S</span></span><span class="w" aria-hidden="true"><span class="ch">I</span><span class="ch">N</span><span class="ch">F</span><span class="ch">I</span><span class="ch">N</span><span class="ch">I</span><span class="ch">T</span><span class="ch">Y</span></span></h1>
+        <p class="hero-lead">人の可能性を、無限に。</p>
+      </div>
+      <a class="hero-scroll" href="#about">Scroll</a>
+    </section>
+    <!-- ==========================================================
+         LP 本文。内容は 2026-09-18 に受領した紹介文が原本。数値や固有名詞を足さない。
+         構成は原本の 30 節を、読み進める順序を保ったまま 11 の章にまとめたもの。
+         ========================================================== -->
+    <div class="lp">
+
+      <section class="section" id="about" aria-labelledby="about-title">
+        <div class="inner">
+          <p class="eyebrow">POTENITAS INFINITY とは</p>
+          <h2 id="about-title">人がやりたいことを中心に置き、<br class="pc">その実現に必要な情報・機能・AI・自動化を一つにつなげる。</h2>
+          <p class="lead"><strong>POTENITAS INFINITY（ポテニタス インフィニティ）</strong>は、仕事・組織運営・情報管理・AI活用・コミュニケーション・自動化など、日々バラバラに存在している機能を一つの環境へ統合し、人が本来持っている可能性を最大限に引き出すことを目指した統合型ソフトウェアプラットフォームです。</p>
+          <p class="lead">単なる業務管理ツールでも、AIチャットでも、SaaSをまとめただけのポータルでもありません。</p>
+        </div>
+      </section>
+
+      <section class="section" id="why" aria-labelledby="why-title">
+        <div class="inner">
+          <p class="eyebrow">生まれた理由</p>
+          <h2 id="why-title">便利なサービスは増えた。<br>その結果、人がソフトウェアに合わせる場面も増えた。</h2>
+          <p class="lead">現在の仕事や生活では、多くのツールを使い分ける必要があります。</p>
+          <dl class="pairs" aria-label="用途ごとに分かれているツール">
+            <div><dt>顧客情報</dt><dd>CRM</dd></div>
+            <div><dt>予定</dt><dd>カレンダー</dd></div>
+            <div><dt>請求</dt><dd>会計ソフト</dd></div>
+            <div><dt>資料</dt><dd>クラウドストレージ</dd></div>
+            <div><dt>コミュニケーション</dt><dd>チャット</dd></div>
+            <div><dt>議事録</dt><dd>別のAIサービス</dd></div>
+            <div><dt>Webサイト</dt><dd>別の管理画面</dd></div>
+            <div><dt>AI</dt><dd>ChatGPT、Gemini、Claude など、それぞれ別々の画面</dd></div>
+          </dl>
+          <ul class="voices" aria-label="よくある問題">
+            <li>「この情報はどこに入っていたのか」</li>
+            <li>「この作業にはどのアプリを開けばいいのか」</li>
+            <li>「同じ情報を何度入力すればいいのか」</li>
+            <li>「AIに毎回同じ前提を説明しなければならない」</li>
+            <li>「サービスごとにデータが分散している」</li>
+          </ul>
+          <p class="body">POTENITAS INFINITYは、この構造そのものを変えることを目指しています。</p>
+          <blockquote class="quote">
+            <p>アプリを中心にするのではなく、人を中心にする。<br>利用者の周囲に、必要な機能を配置する。</p>
+            <p>人が複数のサービスを行き来するのではなく、必要なサービスやAIが人のところへ集まってくる。</p>
+          </blockquote>
+          <p class="body">それがPOTENITAS INFINITYの基本思想です。</p>
+        </div>
+      </section>
+
+      <section class="section" id="name" aria-labelledby="name-title">
+        <div class="inner">
+          <p class="eyebrow">名前とコンセプト</p>
+          <h2 id="name-title">可能性を発見し、仕組みに変え、<br class="pc">その仕組みによってさらに可能性を広げる。</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h3 class="en">POTENITAS</h3>
+              <p>「可能性」を中心に据えたブランドです。</p>
+              <ul class="plain">
+                <li>人には、まだ使えていない能力があります。</li>
+                <li>企業にも、まだ活かせていない情報があります。</li>
+                <li>組織にも、改善できる業務があります。</li>
+                <li>AIにも、人の能力を拡張できる可能性があります。</li>
+              </ul>
+              <p>それらを単に「効率化」するのではなく、可能性を発見し、仕組みに変え、その仕組みによってさらに可能性を広げることを目指しています。</p>
+            </div>
+            <div class="card">
+              <h3 class="en">INFINITY</h3>
+              <p>その思想をさらに拡張したものが、POTENITAS INFINITYです。</p>
+              <p class="emph">「人の可能性には、最初から決められた上限がない」</p>
+              <p>という考えを込めています。</p>
+            </div>
+          </div>
+          <div class="concept">
+            <p class="concept-label">中心コンセプト</p>
+            <p class="concept-copy">人の可能性を、無限に。</p>
+            <p class="body">ソフトウェアによって人の仕事を奪うことを目的にするのではありません。人が本来やる必要のない作業を減らし、人にしかできないことに使える時間を増やします。</p>
+            <ul class="chips" aria-label="人にしかできないこと">
+              <li>判断</li><li>創造</li><li>コミュニケーション</li><li>挑戦</li><li>学習</li><li>意思決定</li><li>新しい価値の創出</li>
+            </ul>
+            <p class="body">AIを「人の代わり」としてだけ捉えるのではなく、<strong>人の能力を拡張する存在</strong>として位置づけます。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="clock" aria-labelledby="clock-title">
+        <div class="inner">
+          <p class="eyebrow">時計型インターフェース</p>
+          <h2 id="clock-title">人を中心に、その周囲に必要な機能が存在する。</h2>
+          <p class="lead">POTENITAS INFINITYを象徴する特徴の一つが、時計をモチーフにした円形インターフェースです。画面中央を中心として、その周囲に主要機能が配置されます。</p>
+          <!-- 12 の領域を時計の文字盤に置く。位置は --i（0〜11）× 30 度。半径 --r は幅に連動して縮む -->
+          <div class="clock-figure" role="img" aria-label="中央の人を囲んで、管理・登録・分析・変換・制作・予定・連絡・集客・自動化・Web・設定・AI の 12 領域が時計のように並ぶ図">
+            <div class="clock-ring" aria-hidden="true"></div>
+            <div class="clock-center" aria-hidden="true"><span class="clock-inf">∞</span><span class="clock-you">人</span></div>
+            <ul class="clock-items" aria-hidden="true">
+              <li style="--i:0"><span>管理</span></li>
+              <li style="--i:1"><span>登録</span></li>
+              <li style="--i:2"><span>分析</span></li>
+              <li style="--i:3"><span>変換</span></li>
+              <li style="--i:4"><span>制作</span></li>
+              <li style="--i:5"><span>予定</span></li>
+              <li style="--i:6"><span>連絡</span></li>
+              <li style="--i:7"><span>集客</span></li>
+              <li style="--i:8"><span>自動化</span></li>
+              <li style="--i:9"><span>Web</span></li>
+              <li style="--i:10"><span>設定</span></li>
+              <li style="--i:11"><span>AI</span></li>
+            </ul>
+          </div>
+          <div class="grid-2 tight">
+            <p class="body">これは単なるデザインではありません。時計は、時間・行動・日常・継続・人生と非常に強く結びついた存在です。この時計という構造を利用して、「人を中心に、その周囲に必要な機能が存在する」という思想を視覚的に表現しています。</p>
+            <p class="body">利用者がアプリの階層構造を覚えるのではなく、「自分の周囲に機能がある」という感覚で操作できるUIを目指しています。PC、タブレット、スマートフォンなど画面サイズが変わった場合でも、時計部分と周囲のアイコンが連動して縮尺を変更し、同じ思想のUIを維持します。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="areas" aria-labelledby="areas-title">
+        <div class="inner">
+          <p class="eyebrow">12 の基本領域</p>
+          <h2 id="areas-title">機能を、12 の領域に分類する。</h2>
+          <p class="lead">それぞれの領域は独立して終わるのではなく、登録された情報を共通情報として互いに利用します。</p>
+          <div class="areas">
+            <details class="area">
+              <summary><span class="area-name">管理</span><span class="area-sub">事業や組織を運営するための情報</span></summary>
+              <div class="area-body"><p>人・組織・契約・権限・請求・財務・資産など、事業や組織を運営するための情報を管理します。</p></div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">登録</span><span class="area-sub">さまざまな情報を POTENITAS へ登録する入口</span></summary>
+              <div class="area-body">
+                <ul class="chips"><li>組織</li><li>人物</li><li>権限</li><li>契約</li><li>請求</li><li>経費</li><li>売上</li><li>備品</li><li>仕入</li></ul>
+                <p>登録された情報は、それぞれ独立したデータとして終わるのではなく、他の機能から利用できる共通情報になります。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">分析</span><span class="area-sub">蓄積された情報を分析する</span></summary>
+              <div class="area-body">
+                <ul class="chips"><li>売上分析</li><li>営業分析</li><li>顧客分析</li><li>商談分析</li><li>業務分析</li></ul>
+                <p>将来的にはAIによって、「数字を表示する」だけではなく、「この数字から何が読み取れるのか」まで支援することを想定しています。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">変換</span><span class="area-sub">情報を別の形式へ変換する</span></summary>
+              <div class="area-body">
+                <ul class="arrows"><li>音声 → 文字</li><li>文章 → 要約</li><li>データ → レポート</li><li>ファイル形式変換</li><li>言語変換</li><li>構造化されていない情報 → 構造化データ</li></ul>
+                <p>AIとの相性が非常に大きい領域です。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">制作</span><span class="area-sub">人が何かを作るための領域</span></summary>
+              <div class="area-body">
+                <ul class="chips"><li>文章</li><li>資料</li><li>画像</li><li>Webコンテンツ</li><li>企画</li><li>広告</li><li>ドキュメント</li></ul>
+                <p>さまざまな制作活動をAIと共同で行うことを想定しています。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">予定</span><span class="area-sub">スケジュールを管理する</span></summary>
+              <div class="area-body">
+                <p>基本構成として、登録・一覧・設定などの機能を持ちます。Googleカレンダーなど外部サービスとの連携も想定し、POTENITASから予定を確認・登録できる環境を目指します。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">連絡</span><span class="area-sub">人とのコミュニケーションを扱う</span></summary>
+              <div class="area-body">
+                <ul class="chips"><li>メール</li><li>チャット</li><li>通知</li><li>問い合わせ</li><li>顧客への連絡</li></ul>
+                <p>これらの情報を集約していくことを想定しています。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">集客</span><span class="area-sub">事業活動における集客を支援する</span></summary>
+              <div class="area-body">
+                <ul class="chips"><li>Web</li><li>SNS</li><li>広告</li><li>問い合わせ</li><li>マーケティング</li></ul>
+                <p>これらと連携し、「どこから顧客が来たのか」を把握できる環境へ発展させます。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">自動化</span><span class="area-sub">繰り返し発生する作業を自動化する</span></summary>
+              <div class="area-body">
+                <ul class="chips"><li>予定登録</li><li>通知</li><li>定型メール</li><li>データ登録</li><li>集計</li><li>AI処理</li><li>ファイル整理</li><li>レポート作成</li></ul>
+                <p>目標は単なるRPAではありません。POTENITAS内に存在するデータとAIを組み合わせることで、「判断を含む自動化」まで発展させることを目指します。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">Web</span><span class="area-sub">WebサイトやWebサービスとの接点</span></summary>
+              <div class="area-body">
+                <ul class="chips"><li>Webページ管理</li><li>フォーム</li><li>LP</li><li>問い合わせ</li><li>外部公開ページ</li><li>Webサービスとの連携</li></ul>
+                <p>将来的には、これらを一つの入口から管理できる構造を想定しています。</p>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">設定</span><span class="area-sub">POTENITAS INFINITY そのものを利用者に合わせる</span></summary>
+              <div class="area-body">
+                <ul class="chips"><li>表示設定</li><li>AI設定</li><li>外部サービス連携</li><li>ユーザー設定</li><li>各種接続設定</li></ul>
+              </div>
+            </details>
+            <details class="area">
+              <summary><span class="area-name">AI</span><span class="area-sub">POTENITAS INFINITY の重要な中核機能</span></summary>
+              <div class="area-body">
+                <p>AIを一つの会社や一つのモデルだけに固定するのではなく、複数のAIを利用できる構造を想定しています。</p>
+                <ul class="chips"><li>OpenAI</li><li>Google</li><li>Anthropic</li><li>xAI</li></ul>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="ai" aria-labelledby="ai-title">
+        <div class="inner">
+          <p class="eyebrow">AI</p>
+          <h2 id="ai-title">「AIアプリ」ではなく、「AIが存在するOS」。</h2>
+          <p class="lead">POTENITAS INFINITYでは、AIを一つの独立した機能としてだけ扱いません。AIは、管理にも、登録にも、分析にも、制作にも、予定にも、連絡にも、自動化にも存在できます。</p>
+          <div class="grid-2">
+            <div>
+              <h3>たとえば営業活動なら</h3>
+              <ol class="flow">
+                <li>商談を録音する</li>
+                <li>AIが文字起こしする</li>
+                <li>AIが議事録を作る</li>
+                <li>決定事項やToDoを抽出する</li>
+                <li>顧客情報と関連付ける</li>
+                <li>次の予定を登録する</li>
+                <li>必要ならフォロー連絡の文章を作る</li>
+                <li>営業状況を分析する</li>
+              </ol>
+              <p class="body">この一連の流れを、一つの環境内でつなげられるようにする。これがPOTENITAS INFINITYの考えるAI活用です。</p>
+            </div>
+            <div>
+              <h3>「来週の商談準備をして」と伝えると</h3>
+              <ol class="flow">
+                <li>顧客情報を確認</li>
+                <li>過去の商談を確認</li>
+                <li>議事録を読む</li>
+                <li>未完了ToDoを確認</li>
+                <li>最近のやり取りを確認</li>
+                <li>必要資料を整理</li>
+                <li>商談用メモを作成</li>
+              </ol>
+              <p class="body">従来のAIチャットは「質問する → 回答を受け取る」という構造が中心です。POTENITAS INFINITYが目指しているのはその先、複数機能を横断して処理する<strong>AIエージェント</strong>への発展です。</p>
+            </div>
+          </div>
+          <div class="card wide">
+            <h3>複数AIを使える設計</h3>
+            <p>AIには、それぞれ得意分野があります。文章生成に強いモデル。長文理解に強いモデル。画像理解に強いモデル。プログラミングに強いモデル。リアルタイム情報との連携に強いモデル。</p>
+            <p>POTENITAS INFINITYは、「どのAI企業が勝つか」を前提に設計するのではありません。必要に応じて最適なAIを選択できる環境を目指します。利用者自身がAIを選ぶ方法だけではなく、将来的には処理内容によって最適なAIへ自動的に振り分けることも構想しています。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="data" aria-labelledby="data-title">
+        <div class="inner">
+          <p class="eyebrow">データと権限</p>
+          <h2 id="data-title">利用者のデータは、できる限り利用者自身が所有する。</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h3>データの所有権を利用者へ</h3>
+              <p>多くのクラウドサービスでは、入力した情報がサービス提供会社のデータベースへ保存されます。POTENITAS INFINITYでは、可能な情報について、利用者自身のGoogle Driveなどへ保存する構造を採用していきます。</p>
+              <p>POTENITAS側にあらゆる情報を集中させるのではなく、POTENITASは「必要なデータへアクセスするためのプラットフォーム」として存在する考え方です。</p>
+            </div>
+            <div class="card">
+              <h3>POTENITAS側が持つ情報を最小化する</h3>
+              <p>基盤側では、サービスを利用するために必要な情報を中心に管理し、顧客情報・営業情報・議事録・経費・契約・資料などの実データは、可能な限り利用者側へ置く設計を目指しています。</p>
+              <p>これにより、運営側への情報集中を減らし、セキュリティリスクを抑え、利用者自身がデータを管理できる構造を作ります。</p>
+            </div>
+            <div class="card">
+              <h3>Googleアカウントを基盤にした認証</h3>
+              <p>独自のパスワードを大量に管理するのではなく、既存のGoogleアカウントを利用して本人確認を行います。Google DriveやGoogle Calendarなどと連携する場合も、必要以上の権限を取得しないことを重要な設計原則としています。</p>
+            </div>
+            <div class="card">
+              <h3>最小権限という考え方</h3>
+              <p>「将来使うかもしれないから、とりあえず広い権限を取得する」という考え方を避けます。必要な機能に対して、必要な権限だけを取得する。</p>
+              <p>Driveであれば、アプリが作成・管理するファイルを中心にアクセスする。カレンダーであれば、必要な予定操作に限定する。利便性とセキュリティの両立を重視します。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="org" aria-labelledby="org-title">
+        <div class="inner">
+          <p class="eyebrow">組織での利用</p>
+          <h2 id="org-title">その階層の管理者が、自分の直下の利用者を管理する。</h2>
+          <div class="grid-2">
+            <div>
+              <h3>Owner / Member 構造</h3>
+              <ol class="tree" aria-label="基本となる構造">
+                <li>POTENITAS</li>
+                <li>Owner<span class="tree-note">自分の環境を管理します</span></li>
+                <li>Member<span class="tree-note">Owner の管理下で POTENITAS を利用します</span></li>
+              </ol>
+              <p class="body">この仕組みによって、個人事業主、小規模チーム、企業、部署、プロジェクトチームなど、さまざまな利用形態へ対応できる構造を目指します。</p>
+            </div>
+            <div>
+              <h3>入れ子型の管理構造</h3>
+              <ol class="tree" aria-label="入れ子型の管理構造の例">
+                <li>POTENITAS運営</li>
+                <li>企業A</li>
+                <li>企業Aの社員<span class="tree-note">管理する主体は企業A</span></li>
+              </ol>
+              <p class="body">中央ですべての利用者を直接管理するだけではなく、その階層の管理者が自分の直下ユーザーを管理します。システム全体が巨大になった場合でも、管理責任を適切に分散できます。</p>
+            </div>
+          </div>
+          <div class="card wide">
+            <h3>権限管理</h3>
+            <p>「ログインできるか」だけではなく、<strong>何を見ることができるか・何を登録できるか・何を変更できるか・何を実行できるか</strong>を管理する仕組みを想定しています。</p>
+            <p>組織によって、経営者・管理者・社員・外部パートナー・顧客など、必要な権限は異なります。そのため、利用者単位で役割やアクセス範囲を管理できる構造へ発展させます。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="connect" aria-labelledby="connect-title">
+        <div class="inner">
+          <p class="eyebrow">つながるデータ</p>
+          <h2 id="connect-title">入力を繰り返すのではなく、情報をつなぐ。</h2>
+          <div class="hub" aria-label="一人の顧客に関連する情報">
+            <p class="hub-center"><span class="hub-label">人物</span><span class="hub-sub">誰に関する情報なのか</span></p>
+            <ul class="hub-items">
+              <li>基本情報</li><li>所属組織</li><li>商談</li><li>契約</li><li>請求</li><li>予定</li><li>議事録</li><li>メール</li><li>売上</li><li>タスク</li>
+            </ul>
+          </div>
+          <div class="grid-2">
+            <div>
+              <h3>人物情報を中心に機能をつなぐ</h3>
+              <p class="body">従来はこれらが別々のサービスへ分散していました。POTENITASでは、「誰に関する情報なのか」を軸に、それぞれの情報を関連付けられる世界を目指します。</p>
+              <h3>組織情報との連携</h3>
+              <p class="body">会社、団体、チーム、取引先などを登録し、人物と組織を関連付けます。この会社には誰が所属しているのか。誰と商談したのか。どんな契約があるのか。売上はいくらなのか。未払いの請求はあるのか。こうした情報を横断的に確認できるようになります。</p>
+            </div>
+            <div>
+              <h3>登録した情報を再利用する</h3>
+              <p class="body">一般的なシステムでは、人物登録、契約登録、請求登録、予定登録などのたびに同じ情報を入力することがあります。POTENITAS INFINITYでは、一度登録した情報を他の機能でも利用できる構造を目指します。</p>
+              <p class="body">例えば人物を登録しておけば、請求先・契約先・予定参加者・商談相手・連絡先として再利用できます。</p>
+              <h3>アプリを増やせるプラットフォーム</h3>
+              <p class="body">最初は人物登録・予定管理・録音・議事録・契約管理だけを利用する企業でも、将来的に営業分析・請求・経費・在庫・AIエージェント・IoT・スマートホームなどを追加できます。完成された一つの固定アプリではなく、新しい機能を追加していける拡張型プラットフォームとして設計します。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="minutes" aria-labelledby="minutes-title">
+        <div class="inner">
+          <p class="eyebrow">録音・文字起こし・議事録</p>
+          <h2 id="minutes-title">会話を、「次の行動につながる情報」へ変換する。</h2>
+          <div class="grid-2">
+            <div>
+              <ol class="flow">
+                <li>録音</li>
+                <li>文字起こし</li>
+                <li>AIによる議事録生成</li>
+              </ol>
+              <p class="body">目的は単に会話を文章化することではありません。会議や商談の情報を、実際に次の行動につなげやすい形へ整理します。</p>
+            </div>
+            <div>
+              <h3>議事録の構成</h3>
+              <ul class="plain ticks">
+                <li>概要</li><li>決定事項</li><li>ToDo</li><li>議題・議論内容</li><li>未決事項</li><li>文字起こし全文</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="automation" aria-labelledby="automation-title">
+        <div class="inner">
+          <p class="eyebrow">自動化と、人が判断する場所</p>
+          <h2 id="automation-title">AIが準備し、人が確認し、人が最終判断する。</h2>
+          <div class="grid-2">
+            <div>
+              <h3>情報がつながることで、自動化の可能性が広がる</h3>
+              <ol class="flow">
+                <li>商談終了</li>
+                <li>録音データ保存</li>
+                <li>AI文字起こし</li>
+                <li>議事録作成</li>
+                <li>ToDo抽出</li>
+                <li>担当者へ通知</li>
+                <li>次回予定候補を作成</li>
+                <li>営業データ更新</li>
+              </ol>
+            </div>
+            <div>
+              <h3>人が判断する場所を残す</h3>
+              <p class="body">POTENITAS INFINITYは、「すべてをAIに任せる」ことを目的にしているわけではありません。重要な判断や外部への送信、契約、支払いなどについては、AIが準備し、人が確認し、人が最終判断するという設計も重要です。</p>
+              <p class="body">AIと人間を対立させるのではなく、それぞれが得意な部分を担当します。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="fit" aria-labelledby="fit-title">
+        <div class="inner">
+          <p class="eyebrow">個人でも、企業でも</p>
+          <h2 id="fit-title">利用者の成長と一緒に、POTENITAS も成長する。</h2>
+          <p class="lead">POTENITAS INFINITYは、特定業種専用のシステムではありません。</p>
+          <div class="grid-3">
+            <div class="card">
+              <h3>個人</h3>
+              <ul class="chips"><li>予定</li><li>情報管理</li><li>AI</li><li>制作</li><li>自動化</li></ul>
+            </div>
+            <div class="card">
+              <h3>個人事業主</h3>
+              <p class="card-note">個人の利用に加えて</p>
+              <ul class="chips"><li>顧客</li><li>契約</li><li>請求</li><li>経費</li><li>営業</li><li>予定</li></ul>
+            </div>
+            <div class="card">
+              <h3>企業</h3>
+              <p class="card-note">さらに拡張して</p>
+              <ul class="chips"><li>組織</li><li>社員</li><li>権限</li><li>売上</li><li>契約</li><li>財務</li><li>分析</li></ul>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <h3>必要なものだけを使う</h3>
+              <p class="body">すべての利用者が、すべての機能を必要としているわけではありません。必要なアプリだけ使う。不要なアプリは使わない。よく使うアプリは使いやすい場所へ配置する。トップ画面にある各機能も、利用者が並び替えられる設計を想定しています。</p>
+            </div>
+            <div>
+              <h3>「ソフトウェアに合わせる」から「ソフトウェアが人に合わせる」へ</h3>
+              <p class="body">従来のソフトウェアでは、利用者がシステムの使い方を覚える必要があります。POTENITAS INFINITYが最終的に目指すのは、その逆です。</p>
+              <ol class="flow compact">
+                <li>利用者が「これをやりたい」と伝える</li>
+                <li>AIが意図を理解する</li>
+                <li>必要な機能を選択する</li>
+                <li>必要な情報を取得する</li>
+                <li>処理を実行する</li>
+                <li>結果を返す</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="value" aria-labelledby="value-title">
+        <div class="inner">
+          <p class="eyebrow">従来型 SaaS との違い、提供する価値</p>
+          <h2 id="value-title">大切なのは、データと機能がつながっていること。</h2>
+          <div class="compare">
+            <div class="compare-col">
+              <h3>従来の SaaS</h3>
+              <p>営業管理なら営業管理、会計なら会計、予定なら予定、AIならAIと、目的ごとにサービスが分かれています。</p>
+            </div>
+            <div class="compare-col is-us">
+              <h3>POTENITAS INFINITY</h3>
+              <p>それらを一つの巨大なアプリに詰め込むこと自体を目的にしているのではありません。一つの人物情報が、営業・予定・契約・請求・議事録・AIから利用できる。一つの商談情報から、文字起こし・議事録・タスク・分析へつながる。この<strong>横断性</strong>が大きな特徴です。</p>
+            </div>
+          </div>
+          <ul class="values" aria-label="POTENITAS INFINITY が目指す価値">
+            <li>情報を探す時間を<em>減らす</em>。</li>
+            <li>同じ情報を何度も入力する作業を<em>減らす</em>。</li>
+            <li>複数サービスを行き来する負担を<em>減らす</em>。</li>
+            <li>AIへ毎回同じ情報を説明する必要を<em>減らす</em>。</li>
+            <li>単純作業を<em>自動化する</em>。</li>
+            <li>人が考える時間を<em>増やす</em>。</li>
+            <li>個人や組織に眠っている情報を<em>活用する</em>。</li>
+            <li>データを利用者自身が管理できる環境を<em>作る</em>。</li>
+          </ul>
+          <p class="quote-line">そして最終的には、人が本来持っている能力を発揮できる時間を増やす。</p>
+        </div>
+      </section>
+
+      <section class="section" id="roadmap" aria-labelledby="roadmap-title">
+        <div class="inner">
+          <p class="eyebrow">開発の進め方</p>
+          <h2 id="roadmap-title">「完成したら公開する製品」ではなく、使いながら進化し続けるプラットフォーム。</h2>
+          <p class="lead">POTENITAS INFINITYは非常に大きな構想ですが、一度にすべてを作るのではありません。各機能について、次の循環で発展させます。</p>
+          <ol class="loop" aria-label="開発の循環">
+            <li>最小MVPを作る</li>
+            <li>実際に使う</li>
+            <li>問題を見つける</li>
+            <li>改善する</li>
+            <li>必要な機能を追加する</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section closing" id="vision" aria-labelledby="vision-title">
+        <div class="inner">
+          <p class="eyebrow">目指す最終形</p>
+          <h2 id="vision-title">人の可能性を引き出すための基盤。</h2>
+          <p class="lead">単なる業務効率化ソフトではありません。仕事だけでもありません。AIだけでもありません。人が何かをしたいと思ったとき、必要な情報がある。必要なツールがある。必要なAIがいる。必要な自動化がある。そして、それらが一つにつながっている。そうした世界を作ることが、POTENITAS INFINITYの目標です。</p>
+          <p class="body">一言で表すなら、AIとデータと業務機能を一つにつなぎ、人の可能性を最大限に引き出すための統合プラットフォーム。本質をさらに短く表現するなら、この言葉に集約されます。</p>
+          <div class="manifesto">
+            <p class="manifesto-title">POTENITAS INFINITY</p>
+            <p>人には、まだ使えていない可能性がある。</p>
+            <p>組織には、まだ活かされていない情報がある。</p>
+            <p>AIには、まだ人と組み合わせることで生まれる可能性がある。</p>
+            <p>それらをバラバラにするのではなく、一つにつなげる。</p>
+            <p>人がソフトウェアに合わせるのではなく、ソフトウェアが人に合わせる。</p>
+            <p>AIが人を置き換えるのではなく、人の能力を拡張する。</p>
+            <p>管理のためのシステムではなく、可能性を引き出すためのシステムへ。</p>
+            <p class="manifesto-tagline">人の可能性を、無限に。</p>
+          </div>
+          <p class="contact">
+            <a class="btn" href="mailto:architect@potenitas.com?subject=%E3%81%94%E7%9B%B8%E8%AB%87%EF%BC%88POTENITAS%20INFINITY%EF%BC%89">メールで相談する</a>
+            <a class="ext sub" href="/potenitas/">POTENITAS について</a>
+          </p>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer>
+    <p class="note">※上記ブランドは<a class="ext" href="https://tsam-ai.com/" target="_blank" rel="noopener">TSAM</a>の提供でお送りしています。</p>
+  </footer>
+
+  <script type="module">
+    import { mountIgnite } from "./ignite.js";
+    /* ページ表示時に 1 回だけ再生する（仕様 §16）。スクロールでは再生しない。リロードでは再生する。 */
+    mountIgnite(document.getElementById("hero"));
+  </script>
+</body>
+</html>
