@@ -79,6 +79,7 @@ const SUITES = [
   { name: 'contact-message', file: 'unit/contact-message.mjs', kind: 'unit' },
   { name: 'push-assistant', file: 'unit/push-assistant.mjs', kind: 'unit' },
   { name: 'push-assistant-sw', file: 'unit/push-assistant-sw.mjs', kind: 'unit' },
+  { name: 'potenitas-infinity', file: 'unit/potenitas-infinity.mjs', kind: 'unit' },
   { name: 'browser:auth-screens', file: 'browser/auth-screens.mjs', kind: 'browser' },
   { name: 'browser:card-mail', file: 'browser/card-mail.mjs', kind: 'browser' },
 ];

@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0f1a">
+  <!-- JS が動く環境でだけ演出用の初期状態（文字非表示）を有効にする。
+       JS 無効なら ignite クラスが付かず、背景・タイトル・サブコピーが最初から見える。 -->
+  <script>document.documentElement.className += " ignite";</script>
+  <title>POTENITAS INFINITY | 人の可能性を、無限に。</title>
+  <meta name="description" content="POTENITAS INFINITY。人の可能性を、無限に。TSアセットマネジメント合同会社（TSAM）が提供する POTENITAS のブランドページです。">
+  <link rel="canonical" href="https://tsam-ai.com/potenitas/infinity/">
+  <!-- TODO: OGP 画像（1200×630）は未確定。用意でき次第 og:image を追加する。 -->
+  <link rel="icon" href="/potenitas/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/potenitas/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/potenitas/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/potenitas/apple-touch-icon.png">
+  <!-- 背景画像を最優先で取りに行く（仕様 §18: 演出開始前に背景が読み込まれていること）。
+       TODO: hero.jpg は指示書で指定された POTENITAS INFINITY の画像。この階層に置く。 -->
+  <link rel="preload" as="image" href="/potenitas/infinity/hero.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- 英字は高級感と可読性を持つセリフ（Cormorant Garamond）、日本語は明朝（Noto Serif JP）で世界観を揃える（仕様 §15）。
+       極端な SF フォントは使わない。 -->
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Serif+JP:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0b0f1a;
+      --text:#f3efe6;
+      --muted:#a9a49a;
+      --border:rgba(243,239,230,.14);
+      --font-en:"Cormorant Garamond","Times New Roman",serif;
+      --font-ja:"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif;
+      /* 最終状態の文字色：白＋わずかな金（仕様 §10） */
+      --title-final:#fff6e3;
+      /* 形成中の強い発光（仕様 §5）と、最終状態の弱い発光（§10） */
+      --glow-strong:0 0 6px #ffffff, 0 0 12px #ffd27a, 0 0 24px #ff8a00, 0 0 48px rgba(255,80,0,.8);
+      --glow-weak:0 0 2px rgba(255,255,255,.35), 0 0 14px rgba(255,210,122,.28);
+      /* 文字位置（PC）：背景の中央の ∞・時計・人物を隠さないよう左〜中央左（仕様 §13）。
+         指定画像は ∞ と時計が画面中央、人物が下中央の縦長構図なので、
+         タイトルは常に 2 行（POTENITAS / INFINITY）にして左 1/3 の列に収め、∞ の左端（約 30%）に届かせない。 */
+      --copy-left:7vw;
+      --copy-max:min(36%, 620px);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    /* 演出中もスクロールできること（仕様 §21）。html/body に overflow:hidden を付けない。 */
+    body{
+      min-height:100vh;
+      min-height:100svh;
+      font-family:var(--font-ja);
+      font-size:16px;
+      line-height:1.8;
+      color:var(--text);
+      background:var(--bg);
+      -webkit-font-smoothing:antialiased;
+    }
+    a{color:inherit;text-decoration:none;}
+    :focus-visible{outline:2px solid #ffd27a;outline-offset:3px;border-radius:6px;}
+
+    /* ------------------------------------------------------------
+       ファーストビュー。レイヤー順: 背景 < 光・炎（canvas） < 文字（仕様 §3）
+       ------------------------------------------------------------ */
+    .hero{
+      position:relative;
+      min-height:100vh;
+      min-height:100svh;
+      display:flex;
+      align-items:center;
+      overflow:hidden; /* 画面外へ流れた火の粉で横スクロールが発生しないように（ページ自体は縦に普通に流れる） */
+      isolation:isolate;
+    }
+    .hero-background{
+      position:absolute;
+      inset:0;
+      z-index:1;
+      /* 画像が無い・読めない間のフォールバック（深い夜色＋中央の淡い光）。画像が乗れば見えない。 */
+      background-color:#0b0f1a;
+      background-image:
+        radial-gradient(60% 50% at 55% 50%, rgba(255,140,40,.10), transparent 70%),
+        linear-gradient(180deg,#0e1424 0%,#0b0f1a 100%);
+    }
+    .hero.is-loaded .hero-background{
+      background-image:url("/potenitas/infinity/hero.jpg");
+      background-size:cover;
+      /* 画像は縦長（約 0.9:1）なので横長の画面では上下が切れる。中央よりやや下を見せ、
+         ∞（画像の高さ約 40% の位置）と人物（約 75〜85%）の両方を残す。上端のアイコンは切れてよい。 */
+      background-position:center 62%;
+      background-repeat:no-repeat;
+    }
+    /* 文字の可読性のために左側だけ薄く落とす。中央から右（∞・人物）は触らない（仕様 §13・§21）。 */
+    .hero-background::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(90deg, rgba(5,8,20,.55) 0%, rgba(5,8,20,.28) 34%, rgba(5,8,20,0) 58%);
+    }
+    .fire-particles{
+      position:absolute;
+      inset:0;
+      z-index:2;
+      width:100%;
+      height:100%;
+      pointer-events:none;
+    }
+    .hero-copy{
+      position:relative;
+      z-index:3;
+      padding:0 24px 0 var(--copy-left);
+      max-width:var(--copy-max);
+    }
+    /* 0〜0.4 秒：文字の位置にごく弱いオレンジの光が生まれる（仕様 §4） */
+    .hero-glow{
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:140%;
+      height:220%;
+      transform:translate(-50%,-50%);
+      background:radial-gradient(closest-side, rgba(255,150,40,.16), rgba(255,90,0,.06) 45%, transparent 75%);
+      opacity:0;
+      pointer-events:none;
+      z-index:-1;
+    }
+    .hero-title{
+      font-family:var(--font-en);
+      font-weight:600;
+      font-size:clamp(40px, 4.4vw, 80px);
+      line-height:1.05;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:var(--title-final);
+      user-select:none;
+    }
+    .hero-title .w{display:block;white-space:nowrap;}
+    .hero-title .ch{display:inline-block;}
+    .hero-lead{
+      margin-top:clamp(16px, 2.2vw, 28px);
+      font-size:clamp(18px, 1.6vw, 26px);
+      font-weight:300;
+      letter-spacing:.14em;
+      line-height:1.7;
+      color:var(--text);
+      text-shadow:0 0 10px rgba(255,210,122,.18);
+    }
+
+    /* ------------------------------------------------------------
+       演出の初期状態（JS が動くときだけ）。
+       文字は透明・ぼかし。canvas とクラスで段階を進める。
+       ------------------------------------------------------------ */
+    .ignite .hero-title .ch{
+      opacity:0;
+      filter:blur(10px);
+      text-shadow:var(--glow-strong);
+      transition:text-shadow 1.6s ease;
+    }
+    .ignite .hero-lead{
+      opacity:0;
+      transform:translateY(12px);
+      filter:blur(6px);
+    }
+    .ignite .hero.is-playing .hero-title .ch{
+      /* 赤橙の炎 → 金 → 白〜淡い金（仕様 §5）。開始時刻 --d は JS が文字ごとに与える。 */
+      animation:ignite 450ms cubic-bezier(.2,.7,.3,1) both;
+      animation-delay:var(--d, 800ms);
+      will-change:opacity, filter;
+    }
+    /* タイトル完成後は発光を弱め、通常の読みやすい文字だけを残す（仕様 §10） */
+    .ignite .hero.is-settled .hero-title .ch{text-shadow:var(--glow-weak);}
+    .ignite .hero.is-done .hero-title .ch{will-change:auto;}
+    .ignite .hero.is-playing .hero-glow{animation:glow 3.2s ease-in-out both;}
+    .ignite .hero.is-playing .hero-lead{
+      /* タイトル完成の 0.4 秒後に、柔らかな発光とともに現れる（仕様 §11） */
+      animation:leadIn 1s ease-out 2400ms both;
+    }
+    @keyframes ignite{
+      0%  {opacity:0;filter:blur(10px);color:#ff6200;}
+      40% {opacity:1;filter:blur(4px);color:#ff9d32;}
+      70% {opacity:1;filter:blur(1px);color:#ffd27a;}
+      100%{opacity:1;filter:blur(0);color:var(--title-final);}
+    }
+    @keyframes glow{
+      0%  {opacity:0;}
+      12% {opacity:1;}   /* 0.4 秒で弱い光が立つ */
+      62% {opacity:1;}   /* 完成（2.0 秒）まで保つ */
+      100%{opacity:0;}   /* 3.2 秒で消える */
+    }
+    @keyframes leadIn{
+      from{opacity:0;transform:translateY(12px);filter:blur(6px);}
+      to  {opacity:1;transform:none;filter:blur(0);}
+    }
+
+    /* 炎なしのフェードイン：reduced-motion（仕様 §19）と、canvas が使えない環境 */
+    .ignite .hero.is-static .hero-title .ch{
+      opacity:1;
+      filter:none;
+      text-shadow:var(--glow-weak);
+      transition:none;
+    }
+    .ignite .hero.is-static .hero-title,
+    .ignite .hero.is-static .hero-lead{
+      opacity:1;
+      transform:none;
+      filter:none;
+      animation:fadeIn .9s ease-out both;
+    }
+    .ignite .hero.is-static .hero-lead{animation-delay:.3s;}
+    @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+    @media (prefers-reduced-motion: reduce){
+      .ignite .hero .hero-title .ch,
+      .ignite .hero .hero-lead,
+      .ignite .hero .hero-glow{animation:none !important;transition:none !important;}
+    }
+
+    /* スマートフォン：タイトルは 2 行のまま、横にはみ出さない大きさにする（仕様 §14） */
+    @media (max-width: 767px){
+      :root{--copy-left:20px;--copy-max:100%;}
+      .hero{align-items:flex-start;}
+      .hero-copy{padding-top:18vh;padding-top:18svh;padding-right:20px;}
+      .hero-title{font-size:clamp(36px, 10vw, 72px);letter-spacing:.06em;}
+      .hero-lead{font-size:clamp(16px, 4vw, 28px);letter-spacing:.1em;}
+      /* 縦長画面では画像の左右が切れ、∞ と人物が中央に残る。上部だけが空くので文字は上寄せ。 */
+      .hero.is-loaded .hero-background{background-position:center;}
+      .hero-background::after{
+        background:linear-gradient(180deg, rgba(5,8,20,.5) 0%, rgba(5,8,20,.2) 40%, rgba(5,8,20,0) 62%);
+      }
+    }
+
+    footer{
+      border-top:1px solid var(--border);
+      padding:16px 24px 20px;
+      font-size:12px;
+      color:var(--muted);
+      text-align:center;
+    }
+    .ext:hover{color:var(--text);text-decoration:underline;text-underline-offset:4px;}
+  </style>
+</head>
+<body>
+
+  <main>
+    <!-- data-hero-image: JS が事前読込して、読み込み完了後にだけ演出を始める（仕様 §18） -->
+    <section class="hero" id="hero" data-hero-image="/potenitas/infinity/hero.jpg" aria-label="POTENITAS INFINITY">
+      <div class="hero-background" aria-hidden="true"></div>
+      <canvas class="fire-particles" aria-hidden="true"></canvas>
+      <div class="hero-copy">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <!-- 1 文字ずつ span にするのは形成の遅延を文字ごとに変えるため。読み上げは aria-label に一本化する。 -->
+        <h1 class="hero-title" aria-label="POTENITAS INFINITY"><span class="w" aria-hidden="true"><span class="ch">P</span><span class="ch">O</span><span class="ch">T</span><span class="ch">E</span><span class="ch">N</span><span class="ch">I</span><span class="ch">T</span><span class="ch">A</span><span class="ch">S</span></span><span class="w" aria-hidden="true"><span class="ch">I</span><span class="ch">N</span><span class="ch">F</span><span class="ch">I</span><span class="ch">N</span><span class="ch">I</span><span class="ch">T</span><span class="ch">Y</span></span></h1>
+        <p class="hero-lead">人の可能性を、無限に。</p>
+      </div>
+    </section>
+    <!-- TODO: LP 本文（ファーストビュー以降）は別途。演出は炎を収束させてここへ自然につなぐ設計（仕様 §23）。 -->
+  </main>
+
+  <footer>
+    <p class="note">※上記ブランドは<a class="ext" href="https://tsam-ai.com/" target="_blank" rel="noopener">TSAM</a>の提供でお送りしています。</p>
+  </footer>
+
+  <script type="module">
+    import { mountIgnite } from "./ignite.js";
+    /* ページ表示時に 1 回だけ再生する（仕様 §16）。スクロールでは再生しない。リロードでは再生する。 */
+    mountIgnite(document.getElementById("hero"));
+  </script>
+</body>
+</html>
