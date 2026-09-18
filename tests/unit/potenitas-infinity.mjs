@@ -160,6 +160,17 @@ try {
   check('演出は ES モジュールから 1 回だけ起動する', /import \{ mountIgnite \} from "\.\/ignite\.js"/.test(HTML));
   check('JS 無効時に備えて ignite クラスは JS で付ける', /document\.documentElement\.className \+= " ignite"/.test(HTML));
 
+  section('LP 本文（受領した紹介文が原本）');
+  const AREAS = ['管理', '登録', '分析', '変換', '制作', '予定', '連絡', '集客', '自動化', 'Web', '設定', 'AI'];
+  check('12 の基本領域が details で 12 個ある', (HTML.match(/<details class="area">/g) || []).length === 12);
+  check('12 の領域名が時計の図にすべてある', AREAS.every((name) => HTML.includes(`<li style="--i:${AREAS.indexOf(name)}"><span>${name}</span></li>`)));
+  check('中心コンセプトと締めの言葉がある', (HTML.match(/人の可能性を、無限に。/g) || []).length >= 3);
+  check('複数 AI の想定（OpenAI / Google / Anthropic / xAI）がある',
+    ['OpenAI', 'Google', 'Anthropic', 'xAI'].every((v) => HTML.includes(`<li>${v}</li>`)));
+  check('AI が準備し、人が最終判断する設計を明記している', /AIが準備し、人が確認し、人が最終判断する/.test(HTML));
+  check('本文中の見出しは h2 / h3 だけで h1 はヒーローの 1 つ', (HTML.match(/<h1\b/g) || []).length === 1);
+  check('ヒーロー末尾のスクロール合図は本文先頭へリンクする', /<a class="hero-scroll" href="#about">/.test(HTML) && /<section class="section" id="about"/.test(HTML));
+
   finish();
 } catch (error) {
   fatal(error);
